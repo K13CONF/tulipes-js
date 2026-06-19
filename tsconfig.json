@@ -2,7 +2,7 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     // File Layout
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "./build",
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
@@ -38,14 +38,25 @@
     "moduleDetection": "force",
     "skipLibCheck": true,
     // Configure aliases
-    "baseUrl": ".",
     "paths": {
       "@/*": [
-        "src/*"
+        "./src/*"
       ],
-      "@config": [
-        "src/config"
+      "@config/*": [
+        "./src/config/*"
       ]
     },
-  }
+  },
+  "ts-node": { // Configuration for ts-node
+    "transpileOnly": true, // Speeds up development
+    "require": [
+      "tsconfig-paths/register"
+    ] // Enable path aliases in ts-node
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
