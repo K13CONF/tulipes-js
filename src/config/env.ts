@@ -1,8 +1,7 @@
 import { config } from 'dotenv'
 
-// Get the ruuntime envirenment, fallback on development
-// const { NODE_ENV = 'development' } = process.env;
-const { NODE_ENV = 'example' } = process.env;
+// Get the runtime environment, fallback on development
+const { NODE_ENV = 'development' } = process.env;
 
 
 // Load the env file

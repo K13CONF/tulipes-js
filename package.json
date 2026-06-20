@@ -3,8 +3,10 @@
   "packageManager": "yarn@4.12.0",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "dev": "nodemon"
+    "build": "tsc && tsc-alias",
+    "dev": "NODE_ENV=development nodemon",
+    "start": "NODE_ENV=production node build/src/Application.js",
+    "prod": "yarn build && yarn start"
   },
   "imports": {
     "#/*": "./build/src/*",
