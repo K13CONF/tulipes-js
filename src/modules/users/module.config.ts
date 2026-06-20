@@ -1,14 +1,15 @@
-import type { ModuleConfig } from '@/types/module-config.implementation.js'
+import { getModuleACL } from './module.acl.js'
 
-export async function getModuleConfig(): Promise<ModuleConfig> {
+
+export async function getModuleConfig() {
+    const acl = await getModuleACL()
 
     return {
         name: 'users',
-        config: {
-            // Module specific configuration can be added here
-        },
-        services: {
-            // Module specific services can be added here
-        }
+        description: 'Users module configuration',
+        version: '1.0.0',
+
+        // Module specific configurations can be added here, for example:
+        acl: acl,
     };
 }
