@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "package.json": "jsonc"
+    },
+    "[jsonc]": {
+        "editor.formatOnSave": false
+    }
+}
