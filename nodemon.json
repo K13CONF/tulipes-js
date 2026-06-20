@@ -3,5 +3,5 @@
         "src"
     ],
     "ext": "ts",
-    "exec": "tsc && tsc-alias && node build/src/Application.js"
+    "exec": "tsc && tsc-alias && node build/Application.js"
 }

@@ -3,20 +3,18 @@
   "packageManager": "yarn@4.12.0",
   "type": "module",
   "scripts": {
-    "//": "------------ Build the js",
+    "//build": "------------ Build the js",
     "build": "tsc && tsc-alias",
-
-    "//": "------------ Run in dev mode",
+    "//dev": "------------ Run in dev mode",
     "start:dev": "NODE_ENV=development nodemon",
-
-    "//": "------------ Run in prod mode",
-    "start:prod": "NODE_ENV=production node build/src/Application.js",
-
+    "//prod": "------------ Run in prod mode",
+    "start:prod": "NODE_ENV=production node build/Application.js"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "tsc-alias": "^1.8.17"
+    "tsc-alias": "^1.8.17",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
