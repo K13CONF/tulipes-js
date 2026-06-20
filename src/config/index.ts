@@ -1,8 +1,42 @@
 import env from '@config/env.js'
 import roles from '@config/roles.definition.js'
+import { moduleACLSchema } from '@config/acl.schema.js'
 
 // import all the modules configs here
 import * as users from '@modules/users/module.config.js'
+
+const modules = {
+    users: await users.getModuleConfig()
+}
+
+function resolveModulesACLs(): Map<string, string[]> {
+    // role name -> set of granted permissions (deduped across modules)
+    const merged = new Map<string, Set<string>>();
+
+    // retrieve all the modules acls and merge them by roles
+    for (const [moduleName, module] of Object.entries(modules)) {
+        // validate the module's ACL shape before merging it
+        const result = moduleACLSchema.safeParse(module.acl);
+        if (!result.success) {
+            console.error(`❌ Invalid ACL in module "${moduleName}":`);
+            result.error.issues.forEach(issue => {
+                console.error(`❌ ${issue.path.join('.')} ${issue.message}`);
+            });
+            process.exit(1);
+        }
+
+        for (const [role, permissions] of Object.entries(result.data)) {
+            const granted = merged.get(role) ?? new Set<string>();
+            permissions.forEach(permission => granted.add(permission));
+            merged.set(role, granted);
+        }
+    }
+
+    // freeze the per-role permission sets into arrays for consumption
+    return new Map(
+        Array.from(merged, ([role, permissions]) => [role, Array.from(permissions)])
+    );
+}
 
 /**
  * @function resolveGlobalConfig
@@ -11,9 +45,7 @@ import * as users from '@modules/users/module.config.js'
  */
 export default await (async function resolveGlobalConfig() {
 
-    const modules = {
-        users: await users.getModuleConfig()
-    }
+    const ACL = resolveModulesACLs()
 
     return {
         app: {
@@ -28,6 +60,7 @@ export default await (async function resolveGlobalConfig() {
             version: '1.0.0',
 
             roles: roles,
+            acl: ACL,
 
             // API configuration
             api: {
