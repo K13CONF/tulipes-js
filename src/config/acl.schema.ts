@@ -8,7 +8,7 @@ import roles from "@config/roles.definition.js"
  */
 
 // Set of valid role names — an ACL may only grant permissions to known roles.
-const roleNames = new Set(roles.map((role) => role.name))
+const roleNames = new Set<string>(roles.map((role) => role.name))
 
 /**
  * A single permission string, in the form "module:resource:action"

@@ -5,9 +5,19 @@ import { z } from 'zod'
  * Each role has a name, description, and a flag indicating whether it is a system role.
  */
 
+/**
+ * The canonical list of role names. Single source of truth for both the
+ * runtime zod validation and the compile-time `RoleName` union consumed across
+ * the ACL system (`defineACL`, `RAIsOf`, etc.).
+ */
+export const ROLE_NAMES = ['sysadmin', 'admin', 'user'] as const
+
+/** Union of all defined role names, e.g. "sysadmin" | "admin" | "user". */
+export type RoleName = (typeof ROLE_NAMES)[number]
+
 // Shape a single role must satisfy
 const roleSchema = z.object({
-    name: z.string(),
+    name: z.enum(ROLE_NAMES),
     description: z.string(),
     isSystem: z.boolean()
 })

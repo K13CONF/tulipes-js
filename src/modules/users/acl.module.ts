@@ -12,7 +12,7 @@ const { acl, defineRoutes } = defineACL({
         "users:bo:get",
         "users:bo:create",
         "users:bo:update",
-        "users:bo:delete"
+        "users:bo:delete",
     ],
     user: [
         "users:bo:list",
@@ -24,7 +24,7 @@ const { acl, defineRoutes } = defineACL({
         "users:bo:create",
         "users:bo:update",
         "users:bo:delete"
-    ]
+    ],
 })
 
 function getModuleACL() {

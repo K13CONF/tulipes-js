@@ -1,58 +1,84 @@
-import type { Role } from "@/config/roles.definition.js";
-import type { ACL, RAI } from "./types.js";
-import { type RequestHandler } from "express"
+import type { RequestHandler } from "express"
+import type { RouteParameters } from "express-serve-static-core"
+import type { ACL, RAI } from "./types.js"
+
+/** HTTP methods a route can be bound to. */
+export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
 
 /**
- * This will return the define routes function fully typed
- * ready to be used with the module's acl 
+ * A fully-described route collected by the registry, ready to be mounted on an
+ * Express router by the application.
  */
-export default function defineRoutesFactory<T extends Role['name'], k>(acl: ACL<T, k>) {
-
-    return defineRoutes;
+export interface RouteRecord {
+    rai: RAI
+    method: HttpMethod
+    path: string
+    middlewares: RequestHandler[]
 }
 
-function defineRoutes(callback: (registry: RoutesRegistry<string>) => void) {
-    const registry = new RoutesRegistry()
-    return callback(registry)
+/**
+ * Builds the strongly-typed `defineRoutes` function for a module, bound to that
+ * module's RAIs (`Identifier`). The `acl` value is used to validate, at runtime,
+ * that every `require(...)` references a granted RAI.
+ */
+export default function defineRoutesFactory<Identifier extends string>(acl: ACL) {
+    // Flatten every granted RAI into a lookup set for runtime validation.
+    const grantedRAIs = new Set<string>()
+    for (const permissions of Object.values(acl)) {
+        permissions?.forEach((permission) => grantedRAIs.add(permission))
+    }
+
+    return function defineRoutes(
+        callback: (registry: RoutesRegistry<Identifier>) => void,
+    ): RouteRecord[] {
+        const registry = new RoutesRegistry<Identifier>(grantedRAIs)
+        callback(registry)
+        return registry.routes
+    }
 }
 
-class RoutesRegistry<T extends string> {
-    private routesMap: Map<T, Array<Route<T>>>;
-    constructor() {
-        this.routesMap = new Map()
-    }
+/**
+ * Collects route definitions for a module. `require(rai)` is typed with the
+ * module's RAIs, so the identifier autocompletes and unknown ones are rejected.
+ */
+export class RoutesRegistry<Identifier extends string> {
+    public readonly routes: RouteRecord[] = []
 
-    private routeFactory(route: Route<T>, method: "GET" | "PUT" | "POST" | "DELETE" | "PATCH", path: string) {
-        return { use: route.use };
-    }
+    constructor(private readonly grantedRAIs: Set<string>) {}
 
-    public require(rai: RAI<T>) {
-        this.routesMap.set(rai, [])
-        const route = new Route(rai)
+    public require(rai: Identifier) {
+        // Types already guarantee this; the runtime guard protects against
+        // untyped / dynamic callers.
+        if (!this.grantedRAIs.has(rai)) {
+            throw new Error(`RAI "${rai}" is not granted to any role in this module's ACL`)
+        }
+
+        const bind = <Path extends string>(method: HttpMethod, path: Path) => {
+            const record: RouteRecord = { rai, method, path, middlewares: [] }
+            this.routes.push(record)
+            return new RouteBuilder<RouteParameters<Path>>(record)
+        }
 
         return {
-            toGET: (path: string) => this.routeFactory(route, "GET", path),
-            toPOST: (path: string) => this.routeFactory(route, "POST", path),
-            toPUT: (path: string) => this.routeFactory(route, "PUT", path),
-            toDELETE: (path: string) => this.routeFactory(route, "DELETE", path),
-            toPATCH: (path: string) => this.routeFactory(route, "PATCH", path),
-        };
+            toGET: <Path extends string>(path: Path) => bind("GET", path),
+            toPOST: <Path extends string>(path: Path) => bind("POST", path),
+            toPUT: <Path extends string>(path: Path) => bind("PUT", path),
+            toDELETE: <Path extends string>(path: Path) => bind("DELETE", path),
+            toPATCH: <Path extends string>(path: Path) => bind("PATCH", path),
+        }
     }
 }
 
-class Route<T extends string> {
-    private middlewaresMap: Map<T, Array<RequestHandler>>;
-    private rai: RAI<T>;
-    constructor(rai: RAI<T>) {
-        this.rai = rai
-        this.middlewaresMap = new Map()
-        this.middlewaresMap.set(rai, [])
-    }
+/**
+ * Chainable middleware builder for a single route. `Params` is the route's path
+ * parameters (e.g. `{ userId: string }` for "/users/:userId"), so every handler
+ * gets a correctly-typed `req.params`.
+ */
+export class RouteBuilder<Params> {
+    constructor(private readonly record: RouteRecord) {}
 
-    public use(handler: RequestHandler) {
-        if (!this.rai) throw new Error('You should init the rai');
-        if (!this.middlewaresMap.get(this.rai) || Array.isArray(this.middlewaresMap.get(this.rai))) throw new Error("INVALID ARRAY MIDDLEWARES")
-        this.middlewaresMap?.get(this.rai)?.push(handler)
-        return { use: this.use }
+    public use(handler: RequestHandler<Params>): this {
+        this.record.middlewares.push(handler as RequestHandler)
+        return this
     }
 }
