@@ -1,0 +1,43 @@
+import { defineRoutes } from "../acl.module.js"
+import { bodySchema, querySchema } from "../schemas/bo.schemas.js";
+
+export const boRoutes = defineRoutes((registry) => {
+
+    // BO users list
+    registry
+        .require("users:bo:list")
+        .post("/users")
+        .use((req, res, next) => {
+            if (req.url) {
+                return next()
+            } else {
+                return res.json({ ok: false })
+            }
+        })
+        .handle((_req, res) => {
+            return res.status(200).json({ ok: true })
+        })
+
+    registry
+        .require("users:bo:list")
+        .post("/users")
+        .validate({
+            query: querySchema,
+            body: bodySchema,
+        })
+        .use((req, _res, next) => {
+            // req.query.page is `number`, req.body.name is `string` (typed by validate)
+            if (req.query.page > 0 && req.body.name) {
+                return next()
+            } else {
+                return next(new Error("invalid"))
+            }
+        })
+        .handle((req, res) => {
+            return res.status(200).json({
+                ok: true,
+                page: req.query.page,
+                name: req.body.name,
+            })
+        })
+})

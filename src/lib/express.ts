@@ -1,0 +1,33 @@
+import express, { type Express } from "express"
+import config from "@config/index.js"
+import { authenticate, createAuthorize, mountModuleRoutes } from "@/packages/acl/serve.js"
+import { errorHandler } from "./error-handler.js"
+
+/**
+ * Creates and configures the Express application from the resolved global
+ * config: body parsing, authentication, every module's routes mounted under the
+ * API prefix with RAI enforcement, and the central error handler.
+ */
+export function createApp(): Express {
+    const app = express()
+
+    // Body parsing (needed for `.validate({ body })`)
+    app.use(express.json())
+
+    // Authentication: populate req.auth (placeholder until JWT)
+    app.use(authenticate)
+
+    // RAI enforcement bound to the merged ACL
+    const authorize = createAuthorize(config.app.acl)
+
+    // Mount every module's routes under /<prefix>/<version>, e.g. /api/v1
+    const basePath = `${config.app.api.prefix}/${config.app.api.version}`
+    for (const module of Object.values(config.app.modules)) {
+        app.use(basePath, mountModuleRoutes(module.routes, authorize))
+    }
+
+    // Central error handler — must be registered last
+    app.use(errorHandler)
+
+    return app
+}

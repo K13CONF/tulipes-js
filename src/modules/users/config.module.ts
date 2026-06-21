@@ -1,4 +1,5 @@
 import { getModuleACL } from './acl.module.js'
+import { boRoutes } from './routes/bo.routes.js'
 
 
 export async function getModuleConfig() {
@@ -11,5 +12,8 @@ export async function getModuleConfig() {
 
         // Module specific configurations can be added here, for example:
         acl: acl,
+
+        // Routes collected for this module, mounted by the HTTP layer.
+        routes: boRoutes,
     };
 }
