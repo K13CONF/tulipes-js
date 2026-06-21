@@ -7,6 +7,7 @@ export function startServer(
     options: { host: string; port: number },
 ): Server {
     const server = createServer(app)
+    
     server.listen(options.port, options.host, () => {
         console.log(`🚀 Server listening on http://${options.host}:${options.port}`)
     })
