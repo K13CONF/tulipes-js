@@ -47,6 +47,9 @@
       ],
       "@modules/*": [
         "./src/modules/*"
+      ],
+      "@packages/*": [
+        "./src/packages/*"
       ]
     },
   },

@@ -4,7 +4,7 @@
  * It specifies which roles have access to which resources and actions within the module.
  */
 
-import defineACL from "@/packages/acl/define-acl.js";
+import defineACL from "@packages/acl/define-acl.js";
 
 const { acl, defineRoutes } = defineACL({
     admin: [

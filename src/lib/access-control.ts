@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express"
-import { ForbiddenError, UnauthorizedError } from "./errors.js"
+import { ForbiddenError, UnauthorizedError } from "@packages/acl/errors.js"
 import "@/types/express.augment.js"
 
 /**
