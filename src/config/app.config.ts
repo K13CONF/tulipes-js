@@ -1,6 +1,6 @@
 import env from '@config/env.js'
 import roles from '@config/roles.definition.js'
-import { moduleACLSchema } from '@config/acl.schema.js'
+import { moduleACLSchema } from '@packages/acl/schema.js'
 
 // import all the modules configs here
 import * as users from '@/modules/users/config.module.js'
