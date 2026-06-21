@@ -1,6 +1,6 @@
 import express, { type Express } from "express"
 import config from "@config/index.js"
-import { mountModuleRoutes } from "@/packages/acl/serve.js"
+import { mountModuleRoutes } from "@/packages/acl/mount-routes.js"
 import { authenticate, createAuthorize } from "./access-control.js"
 import { errorHandler } from "./error-handler.js"
 
