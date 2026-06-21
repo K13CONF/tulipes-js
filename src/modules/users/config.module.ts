@@ -1,4 +1,4 @@
-import { getModuleACL } from './module.acl.js'
+import { getModuleACL } from './acl.module.js'
 
 
 export async function getModuleConfig() {

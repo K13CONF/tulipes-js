@@ -3,7 +3,7 @@ import roles from '@config/roles.definition.js'
 import { moduleACLSchema } from '@config/acl.schema.js'
 
 // import all the modules configs here
-import * as users from '@modules/users/module.config.js'
+import * as users from '@/modules/users/config.module.js'
 
 const modules = {
     users: await users.getModuleConfig()
