@@ -1,19 +1,28 @@
 import { mkdirSync } from "node:fs"
+import { resolve } from "node:path"
 import pino, { type Logger, type LoggerOptions, type StreamEntry } from "pino"
 import { createStream } from "rotating-file-stream"
-import { loggerConfig } from "@config/logger.config.js"
+import env from "./env.js"
 
 /**
- * Application logger (Pino). All behavior is driven by `loggerConfig`
- * (see `@config/logger.config.ts`); this file only wires up Pino.
+ * Application logger (Pino) and its configuration — owned entirely by the config
+ * layer.
  *
- * - Console: colored, human-friendly when `pretty`; raw JSON to stdout otherwise.
- * - File: newline-delimited JSON, rotated daily or at 20MB, gzipped, keeping
- *   14 files in `loggerConfig.dir` — grep/jq/Loki/ELK queryable.
+ * - Console: colored, human-friendly when `pretty` (non-production); raw JSON to
+ *   stdout otherwise.
+ * - File: newline-delimited JSON, rotated daily or at 20MB, gzipped, keeping 14
+ *   files in `LOG_DIR` (default ./logs) — grep/jq/Loki/ELK queryable.
  * - Secrets are redacted so they never reach a transport.
  */
 
-const { level, pretty, toFile, dir, rotation } = loggerConfig
+const isProduction = env.NODE_ENV === "production"
+
+// ── Configuration (derived from env) ───────────────────────────────────────
+const level = env.LOG_LEVEL ?? (isProduction ? "info" : "debug")
+const pretty = !isProduction
+const toFile = env.LOG_TO_FILE ? env.LOG_TO_FILE === "true" : true
+const dir = resolve(env.LOG_DIR) // absolute; LOG_DIR is relative to the cwd
+const rotation = { interval: "1d", size: "20M", compress: "gzip", maxFiles: 14 } as const
 
 /** Names of the rotated log files, e.g. `app.log` (live) -> `app-2026-06-21.log.gz`. */
 function logFileName(time: number | Date | null, index?: number): string {

@@ -1,5 +1,5 @@
 import type { ModuleConfig } from "@/types/module.js"
-import { logger } from "./logger.js"
+import { logger } from "@config/logger.js"
 
 /** Order by priority, higher first (default 0). */
 function byPriorityDesc(a: ModuleConfig, b: ModuleConfig): number {

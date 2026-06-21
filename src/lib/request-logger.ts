@@ -1,5 +1,5 @@
 import { pinoHttp } from "pino-http"
-import { logger } from "./logger.js"
+import { logger } from "@config/logger.js"
 
 /**
  * Per-request logging middleware (pino-http). Attaches a child logger with a

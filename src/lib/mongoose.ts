@@ -1,5 +1,5 @@
 import mongoose from "mongoose"
-import { logger } from "./logger.js"
+import { logger } from "@config/logger.js"
 
 /** Database connection settings (sourced from `config.app.lib.database`). */
 export interface DatabaseConfig {

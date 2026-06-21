@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http"
 import type { Express } from "express"
-import { logger } from "./logger.js"
+import { logger } from "@config/logger.js"
 import { disconnect } from "./mongoose.js"
 
 /** Starts the HTTP server, begins listening, and wires graceful shutdown. */

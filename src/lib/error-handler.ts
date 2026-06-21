@@ -1,7 +1,7 @@
 import type { ErrorRequestHandler } from "express"
 import { ZodError } from "zod"
 import { HttpError } from "@packages/acl/errors.js"
-import { logger } from "./logger.js"
+import { logger } from "@config/logger.js"
 
 /** The single error envelope returned for every error response. */
 interface ErrorBody {
