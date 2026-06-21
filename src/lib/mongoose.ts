@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import { logger } from "./logger.js"
 
 /** Database connection settings (sourced from `config.app.lib.database`). */
 export interface DatabaseConfig {
@@ -25,9 +26,9 @@ function buildConnectionUri(db: DatabaseConfig): string {
  * established; rejects (so startup can fail fast) if it can't connect.
  */
 export async function connect(db: DatabaseConfig): Promise<typeof mongoose> {
-    mongoose.connection.on("connected", () => console.log("✅ MongoDB connected"))
-    mongoose.connection.on("error", (error) => console.error("❌ MongoDB connection error:", error))
-    mongoose.connection.on("disconnected", () => console.warn("⚠️ MongoDB disconnected"))
+    mongoose.connection.on("connected", () => logger.info("✅ MongoDB connected"))
+    mongoose.connection.on("error", (error) => logger.error({ err: error }, "MongoDB connection error"))
+    mongoose.connection.on("disconnected", () => logger.warn("⚠️ MongoDB disconnected"))
 
     await mongoose.connect(buildConnectionUri(db), {
         serverSelectionTimeoutMS: 10_000,

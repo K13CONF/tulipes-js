@@ -1,4 +1,5 @@
 import type { ModuleConfig } from "@/types/module.js"
+import { logger } from "./logger.js"
 
 /** Order by priority, higher first (default 0). */
 function byPriorityDesc(a: ModuleConfig, b: ModuleConfig): number {
@@ -59,7 +60,7 @@ export async function initModules(modules: Record<string, ModuleConfig>): Promis
     for (const module of resolveInitOrder(modules)) {
         if (module.onInit) {
             await module.onInit()
-            console.log(`✅ Module "${module.name}" initialized`)
+            logger.info(`✅ Module "${module.name}" initialized`)
         }
     }
 }

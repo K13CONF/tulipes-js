@@ -3,6 +3,7 @@ import config from "@/config/app.config.js"
 import { mountModuleRoutes } from "@packages/acl/mount-routes.js"
 import { authenticate, createAuthorize } from "./access-control.js"
 import { errorHandler } from "./error-handler.js"
+import { requestLogger } from "./request-logger.js"
 
 /**
  * Creates and configures the Express application from the resolved global
@@ -11,6 +12,9 @@ import { errorHandler } from "./error-handler.js"
  */
 export function createApp(): Express {
     const app = express()
+
+    // Per-request logging first, so every request (incl. errors) is captured.
+    app.use(requestLogger)
 
     // Body parsing (needed for `.validate({ body })`)
     app.use(express.json())

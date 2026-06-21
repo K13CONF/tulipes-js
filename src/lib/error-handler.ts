@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from "express"
 import { ZodError } from "zod"
 import { HttpError } from "@packages/acl/errors.js"
+import { logger } from "./logger.js"
 
 /** The single error envelope returned for every error response. */
 interface ErrorBody {
@@ -17,7 +18,7 @@ interface ErrorBody {
  * errors forwarded by `.validate()`; everything else becomes a 500 (and is
  * logged server-side). Must be registered last, after all routes.
  */
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     // Known application errors carry their own status, code and details.
     if (err instanceof HttpError) {
         const body: ErrorBody = { error: { code: err.code, message: err.message } }
@@ -42,8 +43,8 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
         return res.status(400).json(body)
     }
 
-    // Anything else is unexpected: log it, don't leak internals.
-    console.error("❌ Unhandled error:", err)
+    // Anything else is unexpected: log it (with request context), don't leak internals.
+    ;(req.log ?? logger).error({ err }, "Unhandled error")
     const body: ErrorBody = {
         error: {
             code: "INTERNAL_SERVER_ERROR",

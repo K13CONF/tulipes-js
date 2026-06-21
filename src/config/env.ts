@@ -39,7 +39,12 @@ const envSchema = z.object({
     MAILER_PORT: z.string(),
     MAILER_SECURE: z.string(),
     MAILER_AUTH_USER: z.string(),
-    MAILER_AUTH_PASS: z.string()
+    MAILER_AUTH_PASS: z.string(),
+
+    // Logging configuration (optional — sensible defaults applied in the logger)
+    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).optional(),
+    LOG_DIR: z.string().default('./logs'),
+    LOG_TO_FILE: z.enum(['true', 'false']).optional()
 })
 
 let env: z.infer<typeof envSchema>;

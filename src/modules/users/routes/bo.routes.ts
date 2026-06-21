@@ -20,7 +20,7 @@ export const boRoutes = defineRoutes((registry) => {
 
     registry
         .require("users:bo:list")
-        .post("/users")
+        .get("/users")
         .validate({
             query: querySchema,
             body: bodySchema,
