@@ -1,19 +1,19 @@
 /**
  * This file is the entry point
  */
-import config from "@/config/app.config.js"
-import { connect } from "@/lib/mongoose.js"
-import { initModules } from "@/lib/modules.js"
-import { createApp } from "@/lib/express.js"
-import { startServer } from "@/lib/http.js"
+import config from "@config/app.config.js"
+// import { connect } from "@lib/mongoose.js"
+// import { initModules } from "@lib/modules.js"
+// import { createApp } from "@lib/express.js"
+// import { startServer } from "@lib/http.js"
 
-async function start(){
-    // Connect to the database, then initialize modules (dependency + priority order).
-    await connect(config.app.lib.database)
-    await initModules(config.app.modules)
+// async function start(){
+//     // Connect to the database, then initialize modules (dependency + priority order).
+//     // await connect(config.app.lib.database)
+//     // await initModules(config.app.modules)
 
-    const app = createApp()
-    startServer(app, config.app.lib.server)
-}
+//     const app = createApp()
+//     startServer(app, config.app.lib.server)
+// }
 
-await start()
+// await start()

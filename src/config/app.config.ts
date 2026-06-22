@@ -9,7 +9,10 @@ const modules = {
     users: await users.getModuleConfig()
 }
 
-function resolveModulesACLs(): Map<string, string[]> {
+export type Modules = typeof modules;
+
+
+function resolveModulesACLs(modules: Modules): Map<string, string[]> {
     // role name -> set of granted permissions (deduped across modules)
     const merged = new Map<string, Set<string>>();
 
@@ -45,7 +48,7 @@ function resolveModulesACLs(): Map<string, string[]> {
  */
 export default await (async function resolveGlobalConfig() {
 
-    const ACL = resolveModulesACLs()
+    const ACL = resolveModulesACLs(modules)
 
     return {
         app: {

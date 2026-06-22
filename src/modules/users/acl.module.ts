@@ -26,13 +26,7 @@ const { acl, defineRoutes } = defineACL({
         "users:bo:delete"
     ],
 })
-
-function getModuleACL() {
-
-    return acl;
-}
-
 export {
     defineRoutes,
-    getModuleACL
+    acl
 }

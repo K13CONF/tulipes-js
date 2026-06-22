@@ -11,7 +11,7 @@ function byPriorityDesc(a: ModuleConfig, b: ModuleConfig): number {
  * `priority` (higher first) to break ties among independent modules. Throws on
  * unknown dependencies or dependency cycles.
  */
-export function resolveInitOrder(modules: Record<string, ModuleConfig>): ModuleConfig[] {
+export function sortModulesByPriorityAndDependencies(modules: Record<string, ModuleConfig>): ModuleConfig[] {
     const all = Object.values(modules)
     const byName = new Map(all.map((module) => [module.name, module]))
 
@@ -57,10 +57,19 @@ export function resolveInitOrder(modules: Record<string, ModuleConfig>): ModuleC
  * during bootstrap, after the database connection is established.
  */
 export async function initModules(modules: Record<string, ModuleConfig>): Promise<void> {
-    for (const module of resolveInitOrder(modules)) {
+    const sortedModules = sortModulesByPriorityAndDependencies(modules);
+
+    // Resolve each module
+    for (const module of sortedModules) {
+
+        // Initialise the module
         if (module.onInit) {
-            await module.onInit()
-            logger.info(`✅ Module "${module.name}" initialized`)
+            try {
+                await module.onInit()
+                logger.info(`✅ Module "${module.name}" initialized`)
+            } catch (e: any) {
+                logger.warn(`⚠️ Failed calling module ${module.name}.onInit() rejected with error: ${e.message}`)
+            }
         }
     }
 }

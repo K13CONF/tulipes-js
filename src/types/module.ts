@@ -15,6 +15,12 @@ export interface ModuleConfig {
     /** Routes collected for this module, mounted by the HTTP layer. */
     routes: RouteRecord[]
 
+    /** Relative path to the folder that will contain i18n files for that module */
+    i18nFolderPath?: string,
+    /** Relative path to the folder that will contain views files for that module */
+    viewsFolderPath?: string,
+
+
     /**
      * Tie-breaker for the init order among modules with no dependency relation.
      * Higher runs first. Defaults to 0.
