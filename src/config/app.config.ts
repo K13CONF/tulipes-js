@@ -77,9 +77,10 @@ export default await (async function resolveGlobalConfig() {
                 server: {
                     port: parseInt(env.PORT, 10),
                     host: env.HOST,
-                    https:{
-                        isEnabled: env.IS_HTTPS_ENABLED,
-                    }
+                    https: {
+                        isEnabled: env.HTTPS_ENABLED === "true",
+                    },
+                    clusterModeEnabled: env.CLUSTER_MODE_ENABLED === "true",
                 },
 
                 database: {

@@ -20,7 +20,9 @@ const envSchema = z.object({
     // Server configuration
     PORT: z.string(),
     HOST: z.string(),
-    IS_HTTPS_ENABLED: z.enum(["true", "false"]).default("false"),
+    HTTPS_ENABLED: z.enum(["true", "false"]).default("false"),
+    CLUSTER_MODE_ENABLED: z.enum(["true", "false"]).default("false"),
+
 
     // Database configuration
     DATABASE_PROTOCOL: z.string(),

@@ -48,6 +48,9 @@
       "@lib/*": [
         "./src/lib/*"
       ],
+      "@helpers/*": [
+        "./src/helpers/*"
+      ],
       "@modules/*": [
         "./src/modules/*"
       ],

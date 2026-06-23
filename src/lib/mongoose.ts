@@ -41,3 +41,8 @@ export async function connect(db: DatabaseConfig): Promise<typeof mongoose> {
 export async function disconnect(): Promise<void> {
     await mongoose.disconnect()
 }
+
+/** Whether the Mongoose connection is currently established (readyState 1). */
+export function isConnected(): boolean {
+    return mongoose.connection.readyState === 1
+}

@@ -11,6 +11,7 @@
     "start:prod": "NODE_ENV=production node build/Application.js"
   },
   "dependencies": {
+    "colorette": "^2.0.20",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "glob": "^13.0.6",
