@@ -4,7 +4,7 @@ import { boRoutes } from './routes/bo.routes.js'
 import type { ModuleConfig } from '@/types/module.js'
 
 // Instanciate a dedicated logger for this module
-export const logger = createLogger({module: "users"})
+export const logger = createLogger({ module: "users" })
 
 export async function getModuleConfig() {
 
@@ -30,7 +30,7 @@ export async function getModuleConfig() {
 
         // Lifecycle hook, run during bootstrap in dependency + priority order.
         onInit: async () => {
-            throw new Error("Testing")
+
         },
     } satisfies ModuleConfig;
 }
