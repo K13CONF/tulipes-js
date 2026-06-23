@@ -1,7 +1,10 @@
+import { createLogger } from '@/config/logger.js';
 import { acl } from './acl.module.js'
 import { boRoutes } from './routes/bo.routes.js'
 import type { ModuleConfig } from '@/types/module.js'
 
+// Instanciate a dedicated logger for this module
+export const logger = createLogger({module: "users"})
 
 export async function getModuleConfig() {
 
@@ -20,11 +23,10 @@ export async function getModuleConfig() {
         // Routes collected for this module, mounted by the HTTP layer.
         routes: boRoutes,
 
-        // Folder containing internalisation files
+        // Module folder paths
         i18nFolderPath: "./i18",
-
-        // Folder that will contains 
         viewsFolderPath: "./views",
+        modelsFolderPath: "./models",
 
         // Lifecycle hook, run during bootstrap in dependency + priority order.
         onInit: async () => {

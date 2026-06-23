@@ -4,17 +4,15 @@ import { logger } from "@config/logger.js"
 import { disconnect } from "./mongoose.js"
 
 /** Starts the HTTP server, begins listening, and wires graceful shutdown. */
-export function startServer(
+export function setupHTTPServer(
     app: Express,
-    options: { host: string; port: number },
 ): Server {
+    // Create the server
     const server = createServer(app)
 
-    server.listen(options.port, options.host, () => {
-        logger.info(`🚀 Server listening on http://${options.host}:${options.port}`)
-    })
-
+    // Setup graceful shutdown
     setupGracefulShutdown(server)
+    
     return server
 }
 
