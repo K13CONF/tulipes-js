@@ -24,7 +24,7 @@ export async function getModuleConfig() {
         routes: boRoutes,
 
         // Module folder paths
-        i18nFolderPath: "./i18",
+        i18nFolderPath: "./i18n",
         viewsFolderPath: "./views",
         modelsFolderPath: "./models",
 
