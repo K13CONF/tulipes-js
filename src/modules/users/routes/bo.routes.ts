@@ -40,4 +40,27 @@ export const boRoutes = defineRoutes((registry) => {
                 name: req.body.name,
             })
         })
+
+    registry
+        .require("users:guest:list")
+        .get("/users/public")
+        .validate({
+            query: querySchema,
+            body: bodySchema,
+        })
+        .use((req, _res, next) => {
+            // req.query.page is `number`, req.body.name is `string` (typed by validate)
+            if (req.query.page > 0 && req.body.name) {
+                return next()
+            } else {
+                return next(new Error("invalid"))
+            }
+        })
+        .handle((req, res) => {
+            return res.status(200).json({
+                ok: true,
+                page: req.query.page,
+                name: req.body.name,
+            })
+        })
 })

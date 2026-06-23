@@ -25,6 +25,9 @@ const { acl, defineRoutes } = defineACL({
         "users:bo:update",
         "users:bo:delete"
     ],
+    public: [
+        'users:guest:list'
+    ]
 })
 export {
     defineRoutes,
