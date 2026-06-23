@@ -26,9 +26,9 @@ function buildConnectionUri(db: DatabaseConfig): string {
  * established; rejects (so startup can fail fast) if it can't connect.
  */
 export async function connect(db: DatabaseConfig): Promise<typeof mongoose> {
-    mongoose.connection.on("connected", () => logger.info("✅ MongoDB connected"))
+    mongoose.connection.on("connected", () => logger.info("MongoDB connected"))
     mongoose.connection.on("error", (error) => logger.error({ err: error }, "MongoDB connection error"))
-    mongoose.connection.on("disconnected", () => logger.warn("⚠️ MongoDB disconnected"))
+    mongoose.connection.on("disconnected", () => logger.warn("MongoDB disconnected"))
 
     await mongoose.connect(buildConnectionUri(db), {
         serverSelectionTimeoutMS: 10_000,

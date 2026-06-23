@@ -66,9 +66,9 @@ export async function initModules(modules: Record<string, ModuleConfig>): Promis
         if (module.onInit) {
             try {
                 await module.onInit()
-                logger.info(`✅ Module "${module.name}" initialized`)
+                logger.info(`Module "${module.name}" initialized`)
             } catch (e: any) {
-                logger.warn(`⚠️ Failed calling module ${module.name}.onInit() rejected with error: ${e.message}`)
+                logger.warn(`Failed calling module ${module.name}.onInit() rejected with error: ${e.message}`)
             }
         }
     }
