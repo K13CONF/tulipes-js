@@ -46,11 +46,10 @@ export const boRoutes = defineRoutes((registry) => {
         .get("/users/public")
         .validate({
             query: querySchema,
-            body: bodySchema,
         })
         .use((req, _res, next) => {
             // req.query.page is `number`, req.body.name is `string` (typed by validate)
-            if (req.query.page > 0 && req.body.name) {
+            if (req.query.page > 0) {
                 return next()
             } else {
                 return next(new Error("invalid"))
@@ -60,7 +59,6 @@ export const boRoutes = defineRoutes((registry) => {
             return res.status(200).json({
                 ok: true,
                 page: req.query.page,
-                name: req.body.name,
             })
         })
 })
