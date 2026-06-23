@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express"
 import { ForbiddenError, UnauthorizedError } from "@packages/acl/errors.js"
+import { publicRoleNames } from "@config/roles.definition.js"
 import "@/types/express.augment.js"
 
 /**
@@ -23,14 +24,24 @@ export function createAuthorize(acl: ReadonlyMap<string, readonly string[]>) {
 
     return function authorize(rai: string): RequestHandler {
         return (req, _res, next) => {
+            // The public role(s) are the baseline everyone gets; an authenticated
+            // caller adds their own roles on top. A request with no auth context
+            // is treated as the public/guest role.
+            const effectiveRoles = req.auth?.roles?.length
+                ? [...req.auth.roles, ...publicRoleNames]
+                : publicRoleNames
+
+            const allowed = effectiveRoles.some((role) => grantsByRole.get(role)?.has(rai))
+            if (allowed) {
+                return next()
+            }
+
+            // Not permitted: an unauthenticated caller needs to log in (401);
+            // an authenticated one simply lacks the permission (403).
             if (!req.auth) {
                 return next(new UnauthorizedError())
             }
-            const allowed = req.auth.roles.some((role) => grantsByRole.get(role)?.has(rai))
-            if (!allowed) {
-                return next(new ForbiddenError(`Access to "${rai}" is not permitted`, { rai }))
-            }
-            return next()
+            return next(new ForbiddenError(`Access to "${rai}" is not permitted`, { rai }))
         }
     }
 }
