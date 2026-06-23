@@ -4,6 +4,7 @@ import { mountModuleRoutes } from "@packages/acl/mount-routes.js"
 import { authenticate, createAuthorize } from "./access-control.js"
 import { errorHandler } from "./error-handler.js"
 import { requestLogger } from "./request-logger.js"
+import { i18nextMiddleware } from "./i18n.js"
 
 /**
  * Creates and configures the Express application from the resolved global
@@ -18,6 +19,9 @@ export function createApp(): Express {
 
     // Body parsing (needed for `.validate({ body })`)
     app.use(express.json())
+
+    // Internationalization: detect language and attach `req.t`.
+    app.use(i18nextMiddleware)
 
     // Authentication: populate req.auth (placeholder until JWT)
     app.use(authenticate)

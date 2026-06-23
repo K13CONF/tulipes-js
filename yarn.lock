@@ -346,6 +346,9 @@ __metadata:
     dotenv: "npm:^17.4.2"
     express: "npm:^5.2.1"
     glob: "npm:^13.0.6"
+    i18next: "npm:^26.3.1"
+    i18next-fs-backend: "npm:^2.6.6"
+    i18next-http-middleware: "npm:^3.9.7"
     mongoose: "npm:^9.7.1"
     nodemon: "npm:^3.1.14"
     pino: "npm:^10.3.1"
@@ -925,6 +928,32 @@ __metadata:
     statuses: "npm:~2.0.2"
     toidentifier: "npm:~1.0.1"
   checksum: 10c0/fb38906cef4f5c83952d97661fe14dc156cb59fe54812a42cd448fa57b5c5dfcb38a40a916957737bd6b87aab257c0648d63eb5b6a9ca9f548e105b6072712d4
+  languageName: node
+  linkType: hard
+
+"i18next-fs-backend@npm:^2.6.6":
+  version: 2.6.6
+  resolution: "i18next-fs-backend@npm:2.6.6"
+  checksum: 10c0/aa409fb486eb6d3929a413703a0ba2b5c1e0e4e9923cc2e31371a3ae683b5fa9ceaaa608e9610cc911cb0a053139f8b123f4cda85e3e694ae2fcc5aa5fdd8bea
+  languageName: node
+  linkType: hard
+
+"i18next-http-middleware@npm:^3.9.7":
+  version: 3.9.7
+  resolution: "i18next-http-middleware@npm:3.9.7"
+  checksum: 10c0/a018e2024783d39e7f9e408323acf4059bde5293c868e1d5adac3a0249a0f02632914554a10cfa8f7f683c2c6eb65c7e0bd4daf0fbc7881c9c286deb747cefe9
+  languageName: node
+  linkType: hard
+
+"i18next@npm:^26.3.1":
+  version: 26.3.1
+  resolution: "i18next@npm:26.3.1"
+  peerDependencies:
+    typescript: ^5 || ^6
+  peerDependenciesMeta:
+    typescript:
+      optional: true
+  checksum: 10c0/8f26cb9a09b648edde395a58c2fe890dd996cb81a969d0a05da178b9cb4ce3dee009f9c677a480bb58b5a9d8bbf762fd226111626b015e9bbd66b96132dbba39
   languageName: node
   linkType: hard
 

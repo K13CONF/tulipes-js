@@ -10,7 +10,7 @@ import { z } from 'zod'
  * runtime zod validation and the compile-time `RoleName` union consumed across
  * the ACL system (`defineACL`, `RAIsOf`, etc.).
  */
-export const ROLE_NAMES = ['sysadmin', 'admin', 'user'] as const
+export const ROLE_NAMES = ['sysadmin', 'admin', 'user', 'public'] as const
 
 /** Union of all defined role names, e.g. "sysadmin" | "admin" | "user". */
 export type RoleName = (typeof ROLE_NAMES)[number]
@@ -19,7 +19,10 @@ export type RoleName = (typeof ROLE_NAMES)[number]
 const roleSchema = z.object({
     name: z.enum(ROLE_NAMES),
     description: z.string(),
-    isSystem: z.boolean()
+    isSystem: z.boolean(),
+    // Marks the default/fallback role applied when a request has no role in its
+    // auth context (the "public" / guest role). Defaults to false.
+    isPublic: z.boolean().optional().default(false)
 })
 
 // The full roles definition: an array of roles with unique names
@@ -35,17 +38,26 @@ const rolesDefinition = [
     {
         name: 'sysadmin',
         description: 'System administrator role with full access to all resources',
-        isSystem: true
+        isSystem: true,
+        isPublic: false
     },
     {
         name: 'admin',
         description: 'Administrator role with full access to all resources',
-        isSystem: false
+        isSystem: false,
+        isPublic: false
     },
     {
         name: 'user',
         description: 'Regular user role with limited access to resources',
-        isSystem: false
+        isSystem: false,
+        isPublic: false
+    },
+    {
+        name: 'public',
+        description: 'Public role has access to public resources',
+        isSystem: false,
+        isPublic: true
     }
 ]
 
@@ -71,5 +83,12 @@ try {
     });
     process.exit(1)
 }
+
+/**
+ * Names of the roles flagged `isPublic` — the default fallback roles applied to
+ * a request that carries no role in its auth context. Usually a single role
+ * ("public" / guest).
+ */
+export const publicRoleNames: string[] = roles.filter((role) => role.isPublic).map((role) => role.name)
 
 export default roles

@@ -4,6 +4,7 @@
 import config from "@config/app.config.js"
 import { connect, isConnected } from "@lib/mongoose.js"
 import { initModules } from "@lib/modules.js"
+import { initI18n } from "@lib/i18n.js"
 import { createApp } from "@lib/express.js"
 import { setupHTTPServer } from "@lib/http.js"
 import { buildStartupInfo, printStartupBanner, type StartupInfo } from "@helpers/startup-banner.js"
@@ -23,6 +24,9 @@ async function init() {
     // Connect to the database, then initialize modules (dependency + priority order).
     await connect(config.app.lib.database)
     await initModules(config.app.modules)
+
+    // Initialize i18n from each module's locale folders.
+    await initI18n(config.app.modules)
 
     const app = createApp()
 

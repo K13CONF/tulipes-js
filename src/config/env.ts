@@ -47,7 +47,12 @@ const envSchema = z.object({
     // Logging configuration (optional — sensible defaults applied in the logger)
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).optional(),
     LOG_DIR: z.string().default('./logs'),
-    LOG_TO_FILE: z.enum(['true', 'false']).optional()
+    LOG_TO_FILE: z.enum(['true', 'false']).optional(),
+
+    // i18n configuration (optional — sensible defaults applied in the i18n lib)
+    I18N_FALLBACK_LANGUAGE: z.string().default('en'),
+    I18N_SUPPORTED_LANGUAGES: z.string().default('en'), // comma-separated, e.g. "en,fr,ar"
+    I18N_DEFAULT_NAMESPACE: z.string().default('core')
 })
 
 let env: z.infer<typeof envSchema>;

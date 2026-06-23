@@ -103,6 +103,12 @@ export default await (async function resolveGlobalConfig() {
                     port: parseInt(env.MAILER_PORT, 10),
                     user: env.MAILER_AUTH_USER,
                     password: env.MAILER_AUTH_PASS,
+                },
+
+                i18n: {
+                    fallbackLanguage: env.I18N_FALLBACK_LANGUAGE,
+                    supportedLanguages: env.I18N_SUPPORTED_LANGUAGES.split(",").map((l) => l.trim()).filter(Boolean),
+                    defaultNamespace: env.I18N_DEFAULT_NAMESPACE,
                 }
             },
 
