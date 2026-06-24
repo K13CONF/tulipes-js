@@ -12,7 +12,9 @@ import "@/types/express.augment.js"
  */
 export const responder: RequestHandler = (_req, res, next) => {
     res.respond = ((data?: unknown, options: RespondOptions = {}) => {
-        res.status(options.status ?? 200).json(buildEnvelope({ isOk: true, data, meta: options.meta }))
+        // Explicit `{ status }` wins; otherwise honor an already-set status code
+        // (e.g. `res.status(201).respond(...)`), defaulting to 200.
+        res.status(options.status ?? res.statusCode).json(buildEnvelope({ isOk: true, data, meta: options.meta }))
     }) as Responder
 
     next()
