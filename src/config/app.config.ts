@@ -4,9 +4,11 @@ import { moduleACLSchema } from '@packages/acl/schema.js'
 
 // import all the modules configs here
 import * as users from '@/modules/users/config.module.js'
+import * as categories from '@/modules/categories/config.module.js'
 
 const modules = {
-    users: await users.getModuleConfig()
+    users: await users.getModuleConfig(),
+    categories: await categories.getModuleConfig(),
 }
 
 export type Modules = typeof modules;
