@@ -18,6 +18,20 @@ export interface RouteRecord {
     handler?: RequestHandler
 }
 
+/** Type for a standalone middleware compatible with `.use()` after `.validate()`. */
+export type RouteMiddleware<
+    Params = Record<string, string>,
+    Body = unknown,
+    Query = unknown,
+> = RequestHandler<Params, any, Body, Query>
+
+/** Type for a standalone terminal handler compatible with `.handle()` after `.validate()`. */
+export type RouteHandler<
+    Params = Record<string, string>,
+    Body = unknown,
+    Query = unknown,
+> = (req: Request<Params, any, Body, Query>, res: Response, next: NextFunction) => unknown
+
 /** Per-segment zod schemas accepted by `.validate()`. */
 export interface ValidationSchemas {
     params?: ZodType

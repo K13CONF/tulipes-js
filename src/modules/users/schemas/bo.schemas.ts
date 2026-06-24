@@ -8,9 +8,13 @@ const querySchema = z.object({
 const bodySchema = z.object({
     name: z.string().min(1),
 })
+const paramsSchema = z.object({
+    userId: z.string().min(1),
+})
 
 
 export {
     querySchema,
-    bodySchema
+    bodySchema,
+    paramsSchema,
 }

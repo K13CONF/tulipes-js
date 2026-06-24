@@ -1,7 +1,10 @@
 import { defineRoutes } from "../acl.module.js"
-import { bodySchema, querySchema } from "../schemas/bo.schemas.js";
+import { bodySchema, querySchema, paramsSchema } from "../schemas/bo.schemas.js";
+
+import * as BOCtrls from "../controllers/bo.controllers.js"
 
 export const boRoutes = defineRoutes((registry) => {
+
 
     // BO users list
     registry
@@ -40,6 +43,18 @@ export const boRoutes = defineRoutes((registry) => {
                 name: req.body.name,
             })
         })
+
+
+    registry
+        .require("users:guest:get")
+        .get("/users/:userId")
+        .validate({
+            query: querySchema,
+            body: bodySchema,
+            params: paramsSchema,
+        })
+        .use(BOCtrls.getUserById)
+        .handle(BOCtrls.respondWithUser)
 
     registry
         .require("users:guest:list")
