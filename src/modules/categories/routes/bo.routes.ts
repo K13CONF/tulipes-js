@@ -44,6 +44,4 @@ export const boRoutes = defineRoutes((registry) => {
         .validate({ params: paramsSchema })
         .handle(BOCtrls.deleteCategory)
 
-    const fin = registry.finalize()
-    console.log(fin)
 })
