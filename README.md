@@ -119,11 +119,16 @@ module use()  →  group use() (outer→inner)  →  matched param()  →  route
 - **`param(name, fn)`** — attaches `fn` only to routes whose **full path** declares `:name`. The
   name may come from the prefix *or* an individual route (`.get("/:id")`). A registered param
   that matches no route **throws at startup** — typos can't silently no-op.
-- **`root()`** — mounts a route at its bare path, *outside* the global API prefix
-  (`/health` instead of `/api/v1/health`) — for health checks, webhooks, `robots.txt`. The RAI
-  guard and middlewares still apply; only the mount base changes.
+- **`root()`** — mounts *outside* the global API prefix (`/health` instead of `/api/v1/health`)
+  — for health checks, webhooks, `robots.txt`. The RAI guard and middlewares still apply; only
+  the mount base changes. Works **per route** or **per group** (cascading into nested groups):
   ```ts
+  // one route
   registry.require("system:health:read").get("/health").root().handle(healthCheck)
+
+  // a whole collection — every route lives at /webhooks/*
+  const webhooks = registry.prefix("/webhooks").root()
+  webhooks.require("webhooks:stripe:post").post("/stripe").handle(stripeHook)
   ```
 - **Controllers** — lift handlers into their own files with the exported `RouteMiddleware` /
   `RouteHandler` types, so `req.params`/`body`/`query` stay typed:

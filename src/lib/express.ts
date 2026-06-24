@@ -29,10 +29,15 @@ export function createApp(): Express {
     // RAI enforcement bound to the merged ACL
     const authorize = createAuthorize(config.app.acl)
 
-    // Mount every module's routes under /<prefix>/<version>, e.g. /api/v1
+    // Mount every module's routes. Most live under /<prefix>/<version> (e.g.
+    // /api/v1); routes flagged `.root()` mount at the bare path instead.
     const basePath = `${config.app.api.prefix}/${config.app.api.version}`
     for (const module of Object.values(config.app.modules)) {
-        app.use(basePath, mountModuleRoutes(module.routes, authorize))
+        const prefixed = module.routes.filter((route) => !route.root)
+        const unprefixed = module.routes.filter((route) => route.root)
+
+        if (prefixed.length) app.use(basePath, mountModuleRoutes(prefixed, authorize))
+        if (unprefixed.length) app.use(mountModuleRoutes(unprefixed, authorize))
     }
 
     // Central error handler — must be registered last

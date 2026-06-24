@@ -16,6 +16,8 @@ export interface RouteRecord {
     path: string
     middlewares: RequestHandler[]
     handler?: RequestHandler
+    /** When true, mount at the bare path, outside the global API prefix (see `.root()`). */
+    root?: boolean
 }
 
 /** Type for a standalone middleware compatible with `.use()` after `.validate()`. */
@@ -88,6 +90,7 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
     protected readonly _children: RouteGroupBuilder<Identifier, any>[] = []
     protected readonly _middlewares: RequestHandler[] = []
     protected readonly _params = new Map<string, RequestHandler>()
+    protected _isRoot = false
 
     constructor(
         protected readonly _prefix: Prefix,
@@ -134,6 +137,19 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
         return child
     }
 
+    /**
+     * Mount every route in this group (and its nested groups) outside the global
+     * API prefix — for a whole collection like `/webhooks/*`. Equivalent to
+     * calling `.root()` on each of the group's routes. Chainable, order-independent.
+     *
+     * @example
+     * const webhooks = registry.prefix("/webhooks").root()   // routes live at /webhooks/*
+     */
+    public root(): this {
+        this._isRoot = true
+        return this
+    }
+
     /** Begin a route under this group's prefix, guarded by `rai`. */
     public require(rai: Identifier) {
         // Types already guarantee this; the runtime guard protects untyped callers.
@@ -167,9 +183,11 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
     finalize(
         inheritedMiddlewares: readonly RequestHandler[] = [],
         inheritedParams: ReadonlyMap<string, RequestHandler> = new Map(),
+        inheritedRoot = false,
     ): RouteRecord[] {
         const middlewares = [...inheritedMiddlewares, ...this._middlewares]
         const params = new Map([...inheritedParams, ...this._params])
+        const isRoot = inheritedRoot || this._isRoot
 
         const own = this._routes.map((route) => {
             const paramMiddlewares = paramNamesIn(route.path)
@@ -177,11 +195,13 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
                 .map((name) => params.get(name)!)
             return {
                 ...route,
+                // A route is root if it opted in (`.root()`) or any enclosing group did.
+                root: route.root || isRoot,
                 middlewares: [...middlewares, ...paramMiddlewares, ...route.middlewares],
             }
         })
 
-        const nested = this._children.flatMap((child) => child.finalize(middlewares, params))
+        const nested = this._children.flatMap((child) => child.finalize(middlewares, params, isRoot))
         const subtree = [...own, ...nested]
 
         // Fail-fast: a param handler registered on this group that no route in
@@ -268,6 +288,16 @@ export class RouteBuilder<Params, Body = unknown, Query = unknown> {
     /** Append a middleware (full `(req, res, next)`). Chainable. */
     public use(handler: RequestHandler<Params, any, Body, Query>): this {
         this.record.middlewares.push(handler as RequestHandler)
+        return this
+    }
+
+    /**
+     * Mount this route at its bare path, *outside* the global API prefix — e.g.
+     * `/health` instead of `/api/v1/health`. The RAI guard and middlewares still
+     * apply; only the mount base changes. Chainable.
+     */
+    public root(): this {
+        this.record.root = true
         return this
     }
 
