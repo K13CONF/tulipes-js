@@ -12,5 +12,5 @@ export const getUserById: RouteMiddleware<P, B, Q> = (req, _res, next) => {
 }
 
 export const respondWithUser: RouteHandler<P, B, Q> = (req, res) => {
-    return res.status(200).json({ userId: req.params.userId })
+    return res.respond({ userId: req.params.userId })
 }

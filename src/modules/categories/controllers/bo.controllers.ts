@@ -24,26 +24,26 @@ export const loadCategory: RouteMiddleware<Params> = (req, _res, next) => {
 
 export const listCategories: RouteHandler<Record<string, string>, unknown, Query> = (req, res) => {
     const { page, limit } = req.query
-    return res.status(200).json({ ok: true, data: [], meta: { page, limit } })
+    return res.respond([], { meta: { pagination: { page, limit } } })
 }
 
 export const getCategory: RouteHandler<Params> = (req, res) => {
     const { categoryId } = req.params
-    return res.status(200).json({ ok: true, data: { id: categoryId } })
+    return res.respond({ id: categoryId })
 }
 
 export const createCategory: RouteHandler<Record<string, string>, Body> = (req, res) => {
     const { name, description } = req.body
-    return res.status(201).json({ ok: true, data: { id: "new-id", name, description } })
+    return res.respond({ id: "new-id", name, description }, { status: 201 })
 }
 
 export const updateCategory: RouteHandler<Params, Body> = (req, res) => {
     const { categoryId } = req.params
     const { name, description } = req.body
-    return res.status(200).json({ ok: true, data: { id: categoryId, name, description } })
+    return res.respond({ id: categoryId, name, description })
 }
 
 export const deleteCategory: RouteHandler<Params> = (req, res) => {
     const { categoryId } = req.params
-    return res.status(200).json({ ok: true, data: { id: categoryId } })
+    return res.respond({ id: categoryId })
 }

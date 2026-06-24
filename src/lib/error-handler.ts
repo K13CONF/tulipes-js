@@ -1,16 +1,9 @@
-import type { ErrorRequestHandler, Request } from "express"
+import type { ErrorRequestHandler, Request, Response } from "express"
 import { ZodError } from "zod"
 import { HttpError } from "@packages/acl/errors.js"
+import { buildEnvelope, type ErrorEntry } from "@packages/acl/response.js"
 import { logger } from "@config/logger.js"
-
-/** The single error envelope returned for every error response. */
-interface ErrorBody {
-    error: {
-        code: string
-        message: string
-        details?: unknown
-    }
-}
+import "@/types/express.augment.js"
 
 /**
  * Localizes an error message via i18next (`req.t`, attached by the i18n
@@ -37,39 +30,42 @@ function localize(req: Request, code: string, fallback: string, details?: unknow
  * registered last, after all routes.
  */
 export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
-    // Known application errors carry their own status, code and details.
+    // Known application errors carry their own status and code.
     if (err instanceof HttpError) {
-        const body: ErrorBody = {
-            error: { code: err.code, message: localize(req, err.code, err.message, err.details) },
-        }
-        if (err.details !== undefined) {
-            body.error.details = err.details
-        }
-        return res.status(err.status).json(body)
+        return send(res, err.status, [
+            { code: err.code, message: localize(req, err.code, err.message, err.details) },
+        ])
     }
 
-    // Validation errors forwarded by `.validate()`.
+    // Validation errors forwarded by `.validate()` — one entry per field issue.
     if (err instanceof ZodError) {
-        const body: ErrorBody = {
-            error: {
+        return send(
+            res,
+            400,
+            err.issues.map((issue) => ({
                 code: "VALIDATION_ERROR",
-                message: localize(req, "VALIDATION_ERROR", "Request validation failed"),
-                details: err.issues.map((issue) => ({
-                    path: issue.path.join("."),
-                    message: issue.message,
-                })),
-            },
-        }
-        return res.status(400).json(body)
+                message: issue.message,
+                path: issue.path.join("."),
+            })),
+        )
     }
 
     // Anything else is unexpected: log it (with request context), don't leak internals.
     ;(req.log ?? logger).error({ err }, "Unhandled error")
-    const body: ErrorBody = {
-        error: {
-            code: "INTERNAL_SERVER_ERROR",
-            message: localize(req, "INTERNAL_SERVER_ERROR", "Internal Server Error"),
-        },
+    return send(res, 500, [
+        { code: "INTERNAL_SERVER_ERROR", message: localize(req, "INTERNAL_SERVER_ERROR", "Internal Server Error") },
+    ])
+}
+
+/**
+ * Emits the unified error envelope. Uses `res.respondError` (the responder
+ * middleware), falling back to a raw write for errors thrown before that
+ * middleware ran — in which case the raw senders aren't blocked yet.
+ */
+function send(res: Response, status: number, errors: ErrorEntry[]): void {
+    if (typeof res.respondError === "function") {
+        res.respondError(status, errors)
+        return
     }
-    return res.status(500).json(body)
+    res.status(status).json(buildEnvelope({ isOk: false, errors }))
 }

@@ -1,7 +1,8 @@
-import type { NextFunction, Request, RequestHandler, Response } from "express"
+import type { NextFunction, Request, RequestHandler } from "express"
 import type { ParamsDictionary, RouteParameters } from "express-serve-static-core"
 import type { ZodType } from "zod"
 import type { ACL, RAI } from "./types.js"
+import type { AppResponse } from "./response.js"
 
 /** HTTP methods a route can be bound to. */
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
@@ -20,19 +21,27 @@ export interface RouteRecord {
     root?: boolean
 }
 
-/** Type for a standalone middleware compatible with `.use()` after `.validate()`. */
+/**
+ * Type for a standalone middleware compatible with `.use()` after `.validate()`.
+ * `res` is the restricted {@link AppResponse} — raw senders are blocked; respond
+ * via `res.respond()`.
+ */
 export type RouteMiddleware<
     Params = Record<string, string>,
     Body = unknown,
     Query = unknown,
-> = RequestHandler<Params, any, Body, Query>
+> = (req: Request<Params, any, Body, Query>, res: AppResponse, next: NextFunction) => unknown
 
-/** Type for a standalone terminal handler compatible with `.handle()` after `.validate()`. */
+/**
+ * Type for a standalone terminal handler compatible with `.handle()` after
+ * `.validate()`. `res` is the restricted {@link AppResponse} — respond via
+ * `res.respond()`.
+ */
 export type RouteHandler<
     Params = Record<string, string>,
     Body = unknown,
     Query = unknown,
-> = (req: Request<Params, any, Body, Query>, res: Response, next: NextFunction) => unknown
+> = (req: Request<Params, any, Body, Query>, res: AppResponse, next: NextFunction) => unknown
 
 /**
  * A param name accepted by `group.param()`: the params declared in the prefix
@@ -101,8 +110,8 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
      * Append a middleware that runs before every route in this group (and its
      * nested groups). `req.params` is typed to the params declared in the prefix.
      */
-    public use(handler: RequestHandler<RouteParameters<Prefix>, any, unknown, unknown>): this {
-        this._middlewares.push(handler as RequestHandler)
+    public use(handler: RouteMiddleware<RouteParameters<Prefix>>): this {
+        this._middlewares.push(handler as unknown as RequestHandler)
         return this
     }
 
@@ -116,7 +125,7 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
      * `finalize`), recovering the safety a strict type couldn't give here.
      */
     public param<Params = ParamsDictionary>(name: ParamName<Prefix>, handler: RouteMiddleware<Params>): this {
-        this._params.set(name, handler as RequestHandler)
+        this._params.set(name, handler as unknown as RequestHandler)
         return this
     }
 
@@ -239,8 +248,8 @@ export class RoutesRegistry<Identifier extends string> extends RouteGroupBuilder
      * routes and every group). Unlike a group's `use()`, it isn't bound to a
      * prefix, so `req.params` is the generic dictionary.
      */
-    public override use(handler: RequestHandler): this {
-        this._middlewares.push(handler)
+    public override use(handler: RouteMiddleware): this {
+        this._middlewares.push(handler as unknown as RequestHandler)
         return this
     }
 
@@ -286,8 +295,8 @@ export class RouteBuilder<Params, Body = unknown, Query = unknown> {
     }
 
     /** Append a middleware (full `(req, res, next)`). Chainable. */
-    public use(handler: RequestHandler<Params, any, Body, Query>): this {
-        this.record.middlewares.push(handler as RequestHandler)
+    public use(handler: RouteMiddleware<Params, Body, Query>): this {
+        this.record.middlewares.push(handler as unknown as RequestHandler)
         return this
     }
 
@@ -301,11 +310,9 @@ export class RouteBuilder<Params, Body = unknown, Query = unknown> {
         return this
     }
 
-    /** Terminal request handler that responds. Ends the chain. */
-    public handle(
-        handler: (req: Request<Params, any, Body, Query>, res: Response, next: NextFunction) => unknown,
-    ): RouteRecord {
-        this.record.handler = handler as RequestHandler
+    /** Terminal request handler that responds via `res.respond()`. Ends the chain. */
+    public handle(handler: RouteHandler<Params, Body, Query>): RouteRecord {
+        this.record.handler = handler as unknown as RequestHandler
         return this.record
     }
 }

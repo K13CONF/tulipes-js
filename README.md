@@ -54,7 +54,7 @@ defineRoutes((registry) => {
       if (req.query.page > 0 && req.body.name) return next()
       return next(new Error("invalid"))
     })
-    .handle((req, res) => res.json({ ok: true, page: req.query.page }))
+    .handle((req, res) => res.respond({ page: req.query.page }))
 })
 ```
 
@@ -78,7 +78,7 @@ Three layers guard the same rule, on purpose:
 - 🧩 **Self-assembling modules** — each module declares its routes, ACL, i18n, and an `onInit` hook; the loader resolves `depends` with a real topological sort (cycles throw).
 - ✅ **Fail-fast config** — env vars *and* role definitions are validated with zod at startup. Bad config = the process refuses to start, with the offending key and file path printed.
 - 🧪 **Zod-validated requests, inferred types** — `.validate({ query, body, params })` coerces the request *and* flows the parsed types into every downstream handler.
-- 📦 **One error envelope** — every error exits through a single handler as `{ error: { code, message, details? } }`, localized per request via i18next.
+- 📦 **One response envelope** — every response (success *and* error) is `{ isOk, data, errors, meta }`. Handlers send via `res.respond()`; the raw senders (`res.json`/`res.send`/…) are **blocked** — at compile time *and* runtime — so the shape can never drift. Errors are localized per request via i18next.
 - 🌍 **Per-module i18n** — each module's locale folder becomes an i18next namespace; language is detected per request and exposed as `req.t`.
 - 🪵 **Production-grade logging** — Pino with secret redaction, daily/size rotation + gzip, per-request correlation IDs, pretty in dev / JSON in prod, child loggers per module.
 - 🛑 **Graceful shutdown & clustering** — SIGTERM/SIGINT drains connections and closes the DB; optional cluster mode forks one worker per core.
@@ -139,7 +139,7 @@ import type { RouteHandler } from "@packages/acl/define-routes.js"
 type Params = z.infer<typeof paramsSchema>
 
 export const getCategory: RouteHandler<Params> = (req, res) =>
-  res.json({ id: req.params.categoryId })
+  res.respond({ id: req.params.categoryId })
 ```
 
 It all resolves to a plain `RouteRecord[]`, so the mount layer never needs to know groups exist.
@@ -314,23 +314,27 @@ All variables are validated in `config/env.ts`. Loaded from `.envs/.env.${NODE_E
 | **Logging** *(optional)* | `LOG_LEVEL`, `LOG_DIR`, `LOG_TO_FILE` |
 | **i18n** *(optional)* | `I18N_FALLBACK_LANGUAGE`, `I18N_SUPPORTED_LANGUAGES` (csv), `I18N_DEFAULT_NAMESPACE` |
 
-### Error responses
+### Unified responses
 
-Every error — thrown or `next()`-ed — leaves through one handler in a single shape:
+Every endpoint returns one envelope — success and error alike:
 
-```json
-{
-  "error": {
-    "code": "FORBIDDEN",
-    "message": "Access to users:bo:delete is not permitted",
-    "details": { "rai": "users:bo:delete" }
-  }
-}
+```jsonc
+// success — res.respond(data, { status?, meta? })
+{ "isOk": true,  "data": { "id": "42" }, "errors": [], "meta": { "pagination": { "page": 1, "total": 87 } } }
+
+// error — thrown HttpError / failed validation, rendered by the central handler
+{ "isOk": false, "data": null, "errors": [{ "code": "FORBIDDEN", "message": "Access denied" }], "meta": {} }
 ```
 
-Messages are localized per request (`errors.<CODE>` keys via `req.t`), falling back to the
-default text when no translation exists. Never write `res.status().json()` for an error —
-throw an `HttpError` and let the handler keep the format unified.
+- **Success** → `res.respond(data, { status, meta })`. `meta` carries `pagination`, `action`, or anything else.
+- **Errors** → **throw** an `HttpError` (or `next(err)`); the one central handler renders the same shape.
+  A failed `.validate()` yields one entry per field (each with a `path`).
+- **The raw senders are blocked.** `res.json` / `res.send` / `res.jsonp` / `res.sendFile` / `res.sendStatus`
+  are removed from the handler's `res` type (compile error) *and* throw at runtime — so a response can
+  never escape the envelope. (`res.render()` will join `res.respond()` as a sanctioned exit later.)
+
+Error messages are localized per request (`errors.<CODE>` keys via `req.t`), falling back to the
+default text when no translation exists.
 
 ---
 

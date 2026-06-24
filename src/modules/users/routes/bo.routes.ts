@@ -14,11 +14,11 @@ export const boRoutes = defineRoutes((registry) => {
             if (req.url) {
                 return next()
             } else {
-                return res.json({ ok: false })
+                return res.respond(null, { status: 400 })
             }
         })
         .handle((_req, res) => {
-            return res.status(200).json({ ok: true })
+            return res.respond({ created: true }, { status: 201 })
         })
 
     registry
@@ -37,11 +37,7 @@ export const boRoutes = defineRoutes((registry) => {
             }
         })
         .handle((req, res) => {
-            return res.status(200).json({
-                ok: true,
-                page: req.query.page,
-                name: req.body.name,
-            })
+            return res.respond({ page: req.query.page, name: req.body.name })
         })
 
 
@@ -71,9 +67,6 @@ export const boRoutes = defineRoutes((registry) => {
             }
         })
         .handle((req, res) => {
-            return res.status(200).json({
-                ok: true,
-                page: req.query.page,
-            })
+            return res.respond({ page: req.query.page })
         })
 })

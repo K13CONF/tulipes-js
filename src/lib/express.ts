@@ -5,6 +5,7 @@ import { authenticate, createAuthorize } from "./access-control.js"
 import { errorHandler } from "./error-handler.js"
 import { requestLogger } from "./request-logger.js"
 import { i18nextMiddleware } from "./i18n.js"
+import { responder } from "./responder.js"
 
 /**
  * Creates and configures the Express application from the resolved global
@@ -25,6 +26,11 @@ export function createApp(): Express {
 
     // Authentication: populate req.auth (placeholder until JWT)
     app.use(authenticate)
+
+    // Unified responses: attach res.respond() and block the raw senders. Placed
+    // after the framework middleware (which keep a normal res) and before routes,
+    // so only handler code is constrained.
+    app.use(responder)
 
     // RAI enforcement bound to the merged ACL
     const authorize = createAuthorize(config.app.acl)
