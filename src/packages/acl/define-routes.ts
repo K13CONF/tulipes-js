@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express"
-import type { RouteParameters } from "express-serve-static-core"
+import type { ParamsDictionary, RouteParameters } from "express-serve-static-core"
 import type { ZodType } from "zod"
 import type { ACL, RAI } from "./types.js"
 
@@ -31,6 +31,14 @@ export type RouteHandler<
     Body = unknown,
     Query = unknown,
 > = (req: Request<Params, any, Body, Query>, res: Response, next: NextFunction) => unknown
+
+/**
+ * A param name accepted by `group.param()`: the params declared in the prefix
+ * (autocompleted), plus any other `:param` a route in the group may introduce
+ * (e.g. `.get("/:id")`). The `string & {}` arm keeps the literal autocomplete
+ * while still allowing those route-level names.
+ */
+type ParamName<Prefix extends string> = (keyof RouteParameters<Prefix> & string) | (string & {})
 
 /** Per-segment zod schemas accepted by `.validate()`. */
 export interface ValidationSchemas {
@@ -96,15 +104,15 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
     }
 
     /**
-     * Register a param pre-handler for every route in this group (and its nested
-     * groups) whose path declares `:name`. `Name` is constrained to params
-     * declared in the prefix, so referencing an undeclared param is a
-     * compile-time error.
+     * Register a param pre-handler for routes in this group (and its nested
+     * groups) whose path declares `:name`. The name autocompletes the params
+     * declared in the prefix, but also accepts one introduced by a route in the
+     * group (e.g. `.get("/:id")`) — handlers are matched against each route's
+     * full path, so the param need not live in the prefix. A registered name
+     * that no route under this group declares is reported at startup (see
+     * `finalize`), recovering the safety a strict type couldn't give here.
      */
-    public param<Name extends keyof RouteParameters<Prefix> & string>(
-        name: Name,
-        handler: RequestHandler<RouteParameters<Prefix>, any, unknown, unknown>,
-    ): this {
+    public param<Params = ParamsDictionary>(name: ParamName<Prefix>, handler: RouteMiddleware<Params>): this {
         this._params.set(name, handler as RequestHandler)
         return this
     }
@@ -174,7 +182,21 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
         })
 
         const nested = this._children.flatMap((child) => child.finalize(middlewares, params))
-        return [...own, ...nested]
+        const subtree = [...own, ...nested]
+
+        // Fail-fast: a param handler registered on this group that no route in
+        // its subtree declares is almost certainly a typo — surface it at startup
+        // instead of letting it silently never run.
+        for (const name of this._params.keys()) {
+            const matchesARoute = subtree.some((route) => paramNamesIn(route.path).includes(name))
+            if (!matchesARoute) {
+                throw new Error(
+                    `param("${name}") on prefix "${this._prefix || "/"}" matches no route — no path under it declares ":${name}"`,
+                )
+            }
+        }
+
+        return subtree
     }
 }
 
@@ -199,16 +221,6 @@ export class RoutesRegistry<Identifier extends string> extends RouteGroupBuilder
      */
     public override use(handler: RequestHandler): this {
         this._middlewares.push(handler)
-        return this
-    }
-
-    /**
-     * Module-wide param pre-handler — runs before any route in the module whose
-     * path declares `:name` (mirrors Express `router.param()`). The name is a
-     * free string here because the registry has no prefix to constrain it to.
-     */
-    public override param(name: string, handler: RequestHandler): this {
-        this._params.set(name, handler)
         return this
     }
 
