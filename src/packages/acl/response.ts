@@ -9,7 +9,7 @@
  * This file is just the contract (types + a pure builder). The runtime wiring
  * lives in `lib/responder.ts`.
  */
-import type { NextFunction, Request, Response } from "express"
+import type { Response } from "express"
 
 /** A single error in the unified envelope. */
 export interface ErrorEntry {
@@ -52,11 +52,8 @@ export interface RespondOptions {
     meta?: ResponseMeta
 }
 
-/** `res.respond(data, options)` — the one sanctioned success sender. */
+/** `res.respond(data, options)` — convenience sender for the unified envelope. */
 export type Responder = <Data = unknown>(data?: Data, options?: RespondOptions) => void
-
-/** Internal: `res.respondError(status, errors, meta)` — used by the error handler. */
-export type ErrorResponder = (status: number, errors: ErrorEntry[], meta?: ResponseMeta) => void
 
 /** Builds a unified envelope, filling in the empty defaults. */
 export function buildEnvelope<Data = unknown>(parts: {
@@ -73,17 +70,11 @@ export function buildEnvelope<Data = unknown>(parts: {
     }
 }
 
-/** Senders removed from the handler-facing response — use `res.respond()` instead. */
-type BlockedSender = "json" | "jsonp" | "send" | "sendFile" | "sendStatus"
-
 /**
- * The response object handlers receive: the full Express `Response` minus the
- * raw senders (so a stray `res.json()` is a compile error), keeping `res.respond()`.
- * The internal `respondError` is hidden — errors flow through thrown `HttpError`s.
+ * The response handlers receive: the full Express `Response`, unchanged, plus
+ * `res.respond()` (added via global augmentation). Nothing is restricted —
+ * `res.json` / `res.send` / `res.status()` all keep working; `res.respond()` is
+ * just the convenience for the unified envelope.
  */
 export type AppResponse<Data = unknown, Locals extends Record<string, any> = Record<string, any>> =
-    Omit<Response<Data, Locals>, BlockedSender | "respondError">
-
-/** Handler/middleware signatures whose `res` is the restricted {@link AppResponse}. */
-export type AppRequestHandler<Params = Record<string, string>, Body = unknown, Query = unknown> =
-    (req: Request<Params, any, Body, Query>, res: AppResponse, next: NextFunction) => unknown
+    Response<Data, Locals>

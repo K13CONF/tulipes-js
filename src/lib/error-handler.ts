@@ -57,15 +57,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     ])
 }
 
-/**
- * Emits the unified error envelope. Uses `res.respondError` (the responder
- * middleware), falling back to a raw write for errors thrown before that
- * middleware ran — in which case the raw senders aren't blocked yet.
- */
+/** Emits the unified error envelope `{ isOk:false, data:null, errors, meta:{} }`. */
 function send(res: Response, status: number, errors: ErrorEntry[]): void {
-    if (typeof res.respondError === "function") {
-        res.respondError(status, errors)
-        return
-    }
     res.status(status).json(buildEnvelope({ isOk: false, errors }))
 }

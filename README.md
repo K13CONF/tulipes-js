@@ -78,7 +78,7 @@ Three layers guard the same rule, on purpose:
 - 🧩 **Self-assembling modules** — each module declares its routes, ACL, i18n, and an `onInit` hook; the loader resolves `depends` with a real topological sort (cycles throw).
 - ✅ **Fail-fast config** — env vars *and* role definitions are validated with zod at startup. Bad config = the process refuses to start, with the offending key and file path printed.
 - 🧪 **Zod-validated requests, inferred types** — `.validate({ query, body, params })` coerces the request *and* flows the parsed types into every downstream handler.
-- 📦 **One response envelope** — every response (success *and* error) is `{ isOk, data, errors, meta }`. Handlers send via `res.respond()`; the raw senders (`res.json`/`res.send`/…) are **blocked** — at compile time *and* runtime — so the shape can never drift. Errors are localized per request via i18next.
+- 📦 **Unified response envelope** — `res.respond(data, { status, meta })` sends `{ isOk, data, errors, meta }`, and the central error handler renders failures in the same shape. Purely additive — the full Express `res` (`json`, `send`, `redirect`, …) keeps working. Errors are localized per request via i18next.
 - 🌍 **Per-module i18n** — each module's locale folder becomes an i18next namespace; language is detected per request and exposed as `req.t`.
 - 🪵 **Production-grade logging** — Pino with secret redaction, daily/size rotation + gzip, per-request correlation IDs, pretty in dev / JSON in prod, child loggers per module.
 - 🛑 **Graceful shutdown & clustering** — SIGTERM/SIGINT drains connections and closes the DB; optional cluster mode forks one worker per core.
@@ -329,9 +329,10 @@ Every endpoint returns one envelope — success and error alike:
 - **Success** → `res.respond(data, { status, meta })`. `meta` carries `pagination`, `action`, or anything else.
 - **Errors** → **throw** an `HttpError` (or `next(err)`); the one central handler renders the same shape.
   A failed `.validate()` yields one entry per field (each with a `path`).
-- **The raw senders are blocked.** `res.json` / `res.send` / `res.jsonp` / `res.sendFile` / `res.sendStatus`
-  are removed from the handler's `res` type (compile error) *and* throw at runtime — so a response can
-  never escape the envelope. (`res.render()` will join `res.respond()` as a sanctioned exit later.)
+- **Purely additive.** `res.respond()` sits *alongside* the full Express response — `res.json`, `res.send`,
+  `res.status()`, `res.redirect()` all keep working untouched. Reach for `respond()` when you want the
+  unified envelope; drop to the raw senders when you need something else. (`res.render()` is a natural
+  companion to add later.)
 
 Error messages are localized per request (`errors.<CODE>` keys via `req.t`), falling back to the
 default text when no translation exists.

@@ -21,8 +21,7 @@ export const loadCategory: RouteMiddleware<Params> = (req, _res, next) => {
 
 export const listCategories: RouteHandler<Record<string, string>, unknown, Query> = (req, res) => {
     const { page, limit } = req.query
-    // return res.respond([], { meta: { pagination: { page, limit } } })
-    return res.status(200).json({ message: "List categories", page, limit })
+    return res.status(200).respond([], { meta: { pagination: { page, limit } } })
 }
 
 export const getCategory: RouteHandler<Params> = (req, res) => {
