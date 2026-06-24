@@ -74,6 +74,7 @@ Three layers guard the same rule, on purpose:
 ## What's in the box
 
 - 🔐 **Compile-time + runtime ACL** — typed permissions, role→RAI grants merged across modules, enforced by one middleware.
+- 🧱 **Composable route groups** — `prefix()` nests routes (`/categories` → `/:id`); `use()`/`param()` cascade into nested groups, `param()` handlers attach only to routes that declare them, and a param matching nothing **fails fast at boot**.
 - 🧩 **Self-assembling modules** — each module declares its routes, ACL, i18n, and an `onInit` hook; the loader resolves `depends` with a real topological sort (cycles throw).
 - ✅ **Fail-fast config** — env vars *and* role definitions are validated with zod at startup. Bad config = the process refuses to start, with the offending key and file path printed.
 - 🧪 **Zod-validated requests, inferred types** — `.validate({ query, body, params })` coerces the request *and* flows the parsed types into every downstream handler.
@@ -81,6 +82,62 @@ Three layers guard the same rule, on purpose:
 - 🌍 **Per-module i18n** — each module's locale folder becomes an i18next namespace; language is detected per request and exposed as `req.t`.
 - 🪵 **Production-grade logging** — Pino with secret redaction, daily/size rotation + gzip, per-request correlation IDs, pretty in dev / JSON in prod, child loggers per module.
 - 🛑 **Graceful shutdown & clustering** — SIGTERM/SIGINT drains connections and closes the DB; optional cluster mode forks one worker per core.
+
+---
+
+## Routing: groups, params & controllers
+
+Routes are declared through a small fluent DSL. Beyond the flat `require().get()…` chain, the
+registry is a **scope tree** — `prefix()` opens a group, and groups nest:
+
+```ts
+export const boRoutes = defineRoutes((registry) => {
+  // Module-wide: runs before every route in this module
+  registry.use(requestContext)
+
+  const collection = registry.prefix("/categories")        // /categories
+  collection.use(rateLimit)                                // ← cascades to nested routes too
+
+  collection.require("categories:bo:list").get("").validate({ query }).handle(listCategories)
+  collection.require("categories:bo:create").post("").validate({ body }).handle(createCategory)
+
+  const item = collection.prefix("/:categoryId")           // /categories/:categoryId (nested)
+  item.param("categoryId", loadCategory)                   // runs only on routes that declare :categoryId
+
+  item.require("categories:bo:get").get("").validate({ params }).handle(getCategory)
+  item.require("categories:bo:delete").delete("").validate({ params }).handle(deleteCategory)
+})
+```
+
+Each route's middleware stack is assembled **outermost → innermost**:
+
+```
+module use()  →  group use() (outer→inner)  →  matched param()  →  route validate/use  →  handler
+```
+
+- **`use(fn)`** — at the registry (module-wide) or any group; cascades into nested groups.
+- **`param(name, fn)`** — attaches `fn` only to routes whose **full path** declares `:name`. The
+  name may come from the prefix *or* an individual route (`.get("/:id")`). A registered param
+  that matches no route **throws at startup** — typos can't silently no-op.
+- **`root()`** — mounts a route at its bare path, *outside* the global API prefix
+  (`/health` instead of `/api/v1/health`) — for health checks, webhooks, `robots.txt`. The RAI
+  guard and middlewares still apply; only the mount base changes.
+  ```ts
+  registry.require("system:health:read").get("/health").root().handle(healthCheck)
+  ```
+- **Controllers** — lift handlers into their own files with the exported `RouteMiddleware` /
+  `RouteHandler` types, so `req.params`/`body`/`query` stay typed:
+
+```ts
+// controllers/bo.controllers.ts
+import type { RouteHandler } from "@packages/acl/define-routes.js"
+type Params = z.infer<typeof paramsSchema>
+
+export const getCategory: RouteHandler<Params> = (req, res) =>
+  res.json({ id: req.params.categoryId })
+```
+
+It all resolves to a plain `RouteRecord[]`, so the mount layer never needs to know groups exist.
 
 ---
 
@@ -136,7 +193,7 @@ src/
 ├─ packages/
 │  └─ acl/                   # ← reusable permission engine (types + runtime)
 │     ├─ define-acl.ts       #   defineACL() → { acl, defineRoutes }
-│     ├─ define-routes.ts    #   registry.require().get().validate().use().handle()
+│     ├─ define-routes.ts    #   route DSL — require().get()…  ·  prefix() groups, use()/param()
 │     ├─ mount-routes.ts     #   binds routes onto an Express router w/ guards
 │     ├─ schema.ts           #   zod validation of ACL shape
 │     └─ errors.ts           #   HttpError hierarchy (400/401/403/404…)
@@ -152,11 +209,13 @@ src/
 │  └─ users/                 # ← a feature module (the template to copy)
 │     ├─ config.module.ts    #   the module contract (name, acl, routes, onInit…)
 │     ├─ acl.module.ts       #   role → RAI grants
-│     ├─ routes/             #   route definitions
+│     ├─ routes/             #   route definitions (groups, params, controllers)
 │     ├─ schemas/            #   zod request schemas
-│     ├─ controllers/        #   handlers
+│     ├─ controllers/        #   handlers typed via RouteMiddleware / RouteHandler
 │     └─ i18n/               #   en.json, fr.json → "users" namespace
 └─ types/                    # ambient augmentations (req.auth, module contract)
+
+scripts/copy-assets.mjs      # build step: copies non-TS assets (i18n JSON, …) src/ → build/
 ```
 
 ---
@@ -187,11 +246,24 @@ you never get a half-booted app.
 
 | Command | Does |
 | --- | --- |
-| `yarn start:dev` | Dev mode via nodemon — `tsc && tsc-alias && node build/Application.js` on every change |
-| `yarn build` | Type-check + compile to `build/` and rewrite path aliases (`tsc-alias`) |
+| `yarn start:dev` | Dev via nodemon — runs `yarn build` then `node build/Application.js`, restarting on any `.ts`/`.json` change |
+| `yarn build` | Type-check, compile to `build/`, rewrite `@` aliases (`tsc-alias`), then copy non-TS assets |
+| `yarn copy:assets` | Copy non-TS assets (i18n JSON, …) `src/ → build/` — `tsc` only emits `.js` |
 | `yarn start:prod` | Run the compiled build with `NODE_ENV=production` |
 
 The API mounts at **`/api/v1`** (`prefix` + `version`, both in `app.config.ts`).
+
+### Path aliases
+
+Two alias systems, each for a different stage:
+
+| Alias | Resolved by | Points at | Use in |
+| --- | --- | --- | --- |
+| `@/*`, `@lib/*`, `@config/*`, … | TypeScript + `tsc-alias` (compile time) | `src/*` | typed `.ts` source |
+| `#/*`, `#lib/*`, `#config/*`, … | Node.js `imports` (runtime) | `build/*` | plain `.mjs` scripts |
+
+`@` aliases are rewritten to relative paths during the build; `#` aliases are real Node subpath
+imports (they must start with `#`), handy in standalone scripts that run the compiled output.
 
 ---
 
