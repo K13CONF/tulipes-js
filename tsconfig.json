@@ -66,7 +66,8 @@
     ] // Enable path aliases in ts-node
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "scripts/polyfill.js"
   ],
   "exclude": [
     "node_modules"

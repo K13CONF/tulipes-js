@@ -2,6 +2,6 @@
     "watch": [
         "src"
     ],
-    "ext": "ts",
-    "exec": "tsc && tsc-alias && node build/Application.js"
+    "ext": "ts,json",
+    "exec": "yarn build && node build/Application.js"
 }

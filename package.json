@@ -2,9 +2,19 @@
   "name": "bp-backend-express",
   "packageManager": "yarn@4.12.0",
   "type": "module",
+  "imports": {
+    "#/*": "./build/*",
+    "#config/*": "./build/config/*",
+    "#lib/*": "./build/lib/*",
+    "#helpers/*": "./build/helpers/*",
+    "#modules/*": "./build/modules/*",
+    "#packages/*": "./build/packages/*"
+  },
   "scripts": {
+    "//copy-assets": "--------- Copy assets",
+    "copy:assets": "node scripts/copy-assets.mjs",
     "//build": "------------ Build the js",
-    "build": "tsc && tsc-alias",
+    "build": "tsc && tsc-alias && yarn copy:assets",
     "//dev": "------------ Run in dev mode",
     "start:dev": "NODE_ENV=development nodemon",
     "//prod": "------------ Run in prod mode",
