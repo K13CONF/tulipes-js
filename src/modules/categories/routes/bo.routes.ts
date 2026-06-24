@@ -19,17 +19,18 @@ export const boRoutes = defineRoutes((registry) => {
         .validate({ body: bodySchema })
         .handle(BOCtrls.createCategory)
 
-    // --- Item routes: /categories/:categoryId ---
-    const item = registry.prefix("/categories/:categoryId")
+    // --- Item routes: /categories/:categoryId (nested under the collection) ---
+    const item = collection.prefix("/test")
 
     // loadCategory runs before every item route
     item.param("categoryId", BOCtrls.loadCategory)
 
     item
         .require("categories:bo:get")
-        .get("")
+        .get("/:categoryId")
         .validate({ params: paramsSchema })
         .handle(BOCtrls.getCategory)
+
 
     item
         .require("categories:bo:update")
@@ -42,4 +43,7 @@ export const boRoutes = defineRoutes((registry) => {
         .delete("")
         .validate({ params: paramsSchema })
         .handle(BOCtrls.deleteCategory)
+
+    const fin = registry.finalize()
+    console.log(fin)
 })

@@ -13,8 +13,8 @@ export const publicRoutes = defineRoutes((registry) => {
         .validate({ query: querySchema })
         .handle(PublicCtrls.listCategories)
 
-    // --- Item routes: /categories/:categoryId ---
-    const item = registry.prefix("/categories/:categoryId")
+    // --- Item routes: /categories/:categoryId (nested under the collection) ---
+    const item = collection.prefix("/:categoryId")
 
     item.param("categoryId", PublicCtrls.loadCategory)
 

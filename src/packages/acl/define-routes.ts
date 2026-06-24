@@ -63,75 +63,32 @@ export default function defineRoutesFactory<Identifier extends string>(acl: ACL)
 }
 
 /**
- * Collects route definitions for a module. `require(rai)` is typed with the
- * module's RAIs, so the identifier autocompletes and unknown ones are rejected.
- */
-export class RoutesRegistry<Identifier extends string> {
-    private _directRoutes: RouteRecord[] = []
-    private _groups: Array<{ finalize(): RouteRecord[] }> = []
-
-    constructor(private readonly grantedRAIs: Set<string>) {}
-
-    /** All collected routes: direct routes followed by finalized prefix groups. */
-    get routes(): RouteRecord[] {
-        return [...this._directRoutes, ...this._groups.flatMap((g) => g.finalize())]
-    }
-
-    public require(rai: Identifier) {
-        // Types already guarantee this; the runtime guard protects untyped callers.
-        if (!this.grantedRAIs.has(rai)) {
-            throw new Error(`RAI "${rai}" is not granted to any role in this module's ACL`)
-        }
-
-        const bind = <Path extends string>(method: HttpMethod, path: Path) => {
-            const record: RouteRecord = { rai, method, path, middlewares: [] }
-            this._directRoutes.push(record)
-            return new RouteBuilder<RouteParameters<Path>>(record)
-        }
-
-        return {
-            get: <Path extends string>(path: Path) => bind("GET", path),
-            post: <Path extends string>(path: Path) => bind("POST", path),
-            put: <Path extends string>(path: Path) => bind("PUT", path),
-            delete: <Path extends string>(path: Path) => bind("DELETE", path),
-            patch: <Path extends string>(path: Path) => bind("PATCH", path),
-        }
-    }
-
-    /**
-     * Groups routes under a shared path prefix. Every route defined through the
-     * returned builder gets the prefix prepended to its path.
-     *
-     * The returned builder also exposes:
-     * - `.use(middleware)` — runs before every route in this group
-     * - `.param(name, middleware)` — runs before every route in this group whose
-     *   path contains `:name` (mirrors Express `router.param()` semantics)
-     */
-    public prefix<Prefix extends string>(path: Prefix): RouteGroupBuilder<Identifier, Prefix> {
-        const group = new RouteGroupBuilder<Identifier, Prefix>(path, this.grantedRAIs)
-        this._groups.push(group)
-        return group
-    }
-}
-
-/**
- * Collects routes under a shared prefix. Prefix-level `.use()` middlewares and
- * `.param()` handlers are prepended to each route's middleware stack at finalize
- * time — no changes are needed to the mount layer.
+ * Collects routes under a shared path prefix, and is itself a scope: it can open
+ * further nested groups via `prefix(...)`. A route's final middleware stack is
+ * assembled at {@link finalize} time by walking from the outermost scope inward:
+ *
+ *   group `use()` (outer → inner)  →  matched `param()` handlers  →  the route's
+ *   own middlewares (`validate` / `use`)  →  the handler
+ *
+ * Nested groups inherit their ancestors' `use()` middlewares and `param()`
+ * handlers; a `param()` redefined deeper overrides a shallower one of the same
+ * name. Everything resolves to a plain `RouteRecord[]`, so the mount layer needs
+ * no knowledge of groups.
  */
 export class RouteGroupBuilder<Identifier extends string, Prefix extends string> {
-    private readonly _routes: RouteRecord[] = []
-    private readonly _middlewares: RequestHandler[] = []
-    private readonly _params = new Map<string, RequestHandler>()
+    protected readonly _routes: RouteRecord[] = []
+    protected readonly _children: RouteGroupBuilder<Identifier, any>[] = []
+    protected readonly _middlewares: RequestHandler[] = []
+    protected readonly _params = new Map<string, RequestHandler>()
 
     constructor(
-        private readonly prefix: Prefix,
-        private readonly grantedRAIs: Set<string>,
+        protected readonly _prefix: Prefix,
+        protected readonly grantedRAIs: Set<string>,
     ) {}
 
     /**
-     * Append a middleware that runs before every route in this group.
-     * `req.params` is typed to the params declared in the prefix path.
+     * Append a middleware that runs before every route in this group (and its
+     * nested groups). `req.params` is typed to the params declared in the prefix.
      */
     public use(handler: RequestHandler<RouteParameters<Prefix>, any, unknown, unknown>): this {
         this._middlewares.push(handler as RequestHandler)
@@ -139,9 +96,10 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
     }
 
     /**
-     * Register a param pre-handler for every route in this group whose path
-     * contains `:name`. `Name` is constrained to params declared in the prefix,
-     * so referencing an undeclared param is a compile-time error.
+     * Register a param pre-handler for every route in this group (and its nested
+     * groups) whose path declares `:name`. `Name` is constrained to params
+     * declared in the prefix, so referencing an undeclared param is a
+     * compile-time error.
      */
     public param<Name extends keyof RouteParameters<Prefix> & string>(
         name: Name,
@@ -151,15 +109,33 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
         return this
     }
 
-    /** Same fluent API as `RoutesRegistry.require()`, with the prefix prepended to every path. */
+    /**
+     * Open a nested group whose prefix is this group's prefix followed by `path`.
+     * The child inherits this group's `use()` middlewares and `param()` handlers.
+     *
+     * @example
+     * const collection = registry.prefix("/categories")   // /categories
+     * const item = collection.prefix("/:categoryId")       // /categories/:categoryId
+     */
+    public prefix<Sub extends string>(path: Sub): RouteGroupBuilder<Identifier, `${Prefix}${Sub}`> {
+        const child = new RouteGroupBuilder<Identifier, `${Prefix}${Sub}`>(
+            `${this._prefix}${path}`,
+            this.grantedRAIs,
+        )
+        this._children.push(child)
+        return child
+    }
+
+    /** Begin a route under this group's prefix, guarded by `rai`. */
     public require(rai: Identifier) {
+        // Types already guarantee this; the runtime guard protects untyped callers.
         if (!this.grantedRAIs.has(rai)) {
             throw new Error(`RAI "${rai}" is not granted to any role in this module's ACL`)
         }
 
         const bind = <RoutePath extends string>(method: HttpMethod, routePath: RoutePath) => {
             type FullPath = `${Prefix}${RoutePath}`
-            const fullPath = `${this.prefix}${routePath}` as FullPath
+            const fullPath = `${this._prefix}${routePath}` as FullPath
             const record: RouteRecord = { rai, method, path: fullPath, middlewares: [] }
             this._routes.push(record)
             return new RouteBuilder<RouteParameters<FullPath>>(record)
@@ -175,22 +151,78 @@ export class RouteGroupBuilder<Identifier extends string, Prefix extends string>
     }
 
     /**
-     * Resolves the final middleware stack for every route in the group.
-     * Order: param handlers → prefix `.use()` middlewares → route's own middlewares.
-     * Called once by `RoutesRegistry.routes` at the end of `defineRoutes`.
+     * Flatten this group and its descendants into fully-resolved routes. Each
+     * route's stack is `inherited + own use()`, then the `param()` handlers whose
+     * name appears in its path (in path order, nearest definition winning), then
+     * the route's own middlewares. Called once via `RoutesRegistry.routes`.
      */
-    finalize(): RouteRecord[] {
-        return this._routes.map((route) => {
-            const paramNames = [...route.path.matchAll(/:(\w+)/g)].map((m) => m[1]).filter((n): n is string => n !== undefined)
-            const paramMiddlewares = paramNames
-                .filter((name) => this._params.has(name))
-                .map((name) => this._params.get(name)!)
+    finalize(
+        inheritedMiddlewares: readonly RequestHandler[] = [],
+        inheritedParams: ReadonlyMap<string, RequestHandler> = new Map(),
+    ): RouteRecord[] {
+        const middlewares = [...inheritedMiddlewares, ...this._middlewares]
+        const params = new Map([...inheritedParams, ...this._params])
+
+        const own = this._routes.map((route) => {
+            const paramMiddlewares = paramNamesIn(route.path)
+                .filter((name) => params.has(name))
+                .map((name) => params.get(name)!)
             return {
                 ...route,
-                middlewares: [...paramMiddlewares, ...this._middlewares, ...route.middlewares],
+                middlewares: [...middlewares, ...paramMiddlewares, ...route.middlewares],
             }
         })
+
+        const nested = this._children.flatMap((child) => child.finalize(middlewares, params))
+        return [...own, ...nested]
     }
+}
+
+/**
+ * Collects a module's route definitions. The registry is the root of a small
+ * scope tree: `require(...)` binds routes at the root, while `prefix(...)` opens
+ * a nested {@link RouteGroupBuilder} whose routes inherit the parent's prefix,
+ * `use()` middlewares and `param()` handlers.
+ *
+ * `require(rai)` is typed with the module's RAIs, so the identifier autocompletes
+ * and unknown ones are rejected.
+ */
+export class RoutesRegistry<Identifier extends string> extends RouteGroupBuilder<Identifier, ""> {
+    constructor(grantedRAIs: Set<string>) {
+        super("", grantedRAIs)
+    }
+
+    /**
+     * Module-wide middleware — runs before every route in the module (direct
+     * routes and every group). Unlike a group's `use()`, it isn't bound to a
+     * prefix, so `req.params` is the generic dictionary.
+     */
+    public override use(handler: RequestHandler): this {
+        this._middlewares.push(handler)
+        return this
+    }
+
+    /**
+     * Module-wide param pre-handler — runs before any route in the module whose
+     * path declares `:name` (mirrors Express `router.param()`). The name is a
+     * free string here because the registry has no prefix to constrain it to.
+     */
+    public override param(name: string, handler: RequestHandler): this {
+        this._params.set(name, handler)
+        return this
+    }
+
+    /** Every collected route, with its middleware stack fully resolved. */
+    get routes(): RouteRecord[] {
+        return this.finalize()
+    }
+}
+
+/** Extracts the `:param` names from a route path, in the order they appear. */
+function paramNamesIn(path: string): string[] {
+    return [...path.matchAll(/:(\w+)/g)]
+        .map((match) => match[1])
+        .filter((name): name is string => name !== undefined)
 }
 
 /**
