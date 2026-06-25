@@ -12,7 +12,7 @@ export async function getModuleConfig() {
         description: "Categories module",
         version: "1.0.0",
 
-        priority: 0,
+        priority: 3,
         depends: [],
 
         acl: acl,

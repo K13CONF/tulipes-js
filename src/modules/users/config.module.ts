@@ -14,7 +14,7 @@ export async function getModuleConfig() {
         version: '1.0.0',
 
         // Init order: higher priority runs first; `depends` init before this one.
-        priority: 0,
+        priority: 1,
         depends: [],
 
         // Module specific configurations can be added here, for example:
