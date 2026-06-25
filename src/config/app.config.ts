@@ -3,10 +3,12 @@ import roles from '@config/roles.definition.js'
 import { moduleACLSchema } from '@packages/acl/schema.js'
 
 // import all the modules configs here
+import * as core from '@/modules/core/config.module.js'
 import * as users from '@/modules/users/config.module.js'
 import * as categories from '@/modules/categories/config.module.js'
 
 const modules = {
+    core: await core.getModuleConfig(),
     users: await users.getModuleConfig(),
     categories: await categories.getModuleConfig(),
 }
@@ -95,8 +97,11 @@ export default await (async function resolveGlobalConfig() {
                 },
 
                 jwt: {
-                    secret: env.JWT_SECRET,
-                    expiresIn: env.JWT_EXPIRES_IN
+                    algorithm: env.JWT_ALGORITHM,
+                    privateKey: env.JWT_PRIVATE_KEY,
+                    publicKey: env.JWT_PUBLIC_KEY,
+                    expiresIn: env.JWT_EXPIRES_IN,
+                    refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
                 },
 
                 mailer: {

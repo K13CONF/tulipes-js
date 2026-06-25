@@ -1,3 +1,8 @@
 {
-    
+    "errors": {
+        "BAD_REQUEST": "Bad request",
+        "UNAUTHORIZED": "Authentication required",
+        "FORBIDDEN": "Insufficient permissions",
+        "NOT_FOUND": "Resource not found"
+    }
 }

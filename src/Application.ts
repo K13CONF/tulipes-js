@@ -22,7 +22,7 @@ const bootStartedAt = Date.now()
  */
 async function init() {
     // Connect to the database, then initialize modules (dependency + priority order).
-    await connect(config.app.lib.database)
+    // await connect(config.app.lib.database)
     await initModules(config.app.modules)
 
     // Initialize i18n from each module's locale folders.

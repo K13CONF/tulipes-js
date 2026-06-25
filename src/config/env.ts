@@ -1,6 +1,7 @@
 import { config } from 'dotenv'
 import { z } from 'zod'
 import path from 'path'
+import type { StringValue } from 'ms'
 
 // Get the runtime environment, fallback on development
 const { NODE_ENV = 'development' } = process.env;
@@ -33,8 +34,11 @@ const envSchema = z.object({
     DATABASE_PASSWORD: z.string(),
 
     // JWT configuration
-    JWT_SECRET: z.string(),
-    JWT_EXPIRES_IN: z.string(),
+    JWT_ALGORITHM: z.enum(['HS256', 'RS256', 'ES256']).default('RS256'),
+    JWT_PRIVATE_KEY: z.string(), // Private key for RS256 or ES256 algorithms. Also used for HS256 if you want to use a custom secret.
+    JWT_PUBLIC_KEY: z.string(), // Public key for RS256 or ES256 algorithms
+    JWT_EXPIRES_IN: z.custom<StringValue>((val) => typeof val === "string" && /^\d+\s*[a-zA-Z]*$/.test(val)), // e.g. "1h", "7d", "30d"
+    JWT_REFRESH_EXPIRES_IN: z.custom<StringValue>((val) => typeof val === "string" && /^\d+\s*[a-zA-Z]*$/.test(val)), // e.g. "1h", "7d", "30d"
 
     // Email configuration
     MAILER_FROM: z.string(),
