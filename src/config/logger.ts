@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs"
 import { resolve } from "node:path"
+import cluster from "node:cluster"
 import pino, { type Logger, type LoggerOptions, type StreamEntry } from "pino"
 import { createStream } from "rotating-file-stream"
 import env from "./env.js"
@@ -24,13 +25,24 @@ const toFile = env.LOG_TO_FILE ? env.LOG_TO_FILE === "true" : true
 const dir = resolve(env.LOG_DIR) // absolute; LOG_DIR is relative to the cwd
 const rotation = { interval: "1d", size: "20M", compress: "gzip", maxFiles: 14 } as const
 
+/**
+ * In cluster mode every worker runs this module in its own process, and
+ * `rotating-file-stream` assumes a single writer per file — concurrent workers
+ * sharing one file would interleave lines and race on rotation. So each worker
+ * writes to its own `app-worker-<id>.log`. The worker id is stable across
+ * restarts, so rotation keeps pruning the same series (unlike a pid, which would
+ * orphan a new file set each boot). Outside cluster mode → plain `app.log`.
+ */
+const clustered = env.CLUSTER_MODE_ENABLED === "true"
+const workerTag = clustered ? `-worker-${cluster.worker?.id ?? process.pid}` : ""
+
 /** Names of the rotated log files, e.g. `app.log` (live) -> `app-2026-06-21.log.gz`. */
 function logFileName(time: number | Date | null, index?: number): string {
-    if (!time) return "app.log"
+    if (!time) return `app${workerTag}.log`
     const date = time instanceof Date ? time : new Date(time)
     const pad = (n: number) => String(n).padStart(2, "0")
     const stamp = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-    return `app-${stamp}${index && index > 1 ? `.${index}` : ""}.log`
+    return `app${workerTag}-${stamp}${index && index > 1 ? `.${index}` : ""}.log`
 }
 
 const options: LoggerOptions = {
@@ -108,7 +120,14 @@ if (toFile) {
     })
 }
 
-export const logger: Logger = pino(options, pino.multistream(streams))
+const rootLogger: Logger = pino(options, pino.multistream(streams))
+
+// In cluster mode, tag every record with the worker id so the per-worker files
+// (and any later aggregation) are attributable. pid/hostname stay from pino's
+// defaults; child module loggers inherit this binding.
+export const logger: Logger = clustered
+    ? rootLogger.child({ worker: cluster.worker?.id ?? process.pid })
+    : rootLogger
 
 /** Creates a child logger with bound context, e.g. `createLogger({ module: "users" })`. */
 export function createLogger(bindings: Record<string, unknown>): Logger {
