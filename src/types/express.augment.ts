@@ -17,8 +17,6 @@ declare global {
     namespace Express {
         interface Request {
             auth?: AuthContext
-            /** i18next translation function, attached by `i18next-http-middleware`. */
-            t?: (key: string, options?: Record<string, unknown>) => string
         }
         interface Response {
             /** Send a unified success envelope. Additive — the raw senders still work. */
