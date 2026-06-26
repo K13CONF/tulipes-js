@@ -52,21 +52,28 @@ async function start() {
 
 
         if (clusterModeEnabled && cluster.isPrimary) {
-            logger.info(`Running in cluster mode: Primary process ${process.pid}`)
+            const numCPUs = availableParallelism()
+            logger.info(`Cluster primary ${process.pid} — forking ${numCPUs} workers`)
 
-            // 1. Get the total number of available CPU cores
-            const numCPUs = availableParallelism();
+            // Give each worker a stable slot index (0..numCPUs-1) via WORKER_INDEX,
+            // and remember which slot each worker holds. When one dies we respawn
+            // into the SAME slot, so its log file (app-worker-<slot>.log) is reused
+            // rather than a new one being created on every restart/crash.
+            const slotByWorkerId = new Map<number, number>()
 
-            // 2. Fork a worker process for each CPU core
-            for (let i = 0; i < numCPUs; i++) {
-                cluster.fork()
+            const spawnWorker = (slot: number) => {
+                const worker = cluster.fork({ WORKER_INDEX: String(slot) })
+                slotByWorkerId.set(worker.id, slot)
             }
 
-            // 3. Listen for dying workers and replace them immediately
-            cluster.on('exit', (worker, code, signal) => {
-                console.log(`Worker ${worker.process.pid} died. Spawning a new one...`);
-                cluster.fork();
-            });
+            for (let slot = 0; slot < numCPUs; slot++) spawnWorker(slot)
+
+            cluster.on("exit", (worker, code, signal) => {
+                const slot = slotByWorkerId.get(worker.id) ?? 0
+                slotByWorkerId.delete(worker.id)
+                logger.warn(`Worker ${worker.process.pid} (slot ${slot}) exited [${signal ?? code}] — respawning`)
+                spawnWorker(slot)
+            })
 
         } else {
 

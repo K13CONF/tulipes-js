@@ -1,6 +1,5 @@
 import { mkdirSync } from "node:fs"
 import { resolve } from "node:path"
-import cluster from "node:cluster"
 import pino, { type Logger, type LoggerOptions, type StreamEntry } from "pino"
 import { createStream } from "rotating-file-stream"
 import env from "./env.js"
@@ -27,22 +26,27 @@ const rotation = { interval: "1d", size: "20M", compress: "gzip", maxFiles: 14 }
 
 /**
  * In cluster mode every worker runs this module in its own process, and
- * `rotating-file-stream` assumes a single writer per file — concurrent workers
- * sharing one file would interleave lines and race on rotation. So each worker
- * writes to its own `app-worker-<id>.log`. The worker id is stable across
- * restarts, so rotation keeps pruning the same series (unlike a pid, which would
- * orphan a new file set each boot). Outside cluster mode → plain `app.log`.
+ * `rotating-file-stream` assumes a single writer per file. To avoid two workers
+ * racing on one file, each writes its own — keyed by the slot index the primary
+ * assigns via `WORKER_INDEX` (see `Application.ts`). That slot is reused when a
+ * worker respawns, so the set stays `app-worker-0.log … app-worker-<n-1>.log`
+ * instead of growing on every restart. Outside cluster mode → plain `app.log`.
  */
-const clustered = env.CLUSTER_MODE_ENABLED === "true"
-const workerTag = clustered ? `-worker-${cluster.worker?.id ?? process.pid}` : ""
+const workerIndex = env.CLUSTER_MODE_ENABLED === "true" ? (process.env.WORKER_INDEX ?? "0") : null
+const baseName = workerIndex === null ? "app" : `app-worker-${workerIndex}`
 
-/** Names of the rotated log files, e.g. `app.log` (live) -> `app-2026-06-21.log.gz`. */
-function logFileName(time: number | Date | null, index?: number): string {
-    if (!time) return `app${workerTag}.log`
-    const date = time instanceof Date ? time : new Date(time)
+/** `yyyy-mm-dd`, used in rotated file names. */
+function dateStamp(date: Date): string {
     const pad = (n: number) => String(n).padStart(2, "0")
-    const stamp = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-    return `app${workerTag}-${stamp}${index && index > 1 ? `.${index}` : ""}.log`
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/** Live file is `<base>.log`; rotations append the date (and `.N` for same-day rolls). */
+function logFileName(time: number | Date | null, index?: number): string {
+    if (!time) return `${baseName}.log`
+    const date = time instanceof Date ? time : new Date(time)
+    const sameDayRoll = index && index > 1 ? `.${index}` : ""
+    return `${baseName}-${dateStamp(date)}${sameDayRoll}.log`
 }
 
 const options: LoggerOptions = {
@@ -122,12 +126,11 @@ if (toFile) {
 
 const rootLogger: Logger = pino(options, pino.multistream(streams))
 
-// In cluster mode, tag every record with the worker id so the per-worker files
+// In cluster mode, tag every record with the worker slot so the per-worker files
 // (and any later aggregation) are attributable. pid/hostname stay from pino's
 // defaults; child module loggers inherit this binding.
-export const logger: Logger = clustered
-    ? rootLogger.child({ worker: cluster.worker?.id ?? process.pid })
-    : rootLogger
+export const logger: Logger =
+    workerIndex === null ? rootLogger : rootLogger.child({ worker: Number(workerIndex) })
 
 /** Creates a child logger with bound context, e.g. `createLogger({ module: "users" })`. */
 export function createLogger(bindings: Record<string, unknown>): Logger {
