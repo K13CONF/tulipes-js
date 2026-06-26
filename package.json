@@ -11,6 +11,8 @@
     "#packages/*": "./build/packages/*"
   },
   "scripts": {
+    "//keys": "------------ Generate RS256 JWT key pair",
+    "keys:jwt": "node scripts/generate-jwt-keys.mjs",
     "//copy-assets": "--------- Copy assets",
     "copy:assets": "node scripts/copy-assets.mjs",
     "//build": "------------ Build the js",

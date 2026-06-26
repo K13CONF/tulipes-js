@@ -22,7 +22,13 @@ const level = env.LOG_LEVEL ?? (isProduction ? "info" : "debug")
 const pretty = !isProduction
 const toFile = env.LOG_TO_FILE ? env.LOG_TO_FILE === "true" : true
 const dir = resolve(env.LOG_DIR) // absolute; LOG_DIR is relative to the cwd
-const rotation = { interval: "1d", size: "20M", compress: "gzip", maxFiles: 14 } as const
+const rotation = {
+    interval: "1d",
+    size: "20M",
+    // compress: "gzip", // Keep this commented in most out cases storage wont be a problem
+    compress: false,
+    maxFiles: 14
+} as const
 
 /**
  * In cluster mode every worker runs this module in its own process, and
@@ -116,6 +122,7 @@ if (toFile) {
         level,
         stream: createStream(logFileName, {
             path: dir,
+            initialRotation: true,
             interval: rotation.interval,
             size: rotation.size,
             compress: rotation.compress,
