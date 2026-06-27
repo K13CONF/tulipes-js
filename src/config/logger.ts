@@ -8,38 +8,35 @@ import env from "./env.js"
  * Application logger (Pino) and its configuration — owned entirely by the config
  * layer.
  *
- * - Console: colored, human-friendly when `pretty` (non-production); raw JSON to
- *   stdout otherwise.
- * - File: newline-delimited JSON, rotated daily or at 20MB, gzipped, keeping 14
- *   files in `LOG_DIR` (default ./logs) — grep/jq/Loki/ELK queryable.
+ * - Console: colored, human-friendly when `pretty` (development only); raw JSON
+ *   to stdout otherwise.
+ * - File: newline-delimited JSON, rotated daily or at 20MB, keeping 14 files in
+ *   `LOG_DIR` (default ./logs) — grep/jq/Loki/ELK queryable. Under PM2, set
+ *   `LOG_TO_FILE=false` and let PM2 capture stdout instead.
  * - Secrets are redacted so they never reach a transport.
  */
 
-const isProduction = env.NODE_ENV === "production"
+// Only development gets pretty/verbose output; staging + production are
+// treated as production-like (JSON, info level).
+const isDevelopment = env.NODE_ENV === "development"
 
 // ── Configuration (derived from env) ───────────────────────────────────────
-const level = env.LOG_LEVEL ?? (isProduction ? "info" : "debug")
-const pretty = !isProduction
+const level = env.LOG_LEVEL ?? (isDevelopment ? "debug" : "info")
+const pretty = isDevelopment
 const toFile = env.LOG_TO_FILE ? env.LOG_TO_FILE === "true" : true
 const dir = resolve(env.LOG_DIR) // absolute; LOG_DIR is relative to the cwd
 const rotation = {
     interval: "1d",
     size: "20M",
-    // compress: "gzip", // Keep this commented in most out cases storage wont be a problem
+    // compress: "gzip", // Keep this commented in most cases — storage won't be a problem
     compress: false,
     maxFiles: 14
 } as const
 
-/**
- * In cluster mode every worker runs this module in its own process, and
- * `rotating-file-stream` assumes a single writer per file. To avoid two workers
- * racing on one file, each writes its own — keyed by the slot index the primary
- * assigns via `WORKER_INDEX` (see `Application.ts`). That slot is reused when a
- * worker respawns, so the set stays `app-worker-0.log … app-worker-<n-1>.log`
- * instead of growing on every restart. Outside cluster mode → plain `app.log`.
- */
-const workerIndex = env.CLUSTER_MODE_ENABLED === "true" ? (process.env.WORKER_INDEX ?? "0") : null
-const baseName = workerIndex === null ? "app" : `app-worker-${workerIndex}`
+// Clustering is owned by PM2 (the app no longer forks via node:cluster). Each
+// PM2 instance is its own process; with file logging on, point distinct
+// instances at distinct LOG_DIRs, or prefer `LOG_TO_FILE=false` + PM2 capture.
+const baseName = "app"
 
 /** `yyyy-mm-dd`, used in rotated file names. */
 function dateStamp(date: Date): string {
@@ -131,13 +128,7 @@ if (toFile) {
     })
 }
 
-const rootLogger: Logger = pino(options, pino.multistream(streams))
-
-// In cluster mode, tag every record with the worker slot so the per-worker files
-// (and any later aggregation) are attributable. pid/hostname stay from pino's
-// defaults; child module loggers inherit this binding.
-export const logger: Logger =
-    workerIndex === null ? rootLogger : rootLogger.child({ worker: Number(workerIndex) })
+export const logger: Logger = pino(options, pino.multistream(streams))
 
 /** Creates a child logger with bound context, e.g. `createLogger({ module: "users" })`. */
 export function createLogger(bindings: Record<string, unknown>): Logger {

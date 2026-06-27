@@ -24,6 +24,13 @@ export async function getModuleConfig() {
         modelsFolderPath: "./models",
 
         onInit: async () => {
+            // Resource sync is a one-off boot task. Under PM2 cluster every
+            // instance runs onInit, so only instance 0 (or a single/fork process,
+            // where NODE_APP_INSTANCE is unset) performs the upsert — the others
+            // would just repeat the same idempotent writes.
+            const instance = process.env.NODE_APP_INSTANCE
+            if (instance && instance !== "0") return
+
             const Resource = mongoose.model<IResource>("Resource")
 
             // 1. Get all the resources
