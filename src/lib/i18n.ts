@@ -28,15 +28,17 @@ const modulesRoot = resolve(import.meta.dirname, "../modules")
  * Resolves each module's i18n folder into a namespace map: `{ [moduleKey]: dir }`.
  * Only folders that actually exist on disk are included.
  */
-function collectNamespaceDirs(modules: Record<string, ModuleConfig>): Record<string, string> {
+function collectNamespaceDirs(modules: ModuleConfig[]): Record<string, string> {
     const dirs: Record<string, string> = {}
-    for (const [key, module] of Object.entries(modules)) {
+    for (const module of modules) {
         if (!module.i18nFolderPath) continue
-        const dir = resolve(modulesRoot, key, module.i18nFolderPath)
+        // `module.name` must match the on-disk module folder (and is used as the
+        // i18next namespace).
+        const dir = resolve(modulesRoot, module.name, module.i18nFolderPath)
         if (existsSync(dir)) {
-            dirs[key] = dir
+            dirs[module.name] = dir
         } else {
-            logger.warn(`i18n: module "${key}" declares i18nFolderPath but ${dir} was not found — skipping`)
+            logger.warn(`i18n: module "${module.name}" declares i18nFolderPath but ${dir} was not found — skipping`)
         }
     }
     return dirs
@@ -47,7 +49,7 @@ function collectNamespaceDirs(modules: Record<string, ModuleConfig>): Record<str
  * bootstrap. Safe to call even when no module ships translations — it falls
  * back to the default namespace.
  */
-export async function initI18n(modules: Record<string, ModuleConfig>): Promise<void> {
+export async function initI18n(modules: ModuleConfig[]): Promise<void> {
     const namespaceDirs = collectNamespaceDirs(modules)
     const namespaces = Object.keys(namespaceDirs)
     const ns = namespaces.length > 0 ? namespaces : [defaultNS]

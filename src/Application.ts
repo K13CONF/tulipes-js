@@ -37,7 +37,7 @@ async function init() {
     await initModules(config.app.modules)
 
     // Initialize i18n from each module's locale folders.
-    // await initI18n(config.app.modules)
+    await initI18n(config.app.modules)
 
     const app = createApp()
 

@@ -5,11 +5,11 @@ import type { ModuleConfig } from "@/types/module.js"
 import mongoose from "mongoose"
 import type { IResource } from "./models/resource.model.js";
 
-export const logger = createLogger({ module: "categories" })
+export const logger = createLogger({ module: "core" })
 
 export async function getModuleConfig() {
     return {
-        name: "Core",
+        name: "core",
         description: "Core module",
         version: "1.0.0",
 
