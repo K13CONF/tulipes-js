@@ -1,18 +1,22 @@
 import env from '@config/env.js'
 import roles from '@config/roles.definition.js'
 import { moduleACLSchema } from '@packages/acl/schema.js'
+import { sortModulesByPriorityAndDependencies } from '@lib/modules.js';
 
 // import all the modules configs here
 import * as core from '@/modules/core/config.module.js'
 import * as users from '@/modules/users/config.module.js'
 import * as categories from '@/modules/categories/config.module.js'
-import { sortModulesByPriorityAndDependencies } from '@lib/modules.js';
 
-const modules = sortModulesByPriorityAndDependencies({
+// Keyed by folder name (must match the on-disk module directory) — used to
+// resolve each module's relative folders (models, i18n, views).
+export const moduleRegistry = {
     core: await core.getModuleConfig(),
     users: await users.getModuleConfig(),
     categories: await categories.getModuleConfig(),
-});
+};
+
+const modules = sortModulesByPriorityAndDependencies(moduleRegistry);
 
 export type Modules = typeof modules;
 

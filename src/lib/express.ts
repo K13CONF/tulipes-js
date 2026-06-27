@@ -1,7 +1,7 @@
 import express, { type Express } from "express"
 import config from "@/config/app.config.js"
 import { mountModuleRoutes } from "@packages/acl/mount-routes.js"
-import { authenticate, createAuthorize } from "./access-control.js"
+import { authenticate, checkResourceEnabled, createAuthorize } from "./access-control.js"
 import { errorHandler } from "./error-handler.js"
 import { requestLogger } from "./request-logger.js"
 import { i18nextMiddleware } from "./i18n.js"
@@ -42,8 +42,8 @@ export function createApp(): Express {
         const prefixed = module.routes.filter((route) => !route.root)
         const unprefixed = module.routes.filter((route) => route.root)
 
-        if (prefixed.length) app.use(basePath, mountModuleRoutes(prefixed, authorize))
-        if (unprefixed.length) app.use(mountModuleRoutes(unprefixed, authorize))
+        if (prefixed.length) app.use(basePath, mountModuleRoutes(prefixed, checkResourceEnabled, authorize))
+        if (unprefixed.length) app.use(mountModuleRoutes(unprefixed, checkResourceEnabled, authorize))
     }
 
     // Central error handler — must be registered last

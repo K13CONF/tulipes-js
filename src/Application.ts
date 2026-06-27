@@ -10,12 +10,12 @@ import process from "node:process"
 import "@packages/mongoose/register.js"
 
 // Config
-import config from "@config/app.config.js"
+import config, { moduleRegistry } from "@config/app.config.js"
 import { logger } from "@config/logger.js"
 
 // Libs
 import { connect, isConnected } from "@lib/mongoose.js"
-import { initModules } from "@lib/modules.js"
+import { initModules, loadModuleModels } from "@lib/modules.js"
 import { initI18n } from "@lib/i18n.js"
 import { createApp } from "@lib/express.js"
 import { setupHTTPServer } from "@lib/http.js"
@@ -29,8 +29,11 @@ const bootStartedAt = Date.now()
  * Initialise all the libs
  */
 async function init() {
+    // Register every module's Mongoose model (side-effect imports) before use.
+    await loadModuleModels(moduleRegistry)
+
     // Connect to the database, then initialize modules (dependency + priority order).
-    // await connect(config.app.lib.database)
+    await connect(config.app.lib.database)
     await initModules(config.app.modules)
 
     // Initialize i18n from each module's locale folders.

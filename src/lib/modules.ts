@@ -1,5 +1,41 @@
+import { resolve } from "node:path"
+import { pathToFileURL } from "node:url"
+import { glob } from "glob"
 import type { ModuleConfig } from "@/types/module.js"
 import { logger } from "@config/logger.js"
+
+// Modules live at `<dist>/modules/<key>`; this file at `<dist>/lib`.
+const modulesRoot = resolve(import.meta.dirname, "../modules")
+
+/**
+ * Eagerly imports every `*.model.js` under each module's declared
+ * `modelsFolderPath` so the side-effect `mongoose.model(...)` calls register the
+ * schemas with Mongoose before the app serves traffic. Call once during
+ * bootstrap, after the global base plugin is registered (see `register.ts`).
+ * Re-importing a model is a no-op, so this is safe to call repeatedly.
+ *
+ * `modules` is keyed by folder name (the on-disk module directory) so each
+ * relative `modelsFolderPath` can be resolved against `<modulesRoot>/<key>`.
+ */
+export async function loadModuleModels(modules: Record<string, ModuleConfig>): Promise<void> {
+    let count = 0
+
+    for (const [key, module] of Object.entries(modules)) {
+        if (!module.modelsFolderPath) continue
+
+        // Compiled models are `*.model.js`; sources are `*.model.ts`. Sorted for
+        // a deterministic, log-friendly load order. Missing folders glob to [].
+        const dir = resolve(modulesRoot, key, module.modelsFolderPath)
+        const files = (await glob("**/*.model.js", { cwd: dir, absolute: true })).sort()
+
+        for (const file of files) {
+            await import(pathToFileURL(file).href)
+        }
+        count += files.length
+    }
+
+    logger.info(`Loaded ${count} module model(s)`)
+}
 
 /** Order by priority, higher first (default 0). */
 function byPriorityDesc(a: ModuleConfig, b: ModuleConfig): number {

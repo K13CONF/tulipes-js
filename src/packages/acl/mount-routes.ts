@@ -17,11 +17,12 @@ const METHOD_FN = {
  */
 export function mountModuleRoutes(
     routes: readonly RouteRecord[],
+    is_enabled: (rai: string) => RequestHandler,
     authorize: (rai: string) => RequestHandler,
 ): Router {
     const router = Router()
     for (const route of routes) {
-        const handlers: RequestHandler[] = [authorize(route.rai), ...route.middlewares]
+        const handlers: RequestHandler[] = [is_enabled(route.rai), authorize(route.rai), ...route.middlewares]
         if (route.handler) handlers.push(route.handler)
         router[METHOD_FN[route.method]](route.path, ...handlers)
     }

@@ -5,6 +5,7 @@
  * RAI-enforcement (`authorize`) middleware. `res.respond` is added by the
  * `responder` middleware as a convenience for the unified envelope.
  */
+import type { RAI } from "@packages/acl/types.js";
 import type { Responder } from "@packages/acl/response.js"
 
 /** Authenticated caller context attached to each request. */
@@ -17,6 +18,7 @@ declare global {
     namespace Express {
         interface Request {
             auth?: AuthContext
+            rai?: RAI
         }
         interface Response {
             /** Send a unified success envelope. Additive — the raw senders still work. */
