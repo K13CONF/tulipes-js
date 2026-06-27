@@ -1,6 +1,7 @@
 /**
  * This file is the entry point
  */
+import "@packages/mongoose/register.js" // registers the global base plugin before any model compiles
 import config from "@config/app.config.js"
 import { connect, isConnected } from "@lib/mongoose.js"
 import { initModules } from "@lib/modules.js"
