@@ -15,7 +15,10 @@ until the config is proven valid.
 ![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)
 ![Zod](https://img.shields.io/badge/Zod-4-3E67B1)
 ![Mongoose](https://img.shields.io/badge/Mongoose-9-880000?logo=mongodb&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-cache-DC382D?logo=redis&logoColor=white)
+![BullMQ](https://img.shields.io/badge/BullMQ-queues-E10098)
 ![Pino](https://img.shields.io/badge/Pino-10-687634)
+![PM2](https://img.shields.io/badge/PM2-cluster%20%2B%20worker-2B037A?logo=pm2&logoColor=white)
 ![ESM](https://img.shields.io/badge/ESM-top--level%20await-F7DF1E?logoColor=black)
 ![Status](https://img.shields.io/badge/status-WIP-orange)
 
@@ -83,8 +86,12 @@ Three layers guard the same rule, on purpose:
 - 🧬 **Global Mongoose base plugin** — every schema auto-gets snake_case timestamps **and** soft delete (`is_deleted` + `deleted_at` + a polymorphic `deleted_by`); deleted docs are transparently filtered from reads/updates, with `.withDeleted()` / `.onlyDeleted()` escape hatches.
 - 🗂️ **Auto-loaded models** — each module's `*.model.ts` are imported on boot (from its `modelsFolderPath`), so schemas register with Mongoose — already carrying the base plugin — before the first request.
 - 🚦 **DB-backed resource toggles** — every route is mirrored to a `Resource` document on boot; a disabled resource returns `404` before your handler (or the ACL check) ever runs.
-- 🪵 **Production-grade logging** — Pino with secret redaction, daily/size rotation + gzip, per-request correlation IDs, pretty in dev / JSON in prod, child loggers per module.
-- 🛑 **Graceful shutdown & clustering** — SIGTERM/SIGINT drains connections and closes the DB; optional cluster mode forks one worker per core (each with its own rotating log file).
+- ⚡ **Redis caching** — a small storage-agnostic `Cache` interface (`get`/`set`/`del`/`wrap`) with a Redis impl (and a `MemoryCache` for tests); swap the backend without touching call sites.
+- 📮 **Background jobs (BullMQ)** — one shared queue with a job-handler registry; producers `add(name, data)`, the worker dispatches by name. Runs in-process in dev, as a **dedicated worker process** in staging/prod.
+- ✉️ **Queued mailer** — nodemailer transport; `sendMail()` enqueues by default (`MAILER_QUEUE_ENABLED`) so SMTP latency and retries stay off the request path.
+- 🪵 **Production-grade logging** — Pino with secret redaction, daily/size rotation, per-request correlation IDs, pretty in dev / JSON otherwise, child loggers per module. Under PM2, log to stdout and let PM2 capture it.
+- 🛑 **Graceful shutdown** — SIGTERM/SIGINT drains the HTTP server, then closes the queue worker, mailer, Redis, and MongoDB (shared by the web and worker processes).
+- 🧵 **PM2 process model** — clustering and the dedicated worker are managed by PM2 (`ecosystem.config.cjs`); the app itself no longer forks.
 
 ---
 
@@ -160,7 +167,8 @@ flowchart LR
   B --> C[app.config<br/>merge module ACLs]
   C --> M[loadModels<br/>register schemas]
   M --> D[connect<br/>MongoDB]
-  D --> E[initModules<br/>topo-sorted onInit]
+  D --> I[infra<br/>redis · cache · queue · mailer]
+  I --> E[initModules<br/>topo-sorted onInit]
   E --> F[initI18n<br/>per-module namespaces]
   F --> G[createApp<br/>mount routes]
   G --> H[HTTP server<br/>listen + banner]
@@ -168,8 +176,15 @@ flowchart LR
 
 > The Mongoose base plugin is registered via a side-effect import **first** —
 > before any schema compiles — so every model picks up timestamps + soft delete.
-> `loadModels` then imports each module's `*.model.ts`, and `initModules` runs the
-> `onInit` hooks (e.g. core's syncs every route into a `Resource` document).
+> `loadModels` imports each module's `*.model.ts`; the **infra** step (shared by
+> the web and worker entry points via `lib/bootstrap.ts`) connects Redis, the
+> cache, the queue producer, and the mailer; `initModules` then runs the `onInit`
+> hooks (e.g. core's syncs every route into a `Resource` document).
+>
+> The **web** process (`Application.ts`) ends at the HTTP server and only runs the
+> queue worker inline when `WORKER_INLINE=true` (dev). The **worker** process
+> (`worker.ts`) shares the same infra bootstrap, runs `startWorker`, and skips the
+> HTTP server — it's what PM2 runs as a separate app in staging/prod.
 
 **Request lifecycle** — what every request walks through:
 
@@ -192,8 +207,8 @@ flowchart LR
 
 Two layers, deliberately separated:
 
-- **`packages/`** — reusable, app-agnostic machinery (`acl/` is the whole permission engine). Copy it to the next project untouched.
-- **`lib/`** — *this* app's policy. `access-control.ts` is where you swap the placeholder auth for real JWT; `express.ts` is where the app is assembled. Meant to be edited.
+- **`packages/`** — reusable, app-agnostic machinery (`acl/` is the permission engine, `mongoose/` the base plugin, `cache/` the storage-agnostic cache). Copy them to the next project untouched.
+- **`lib/`** — *this* app's policy and infra clients (mongoose, redis, cache, queue, mailer, i18n) plus wiring (`bootstrap.ts`, `express.ts`, `http.ts`, `shutdown.ts`). `access-control.ts` is where you swap the placeholder auth for real JWT. Meant to be edited.
 
 ---
 
@@ -201,7 +216,8 @@ Two layers, deliberately separated:
 
 ```
 src/
-├─ Application.ts            # entry point — boot, cluster, listen, graceful shutdown
+├─ Application.ts            # web entry point — boot, HTTP server, graceful shutdown
+├─ worker.ts                 # worker entry point — consumes the queue, no HTTP
 ├─ config/
 │  ├─ env.ts                 # zod-validated environment (fail-fast)
 │  ├─ app.config.ts          # global config; merges every module's ACL
@@ -214,17 +230,24 @@ src/
 │  │  ├─ mount-routes.ts     #     binds routes onto an Express router w/ guards
 │  │  ├─ schema.ts           #     zod validation of ACL shape
 │  │  └─ errors.ts           #     HttpError hierarchy (400/401/403/404…)
-│  └─ mongoose/              #   Mongoose base plugin
-│     ├─ register.ts         #     mongoose.plugin(baseModelPlugin) — global, import first
-│     └─ plugins/            #     timestamps + soft-delete (composed in base.plugin.ts)
-├─ lib/                      # ← app-specific policy (edit these)
+│  ├─ mongoose/              #   Mongoose base plugin
+│  │  ├─ register.ts         #     mongoose.plugin(baseModelPlugin) — global, import first
+│  │  └─ plugins/            #     timestamps + soft-delete (composed in base.plugin.ts)
+│  └─ cache/                 #   storage-agnostic Cache (interface + Redis + Memory impls)
+├─ lib/                      # ← app-specific policy & infra clients (edit these)
+│  ├─ bootstrap.ts           #   shared infra boot (models, db, redis, cache, queue, mailer)
 │  ├─ express.ts             #   assembles the app & middleware chain
 │  ├─ access-control.ts      #   authenticate + resource-enabled + authorize (JWT goes here)
 │  ├─ error-handler.ts       #   the one place errors become responses
 │  ├─ i18n.ts                #   i18next wiring, per-module namespaces
 │  ├─ modules.ts             #   topo-sorted init + loadModuleModels()
 │  ├─ mongoose.ts            #   DB connect / disconnect / health
-│  └─ http.ts                #   server + graceful shutdown
+│  ├─ redis.ts               #   shared Redis client + connection factory
+│  ├─ cache.ts               #   binds RedisCache to the shared client (app singleton)
+│  ├─ queue.ts               #   BullMQ queue + worker + job-handler registry
+│  ├─ mailer.ts              #   nodemailer transport; enqueues / sends mail
+│  ├─ shutdown.ts            #   shared SIGTERM/SIGINT drain (web + worker)
+│  └─ http.ts                #   HTTP server wiring
 ├─ helpers/                  # small pure utilities (jwt, startup-banner, …)
 ├─ modules/
 │  ├─ core/                  # ← built-in module: resource registry
@@ -240,6 +263,7 @@ src/
 │     └─ i18n/               #   en.json, fr.json → "users" namespace
 └─ types/                    # ambient augmentations (req.auth, module contract)
 
+ecosystem.config.cjs         # PM2: bp-web (cluster) + bp-worker (fork), per-env blocks
 scripts/
 ├─ clean.mjs                 # wipes build/ before a fresh compile (no stale .js)
 ├─ copy-assets.mjs           # copies non-TS assets (i18n JSON, …) src/ → build/
@@ -250,7 +274,7 @@ scripts/
 
 ## Getting started
 
-**Requirements:** Node `v24` (see `.nvmrc`) · Yarn `4` (Berry) · a MongoDB instance.
+**Requirements:** Node `v24` (see `.nvmrc`) · Yarn `4` (Berry) · a MongoDB instance · a Redis instance (cache + BullMQ).
 
 ```bash
 # 1. Use the pinned Node version
@@ -261,7 +285,7 @@ yarn install
 
 # 3. Configure — env files live in .envs/.env.<NODE_ENV>
 cp .envs/.env.example .envs/.env.development
-#   then fill in DATABASE_*, MAILER_*
+#   then fill in DATABASE_*, REDIS_*, MAILER_*
 
 # 4. Generate a JWT signing key pair (RS256) straight into the env file
 yarn keys:jwt --env development
@@ -271,6 +295,10 @@ yarn keys:jwt --env development
 yarn start:dev      # nodemon → rebuild + restart on change
 ```
 
+In dev, `WORKER_INLINE=true` (set in `.env.development`) means a single `yarn start:dev` also
+processes queue jobs — no separate worker needed. In staging/prod the worker runs as its own
+process under PM2 (see **Processes & deployment**).
+
 If anything in the env or role config is wrong, the server tells you exactly what and exits —
 you never get a half-booted app.
 
@@ -278,12 +306,15 @@ you never get a half-booted app.
 
 | Command | Does |
 | --- | --- |
-| `yarn start:dev` | Dev via nodemon — runs `yarn build` then `node build/Application.js`, restarting on any `.ts`/`.json` change |
+| `yarn start:dev` | Dev via nodemon — `yarn build` then `node build/Application.js`, restarting on any `.ts`/`.json` change (worker runs inline) |
 | `yarn build` | Clean `build/`, type-check, compile, rewrite `@` aliases (`tsc-alias`), then copy non-TS assets |
 | `yarn clean` | Remove `build/` — so renamed/deleted sources don't leave stale `.js` (which the model auto-loader would otherwise import) |
 | `yarn copy:assets` | Copy non-TS assets (i18n JSON, …) `src/ → build/` — `tsc` only emits `.js` |
 | `yarn keys:jwt` | Generate an RS256 key pair for JWT; `--env <name>` writes it into `.envs/.env.<name>` |
-| `yarn start:prod` | Run the compiled build with `NODE_ENV=production` |
+| `yarn start:prod` | Run the compiled web server with `NODE_ENV=production` |
+| `yarn start:worker` | Run the compiled queue worker (standalone, non-PM2) |
+| `yarn pm2:dev` / `pm2:staging` / `pm2:prod` | Start `bp-web` + `bp-worker` under PM2 for that environment |
+| `yarn pm2:reload` / `pm2:stop` / `pm2:delete` / `pm2:logs` | Manage the PM2 processes |
 
 The API mounts at **`/api/v1`** (`prefix` + `version`, both in `app.config.ts`).
 
@@ -374,17 +405,90 @@ Hard deletes (`deleteOne` / `deleteMany`) are left literal — they bypass the s
 
 ---
 
+## Caching, queues & mail
+
+Three infra clients live in `lib/`, wired once during boot (`lib/bootstrap.ts`) and shared by
+the web and worker processes. Each reads from `config.app.lib.*`.
+
+**Cache** — a storage-agnostic interface (`packages/cache`), bound to the shared Redis client
+in `lib/cache.ts`:
+
+```ts
+import { getCache } from "@lib/cache.js"
+
+const user = await getCache().wrap(`user:${id}`, 300, () => UserModel.findById(id)) // read-through, 300s TTL
+await getCache().set("k", value, 60)
+await getCache().del("k")
+```
+
+Swap `RedisCache` for `MemoryCache` in `lib/cache.ts` (or in tests) without touching call sites
+— they depend on the `Cache` interface, not Redis.
+
+**Queue** — one shared BullMQ queue (`"app"`). Producers add jobs by name; a registry maps
+names to handlers and the worker dispatches:
+
+```ts
+import { getQueue, registerJobHandler } from "@lib/queue.js"
+
+registerJobHandler("resize-image", async (job) => { /* … */ }) // during boot
+await getQueue().add("resize-image", { id })                   // anywhere
+```
+
+**Mailer** — nodemailer transport. `sendMail()` enqueues a `send-mail` job when
+`MAILER_QUEUE_ENABLED` (the default) so SMTP latency + retries stay off the request path;
+otherwise it sends inline:
+
+```ts
+import { sendMail } from "@lib/mailer.js"
+await sendMail({ to: "a@b.com", subject: "Hi", text: "…" })
+```
+
+---
+
+## Processes & deployment (PM2)
+
+Clustering and the background worker are owned by **PM2** — the app no longer forks itself.
+`ecosystem.config.cjs` defines two apps:
+
+| App | Mode | Role |
+| --- | --- | --- |
+| `bp-web` | `cluster` (`instances: max`) | the HTTP server (`Application.js`); PM2 load-balances the port across cores |
+| `bp-worker` | `fork` (`instances: 1`) | the queue consumer (`worker.js`); scale by raising `instances` |
+
+```bash
+yarn build
+yarn pm2:prod          # pm2 start ecosystem.config.cjs --env production
+yarn pm2:staging       # or --env staging
+yarn pm2:logs
+```
+
+`--env <name>` overlays the matching `env_<name>` block; vars set there win over the
+`.envs/.env.<NODE_ENV>` file (process.env beats dotenv). PM2 forces `LOG_TO_FILE=false` (it
+captures stdout itself) and `WORKER_INLINE=false` (the dedicated `bp-worker` consumes jobs).
+
+- **web = producer, worker = consumer.** The web process runs the worker inline only when
+  `WORKER_INLINE=true` (dev). Resource sync (core's `onInit`) is gated to
+  `NODE_APP_INSTANCE === "0"`, so it runs once rather than on every cluster instance.
+- **Graceful shutdown.** Both processes drain on SIGTERM/SIGINT (queue → mailer → Redis →
+  MongoDB); `kill_timeout` gives in-flight work time to finish.
+- **Environments.** `NODE_ENV` is one of `development | staging | production | test`. Only
+  `development` gets pretty/`debug` logs; `staging` and `production` are JSON/`info`.
+
+---
+
 ## Configuration reference
 
 All variables are validated in `config/env.ts`. Loaded from `.envs/.env.${NODE_ENV}`.
 
 | Group | Keys |
 | --- | --- |
-| **Runtime** | `NODE_ENV` |
-| **Server** | `PORT`, `HOST`, `HTTPS_ENABLED`, `CLUSTER_MODE_ENABLED` |
+| **Runtime** | `NODE_ENV` (`development` \| `staging` \| `production` \| `test`) |
+| **Server** | `PORT`, `HOST`, `HTTPS_ENABLED` |
 | **Database** | `DATABASE_PROTOCOL` (`mongodb` \| `mongodb+srv`), `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` |
+| **Redis** | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` *(optional)*, `REDIS_DB` |
+| **Queue worker** | `WORKER_INLINE` (run the worker in the web process — dev), `WORKER_CONCURRENCY` |
 | **Auth (JWT)** | `JWT_ALGORITHM` (`HS256` \| `RS256` \| `ES256`), `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` |
-| **Mailer** | `MAILER_FROM`, `MAILER_HOST`, `MAILER_PORT`, `MAILER_SECURE`, `MAILER_AUTH_USER`, `MAILER_AUTH_PASS` |
+| **Mailer** | `MAILER_FROM`, `MAILER_HOST`, `MAILER_PORT`, `MAILER_SECURE`, `MAILER_AUTH_USER`, `MAILER_AUTH_PASS`, `MAILER_QUEUE_ENABLED`, `MAILER_LOGGING_ENABLED` |
 | **Logging** *(optional)* | `LOG_LEVEL`, `LOG_DIR`, `LOG_TO_FILE` |
 | **i18n** *(optional)* | `I18N_FALLBACK_LANGUAGE`, `I18N_SUPPORTED_LANGUAGES` (csv), `I18N_DEFAULT_NAMESPACE` |
 
@@ -422,7 +526,9 @@ This is a **work in progress**, and a few foundations are intentionally stubbed:
 - [ ] **Tests.** `NODE_ENV=test` is supported; no runner is wired up yet. The ACL engine is the first thing that deserves coverage.
 - [ ] **JWT token helper.** `helpers/jwt/generateJWTTokens` is scaffolded but returns empty tokens — implement sign + refresh against `config.lib.jwt`.
 
-Already handled (not on the list): cluster-safe logging — each worker writes its own `app-worker-<slot>.log`, so rotation never races.
+Already handled (not on the list): caching (Redis), background jobs (BullMQ) with a dedicated
+worker process, queued email, and clustering/process management via PM2. Logging is cluster-safe
+by deferring to PM2's stdout capture (`LOG_TO_FILE=false`) instead of per-process file rotation.
 
 ---
 
