@@ -6,12 +6,13 @@ import { moduleACLSchema } from '@packages/acl/schema.js'
 import * as core from '@/modules/core/config.module.js'
 import * as users from '@/modules/users/config.module.js'
 import * as categories from '@/modules/categories/config.module.js'
+import { sortModulesByPriorityAndDependencies } from '@lib/modules.js';
 
-const modules = {
+const modules = sortModulesByPriorityAndDependencies({
     core: await core.getModuleConfig(),
     users: await users.getModuleConfig(),
     categories: await categories.getModuleConfig(),
-}
+});
 
 export type Modules = typeof modules;
 
@@ -21,11 +22,11 @@ function resolveModulesACLs(modules: Modules): Map<string, string[]> {
     const merged = new Map<string, Set<string>>();
 
     // retrieve all the modules acls and merge them by roles
-    for (const [moduleName, module] of Object.entries(modules)) {
+    for (const module of modules) {
         // validate the module's ACL shape before merging it
         const result = moduleACLSchema.safeParse(module.acl);
         if (!result.success) {
-            console.error(`❌ Invalid ACL in module "${moduleName}":`);
+            console.error(`❌ Invalid ACL in module "${module.name}":`);
             result.error.issues.forEach(issue => {
                 console.error(`❌ ${issue.path.join('.')} ${issue.message}`);
             });
@@ -120,7 +121,8 @@ async function resolveGlobalConfig() {
             },
 
             // Here we have configurations dedicated for any modules that we have in our application.
-            modules: modules,
+            modules,
+
         }
     }
 };

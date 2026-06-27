@@ -1,3 +1,4 @@
+import config from "@config/app.config.js"
 import { createLogger } from "@/config/logger.js"
 import defineACL from "@/packages/acl/define-acl.js";
 import type { ModuleConfig } from "@/types/module.js"
@@ -20,6 +21,12 @@ export async function getModuleConfig() {
         viewsFolderPath: "./views",
         modelsFolderPath: "./models",
 
-        onInit: async () => { },
+        onInit: async () => {
+            
+            const modules = config.app.modules
+            const routes = modules.flatMap((module: ModuleConfig) => module.routes ?? [])
+
+
+        },
     } satisfies ModuleConfig
 }

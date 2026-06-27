@@ -1,20 +1,27 @@
 /**
  * This file is the entry point
  */
-import "@packages/mongoose/register.js" // registers the global base plugin before any model compiles
+// Node builtins
+import cluster from "node:cluster"
+import { availableParallelism } from "node:os"
+import process from "node:process"
+
+// Side-effect: must run before any model is compiled (see register.ts)
+import "@packages/mongoose/register.js"
+
+// Config
 import config from "@config/app.config.js"
+import { logger } from "@config/logger.js"
+
+// Libs
 import { connect, isConnected } from "@lib/mongoose.js"
 import { initModules } from "@lib/modules.js"
 import { initI18n } from "@lib/i18n.js"
 import { createApp } from "@lib/express.js"
 import { setupHTTPServer } from "@lib/http.js"
-import { buildStartupInfo, printStartupBanner, type StartupInfo } from "@helpers/startup-banner.js"
-import { logger } from "./config/logger.js";
 
-import cluster from 'node:cluster';
-import { availableParallelism } from 'node:os';
-import process from 'node:process';
-import { boolean } from "zod";
+// Helpers
+import { buildStartupInfo, printStartupBanner } from "@helpers/startup-banner.js"
 
 const bootStartedAt = Date.now()
 
@@ -27,7 +34,7 @@ async function init() {
     await initModules(config.app.modules)
 
     // Initialize i18n from each module's locale folders.
-    await initI18n(config.app.modules)
+    // await initI18n(config.app.modules)
 
     const app = createApp()
 

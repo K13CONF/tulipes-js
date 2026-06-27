@@ -41,6 +41,20 @@ function excludeDeletedFromAggregate(this: Aggregate<unknown[]>) {
 }
 
 /**
+ * The `deleted_by` actor as a nested sub-schema (no own `_id`) so the whole
+ * object can be `null` when the document is live, and a `{ model, id }` pair
+ * once deleted. `refPath` makes `id` a polymorphic reference resolved against
+ * the model named in `deleted_by.model`.
+ */
+const deletedBySchema = new Schema<Actor>(
+    {
+        model: { type: String, required: true },
+        id: { type: Schema.Types.ObjectId, required: true, refPath: "deleted_by.model" },
+    },
+    { _id: false },
+)
+
+/**
  * Mongoose plugin adding soft deletion: an `is_deleted` flag plus `deleted_at`
  * and a polymorphic `deleted_by` actor. Deleted documents are transparently
  * excluded from queries unless explicitly included.
@@ -56,10 +70,7 @@ export function softDeletePlugin(schema: Schema): void {
     schema.add({
         is_deleted: { type: Boolean, default: false, index: true },
         deleted_at: { type: Date, default: null },
-        deleted_by: {
-            model: { type: String, default: null },
-            id: { type: Schema.Types.ObjectId, refPath: "deleted_by.model", default: null },
-        },
+        deleted_by: { type: deletedBySchema, default: null },
     })
 
     // ── Auto-exclude deleted docs from reads/updates ──────────────────────────

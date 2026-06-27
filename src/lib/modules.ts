@@ -56,11 +56,10 @@ export function sortModulesByPriorityAndDependencies(modules: Record<string, Mod
  * Runs every module's `onInit` hook in dependency + priority order. Call once
  * during bootstrap, after the database connection is established.
  */
-export async function initModules(modules: Record<string, ModuleConfig>): Promise<void> {
-    const sortedModules = sortModulesByPriorityAndDependencies(modules);
+export async function initModules(modules: ModuleConfig[]): Promise<void> {
 
     // Resolve each module
-    for (const module of sortedModules) {
+    for (const module of modules) {
 
         // Initialise the module
         if (module.onInit) {
