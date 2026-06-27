@@ -50,7 +50,7 @@ function resolveModulesACLs(modules: Modules): Map<string, string[]> {
  * @description This function resolves the global configuration for the application.
  * It merges the environment variables and any module-specific configurations into a single configuration object.
  */
-export default await (async function resolveGlobalConfig() {
+async function resolveGlobalConfig() {
 
     const ACL = resolveModulesACLs(modules)
 
@@ -123,4 +123,8 @@ export default await (async function resolveGlobalConfig() {
             modules: modules,
         }
     }
-})();
+};
+
+const config = await resolveGlobalConfig()
+
+export default config

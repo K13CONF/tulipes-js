@@ -30,7 +30,7 @@ export async function getModuleConfig() {
 
         // Lifecycle hook, run during bootstrap in dependency + priority order.
         onInit: async () => {
-
+            
         },
     } satisfies ModuleConfig;
 }

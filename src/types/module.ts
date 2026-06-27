@@ -38,9 +38,4 @@ export interface ModuleConfig {
      */
     onInit?: () => void | Promise<void>
 
-    /**
-     * Lifecycle hook run after all modules have initialized, and after the HTTP server is listening.
-     * This is useful for modules that need to perform some actions after the entire application is ready.
-     */
-    onReady?: () => void | Promise<void>
 }
