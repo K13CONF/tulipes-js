@@ -84,9 +84,9 @@ export async function initI18n(modules: ModuleConfig[]): Promise<void> {
                     return join(dir, `${language}.missing.json`)
                 },
             },
-            // Only capture missing keys outside production, to avoid disk writes
-            // on the hot path in prod.
-            saveMissing: config.app.env !== "production",
+            // Only capture missing keys in development, to avoid disk writes on
+            // the hot path in staging/production.
+            saveMissing: config.app.isDevelopment,
             detection: {
                 order: ["querystring", "header", "cookie"],
                 lookupQuerystring: "lng",

@@ -16,13 +16,12 @@ config({
 
 const envSchema = z.object({
     // Runtime environment variables
-    NODE_ENV: z.enum(['development', 'production', 'test']),
+    NODE_ENV: z.enum(['development', 'staging', 'production', 'test']),
 
     // Server configuration
     PORT: z.string(),
     HOST: z.string(),
     HTTPS_ENABLED: z.enum(["true", "false"]).default("false"),
-    CLUSTER_MODE_ENABLED: z.enum(["true", "false"]).default("false"),
 
 
     // Database configuration
@@ -40,13 +39,25 @@ const envSchema = z.object({
     JWT_EXPIRES_IN: z.custom<StringValue>((val) => typeof val === "string" && /^\d+\s*[a-zA-Z]*$/.test(val)), // e.g. "1h", "7d", "30d"
     JWT_REFRESH_EXPIRES_IN: z.custom<StringValue>((val) => typeof val === "string" && /^\d+\s*[a-zA-Z]*$/.test(val)), // e.g. "1h", "7d", "30d"
 
+    // Redis configuration (shared cache client + BullMQ connections)
+    REDIS_HOST: z.string(),
+    REDIS_PORT: z.string(),
+    REDIS_PASSWORD: z.string().optional(),
+    REDIS_DB: z.string().default('0'),
+
+    // Queue worker configuration
+    WORKER_INLINE: z.enum(["true", "false"]).default("false"), // run the queue worker inside the web process (dev convenience)
+    WORKER_CONCURRENCY: z.string().default("5"), // max jobs a worker processes concurrently
+
     // Email configuration
     MAILER_FROM: z.string(),
     MAILER_HOST: z.string(),
     MAILER_PORT: z.string(),
-    MAILER_SECURE: z.string(),
+    MAILER_SECURE: z.enum(["true", "false"]).default("false"),
     MAILER_AUTH_USER: z.string(),
     MAILER_AUTH_PASS: z.string(),
+    MAILER_QUEUE_ENABLED: z.enum(["true", "false"]).default("true"), // enqueue mail via BullMQ instead of sending inline
+    MAILER_LOGGING_ENABLED: z.enum(["true", "false"]).default("false"), // nodemailer transport logging
 
     // Logging configuration (optional — sensible defaults applied in the logger)
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).optional(),

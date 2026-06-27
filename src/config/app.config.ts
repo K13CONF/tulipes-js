@@ -64,6 +64,7 @@ async function resolveGlobalConfig() {
             // Runtime environment
             env: env.NODE_ENV,
             isDevelopment: env.NODE_ENV === 'development',
+            isStaging: env.NODE_ENV === 'staging',
             isProduction: env.NODE_ENV === 'production',
 
             // Application general informations
@@ -89,7 +90,6 @@ async function resolveGlobalConfig() {
                     https: {
                         isEnabled: env.HTTPS_ENABLED === "true",
                     },
-                    clusterModeEnabled: env.CLUSTER_MODE_ENABLED === "true",
                 },
 
                 database: {
@@ -109,12 +109,29 @@ async function resolveGlobalConfig() {
                     refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
                 },
 
+                redis: {
+                    host: env.REDIS_HOST,
+                    port: parseInt(env.REDIS_PORT, 10),
+                    password: env.REDIS_PASSWORD,
+                    db: parseInt(env.REDIS_DB, 10),
+                },
+
+                worker: {
+                    // Run the queue worker inside the web process (dev). In
+                    // staging/prod a dedicated worker process consumes jobs.
+                    inline: env.WORKER_INLINE === "true",
+                    concurrency: parseInt(env.WORKER_CONCURRENCY, 10),
+                },
+
                 mailer: {
                     from: env.MAILER_FROM,
                     host: env.MAILER_HOST,
                     port: parseInt(env.MAILER_PORT, 10),
+                    secure: env.MAILER_SECURE === "true",
                     user: env.MAILER_AUTH_USER,
                     password: env.MAILER_AUTH_PASS,
+                    queueEnabled: env.MAILER_QUEUE_ENABLED === "true",
+                    loggingEnabled: env.MAILER_LOGGING_ENABLED === "true",
                 },
 
                 i18n: {
