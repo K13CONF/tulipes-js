@@ -79,9 +79,12 @@ Three layers guard the same rule, on purpose:
 - ✅ **Fail-fast config** — env vars *and* role definitions are validated with zod at startup. Bad config = the process refuses to start, with the offending key and file path printed.
 - 🧪 **Zod-validated requests, inferred types** — `.validate({ query, body, params })` coerces the request *and* flows the parsed types into every downstream handler.
 - 📦 **Unified response envelope** — `res.respond(data, { status, meta })` sends `{ isOk, data, errors, meta }`, and the central error handler renders failures in the same shape. Purely additive — the full Express `res` (`json`, `send`, `redirect`, …) keeps working. Errors are localized per request via i18next.
-- 🌍 **Per-module i18n** — each module's locale folder becomes an i18next namespace; language is detected per request and exposed as `req.t`.
+- 🌍 **Per-module i18n** — each module's locale folder becomes an i18next namespace (named after the module); language is detected per request and exposed as `req.t`.
+- 🧬 **Global Mongoose base plugin** — every schema auto-gets snake_case timestamps **and** soft delete (`is_deleted` + `deleted_at` + a polymorphic `deleted_by`); deleted docs are transparently filtered from reads/updates, with `.withDeleted()` / `.onlyDeleted()` escape hatches.
+- 🗂️ **Auto-loaded models** — each module's `*.model.ts` are imported on boot (from its `modelsFolderPath`), so schemas register with Mongoose — already carrying the base plugin — before the first request.
+- 🚦 **DB-backed resource toggles** — every route is mirrored to a `Resource` document on boot; a disabled resource returns `404` before your handler (or the ACL check) ever runs.
 - 🪵 **Production-grade logging** — Pino with secret redaction, daily/size rotation + gzip, per-request correlation IDs, pretty in dev / JSON in prod, child loggers per module.
-- 🛑 **Graceful shutdown & clustering** — SIGTERM/SIGINT drains connections and closes the DB; optional cluster mode forks one worker per core.
+- 🛑 **Graceful shutdown & clustering** — SIGTERM/SIGINT drains connections and closes the DB; optional cluster mode forks one worker per core (each with its own rotating log file).
 
 ---
 
@@ -152,14 +155,21 @@ It all resolves to a plain `RouteRecord[]`, so the mount layer never needs to kn
 
 ```mermaid
 flowchart LR
-  A[env.ts<br/>validate .env] --> B[roles.definition<br/>validate roles]
+  P[register<br/>global base plugin] --> A[env.ts<br/>validate .env]
+  A --> B[roles.definition<br/>validate roles]
   B --> C[app.config<br/>merge module ACLs]
-  C --> D[connect<br/>MongoDB]
+  C --> M[loadModels<br/>register schemas]
+  M --> D[connect<br/>MongoDB]
   D --> E[initModules<br/>topo-sorted onInit]
   E --> F[initI18n<br/>per-module namespaces]
   F --> G[createApp<br/>mount routes]
   G --> H[HTTP server<br/>listen + banner]
 ```
+
+> The Mongoose base plugin is registered via a side-effect import **first** —
+> before any schema compiles — so every model picks up timestamps + soft delete.
+> `loadModels` then imports each module's `*.model.ts`, and `initModules` runs the
+> `onInit` hooks (e.g. core's syncs every route into a `Resource` document).
 
 **Request lifecycle** — what every request walks through:
 
@@ -169,11 +179,13 @@ flowchart LR
   log --> json[express.json]
   json --> i18n[i18n<br/>attach req.t]
   i18n --> auth[authenticate<br/>populate req.auth]
-  auth --> rai[authorize&#40;rai&#41;<br/>ACL check]
+  auth --> en[resource enabled?<br/>DB check]
+  en --> rai[authorize&#40;rai&#41;<br/>ACL check]
   rai --> val[.validate<br/>zod coerce]
   val --> mw[.use<br/>middlewares]
   mw --> h[.handle<br/>respond]
-  rai -. denied .-> err[errorHandler]
+  en -. disabled .-> err[errorHandler]
+  rai -. denied .-> err
   val -. invalid .-> err
   err --> out((envelope))
 ```
@@ -195,32 +207,43 @@ src/
 │  ├─ app.config.ts          # global config; merges every module's ACL
 │  ├─ roles.definition.ts    # single source of truth for role names
 │  └─ logger.ts              # Pino: redaction, rotation, child loggers
-├─ packages/
-│  └─ acl/                   # ← reusable permission engine (types + runtime)
-│     ├─ define-acl.ts       #   defineACL() → { acl, defineRoutes }
-│     ├─ define-routes.ts    #   route DSL — require().get()…  ·  prefix() groups, use()/param()
-│     ├─ mount-routes.ts     #   binds routes onto an Express router w/ guards
-│     ├─ schema.ts           #   zod validation of ACL shape
-│     └─ errors.ts           #   HttpError hierarchy (400/401/403/404…)
+├─ packages/                 # ← reusable, app-agnostic machinery (copy as-is)
+│  ├─ acl/                   #   the permission engine (types + runtime)
+│  │  ├─ define-acl.ts       #     defineACL() → { acl, defineRoutes }
+│  │  ├─ define-routes.ts    #     route DSL — require().get()…  ·  prefix() groups, use()/param()
+│  │  ├─ mount-routes.ts     #     binds routes onto an Express router w/ guards
+│  │  ├─ schema.ts           #     zod validation of ACL shape
+│  │  └─ errors.ts           #     HttpError hierarchy (400/401/403/404…)
+│  └─ mongoose/              #   Mongoose base plugin
+│     ├─ register.ts         #     mongoose.plugin(baseModelPlugin) — global, import first
+│     └─ plugins/            #     timestamps + soft-delete (composed in base.plugin.ts)
 ├─ lib/                      # ← app-specific policy (edit these)
 │  ├─ express.ts             #   assembles the app & middleware chain
-│  ├─ access-control.ts      #   authenticate + authorize (JWT goes here)
+│  ├─ access-control.ts      #   authenticate + resource-enabled + authorize (JWT goes here)
 │  ├─ error-handler.ts       #   the one place errors become responses
 │  ├─ i18n.ts                #   i18next wiring, per-module namespaces
-│  ├─ modules.ts             #   dependency-ordered module init
+│  ├─ modules.ts             #   topo-sorted init + loadModuleModels()
 │  ├─ mongoose.ts            #   DB connect / disconnect / health
 │  └─ http.ts                #   server + graceful shutdown
+├─ helpers/                  # small pure utilities (jwt, startup-banner, …)
 ├─ modules/
+│  ├─ core/                  # ← built-in module: resource registry
+│  │  ├─ models/             #   resource.model.ts (RAI ↔ route mirror)
+│  │  └─ config.module.ts    #   onInit upserts a Resource per route
 │  └─ users/                 # ← a feature module (the template to copy)
 │     ├─ config.module.ts    #   the module contract (name, acl, routes, onInit…)
 │     ├─ acl.module.ts       #   role → RAI grants
 │     ├─ routes/             #   route definitions (groups, params, controllers)
 │     ├─ schemas/            #   zod request schemas
 │     ├─ controllers/        #   handlers typed via RouteMiddleware / RouteHandler
+│     ├─ models/             #   *.model.ts — auto-loaded on boot
 │     └─ i18n/               #   en.json, fr.json → "users" namespace
 └─ types/                    # ambient augmentations (req.auth, module contract)
 
-scripts/copy-assets.mjs      # build step: copies non-TS assets (i18n JSON, …) src/ → build/
+scripts/
+├─ clean.mjs                 # wipes build/ before a fresh compile (no stale .js)
+├─ copy-assets.mjs           # copies non-TS assets (i18n JSON, …) src/ → build/
+└─ generate-jwt-keys.mjs     # generates an RS256 key pair for JWT (yarn keys:jwt)
 ```
 
 ---
@@ -238,9 +261,13 @@ yarn install
 
 # 3. Configure — env files live in .envs/.env.<NODE_ENV>
 cp .envs/.env.example .envs/.env.development
-#   then fill in DATABASE_*, JWT_SECRET, MAILER_*
+#   then fill in DATABASE_*, MAILER_*
 
-# 4. Run
+# 4. Generate a JWT signing key pair (RS256) straight into the env file
+yarn keys:jwt --env development
+#   (or `yarn keys:jwt` to print the JWT_* lines; HS256 also works — set JWT_ALGORITHM)
+
+# 5. Run
 yarn start:dev      # nodemon → rebuild + restart on change
 ```
 
@@ -252,8 +279,10 @@ you never get a half-booted app.
 | Command | Does |
 | --- | --- |
 | `yarn start:dev` | Dev via nodemon — runs `yarn build` then `node build/Application.js`, restarting on any `.ts`/`.json` change |
-| `yarn build` | Type-check, compile to `build/`, rewrite `@` aliases (`tsc-alias`), then copy non-TS assets |
+| `yarn build` | Clean `build/`, type-check, compile, rewrite `@` aliases (`tsc-alias`), then copy non-TS assets |
+| `yarn clean` | Remove `build/` — so renamed/deleted sources don't leave stale `.js` (which the model auto-loader would otherwise import) |
 | `yarn copy:assets` | Copy non-TS assets (i18n JSON, …) `src/ → build/` — `tsc` only emits `.js` |
+| `yarn keys:jwt` | Generate an RS256 key pair for JWT; `--env <name>` writes it into `.envs/.env.<name>` |
 | `yarn start:prod` | Run the compiled build with `NODE_ENV=production` |
 
 The API mounts at **`/api/v1`** (`prefix` + `version`, both in `app.config.ts`).
@@ -279,7 +308,8 @@ Copy `modules/users/`, then satisfy the contract in `config.module.ts`:
 ```ts
 export async function getModuleConfig() {
   return {
-    name: "billing",
+    name: "billing",        // ⚠️ must equal the folder name — it's the i18n namespace
+                            //    and how models/locale folders are resolved on disk
     description: "Billing module",
     version: "1.0.0",
 
@@ -289,14 +319,58 @@ export async function getModuleConfig() {
     acl,                    // role → RAI grants  (from defineACL)
     routes,                 // collected route records (from defineRoutes)
 
-    i18nFolderPath: "./i18n",
+    i18nFolderPath: "./i18n",     // → "billing" i18next namespace
+    modelsFolderPath: "./models", // → *.model.ts here auto-load on boot
     onInit: async () => { /* indexes, seed data, warm caches… */ },
   } satisfies ModuleConfig
 }
 ```
 
-Register it in `config/app.config.ts` and it self-wires: routes mounted, ACL merged into the
-global policy, locale folder registered as a namespace, `onInit` run in dependency order.
+Add it to the `moduleRegistry` in `config/app.config.ts` (keyed by folder name) and it
+self-wires: models loaded, routes mounted, ACL merged into the global policy, locale folder
+registered as a namespace, `onInit` run in dependency order.
+
+---
+
+## Models & soft delete
+
+A single global plugin (`packages/mongoose`) is registered before any schema compiles, so
+**every** model inherits the same base shape — no per-schema wiring:
+
+```ts
+// modules/<module>/models/thing.model.ts
+import mongoose, { Schema } from "mongoose"
+import type { BaseDocument } from "@packages/mongoose/plugins/base.plugin.js"
+
+export interface IThing extends BaseDocument { name: string }  // BaseDocument<string> for a string _id
+
+export const ThingModel = mongoose.model<IThing>("Thing", new Schema({ name: String }))
+// auto-loaded on boot — no import needed elsewhere
+```
+
+Every document then carries:
+
+| Field | Added by | Notes |
+| --- | --- | --- |
+| `created_at` / `updated_at` | timestamps plugin | snake_case, Mongoose-managed |
+| `is_deleted` | soft-delete plugin | indexed; `false` by default |
+| `deleted_at` | soft-delete plugin | `null` until deleted |
+| `deleted_by` | soft-delete plugin | polymorphic `{ model, id }` (populate-able via `refPath`), or `null` |
+
+**Soft delete is the default read model.** Deleted docs are transparently excluded from
+`find*`, `count*`, `update*`, and aggregations — opt back in explicitly:
+
+```ts
+await doc.softDelete(actor)          // actor = { model: "User", id }  (optional)
+await Model.softDelete(filter, actor)// bulk
+await doc.restore()                  //   /  await Model.restore(filter)
+
+Model.find()                         // live docs only (default)
+Model.find().withDeleted()           // include soft-deleted
+Model.find().onlyDeleted()           // only soft-deleted
+```
+
+Hard deletes (`deleteOne` / `deleteMany`) are left literal — they bypass the soft-delete guard.
 
 ---
 
@@ -309,7 +383,7 @@ All variables are validated in `config/env.ts`. Loaded from `.envs/.env.${NODE_E
 | **Runtime** | `NODE_ENV` |
 | **Server** | `PORT`, `HOST`, `HTTPS_ENABLED`, `CLUSTER_MODE_ENABLED` |
 | **Database** | `DATABASE_PROTOCOL` (`mongodb` \| `mongodb+srv`), `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` |
-| **Auth** | `JWT_SECRET`, `JWT_EXPIRES_IN` |
+| **Auth (JWT)** | `JWT_ALGORITHM` (`HS256` \| `RS256` \| `ES256`), `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` |
 | **Mailer** | `MAILER_FROM`, `MAILER_HOST`, `MAILER_PORT`, `MAILER_SECURE`, `MAILER_AUTH_USER`, `MAILER_AUTH_PASS` |
 | **Logging** *(optional)* | `LOG_LEVEL`, `LOG_DIR`, `LOG_TO_FILE` |
 | **i18n** *(optional)* | `I18N_FALLBACK_LANGUAGE`, `I18N_SUPPORTED_LANGUAGES` (csv), `I18N_DEFAULT_NAMESPACE` |
@@ -343,7 +417,7 @@ default text when no translation exists.
 
 This is a **work in progress**, and a few foundations are intentionally stubbed:
 
-- [ ] **Real authentication.** `lib/access-control.ts` currently trusts an `x-roles` header as a placeholder. Swap it for JWT verification (`config.lib.jwt`) before anything faces the internet.
+- [ ] **Real authentication.** The JWT config (`config.lib.jwt`) and a key generator (`yarn keys:jwt`) are in place, but `helpers/jwt` is still a stub and `lib/access-control.ts` trusts an `x-roles` header. Wire up sign/verify and swap the placeholder before anything faces the internet.
 - [ ] **HTTPS server.** `HTTPS_ENABLED=true` is recognized but not yet implemented.
 - [ ] **Tests.** `NODE_ENV=test` is supported; no runner is wired up yet. The ACL engine is the first thing that deserves coverage.
 - [ ] **Cluster-safe logging.** With `CLUSTER_MODE_ENABLED`, prefer stdout over file rotation — multiple workers shouldn't share one rotating log file.
