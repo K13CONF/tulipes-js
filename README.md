@@ -420,7 +420,9 @@ This is a **work in progress**, and a few foundations are intentionally stubbed:
 - [ ] **Real authentication.** The JWT config (`config.lib.jwt`) and a key generator (`yarn keys:jwt`) are in place, but `helpers/jwt` is still a stub and `lib/access-control.ts` trusts an `x-roles` header. Wire up sign/verify and swap the placeholder before anything faces the internet.
 - [ ] **HTTPS server.** `HTTPS_ENABLED=true` is recognized but not yet implemented.
 - [ ] **Tests.** `NODE_ENV=test` is supported; no runner is wired up yet. The ACL engine is the first thing that deserves coverage.
-- [ ] **Cluster-safe logging.** With `CLUSTER_MODE_ENABLED`, prefer stdout over file rotation — multiple workers shouldn't share one rotating log file.
+- [ ] **JWT token helper.** `helpers/jwt/generateJWTTokens` is scaffolded but returns empty tokens — implement sign + refresh against `config.lib.jwt`.
+
+Already handled (not on the list): cluster-safe logging — each worker writes its own `app-worker-<slot>.log`, so rotation never races.
 
 ---
 
