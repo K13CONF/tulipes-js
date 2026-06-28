@@ -11,31 +11,33 @@
     "#packages/*": "./build/packages/*"
   },
   "scripts": {
-    "//keys": "------------ Generate RS256 JWT key pair",
-    "keys:jwt": "node scripts/generate-jwt-keys.mjs",
-    "//copy-assets": "--------- Copy assets",
-    "copy:assets": "node scripts/copy-assets.mjs",
-    "//clean": "----------- Remove the build output",
-    "clean": "node scripts/clean.mjs",
-    "//email": "----------- React Email preview app (dev only)",
-    "email:dev": "email dev --dir src/emails/preview --port 3001",
-    "email:export": "email export --dir src/emails/preview --outDir out",
-    "//build": "------------ Build the js",
-    "build": "yarn clean && tsc && tsc-alias && yarn copy:assets",
-    "//dev": "------------ Run in dev mode",
+    "//  Develop  ─────────────────────────────────": "",
     "start:dev": "NODE_ENV=development nodemon",
-    "//prod": "------------ Run in prod mode",
+
+    "//  Build  ───────────────────────────────────": "",
+    "clean": "node scripts/clean.mjs",
+    "copy:assets": "node scripts/copy-assets.mjs",
+    "build": "yarn clean && tsc && tsc-alias && yarn copy:assets",
+
+    "//  Run · production  ────────────────────────": "",
     "start:prod": "NODE_ENV=production node build/Application.js",
-    "//worker": "----------- Run the queue worker (standalone, non-PM2)",
     "start:worker": "NODE_ENV=production node build/worker.js",
-    "//pm2": "------------- PM2 process manager (build first)",
+
+    "//  PM2 · build first  ───────────────────────": "",
     "pm2:dev": "yarn build && pm2 start ecosystem.config.cjs --env development",
     "pm2:staging": "yarn build && pm2 start ecosystem.config.cjs --env staging",
     "pm2:prod": "yarn build && pm2 start ecosystem.config.cjs --env production",
     "pm2:reload": "pm2 reload ecosystem.config.cjs",
     "pm2:stop": "pm2 stop ecosystem.config.cjs",
     "pm2:delete": "pm2 delete ecosystem.config.cjs",
-    "pm2:logs": "pm2 logs --raw | pino-pretty"
+    "pm2:logs": "pm2 logs --raw | pino-pretty",
+
+    "//  Emails · React Email preview  ────────────": "",
+    "email:dev": "email dev --dir src/emails/preview --port 3001",
+    "email:export": "email export --dir src/emails/preview --outDir out",
+
+    "//  Keys  ────────────────────────────────────": "",
+    "keys:jwt": "node scripts/generate-jwt-keys.mjs"
   },
   "dependencies": {
     "@react-email/components": "^1.0.12",
