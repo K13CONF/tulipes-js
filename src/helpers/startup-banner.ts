@@ -8,7 +8,6 @@ import {
     greenBright,
     magenta,
     red,
-    yellow,
 } from "colorette"
 import config from "@config/app.config.js"
 
@@ -18,7 +17,6 @@ export interface StartupInfo {
     version: string
     description: string
     env: string
-    https: boolean
     host: string
     port: number
     apiBasePath: string
@@ -57,7 +55,6 @@ export function buildStartupInfo(bootStartedAt: number, lib: LIB, isConnected: (
         version: config.app.version,
         description: config.app.description,
         env: config.app.env,
-        https: server.https.isEnabled,
         host: server.host,
         port: server.port,
         apiBasePath: `${config.app.api.prefix}/${config.app.api.version}`,
@@ -81,8 +78,8 @@ export function buildStartupInfo(bootStartedAt: number, lib: LIB, isConnected: (
  * call in every environment.
  */
 export function printStartupBanner(info: StartupInfo): void {
-    const protocol = info.https ? "https" : "http"
-    const localUrl = `${protocol}://${info.host}:${info.port}`
+    // TLS is terminated upstream (nginx); the app listens over plain HTTP.
+    const localUrl = `http://${info.host}:${info.port}`
     const apiUrl = `${localUrl}${info.apiBasePath}`
     const dbUrl = `${info.database.protocol}://${info.database.host}:${info.database.port}/${info.database.name}`
     const ec = envColor(info.env)
@@ -91,10 +88,6 @@ export function printStartupBanner(info: StartupInfo): void {
         ["Environment", ec(bold(info.env))],
         ["Server", `${cyan(localUrl)}  ${dot(true)} ${green("listening")}`],
         ["API base", cyan(apiUrl)],
-        [
-            "Protocol",
-            info.https ? `${bold("HTTPS")} ${green("(TLS)")}` : `${bold("HTTP")} ${yellow("(no TLS)")}`,
-        ],
         [
             "Database",
             `${cyan(dbUrl)}  ${dot(info.database.connected)} ${info.database.connected ? green("connected") : red("disconnected")

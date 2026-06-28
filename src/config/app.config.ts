@@ -98,9 +98,6 @@ async function resolveGlobalConfig() {
                 server: {
                     port: parseInt(env.PORT, 10),
                     host: env.HOST,
-                    https: {
-                        isEnabled: env.HTTPS_ENABLED === "true",
-                    },
                 },
 
                 database: {

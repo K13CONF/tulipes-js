@@ -551,7 +551,7 @@ All variables are validated in `config/env.ts`. Loaded from `.envs/.env.${NODE_E
 | Group | Keys |
 | --- | --- |
 | **Runtime** | `NODE_ENV` (`development` \| `staging` \| `production` \| `test`) |
-| **Server** | `PORT`, `HOST`, `HTTPS_ENABLED` |
+| **Server** | `PORT`, `HOST` |
 | **Security** | `CORS_ORIGINS` (csv; `*`=dev), `CORS_CREDENTIALS`, `TRUST_PROXY`, `BODY_LIMIT`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX`, `RATE_LIMIT_AUTH_MAX` |
 | **Database** | `DATABASE_PROTOCOL` (`mongodb` \| `mongodb+srv`), `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` |
 | **Redis** | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` *(optional)*, `REDIS_DB` |
@@ -591,7 +591,6 @@ default text when no translation exists.
 This is a **work in progress**, and a few foundations are intentionally stubbed:
 
 - [ ] **Real authentication.** The JWT config (`config.lib.jwt`) and a key generator (`yarn keys:jwt`) are in place, but `helpers/jwt` is still a stub and `lib/access-control.ts` trusts an `x-roles` header. Wire up sign/verify and swap the placeholder before anything faces the internet.
-- [ ] **HTTPS server.** `HTTPS_ENABLED=true` is recognized but not yet implemented.
 - [ ] **JWT token helper.** `helpers/jwt/generateJWTTokens` is scaffolded but returns empty tokens — implement sign + refresh against `config.lib.jwt`.
 
 Already handled (not on the list): caching (Redis), background jobs (BullMQ) with a dedicated

@@ -56,15 +56,10 @@ function announceReady(): void {
  */
 async function start() {
     try {
-        const { port, host, https } = config.app.lib.server
+        const { port, host } = config.app.lib.server
         const app = await init()
 
-        if (https.isEnabled) {
-            // TODO: https server configuration will be added later
-            logger.warn("HTTPS is enabled but not yet implemented — no server started")
-            return
-        }
-
+        // TLS is terminated by the reverse proxy (nginx); the app always speaks HTTP.
         const server = setupHTTPServer(app)
         server.listen(port, host, announceReady)
     } catch (error) {
