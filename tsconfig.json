@@ -73,6 +73,9 @@
     "scripts/polyfill.js"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    // Dev-only react-email preview entries (compiled by the react-email CLI, not
+    // shipped in build/). They import JSON and inject a mock `t`.
+    "src/emails/preview"
   ]
 }

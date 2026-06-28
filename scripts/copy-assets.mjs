@@ -18,8 +18,8 @@ const dest = resolve(root, "build")
 
 cpSync(src, dest, {
     recursive: true,
-    // Everything except the TypeScript sources tsc already compiled.
-    filter: (source) => !source.endsWith(".ts"),
+    // Everything except the TypeScript sources tsc already compiled (.ts/.tsx).
+    filter: (source) => !source.endsWith(".ts") && !source.endsWith(".tsx"),
 })
 
 console.log(`${green(bold("✓"))} copied non-TS assets  ${cyan("src/")} ${dim("→")} ${cyan("build/")}`)

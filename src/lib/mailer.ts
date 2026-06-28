@@ -1,6 +1,8 @@
 import nodemailer, { type Transporter } from "nodemailer"
 import type { Job } from "bullmq"
 import { getQueue, registerJobHandler } from "./queue.js"
+import { renderEmail } from "./email-renderer.js"
+import type { EmailData, EmailTemplateKey } from "@/emails/index.js"
 import { logger } from "@config/logger.js"
 
 /** Mailer settings (sourced from `config.app.lib.mailer`). */
@@ -60,6 +62,38 @@ export async function sendMail(payload: MailPayload): Promise<void> {
         return
     }
     await deliver(payload)
+}
+
+/** A templated email request: a registry template, its typed data, and a locale. */
+export interface TemplatedMailPayload<K extends EmailTemplateKey> {
+    to: string | string[]
+    /** Registry key (see `src/emails/registry.ts`). */
+    template: K
+    /** Data the chosen template requires — type-checked per template. */
+    data: EmailData[K]
+    /** Locale for the rendered copy, e.g. `req.language`. */
+    locale: string
+    /** Overrides the configured default sender. */
+    from?: string
+}
+
+/**
+ * Renders a React Email template (localized) and sends it. Rendering runs here,
+ * at the call site — only the produced subject/html/text are handed to
+ * `sendMail`, so when queueing is on the BullMQ job carries plain strings and
+ * the worker stays free of React on the delivery path.
+ */
+export async function sendTemplatedMail<K extends EmailTemplateKey>(
+    payload: TemplatedMailPayload<K>,
+): Promise<void> {
+    const { subject, html, text } = await renderEmail(payload.template, payload.data, payload.locale)
+    await sendMail({
+        to: payload.to,
+        subject,
+        html,
+        text,
+        ...(payload.from ? { from: payload.from } : {}),
+    })
 }
 
 /** Hands a message to the SMTP transport. */

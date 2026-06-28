@@ -51,6 +51,12 @@ function collectNamespaceDirs(modules: ModuleConfig[]): Record<string, string> {
  */
 export async function initI18n(modules: ModuleConfig[]): Promise<void> {
     const namespaceDirs = collectNamespaceDirs(modules)
+
+    // Central, non-module namespace for transactional email copy (src/emails/i18n
+    // → build/emails/i18n). Renders via i18next.getFixedT(locale, "emails").
+    const emailsDir = resolve(import.meta.dirname, "../emails/i18n")
+    if (existsSync(emailsDir)) namespaceDirs["emails"] = emailsDir
+
     const namespaces = Object.keys(namespaceDirs)
     const ns = namespaces.length > 0 ? namespaces : [defaultNS]
 

@@ -1,0 +1,16 @@
+{
+    "welcome": {
+        "subject": "Welcome aboard, {{name}}!",
+        "preview": "Confirm your email to get started",
+        "heading": "Welcome, {{name}}!",
+        "body": "Thanks for signing up. Please confirm your email address to activate your account.",
+        "cta": "Verify email"
+    },
+    "resetPassword": {
+        "subject": "Reset your password",
+        "preview": "Reset your password",
+        "heading": "Reset your password",
+        "body": "Hi {{name}}, we received a request to reset your password. This link expires in {{minutes}} minutes. If you didn't request it, you can ignore this email.",
+        "cta": "Choose a new password"
+    }
+}

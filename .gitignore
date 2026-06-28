@@ -21,3 +21,6 @@ build
 !.env.example
 # Logs
 logs
+# react-email preview app build + export artifacts
+.react-email
+out

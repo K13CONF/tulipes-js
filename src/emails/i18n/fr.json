@@ -1,0 +1,16 @@
+{
+    "welcome": {
+        "subject": "Bienvenue à bord, {{name}} !",
+        "preview": "Confirmez votre e-mail pour commencer",
+        "heading": "Bienvenue, {{name}} !",
+        "body": "Merci de votre inscription. Veuillez confirmer votre adresse e-mail pour activer votre compte.",
+        "cta": "Vérifier l'e-mail"
+    },
+    "resetPassword": {
+        "subject": "Réinitialisez votre mot de passe",
+        "preview": "Réinitialisez votre mot de passe",
+        "heading": "Réinitialisez votre mot de passe",
+        "body": "Bonjour {{name}}, nous avons reçu une demande de réinitialisation de votre mot de passe. Ce lien expire dans {{minutes}} minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.",
+        "cta": "Choisir un nouveau mot de passe"
+    }
+}
