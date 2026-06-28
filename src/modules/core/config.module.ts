@@ -20,7 +20,6 @@ export async function getModuleConfig() {
         routes: [],
 
         i18nFolderPath: "./i18n",
-        viewsFolderPath: "./views",
         modelsFolderPath: "./models",
 
         onInit: async () => {

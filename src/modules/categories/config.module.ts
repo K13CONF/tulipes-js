@@ -19,7 +19,6 @@ export async function getModuleConfig() {
         routes: [...boRoutes, ...publicRoutes],
 
         i18nFolderPath: "./i18n",
-        viewsFolderPath: "./views",
         modelsFolderPath: "./models",
 
         onInit: async () => {},

@@ -25,7 +25,6 @@ export async function getModuleConfig() {
 
         // Module folder paths
         i18nFolderPath: "./i18n",
-        viewsFolderPath: "./views",
         modelsFolderPath: "./models",
 
         // Lifecycle hook, run during bootstrap in dependency + priority order.

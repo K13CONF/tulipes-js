@@ -9,7 +9,7 @@ import * as users from '@/modules/users/config.module.js'
 import * as categories from '@/modules/categories/config.module.js'
 
 // Keyed by folder name (must match the on-disk module directory) — used to
-// resolve each module's relative folders (models, i18n, views).
+// resolve each module's relative folders (models, i18n).
 export const moduleRegistry = {
     core: await core.getModuleConfig(),
     users: await users.getModuleConfig(),

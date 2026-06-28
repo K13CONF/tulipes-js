@@ -17,8 +17,6 @@ export interface ModuleConfig {
 
     /** Relative path to the folder that will contain i18n files for that module */
     i18nFolderPath?: string,
-    /** Relative path to the folder that will contain views files for that module */
-    viewsFolderPath?: string,
     /** Relative path to the folder that will contain models files  for that module */
     modelsFolderPath?: string
 
