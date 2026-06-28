@@ -3,6 +3,10 @@
         "BAD_REQUEST": "Mauvaise requête",
         "UNAUTHORIZED": "Authentification requise",
         "FORBIDDEN": "Permissions insuffisantes",
-        "NOT_FOUND": "Ressource non trouvée"
+        "NOT_FOUND": "Ressource non trouvée",
+        "PAYLOAD_TOO_LARGE": "Le corps de la requête est trop volumineux",
+        "TOO_MANY_REQUESTS": "Trop de requêtes — veuillez réessayer plus tard",
+        "VALIDATION_ERROR": "Échec de la validation",
+        "INTERNAL_SERVER_ERROR": "Erreur interne du serveur"
     }
 }

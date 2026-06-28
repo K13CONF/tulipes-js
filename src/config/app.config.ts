@@ -3,6 +3,17 @@ import roles from '@config/roles.definition.js'
 import { moduleACLSchema } from '@packages/acl/schema.js'
 import { sortModulesByPriorityAndDependencies } from '@lib/modules.js';
 
+/**
+ * Parses TRUST_PROXY into the value Express's `trust proxy` setting expects:
+ * a boolean, a hop count (number), or a named/subnet string (e.g. "loopback").
+ */
+function parseTrustProxy(value: string): boolean | number | string {
+    if (value === 'true') return true
+    if (value === 'false' || value === '') return false
+    const hops = Number(value)
+    return Number.isInteger(hops) ? hops : value
+}
+
 // import all the modules configs here
 import * as core from '@/modules/core/config.module.js'
 import * as users from '@/modules/users/config.module.js'
@@ -132,6 +143,22 @@ async function resolveGlobalConfig() {
                     password: env.MAILER_AUTH_PASS,
                     queueEnabled: env.MAILER_QUEUE_ENABLED === "true",
                     loggingEnabled: env.MAILER_LOGGING_ENABLED === "true",
+                },
+
+                security: {
+                    // Express `trust proxy` value — see parseTrustProxy.
+                    trustProxy: parseTrustProxy(env.TRUST_PROXY),
+                    // Max JSON body size (passed to express.json({ limit })).
+                    bodyLimit: env.BODY_LIMIT,
+                    cors: {
+                        origins: env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean),
+                        credentials: env.CORS_CREDENTIALS === "true",
+                    },
+                    rateLimit: {
+                        windowMs: parseInt(env.RATE_LIMIT_WINDOW_MS, 10),
+                        max: parseInt(env.RATE_LIMIT_MAX, 10),
+                        authMax: parseInt(env.RATE_LIMIT_AUTH_MAX, 10),
+                    },
                 },
 
                 i18n: {

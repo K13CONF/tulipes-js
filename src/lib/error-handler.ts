@@ -1,6 +1,6 @@
 import type { ErrorRequestHandler, Request, Response } from "express"
 import { ZodError } from "zod"
-import { HttpError } from "@packages/acl/errors.js"
+import { BadRequestError, HttpError, PayloadTooLargeError } from "@packages/acl/errors.js"
 import { buildEnvelope, type ErrorEntry } from "@packages/acl/response.js"
 import { logger } from "@config/logger.js"
 import "@/types/express.augment.js"
@@ -48,6 +48,20 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
                 path: issue.path.join("."),
             })),
         )
+    }
+
+    // Body-parser (express.json) failures carry a `type`: oversized body → 413,
+    // malformed/unsupported JSON → 400. Map them to clean, localized envelopes.
+    if (err && typeof err === "object" && "type" in err) {
+        const type = (err as { type?: string }).type
+        if (type === "entity.too.large") {
+            const e = new PayloadTooLargeError()
+            return send(res, e.status, [{ code: e.code, message: localize(req, e.code, e.message) }])
+        }
+        if (type === "entity.parse.failed" || type === "encoding.unsupported" || type === "charset.unsupported") {
+            const e = new BadRequestError()
+            return send(res, e.status, [{ code: e.code, message: localize(req, e.code, e.message) }])
+        }
     }
 
     // Anything else is unexpected: log it (with request context), don't leak internals.

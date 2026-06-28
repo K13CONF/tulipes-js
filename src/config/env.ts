@@ -23,6 +23,15 @@ const envSchema = z.object({
     HOST: z.string(),
     HTTPS_ENABLED: z.enum(["true", "false"]).default("false"),
 
+    // Security configuration
+    CORS_ORIGINS: z.string().default(""), // csv allowlist; "" = none, "*" = any (dev only)
+    CORS_CREDENTIALS: z.enum(["true", "false"]).default("false"), // allow cookies/Authorization cross-origin
+    TRUST_PROXY: z.string().default("false"), // false | true | <hops> | "loopback" — behind nginx/ALB set to hop count
+    BODY_LIMIT: z.string().default("100kb"), // max JSON body size
+    RATE_LIMIT_WINDOW_MS: z.string().default("60000"), // rate-limit window
+    RATE_LIMIT_MAX: z.string().default("100"), // max requests per IP per window (global)
+    RATE_LIMIT_AUTH_MAX: z.string().default("10"), // stricter cap for auth routes
+
 
     // Database configuration
     DATABASE_PROTOCOL: z.string(),

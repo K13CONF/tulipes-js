@@ -6,20 +6,41 @@ import { errorHandler } from "./error-handler.js"
 import { requestLogger } from "./request-logger.js"
 import { i18nextMiddleware } from "./i18n.js"
 import { responder } from "./responder.js"
+import { corsMiddleware, helmetMiddleware, mongoSanitize, rateLimiter } from "./security.js"
 
 /**
  * Creates and configures the Express application from the resolved global
- * config: body parsing, authentication, every module's routes mounted under the
- * API prefix with RAI enforcement, and the central error handler.
+ * config: edge security (headers, CORS, rate limiting), bounded body parsing,
+ * authentication, every module's routes mounted under the API prefix with RAI
+ * enforcement, and the central error handler.
  */
 export function createApp(): Express {
     const app = express()
 
-    // Per-request logging first, so every request (incl. errors) is captured.
+    // Behind a reverse proxy / load balancer: derive req.ip + protocol from the
+    // X-Forwarded-* headers per config (conservative by default — never blindly
+    // trust every hop, or rate-limit keys become spoofable).
+    app.set("trust proxy", config.app.lib.security.trustProxy)
+    // Don't advertise the framework.
+    app.disable("x-powered-by")
+
+    // Per-request logging first, so every request (incl. rejected ones) is captured.
     app.use(requestLogger)
 
-    // Body parsing (needed for `.validate({ body })`)
-    app.use(express.json())
+    // Security headers on every response — before the limiter so even 429s carry them.
+    app.use(helmetMiddleware)
+
+    // CORS: sets headers and answers preflight (OPTIONS) before the limiter runs.
+    app.use(corsMiddleware)
+
+    // Rate limiting: reject abusive clients before we parse their body.
+    app.use(rateLimiter)
+
+    // Body parsing, size-bounded (needed for `.validate({ body })`).
+    app.use(express.json({ limit: config.app.lib.security.bodyLimit }))
+
+    // Strip Mongo operator keys ($, .) from inputs — defense-in-depth behind zod.
+    app.use(mongoSanitize)
 
     // Internationalization: detect language and attach `req.t`.
     app.use(i18nextMiddleware)

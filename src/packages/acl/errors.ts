@@ -57,3 +57,17 @@ export class NotFoundError extends HttpError {
         super(404, "NOT_FOUND", message, details)
     }
 }
+
+/** 413 — the request body exceeded the configured size limit. */
+export class PayloadTooLargeError extends HttpError {
+    constructor(message = "Payload too large", details?: unknown) {
+        super(413, "PAYLOAD_TOO_LARGE", message, details)
+    }
+}
+
+/** 429 — too many requests; the caller hit a rate limit. */
+export class TooManyRequestsError extends HttpError {
+    constructor(message = "Too many requests", details?: unknown) {
+        super(429, "TOO_MANY_REQUESTS", message, details)
+    }
+}
