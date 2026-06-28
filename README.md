@@ -590,12 +590,11 @@ default text when no translation exists.
 
 This is a **work in progress**, and a few foundations are intentionally stubbed:
 
-- [ ] **Real authentication.** The JWT config (`config.lib.jwt`) and a key generator (`yarn keys:jwt`) are in place, but `helpers/jwt` is still a stub and `lib/access-control.ts` trusts an `x-roles` header. Wire up sign/verify and swap the placeholder before anything faces the internet.
-- [ ] **JWT token helper.** `helpers/jwt/generateJWTTokens` is scaffolded but returns empty tokens — implement sign + refresh against `config.lib.jwt`.
+- [ ] **Real authentication wiring.** Token signing/verification is done (`helpers/jwt` — `generateJWTTokens` / `verifyAccessToken` / `verifyRefreshToken`, HS + RS/ES), but `lib/access-control.ts` still trusts an `x-roles` header. Replace that placeholder with Bearer-token verification (and add login/refresh routes) before anything faces the internet.
 
-Already handled (not on the list): caching (Redis), background jobs (BullMQ) with a dedicated
-worker process, queued email, edge security (helmet/CORS/rate-limiting), and clustering/process
-management via PM2. Logging is cluster-safe by deferring to PM2's stdout capture
+Already handled (not on the list): JWT token signing + verification (`helpers/jwt`, driven by
+`config.lib.jwt`), caching (Redis), background jobs (BullMQ) with a dedicated worker process,
+queued email, edge security (helmet/CORS/rate-limiting), and clustering/process management via PM2. Logging is cluster-safe by deferring to PM2's stdout capture
 (`LOG_TO_FILE=false`) instead of per-process file rotation.
 
 **On tests — intentionally none.** `NODE_ENV=test` is wired so a suite *can* be added, but this is
