@@ -92,6 +92,7 @@ Three layers guard the same rule, on purpose:
 - 🪵 **Production-grade logging** — Pino with secret redaction, daily/size rotation, per-request correlation IDs, pretty in dev / JSON otherwise, child loggers per module. Under PM2, log to stdout and let PM2 capture it.
 - 🛑 **Graceful shutdown** — SIGTERM/SIGINT drains the HTTP server, then closes the queue worker, mailer, Redis, and MongoDB (shared by the web and worker processes).
 - 🧵 **PM2 process model** — clustering and the dedicated worker are managed by PM2 (`ecosystem.config.cjs`); the app itself no longer forks.
+- 🛡️ **Hardened edge** — helmet headers, allowlist CORS, Redis-backed rate limiting (shared across the cluster), bounded body size, Mongo-operator input sanitization, and `trust proxy` / slowloris timeouts — all env-configured in `lib/security.ts`.
 
 ---
 
@@ -245,6 +246,7 @@ src/
 │  ├─ redis.ts               #   shared Redis client + connection factory
 │  ├─ cache.ts               #   binds RedisCache to the shared client (app singleton)
 │  ├─ queue.ts               #   BullMQ queue + worker + job-handler registry
+│  ├─ security.ts            #   helmet + CORS + rate limiting + input sanitization
 │  ├─ mailer.ts              #   nodemailer transport; sendMail() + sendTemplatedMail()
 │  ├─ email-renderer.ts      #   renders a React Email template → { subject, html, text }
 │  ├─ shutdown.ts            #   shared SIGTERM/SIGINT drain (web + worker)
@@ -517,6 +519,31 @@ captures stdout itself) and `WORKER_INLINE=false` (the dedicated `bp-worker` con
 
 ---
 
+## Security
+
+Edge hardening is applied in `lib/express.ts` (built in `lib/security.ts`), in order:
+
+| Layer | What | Config |
+| --- | --- | --- |
+| **Headers** | `helmet` — HSTS, `nosniff`, `X-Frame-Options`, CORP, no `X-Powered-By`. CSP off (JSON API). | — |
+| **CORS** | env allowlist; unlisted origins get no CORS headers (never a 500); `"*"` = dev only | `CORS_ORIGINS`, `CORS_CREDENTIALS` |
+| **Rate limit** | per-IP via `express-rate-limit`, **Redis-backed** (shared across PM2 instances; in-memory fallback). 429 → unified envelope + i18n | `RATE_LIMIT_*` |
+| **Body limit** | bounded `express.json`; oversized → `413`, malformed → `400` | `BODY_LIMIT` |
+| **Input sanitize** | strips Mongo operator keys (`$`, `.`) from body/params — behind zod validation | — |
+| **Proxy** | `trust proxy` so `req.ip` / rate-limit keys are correct behind nginx/ALB | `TRUST_PROXY` |
+| **Timeouts** | `headers`/`request`/`keepAlive` timeouts (slowloris) in `lib/http.ts` | — |
+
+A stricter `authRateLimiter` is exported, ready to attach to login/reset routes when you build them.
+
+> **Production checklist**
+> - **Replace the placeholder auth.** `lib/access-control.ts` trusts an `x-roles` header — anyone can grant themselves any role. Wire real JWT verification (`config.lib.jwt`) before going live. *This is the one hole headers can't cover.*
+> - **Set `CORS_ORIGINS`** to your real front-end origins (never `*`).
+> - **Set `TRUST_PROXY`** to the actual number of proxies in front (it's `1` in staging/prod by default).
+> - **Terminate TLS** at your reverse proxy / load balancer (the app speaks HTTP behind it; HSTS only bites over HTTPS). CSRF isn't needed for this Bearer-token API — add it only if you introduce cookie auth.
+> - Run `yarn npm audit` in CI.
+
+---
+
 ## Configuration reference
 
 All variables are validated in `config/env.ts`. Loaded from `.envs/.env.${NODE_ENV}`.
@@ -525,6 +552,7 @@ All variables are validated in `config/env.ts`. Loaded from `.envs/.env.${NODE_E
 | --- | --- |
 | **Runtime** | `NODE_ENV` (`development` \| `staging` \| `production` \| `test`) |
 | **Server** | `PORT`, `HOST`, `HTTPS_ENABLED` |
+| **Security** | `CORS_ORIGINS` (csv; `*`=dev), `CORS_CREDENTIALS`, `TRUST_PROXY`, `BODY_LIMIT`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX`, `RATE_LIMIT_AUTH_MAX` |
 | **Database** | `DATABASE_PROTOCOL` (`mongodb` \| `mongodb+srv`), `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` |
 | **Redis** | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` *(optional)*, `REDIS_DB` |
 | **Queue worker** | `WORKER_INLINE` (run the worker in the web process — dev), `WORKER_CONCURRENCY` |
@@ -564,12 +592,18 @@ This is a **work in progress**, and a few foundations are intentionally stubbed:
 
 - [ ] **Real authentication.** The JWT config (`config.lib.jwt`) and a key generator (`yarn keys:jwt`) are in place, but `helpers/jwt` is still a stub and `lib/access-control.ts` trusts an `x-roles` header. Wire up sign/verify and swap the placeholder before anything faces the internet.
 - [ ] **HTTPS server.** `HTTPS_ENABLED=true` is recognized but not yet implemented.
-- [ ] **Tests.** `NODE_ENV=test` is supported; no runner is wired up yet. The ACL engine is the first thing that deserves coverage.
 - [ ] **JWT token helper.** `helpers/jwt/generateJWTTokens` is scaffolded but returns empty tokens — implement sign + refresh against `config.lib.jwt`.
 
 Already handled (not on the list): caching (Redis), background jobs (BullMQ) with a dedicated
-worker process, queued email, and clustering/process management via PM2. Logging is cluster-safe
-by deferring to PM2's stdout capture (`LOG_TO_FILE=false`) instead of per-process file rotation.
+worker process, queued email, edge security (helmet/CORS/rate-limiting), and clustering/process
+management via PM2. Logging is cluster-safe by deferring to PM2's stdout capture
+(`LOG_TO_FILE=false`) instead of per-process file rotation.
+
+**On tests — intentionally none.** `NODE_ENV=test` is wired so a suite *can* be added, but this is
+a client-delivery boilerplate and, realistically, most clients won't pay for test development — so
+no runner ships by default. The design leans on guarantees that don't need a suite to hold:
+strict TypeScript, zod-validated env + requests, and fail-fast boot. When a project's budget does
+cover testing, start with the ACL engine — it's the piece most worth covering.
 
 ---
 
