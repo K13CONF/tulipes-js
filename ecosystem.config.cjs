@@ -19,8 +19,15 @@ const web = {
     name: "bp-web",
     script: "build/Application.js",
     exec_mode: "cluster",
-    instances: "max", // one per CPU core; PM2 load-balances the port
+    instances: "1", // one per CPU core; PM2 load-balances the port
     kill_timeout: 10000, // match the app's graceful-shutdown window
+    // Capture stdout/stderr into ./logs (next to where pino would write) instead
+    // of ~/.pm2/logs. Lines stay pure JSON (no PM2 timestamp prefix) so
+    // `yarn pm2:logs` can pipe them through pino-pretty. `merge_logs` folds all
+    // cluster instances into one file. Rotate these with `pm2 install pm2-logrotate`.
+    out_file: "./logs/bp-web.out.log",
+    error_file: "./logs/bp-web.error.log",
+    merge_logs: true,
     env: {
         NODE_ENV: "development",
         LOG_TO_FILE: "false",
@@ -41,9 +48,12 @@ const web = {
 const worker = {
     name: "bp-worker",
     script: "build/worker.js",
-    exec_mode: "fork", // no port to share; scale with `instances`
+    exec_mode: "cluster", // no port to share; scale with `instances`
     instances: 1,
     kill_timeout: 30000, // give in-flight jobs time to finish before SIGKILL
+    out_file: "./logs/bp-worker.out.log",
+    error_file: "./logs/bp-worker.error.log",
+    merge_logs: true,
     env: {
         NODE_ENV: "development",
         LOG_TO_FILE: "false",

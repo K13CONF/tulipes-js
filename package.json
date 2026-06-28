@@ -32,7 +32,7 @@
     "pm2:reload": "pm2 reload ecosystem.config.cjs",
     "pm2:stop": "pm2 stop ecosystem.config.cjs",
     "pm2:delete": "pm2 delete ecosystem.config.cjs",
-    "pm2:logs": "pm2 logs"
+    "pm2:logs": "pm2 logs --raw | pino-pretty"
   },
   "dependencies": {
     "bullmq": "^5.79.2",

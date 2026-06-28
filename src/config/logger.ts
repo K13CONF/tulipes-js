@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs"
+import { hostname } from "node:os"
 import { resolve } from "node:path"
 import pino, { type Logger, type LoggerOptions, type StreamEntry } from "pino"
 import { createStream } from "rotating-file-stream"
@@ -38,6 +39,15 @@ const rotation = {
 // instances at distinct LOG_DIRs, or prefer `LOG_TO_FILE=false` + PM2 capture.
 const baseName = "app"
 
+// PM2 sets `process.env.name` to the app name (bp-web / bp-worker). Stamp it on
+// every line so the merged `pm2 logs` console (and `pm2:logs` → pino-pretty) can
+// tell the web and worker processes apart. Falls back to pino's default
+// `{ pid, hostname }` base when not running under PM2.
+const processName = process.env.name
+const base = processName
+    ? { pid: process.pid, hostname: hostname(), name: processName }
+    : undefined
+
 /** `yyyy-mm-dd`, used in rotated file names. */
 function dateStamp(date: Date): string {
     const pad = (n: number) => String(n).padStart(2, "0")
@@ -54,6 +64,9 @@ function logFileName(time: number | Date | null, index?: number): string {
 
 const options: LoggerOptions = {
     level,
+    // Omit `base` entirely when not under PM2 so pino keeps its default
+    // `{ pid, hostname }` (assigning undefined is rejected by exactOptionalPropertyTypes).
+    ...(base && { base }),
     // ISO timestamps and string level labels keep the JSON files clear.
     timestamp: pino.stdTimeFunctions.isoTime,
     formatters: {
