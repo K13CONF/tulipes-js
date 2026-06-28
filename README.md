@@ -88,7 +88,7 @@ Three layers guard the same rule, on purpose:
 - 🚦 **DB-backed resource toggles** — every route is mirrored to a `Resource` document on boot; a disabled resource returns `404` before your handler (or the ACL check) ever runs.
 - ⚡ **Redis caching** — a small storage-agnostic `Cache` interface (`get`/`set`/`del`/`wrap`) with a Redis impl (and a `MemoryCache` for tests); swap the backend without touching call sites.
 - 📮 **Background jobs (BullMQ)** — one shared queue with a job-handler registry; producers `add(name, data)`, the worker dispatches by name. Runs in-process in dev, as a **dedicated worker process** in staging/prod.
-- ✉️ **Queued mailer** — nodemailer transport; `sendMail()` enqueues by default (`MAILER_QUEUE_ENABLED`) so SMTP latency and retries stay off the request path.
+- ✉️ **Queued mailer + React Email** — nodemailer transport; `sendMail()` enqueues by default (`MAILER_QUEUE_ENABLED`) so SMTP latency and retries stay off the request path. HTML emails are typed React components with a shared layout/theme and i18n, sent via `sendTemplatedMail()` (browser preview with `yarn email:dev`).
 - 🪵 **Production-grade logging** — Pino with secret redaction, daily/size rotation, per-request correlation IDs, pretty in dev / JSON otherwise, child loggers per module. Under PM2, log to stdout and let PM2 capture it.
 - 🛑 **Graceful shutdown** — SIGTERM/SIGINT drains the HTTP server, then closes the queue worker, mailer, Redis, and MongoDB (shared by the web and worker processes).
 - 🧵 **PM2 process model** — clustering and the dedicated worker are managed by PM2 (`ecosystem.config.cjs`); the app itself no longer forks.
@@ -245,9 +245,17 @@ src/
 │  ├─ redis.ts               #   shared Redis client + connection factory
 │  ├─ cache.ts               #   binds RedisCache to the shared client (app singleton)
 │  ├─ queue.ts               #   BullMQ queue + worker + job-handler registry
-│  ├─ mailer.ts              #   nodemailer transport; enqueues / sends mail
+│  ├─ mailer.ts              #   nodemailer transport; sendMail() + sendTemplatedMail()
+│  ├─ email-renderer.ts      #   renders a React Email template → { subject, html, text }
 │  ├─ shutdown.ts            #   shared SIGTERM/SIGINT drain (web + worker)
 │  └─ http.ts                #   HTTP server wiring
+├─ emails/                   # ← transactional emails (React Email)
+│  ├─ theme.ts               #   design tokens (brand, colors, fonts) — one source of truth
+│  ├─ components/            #   <EmailLayout> + themed primitives (ui.tsx)
+│  ├─ templates/             #   *.tsx — one per email (welcome, reset-password, …)
+│  ├─ registry.ts            #   typed key → { component, subjectKey } (source of truth)
+│  ├─ i18n/                  #   en.json, fr.json → "emails" namespace
+│  └─ preview/               #   dev-only react-email wrappers (excluded from build)
 ├─ helpers/                  # small pure utilities (jwt, startup-banner, …)
 ├─ modules/
 │  ├─ core/                  # ← built-in module: resource registry
@@ -311,6 +319,8 @@ you never get a half-booted app.
 | `yarn clean` | Remove `build/` — so renamed/deleted sources don't leave stale `.js` (which the model auto-loader would otherwise import) |
 | `yarn copy:assets` | Copy non-TS assets (i18n JSON, …) `src/ → build/` — `tsc` only emits `.js` |
 | `yarn keys:jwt` | Generate an RS256 key pair for JWT; `--env <name>` writes it into `.envs/.env.<name>` |
+| `yarn email:dev` | Live email-template preview (React Email) at `http://localhost:3001` |
+| `yarn email:export` | Render the email previews to static HTML in `./out` |
 | `yarn start:prod` | Run the compiled web server with `NODE_ENV=production` |
 | `yarn start:worker` | Run the compiled queue worker (standalone, non-PM2) |
 | `yarn pm2:dev` / `pm2:staging` / `pm2:prod` | Start `bp-web` + `bp-worker` under PM2 for that environment |
@@ -440,7 +450,38 @@ otherwise it sends inline:
 
 ```ts
 import { sendMail } from "@lib/mailer.js"
-await sendMail({ to: "a@b.com", subject: "Hi", text: "…" })
+await sendMail({ to: "a@b.com", subject: "Hi", text: "…" }) // raw escape hatch
+```
+
+**Email templates (React Email)** — HTML emails are authored as typed React components in
+`src/emails/`, sharing one `<EmailLayout>` and a `theme.ts` so branding lives in a single place.
+`sendTemplatedMail()` renders a template (localized via the `emails` i18n namespace) and hands
+the resulting `subject` / `html` / `text` to `sendMail` — so a queued job still carries plain
+strings and the worker never imports React on the delivery path:
+
+```ts
+import { sendTemplatedMail } from "@lib/mailer.js"
+
+await sendTemplatedMail({
+  to: user.email,
+  template: "welcome",          // typed key from the registry
+  data: { name, verifyUrl },    // ← type-checked against the template's props
+  locale: req.language,         // i18next-detected request language
+})
+```
+
+`src/emails/registry.ts` is the single source of truth. **To add a template:** (1) create
+`templates/<name>.tsx` exporting a `Props` interface + a component taking `Props & { t }` wrapped
+in `<EmailLayout>`; (2) register it in `registry.ts` (`component` + `subjectKey`) — its key and
+data type now flow through `sendTemplatedMail` automatically; (3) add the copy to
+`i18n/{en,fr}.json` (namespace `emails`).
+
+Preview templates live in the browser via the React Email dev app — `src/emails/preview/`
+holds thin wrappers that supply sample props + a mock `t`:
+
+```bash
+yarn email:dev        # live preview at http://localhost:3001
+yarn email:export     # render the previews to static HTML in ./out
 ```
 
 ---
