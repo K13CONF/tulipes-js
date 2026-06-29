@@ -32,7 +32,9 @@
     "email:dev": "email dev --dir src/emails/preview --port 3001",
     "email:export": "email export --dir src/emails/preview --outDir out",
     "//  Keys  ────────────────────────────────────": "",
-    "keys:jwt": "node scripts/generate-jwt-keys.mjs"
+    "keys:jwt": "node scripts/generate-jwt-keys.mjs",
+    "//  Init  ────────────────────────────────────": "",
+    "setup": "node scripts/init.mjs"
   },
   "dependencies": {
     "@react-email/components": "^1.0.12",
