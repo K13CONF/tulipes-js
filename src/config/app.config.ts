@@ -98,6 +98,8 @@ async function resolveGlobalConfig() {
                 server: {
                     port: parseInt(env.PORT, 10),
                     host: env.HOST,
+                    apiPublicAddress: env.API_PUBLIC_ADDRESS,
+                    boPublicAddress: env.BO_PUBLIC_ADDRESS,
                 },
 
                 database: {

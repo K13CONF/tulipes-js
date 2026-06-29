@@ -22,6 +22,10 @@ const envSchema = z.object({
     PORT: z.string(),
     HOST: z.string(),
 
+    // Public-facing base URLs (used in emails, redirects, CORS, etc.)
+    API_PUBLIC_ADDRESS: z.url(),
+    BO_PUBLIC_ADDRESS: z.url(),
+
     // Security configuration
     CORS_ORIGINS: z.string().default(""), // csv allowlist; "" = none, "*" = any (dev only)
     CORS_CREDENTIALS: z.enum(["true", "false"]).default("false"), // allow cookies/Authorization cross-origin
