@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bp-backend-express — Codebase Analysis Report</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2129;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --orange: #f0883e;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6; padding: 40px 20px;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 48px; }
+  header h1 { font-size: 2rem; letter-spacing: -0.5px; }
+  header h1 span { color: var(--accent); }
+  header p.sub { color: var(--muted); margin-top: 8px; }
+  .meta-chips { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+  .chip {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+    padding: 3px 14px; font-size: 0.78rem; color: var(--muted); font-family: var(--mono);
+  }
+  h2 {
+    font-size: 1.35rem; margin: 56px 0 8px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border); letter-spacing: -0.3px;
+  }
+  h2 .n { color: var(--muted); font-weight: 400; margin-right: 6px; }
+  .lead { color: var(--muted); margin-bottom: 20px; font-size: 0.95rem; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px 24px; margin-bottom: 16px;
+  }
+  code {
+    font-family: var(--mono); font-size: 0.84em; background: var(--panel2);
+    border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: #e3b341;
+  }
+  pre {
+    font-family: var(--mono); font-size: 0.8rem; background: var(--panel2);
+    border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px;
+    overflow-x: auto; margin: 12px 0; line-height: 1.55;
+  }
+  pre code { background: none; border: none; padding: 0; color: var(--text); }
+
+  /* ── Scorecard ── */
+  .score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .score-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+  .score-row .label { flex: 0 0 145px; font-size: 0.88rem; }
+  .score-row .bar { flex: 1; height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
+  .score-row .bar i { display: block; height: 100%; border-radius: 4px; }
+  .score-row .grade { flex: 0 0 34px; text-align: right; font-family: var(--mono); font-size: 0.85rem; font-weight: 700; }
+  .g-a { color: var(--green); } .g-b { color: var(--yellow); } .g-c { color: var(--orange); }
+
+  /* ── Pipeline diagram ── */
+  .pipeline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 14px 0; }
+  .pl-step {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; font-family: var(--mono); font-size: 0.72rem; text-align: center; line-height: 1.4;
+  }
+  .pl-step small { display: block; color: var(--muted); font-size: 0.65rem; }
+  .pl-arrow { color: var(--muted); font-size: 0.85rem; }
+  .pl-step.sec { border-color: #1f4a2c; background: #12261a; }
+  .pl-step.acl { border-color: #4a3a1f; background: #262012; }
+  .pl-step.warn { border-color: #5a2b2b; background: #2a1516; }
+
+  /* ── Findings ── */
+  .finding { border-left: 4px solid var(--border); }
+  .finding.crit { border-left-color: var(--red); }
+  .finding.high { border-left-color: var(--orange); }
+  .finding.med  { border-left-color: var(--yellow); }
+  .finding.info { border-left-color: var(--accent); }
+  .finding h3 { font-size: 1rem; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .badge { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; padding: 2px 9px;
+    border-radius: 999px; text-transform: uppercase; }
+  .badge.crit { background: #3d1418; color: var(--red); border: 1px solid #6e2126; }
+  .badge.high { background: #3a2013; color: var(--orange); border: 1px solid #6e4021; }
+  .badge.med  { background: #372c10; color: var(--yellow); border: 1px solid #6b571f; }
+  .badge.info { background: #10283d; color: var(--accent); border: 1px solid #1f4a6e; }
+  .badge.confirmed { background: #3d1418; color: #ffb3b8; border: 1px dashed #6e2126; }
+  .finding .where { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); margin: 4px 0 8px; }
+  .finding p { font-size: 0.92rem; margin-bottom: 8px; }
+  .fix { font-size: 0.88rem; background: #10281a00; padding: 8px 12px; border-radius: 6px;
+    border: 1px dashed #2b5a3a; margin-top: 8px; }
+  .fix b { color: var(--green); }
+
+  /* ── Strengths ── */
+  .str-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .str {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px;
+  }
+  .str h4 { font-size: 0.92rem; color: var(--green); margin-bottom: 4px; }
+  .str p { font-size: 0.84rem; color: var(--muted); }
+  .str p code { font-size: 0.78em; }
+
+  /* ── Roadmap table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  td.pri { font-family: var(--mono); white-space: nowrap; font-weight: 700; }
+  .p1 { color: var(--red); } .p2 { color: var(--orange); } .p3 { color: var(--yellow); } .p4 { color: var(--muted); }
+
+  /* ── Checklist ── */
+  ul.check { list-style: none; }
+  ul.check li { padding: 6px 0 6px 30px; position: relative; font-size: 0.92rem; }
+  ul.check li::before { content: "☐"; position: absolute; left: 4px; color: var(--accent); }
+  ul.check li.done::before { content: "☑"; color: var(--green); }
+
+  .callout { border: 1px solid #1f4a6e; background: #0d1d2d; border-radius: 10px; padding: 16px 20px;
+    margin: 16px 0; font-size: 0.92rem; }
+  .callout.red { border-color: #6e2126; background: #21090c; }
+  footer { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 64px;
+    padding-top: 24px; border-top: 1px solid var(--border); }
+  @media print { body { background: #fff; color: #111; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>▲ bp-backend-express <span>· Codebase Analysis</span></h1>
+  <p class="sub">Reuse audit for future projects — what to keep, what to fix, what to add</p>
+  <div class="meta-chips">
+    <span class="chip">Node 24 · TS 6 · Express 5</span>
+    <span class="chip">~3,700 LOC src/</span>
+    <span class="chip">Mongoose 9 · Redis · BullMQ</span>
+    <span class="chip">analyzed 2026-07-05</span>
+  </div>
+</header>
+
+<!-- ══════════════════════ VERDICT ══════════════════════ -->
+<div class="callout">
+  <b>Verdict:</b> this is a genuinely strong foundation — well above typical boilerplate quality.
+  The architecture (typed ACL, module system, fail-fast config, unified envelope) is worth reusing as-is.
+  But it is <b>not internet-ready today</b>: authentication is a placeholder, one security feature is
+  silently broken (confirmed in the logs), and a few "fail-fast" claims have soft spots. Everything
+  below is ranked so you can work top-down.
+</div>
+
+<!-- ══════════════════════ SCORECARD ══════════════════════ -->
+<h2><span class="n">01</span> Scorecard by area</h2>
+<p class="lead">Rough grades from reading every file in <code>src/</code>, the PM2 config, env files, and runtime logs.</p>
+<div class="score-grid">
+  <div class="score-row"><span class="label">Architecture</span><span class="bar"><i style="width:95%;background:var(--green)"></i></span><span class="grade g-a">A</span></div>
+  <div class="score-row"><span class="label">Config &amp; env</span><span class="bar"><i style="width:88%;background:var(--green)"></i></span><span class="grade g-a">A−</span></div>
+  <div class="score-row"><span class="label">Data layer</span><span class="bar"><i style="width:88%;background:var(--green)"></i></span><span class="grade g-a">A−</span></div>
+  <div class="score-row"><span class="label">Jobs &amp; email</span><span class="bar"><i style="width:86%;background:var(--green)"></i></span><span class="grade g-a">A−</span></div>
+  <div class="score-row"><span class="label">Docs (README)</span><span class="bar"><i style="width:85%;background:var(--green)"></i></span><span class="grade g-a">A−</span></div>
+  <div class="score-row"><span class="label">Observability</span><span class="bar"><i style="width:72%;background:var(--yellow)"></i></span><span class="grade g-b">B+</span></div>
+  <div class="score-row"><span class="label">Security</span><span class="bar"><i style="width:62%;background:var(--yellow)"></i></span><span class="grade g-b">B−</span></div>
+  <div class="score-row"><span class="label">DX / tooling</span><span class="bar"><i style="width:55%;background:var(--orange)"></i></span><span class="grade g-c">C+</span></div>
+</div>
+<p class="lead" style="margin-top:12px">Security is dragged down by the placeholder auth and the broken Redis rate-limit store — both fixable.
+DX is missing linting, CI, tests, and a container dev-stack; the code itself is clean.</p>
+
+<!-- ══════════════════════ ARCHITECTURE ══════════════════════ -->
+<h2><span class="n">02</span> How a request flows</h2>
+<p class="lead">Middleware order in <code>lib/express.ts</code> is correct and deliberate — logging first, cheap rejections before body parsing.</p>
+<div class="panel">
+  <div class="pipeline">
+    <div class="pl-step">requestLogger<small>reqId + pino</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step sec">helmet<small>headers</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step sec">CORS<small>allowlist</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step warn">rate limit<small>⚠ in-memory (bug)</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step">json body<small>size-bounded</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step sec">mongoSanitize<small>strip $ keys</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step">i18n<small>req.t</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step warn">authenticate<small>⚠ x-roles header</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step">responder<small>res.respond()</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step warn">resource enabled?<small>⚠ Mongo hit / request</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step acl">authorize(rai)<small>ACL check</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step">validate<small>zod coerce</small></div><span class="pl-arrow">→</span>
+    <div class="pl-step">handler<small>envelope out</small></div>
+  </div>
+  <p style="font-size:0.85rem;color:var(--muted)">Red-tinted boxes are the three per-request weak points detailed in section 04.</p>
+</div>
+
+<!-- ══════════════════════ STRENGTHS ══════════════════════ -->
+<h2><span class="n">03</span> What's already best-practice — keep these</h2>
+<p class="lead">These patterns are the reusable value of the repo. Copy <code>packages/</code> untouched into future projects, exactly as the README intends.</p>
+<div class="str-grid">
+  <div class="str"><h4>Three-layer ACL (the crown jewel)</h4><p>Permissions checked at compile time (<code>defineACL</code> literal types), boot time (ungranted RAI throws), and runtime (one <code>authorize</code> middleware). Typo-proof by construction — rare even in commercial frameworks.</p></div>
+  <div class="str"><h4>Fail-fast zod env validation</h4><p><code>config/env.ts</code> refuses to boot on bad config and prints the offending key + file path. No half-booted apps.</p></div>
+  <div class="str"><h4>Unified response envelope</h4><p>One <code>{ isOk, data, errors, meta }</code> shape for success and failure, rendered by a single central error handler with per-request i18n. Body-parser errors mapped to clean 400/413s.</p></div>
+  <div class="str"><h4>Production logging done right</h4><p>Pino with secret redaction (<code>authorization</code>, <code>cookie</code>, <code>password</code>, <code>token</code>), correlation IDs, rotation, pretty-only-in-dev, PM2-aware process naming.</p></div>
+  <div class="str"><h4>Soft-delete plugin quality</h4><p>Uses <code>$ne: true</code> so legacy docs stay live, covers aggregations, offers <code>.withDeleted()</code>/<code>.onlyDeleted()</code> escape hatches, polymorphic <code>deleted_by</code> actor. Global registration before any schema compiles.</p></div>
+  <div class="str"><h4>Queue architecture</h4><p>Web = producer, dedicated worker = consumer. Sane BullMQ defaults (3 attempts, exponential backoff, TTL'd job cleanup). Mail rendered at call site so the worker never touches React.</p></div>
+  <div class="str"><h4>Module system with real topo-sort</h4><p><code>depends</code> resolved with cycle detection; unknown deps throw. Models auto-load, i18n namespaces self-register, <code>onInit</code> ordered.</p></div>
+  <div class="str"><h4>Graceful shutdown</h4><p>SIGTERM/SIGINT drain HTTP → queue → mailer → Redis → Mongo, with a forced-exit deadline. Shared between web and worker entry points.</p></div>
+  <div class="str"><h4>Secrets hygiene</h4><p>Only <code>.env.example</code> is tracked in git; real env files and logs are ignored. JWT key generation scripted (<code>yarn keys:jwt</code>) with RS256 default.</p></div>
+  <div class="str"><h4>Express 5 chosen well</h4><p>Async handler rejections auto-forward to the error handler — no wrapper hell. Slowloris timeouts set on the HTTP server. <code>trust proxy</code> conservative by default.</p></div>
+</div>
+
+<!-- ══════════════════════ CAUTIONS ══════════════════════ -->
+<h2><span class="n">04</span> Things to be cautious about</h2>
+<p class="lead">Ranked by severity. The top two block any internet-facing deployment.</p>
+
+<div class="panel finding crit">
+  <h3><span class="badge crit">Critical</span> Authentication is a placeholder — any caller can claim any role</h3>
+  <div class="where">src/lib/access-control.ts:79–85</div>
+  <p>The <code>authenticate</code> middleware reads a plain <code>x-roles</code> request header and trusts it verbatim.
+  <code>curl -H "x-roles: sysadmin"</code> grants full access to every route. The README documents this honestly,
+  and the JWT helpers (<code>helpers/jwt</code> — sign/verify, access vs refresh typing, HS/RS/ES) are already built —
+  they're just not wired in.</p>
+  <div class="fix"><b>Fix:</b> replace the header read with <code>Authorization: Bearer</code> parsing → <code>verifyAccessToken()</code> → populate <code>req.auth</code> from the token's claims. Then build the auth module (login / refresh / logout) and attach the already-exported <code>authRateLimiter</code> to it. This is the single highest-value task in the repo.</div>
+</div>
+
+<div class="panel finding crit">
+  <h3><span class="badge crit">Critical</span> <span class="badge confirmed">Confirmed in logs</span> Redis-backed rate limiting never engages — import-order bug</h3>
+  <div class="where">src/lib/security.ts:81–96 · evidence: logs/app-2026-06-29.log</div>
+  <p>The two limiters are built at <b>module import time</b> (top-level <code>buildLimiter(...)</code> calls).
+  ES module imports are hoisted, so <code>security.ts</code> evaluates when <code>Application.ts</code> loads its imports —
+  <em>before</em> <code>bootstrapInfra()</code> ever calls <code>connectRedis()</code>. <code>isRedisConnected()</code> is therefore
+  always <code>false</code> at that moment, and both limiters silently fall back to the per-process memory store.
+  Your own runtime logs prove it on every boot:</p>
+  <pre><code>{"level":"warn","msg":"Rate limiter \"rl:global:\" using in-memory store (Redis not connected) — limits are per-process"}
+{"level":"warn","msg":"Rate limiter \"rl:auth:\" using in-memory store (Redis not connected) — limits are per-process"}</code></pre>
+  <p>Consequence: under PM2 cluster with N instances, the real limit is <code>N × RATE_LIMIT_MAX</code>, and limits reset on every reload. The README's "shared across the cluster" claim doesn't hold.</p>
+  <div class="fix"><b>Fix:</b> make store creation lazy — export a <code>buildLimiters()</code> factory called from <code>createApp()</code> (which runs after infra boot), or pass a lazily-resolved <code>sendCommand</code> that fetches the client per call. One-file change.</div>
+</div>
+
+<div class="panel finding high">
+  <h3><span class="badge high">High</span> One MongoDB query on every single request (resource toggle)</h3>
+  <div class="where">src/lib/access-control.ts:18–34</div>
+  <p><code>checkResourceEnabled</code> runs <code>Resource.exists({_id: rai, is_enabled: true})</code> as the first guard on
+  <b>every route, every request</b>. It's indexed, but it still adds a DB round-trip of latency to all traffic and makes
+  MongoDB a hard dependency of even cache-served endpoints. Ironically, the repo ships a perfectly good <code>Cache</code>
+  layer that isn't used here.</p>
+  <div class="fix"><b>Fix:</b> cache the enabled-set (e.g. <code>cache.wrap("resources:enabled", 30, ...)</code> or an in-process map refreshed every N seconds / invalidated via Redis pub-sub when an admin toggles a resource). Fail-open or fail-closed is your call — decide explicitly.</div>
+</div>
+
+<div class="panel finding high">
+  <h3><span class="badge high">High</span> Module <code>onInit</code> failures are swallowed — "fail-fast" has a hole</h3>
+  <div class="where">src/lib/modules.ts:95–110</div>
+  <p><code>initModules</code> catches every <code>onInit</code> rejection and only logs a <b>warning</b>. If core's resource
+  sync fails (Mongo hiccup at boot), the app starts anyway — but with no <code>Resource</code> docs,
+  <code>checkResourceEnabled</code> then 404s <b>every route</b>, and nothing in the logs above warn level explains why.
+  That contradicts the fail-fast philosophy everywhere else in the codebase.</p>
+  <div class="fix"><b>Fix:</b> let <code>onInit</code> errors throw (aborting boot), or add a <code>critical: true</code> flag on the module contract so core-style modules abort while optional ones warn.</div>
+</div>
+
+<div class="panel finding high">
+  <h3><span class="badge high">High</span> CORS <code>*</code> + credentials is representable — and nothing stops it in production</h3>
+  <div class="where">src/lib/security.ts:32–42 · src/config/env.ts:30–31</div>
+  <p>When <code>CORS_ORIGINS=*</code> the origin callback reflects <em>any</em> Origin, and if
+  <code>CORS_CREDENTIALS=true</code> is also set, every website on the internet can make credentialed requests to your API.
+  The env schema allows this combination in any <code>NODE_ENV</code>.</p>
+  <div class="fix"><b>Fix:</b> add a zod <code>superRefine</code> in <code>env.ts</code>: reject <code>"*"</code> when <code>NODE_ENV=production</code>, and reject <code>"*" + CORS_CREDENTIALS=true</code> everywhere. Two lines, closes the foot-gun permanently.</div>
+</div>
+
+<div class="panel finding med">
+  <h3><span class="badge med">Medium</span> Unknown routes bypass the unified envelope</h3>
+  <div class="where">src/lib/express.ts:70–71</div>
+  <p>There is no catch-all 404 handler. A request to an unmounted path falls through to Express's default handler,
+  which returns an HTML <code>Cannot GET /whatever</code> page — breaking the "every endpoint returns one envelope" contract
+  and leaking that the framework is Express.</p>
+  <div class="fix"><b>Fix:</b> before <code>errorHandler</code>, add <code>app.use((req, _res, next) =&gt; next(new NotFoundError()))</code>.</div>
+</div>
+
+<div class="panel finding med">
+  <h3><span class="badge med">Medium</span> Cache <code>wrap()</code>: null results are never cached; no stampede protection</h3>
+  <div class="where">src/packages/cache/redis-cache.ts:37–44</div>
+  <p><code>get()</code> returns <code>null</code> both for "key missing" and "cached value was null", so
+  <code>wrap("user:42", …, () =&gt; findById(42))</code> re-runs the producer on <b>every call</b> when the user doesn't exist —
+  a cache that never caches misses (and a nice DoS lever on guessable IDs). Concurrent callers also all run the producer
+  at once (dogpile). <code>JSON.parse</code> on a corrupt entry throws a raw 500.</p>
+  <div class="fix"><b>Fix:</b> store a sentinel wrapper (<code>{v: value}</code>) to distinguish miss from null; wrap <code>JSON.parse</code> in try/catch → treat as miss; consider a simple per-key in-flight promise map for stampedes.</div>
+</div>
+
+<div class="panel finding med">
+  <h3><span class="badge med">Medium</span> Numeric env vars validated as strings — <code>PORT=abc</code> boots to NaN</h3>
+  <div class="where">src/config/env.ts:22,34–36,55–58 · src/config/app.config.ts:99–160</div>
+  <p><code>PORT</code>, <code>REDIS_PORT</code>, <code>RATE_LIMIT_*</code> etc. are <code>z.string()</code> and only
+  <code>parseInt</code>-ed later in <code>app.config.ts</code>. Garbage passes validation and surfaces as
+  <code>NaN</code> deep in the stack — the exact failure mode the fail-fast env layer exists to prevent.
+  Similarly, <code>JWT_EXPIRES_IN</code>'s regex accepts nonsense units like <code>"1x"</code>.</p>
+  <div class="fix"><b>Fix:</b> use <code>z.coerce.number().int().positive()</code> in the schema and drop the scattered <code>parseInt</code> calls; validate expiry strings against <code>ms()</code> actually parsing them.</div>
+</div>
+
+<div class="panel finding med">
+  <h3><span class="badge med">Medium</span> Shutdown deadline (10s) contradicts the worker's PM2 kill window (30s)</h3>
+  <div class="where">src/lib/shutdown.ts:8 · ecosystem.config.cjs:53</div>
+  <p>PM2 gives <code>bp-worker</code> 30s to finish in-flight jobs, but <code>shutdown.ts</code> force-exits at a hard-coded
+  10s. Long jobs (a slow SMTP send, a batch task) get killed 20 seconds earlier than you budgeted, and BullMQ will
+  re-run them — fine only if every job is idempotent.</p>
+  <div class="fix"><b>Fix:</b> make the timeout configurable per process (env or parameter) and align it just under each PM2 <code>kill_timeout</code>. And keep writing jobs to be idempotent regardless.</div>
+</div>
+
+<div class="panel finding info">
+  <h3><span class="badge info">Note</span> Docs drift + small nits</h3>
+  <div class="where">README.md · ecosystem.config.cjs · src/lib/security.ts</div>
+  <p>
+    ① README says web runs <code>instances: max</code> and worker runs <code>fork</code> mode; the actual config is
+    <code>instances: "1"</code> and <code>cluster</code> — harmless today, misleading later.
+    ② PEM keys live in env vars; the <code>keys:jwt</code> script handles newline escaping, but hand-editing
+    <code>.env.production</code> will break keys silently — always regenerate via the script.
+    ③ <code>mongoSanitize</code> can't scrub Express 5's read-only <code>req.query</code> (documented) — zod remains the
+    real guard there; keep schemas <code>.strict()</code> where possible.
+    ④ Mongoose <code>autoIndex</code> stays on in production — fine at small scale, disable + migrate indexes explicitly if collections grow.
+  </p>
+</div>
+
+<!-- ══════════════════════ ADDITIONS ══════════════════════ -->
+<h2><span class="n">05</span> Things to consider adding</h2>
+<p class="lead">Prioritized roadmap. P1 = before anything faces the internet · P2 = first week of real use · P3 = quality of life · P4 = when scale demands.</p>
+<div class="panel" style="padding:8px 12px">
+<table>
+  <tr><th style="width:60px">Pri</th><th style="width:230px">Addition</th><th>Why / how</th></tr>
+  <tr><td class="pri p1">P1</td><td><b>Auth module</b> (login, refresh, logout)</td><td>The JWT helpers, <code>authRateLimiter</code>, and the whole ACL engine are waiting on it. Add a <code>users</code> password field (argon2id or bcrypt ≥ 12 rounds), refresh-token rotation, and wire <code>authenticate</code> to <code>verifyAccessToken</code>.</td></tr>
+  <tr><td class="pri p1">P1</td><td><b>Fix the rate-limit store</b></td><td>See finding above — lazy store creation so Redis actually backs it.</td></tr>
+  <tr><td class="pri p1">P1</td><td><b>Health &amp; readiness endpoints</b></td><td>The README even uses <code>/health</code> as its <code>.root()</code> example, but no module implements it. Add liveness (process up) + readiness (Mongo <code>isConnected()</code>, Redis <code>isRedisConnected()</code>) — PM2, load balancers, and uptime monitors all need it.</td></tr>
+  <tr><td class="pri p2">P2</td><td><b>docker-compose dev stack</b></td><td>One <code>docker-compose.yml</code> with MongoDB, Redis, and Mailpit (SMTP catcher with web UI) turns "clone → run" into two commands and makes the mailer testable without real SMTP creds.</td></tr>
+  <tr><td class="pri p2">P2</td><td><b>ESLint + Prettier (or Biome)</b></td><td>Currently only <code>.editorconfig</code>. A flat-config ESLint with <code>typescript-eslint</code> strict + Prettier (or Biome for both in one tool) keeps the codebase consistent as it's copied between projects.</td></tr>
+  <tr><td class="pri p2">P2</td><td><b>CI pipeline</b> (GitHub Actions)</td><td>On push: <code>yarn build</code> (tsc is your first test suite), lint, <code>yarn npm audit</code>. The README already asks for audit-in-CI; nothing runs it.</td></tr>
+  <tr><td class="pri p2">P2</td><td><b>Catch-all 404 → envelope</b></td><td>One-liner, closes the envelope contract (finding above).</td></tr>
+  <tr><td class="pri p3">P3</td><td><b>Minimal test harness for the ACL engine</b></td><td>The README says "when budget allows, start with the ACL engine" — for personal use, a small vitest suite over <code>define-routes</code> / <code>mount-routes</code> / the soft-delete plugin costs an afternoon and protects the code you'll reuse the most. <code>MemoryCache</code> already exists for exactly this.</td></tr>
+  <tr><td class="pri p3">P3</td><td><b>OpenAPI docs from zod</b></td><td>Request schemas already exist per route. <code>zod-openapi</code> (or hand-rolled from <code>RouteRecord[]</code> + schemas — you already have method, path, and zod types in one place) gives you Swagger UI nearly for free.</td></tr>
+  <tr><td class="pri p3">P3</td><td><b>Request-ID echo header</b></td><td>pino-http assigns <code>req.id</code>; also accept an inbound <code>X-Request-Id</code> and echo it on the response so clients and proxies can correlate with your logs.</td></tr>
+  <tr><td class="pri p3">P3</td><td><b>Dependabot / Renovate</b></td><td>26 direct deps incl. security-sensitive ones (jsonwebtoken, express, helmet). Automated update PRs beat quarterly panic upgrades.</td></tr>
+  <tr><td class="pri p3">P3</td><td><b>Seed script</b></td><td>An idempotent <code>yarn seed</code> that creates the first sysadmin user (from env) — you'll need it the moment real auth lands.</td></tr>
+  <tr><td class="pri p4">P4</td><td><b>Metrics</b> (Prometheus / OTel)</td><td>Logs exist; numbers don't. <code>prom-client</code> default metrics + an HTTP histogram + BullMQ queue-depth gauge on a <code>/metrics</code> root route covers 90% of "is it healthy?".</td></tr>
+  <tr><td class="pri p4">P4</td><td><b>Cache invalidation helpers</b></td><td><code>del()</code> is single-key only. Add prefix/tag invalidation (SCAN + UNLINK) before cache usage grows organically.</td></tr>
+  <tr><td class="pri p4">P4</td><td><b>File upload story</b></td><td>Nothing handles multipart today. When needed: multer with strict size/type limits, streamed to S3-compatible storage, never to local disk under PM2 cluster.</td></tr>
+  <tr><td class="pri p4">P4</td><td><b>BullMQ dashboard</b></td><td><code>@bull-board/express</code> mounted behind a sysadmin-guarded root route — visibility into failed jobs beats grepping logs.</td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════ BEST PRACTICES ══════════════════════ -->
+<h2><span class="n">06</span> Best practices when reusing this as your foundation</h2>
+<div class="panel">
+<ul class="check">
+  <li><b>Copy <code>packages/</code> verbatim, edit <code>lib/</code>.</b> The repo's own layering rule is right: <code>packages/acl</code>, <code>packages/mongoose</code>, <code>packages/cache</code> are app-agnostic; policy lives in <code>lib/</code>. Keep that boundary sacred in new projects.</li>
+  <li><b>Never deploy with <code>authenticate</code> reading <code>x-roles</code>.</b> Make replacing it step zero of every new project — consider deleting the placeholder body and throwing <code>"not implemented"</code> so it can't ship by accident.</li>
+  <li><b>Regenerate JWT keys per project, per environment.</b> <code>yarn keys:jwt --env production</code>. Never share a key pair across projects; never commit env files (the gitignore already protects you — keep it that way).</li>
+  <li><b>Keep zod as the single trust boundary.</b> <code>mongoSanitize</code> is defense-in-depth, not the guard. Every new route gets <code>.validate()</code>; prefer <code>.strict()</code> object schemas so unexpected keys are rejected, not ignored.</li>
+  <li><b>New feature = new module.</b> Copy <code>modules/users/</code>, keep the folder-name-equals-module-name rule (i18n and model loading depend on it), and declare <code>depends</code> honestly — the topo-sort only protects you if you do.</li>
+  <li><b>All jobs idempotent.</b> BullMQ retries (3 attempts configured) plus the shutdown-timeout mismatch mean any job can run twice. Design handlers so that's harmless.</li>
+  <li><b>Let PM2 own logs in cluster mode.</b> <code>LOG_TO_FILE=false</code> under PM2 (already enforced in the ecosystem file) — two processes writing one rotating file corrupts rotation.</li>
+  <li><b>Check the boot banner and warnings on every deploy.</b> This audit found a silent security downgrade sitting in plain sight in the logs. Treat any <code>warn</code> at startup as a broken build.</li>
+  <li><b>TLS at the proxy, HTTP inside.</b> The app deliberately dropped HTTPS handling — always front it with nginx/Caddy/ALB doing TLS + HSTS, set <code>TRUST_PROXY</code> to the real hop count, and set <code>CORS_ORIGINS</code> to explicit origins.</li>
+  <li><b>Soft-delete is the default read model — remember the escape hatches.</b> Admin screens and audits need <code>.withDeleted()</code>; uniqueness constraints must account for deleted rows still existing (partial indexes on <code>is_deleted: false</code>).</li>
+  <li><b>Run <code>yarn npm audit</code> before each reuse</b> and bump majors consciously — Express 5, Mongoose 9, and Zod 4 are all recent majors whose ecosystems are still settling.</li>
+</ul>
+</div>
+
+<!-- ══════════════════════ QUICK WINS ══════════════════════ -->
+<h2><span class="n">07</span> Suggested order of attack</h2>
+<div class="panel">
+<pre><code>1. Fix rate-limit store (lazy init)            ~30 min   closes confirmed security gap
+2. Env guards: no "*" CORS in prod,
+   z.coerce.number() for numeric vars          ~30 min   hardens fail-fast promise
+3. Catch-all 404 → envelope                    ~10 min   contract consistency
+4. Health/readiness endpoints (root routes)    ~1 h      deployability
+5. Wire JWT into authenticate + auth module    ~1–2 d    THE blocker for real use
+6. Cache the resource-enabled check            ~2 h      removes per-request DB hit
+7. onInit: throw (or critical flag)            ~30 min   true fail-fast boot
+8. docker-compose + ESLint + CI                ~half day reusable dev experience</code></pre>
+</div>
+
+<footer>
+  Generated by codebase analysis · 2026-07-05 · every finding verified against source, config, and runtime logs<br>
+  <span style="font-size:0.72rem">Sources: src/ (all 44 files read), ecosystem.config.cjs, .envs/.env.example, .gitignore, logs/app-2026-06-29.log</span>
+</footer>
+
+</div>
+</body>
+</html>
