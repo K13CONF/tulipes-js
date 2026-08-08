@@ -17,6 +17,12 @@ export const boRoutes = defineRoutes((registry) => {
         .require("categories:bo:create")
         .post("")
         .validate({ body: bodySchema })
+        .documentation({
+            name: "Create category",
+            description: "Creates a new category owned by the calling admin.",
+            preRequestScript: "pm.environment.set('createdAt', Date.now())",
+            postResponseScript: "pm.test('status is 201', () => pm.response.to.have.status(201))",
+        })
         .handle(BOCtrls.createCategory)
 
     // --- Item routes: /categories/:categoryId (nested under the collection) ---

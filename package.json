@@ -34,7 +34,9 @@
     "//  Keys  ────────────────────────────────────": "",
     "keys:jwt": "node scripts/generate-jwt-keys.mjs",
     "//  Init  ────────────────────────────────────": "",
-    "setup": "node scripts/init.mjs"
+    "setup": "node scripts/init.mjs",
+    "//  Postman  ─────────────────────────────────": "",
+    "postman:generate": "yarn build && node scripts/generate-postman.mjs --out ./postman"
   },
   "dependencies": {
     "@react-email/components": "^1.0.12",
