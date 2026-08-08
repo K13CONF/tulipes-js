@@ -19,6 +19,10 @@ export interface RouteRecord {
     handler?: RequestHandler
     /** When true, mount at the bare path, outside the global API prefix (see `.root()`). */
     root?: boolean
+    /** Raw zod schemas passed to `.validate()`, kept for tooling (e.g. the Postman generator). */
+    schemas?: ValidationSchemas
+    /** Metadata attached via `.documentation()`, kept for tooling (e.g. the Postman generator). */
+    documentation?: RouteDocumentation
 }
 
 /**
@@ -56,6 +60,16 @@ export interface ValidationSchemas {
     params?: ZodType
     query?: ZodType
     body?: ZodType
+}
+
+/** Optional per-route metadata for external tooling (e.g. the Postman generator) — never read by the running app. */
+export interface RouteDocumentation {
+    name?: string
+    description?: string
+    /** Postman pre-request script (stringified JS), run before the request fires. */
+    preRequestScript?: string
+    /** Postman post-response script (stringified JS) — Postman's "test" script, run after the response arrives. */
+    postResponseScript?: string
 }
 
 /** Validated (coerced) output type of a schema, or a fallback when it's absent. */
@@ -287,6 +301,7 @@ export class RouteBuilder<Params, Body = unknown, Query = unknown> {
         InferOr<Schemas["query"], Query>
     > {
         this.record.middlewares.push(createValidationMiddleware(schemas))
+        this.record.schemas = schemas
         return this as unknown as RouteBuilder<
             InferOr<Schemas["params"], Params>,
             InferOr<Schemas["body"], Body>,
@@ -297,6 +312,12 @@ export class RouteBuilder<Params, Body = unknown, Query = unknown> {
     /** Append a middleware (full `(req, res, next)`). Chainable. */
     public use(handler: RouteMiddleware<Params, Body, Query>): this {
         this.record.middlewares.push(handler as unknown as RequestHandler)
+        return this
+    }
+
+    /** Attach descriptive metadata (name, description, Postman scripts) for tooling. Chainable, order-independent. */
+    public documentation(doc: RouteDocumentation): this {
+        this.record.documentation = doc
         return this
     }
 

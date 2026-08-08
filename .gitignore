@@ -24,3 +24,6 @@ logs
 # react-email preview app build + export artifacts
 .react-email
 out
+
+# Generated Postman collection + environment (yarn postman:generate)
+postman
