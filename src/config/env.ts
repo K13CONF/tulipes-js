@@ -51,6 +51,10 @@ const envSchema = z.object({
     JWT_EXPIRES_IN: z.custom<StringValue>((val) => typeof val === "string" && /^\d+\s*[a-zA-Z]*$/.test(val)), // e.g. "1h", "7d", "30d"
     JWT_REFRESH_EXPIRES_IN: z.custom<StringValue>((val) => typeof val === "string" && /^\d+\s*[a-zA-Z]*$/.test(val)), // e.g. "1h", "7d", "30d"
 
+    // Sysadmin seed (optional; both-or-neither — consumed by the users module's onInit)
+    SEED_SYSADMIN_EMAIL: z.email().optional(),
+    SEED_SYSADMIN_PASSWORD: z.string().min(12).optional(),
+
     // Redis configuration (shared cache client + BullMQ connections)
     REDIS_HOST: z.string(),
     REDIS_PORT: z.string(),
@@ -80,6 +84,15 @@ const envSchema = z.object({
     I18N_FALLBACK_LANGUAGE: z.string().default('en'),
     I18N_SUPPORTED_LANGUAGES: z.string().default('en'), // comma-separated, e.g. "en,fr,ar"
     I18N_DEFAULT_NAMESPACE: z.string().default('core')
+}).superRefine((vars, ctx) => {
+    // Seed credentials only make sense as a pair — half a seed is a config bug.
+    if (!!vars.SEED_SYSADMIN_EMAIL !== !!vars.SEED_SYSADMIN_PASSWORD) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['SEED_SYSADMIN_EMAIL'],
+            message: 'SEED_SYSADMIN_EMAIL and SEED_SYSADMIN_PASSWORD must be set together',
+        })
+    }
 })
 
 let env: z.infer<typeof envSchema>;

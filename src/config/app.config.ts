@@ -15,9 +15,10 @@ function parseTrustProxy(value: string): boolean | number | string {
 }
 
 // import all the modules configs here
-import * as core from '@/modules/core/config.module.js'
-import * as users from '@/modules/users/config.module.js'
-import * as categories from '@/modules/categories/config.module.js'
+import * as core from '@modules/core/config.module.js'
+import * as users from '@modules/users/config.module.js'
+import * as categories from '@modules/categories/config.module.js'
+import * as auth from '@modules/auth/config.module.js'
 
 // Keyed by folder name (must match the on-disk module directory) — used to
 // resolve each module's relative folders (models, i18n).
@@ -25,6 +26,7 @@ export const moduleRegistry = {
     core: await core.getModuleConfig(),
     users: await users.getModuleConfig(),
     categories: await categories.getModuleConfig(),
+    auth: await auth.getModuleConfig(),
 };
 
 const modules = sortModulesByPriorityAndDependencies(moduleRegistry);
