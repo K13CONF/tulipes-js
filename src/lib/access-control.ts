@@ -1,9 +1,12 @@
 import mongoose from "mongoose"
-import type { RequestHandler } from "express"
+import jwt from "jsonwebtoken"
+import type { Request, RequestHandler } from "express"
 import { publicRoleNames } from "@config/roles.definition.js"
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "@packages/acl/errors.js"
 import type { RAI } from "@packages/acl/types.js";
 import type { IResource } from "@modules/core/models/resource.model.js";
+import { verifyAccessToken } from "@helpers/jwt/index.js"
+import { AccessTokenExpiredError } from "@modules/auth/helpers/errors.js"
 
 /**
  * App-level access-control policy. This lives in `lib` (not the acl package)
@@ -71,15 +74,40 @@ export function createAuthorize(acl: ReadonlyMap<string, readonly string[]>) {
 }
 
 /**
- * Placeholder authentication: populates `req.auth` from an `x-roles` header
- * (comma-separated role names).
+ * Extracts the raw access token from the `Authorization: Bearer` header —
+ * the sole credential transport.
+ */
+function extractAccessToken(req: Request): string | undefined {
+    const header = req.header("authorization")
+    if (header?.startsWith("Bearer ")) return header.slice("Bearer ".length).trim()
+    return undefined
+}
+
+/**
+ * Authentication: verifies the JWT access token and populates `req.auth` with
+ * the token's principal — no database hit on the request path (roles ride in
+ * the token; `/auth/refresh` is where they re-sync with the database).
  *
- * TODO: replace with real JWT verification using `config.lib.jwt`.
+ * A request with no token stays anonymous (`authorize()` applies the public
+ * role). A request with a *bad* token fails outright — a presented credential
+ * is never silently downgraded to anonymous.
  */
 export const authenticate: RequestHandler = (req, _res, next) => {
-    const header = req.header("x-roles")
-    if (header) {
-        req.auth = { roles: header.split(",").map((role) => role.trim()).filter(Boolean) }
+    const token = extractAccessToken(req)
+    if (!token) return next()
+
+    try {
+        const payload = verifyAccessToken(token)
+        req.auth = {
+            model: String(payload.model),
+            id: String(payload.sub),
+            roles: Array.isArray(payload.roles) ? payload.roles : [],
+            ...(typeof payload.jti === "string" ? { jti: payload.jti } : {}),
+        }
+        return next()
+    } catch (error) {
+        // Expired gets its own code so clients know to refresh, not re-login.
+        if (error instanceof jwt.TokenExpiredError) return next(new AccessTokenExpiredError())
+        return next(new UnauthorizedError())
     }
-    next()
 }

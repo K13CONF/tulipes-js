@@ -58,6 +58,13 @@ export class NotFoundError extends HttpError {
     }
 }
 
+/** 409 — the request conflicts with existing state (e.g. a taken identifier). */
+export class ConflictError extends HttpError {
+    constructor(message = "Conflict with existing resource", details?: unknown) {
+        super(409, "CONFLICT", message, details)
+    }
+}
+
 /** 413 — the request body exceeded the configured size limit. */
 export class PayloadTooLargeError extends HttpError {
     constructor(message = "Payload too large", details?: unknown) {

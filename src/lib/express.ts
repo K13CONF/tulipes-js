@@ -1,4 +1,5 @@
 import express, { type Express } from "express"
+import passport from "passport"
 import config from "@/config/app.config.js"
 import { mountModuleRoutes } from "@packages/acl/mount-routes.js"
 import { authenticate, checkResourceEnabled, createAuthorize } from "./access-control.js"
@@ -45,7 +46,11 @@ export function createApp(): Express {
     // Internationalization: detect language and attach `req.t`.
     app.use(i18nextMiddleware)
 
-    // Authentication: populate req.auth (placeholder until JWT)
+    // Passport powers the local login strategy only — no passport sessions;
+    // the JWT is the sole credential, sent as a Bearer token.
+    app.use(passport.initialize())
+
+    // Authentication: verify the JWT Bearer token → req.auth.
     app.use(authenticate)
 
     // Unified responses: attach res.respond() and block the raw senders. Placed

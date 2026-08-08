@@ -11,9 +11,21 @@ import { getRedis, isRedisConnected } from "./redis.js"
 /**
  * Edge security middleware — security headers, CORS, and rate limiting — built
  * from `config.app.lib.security`. Wired (in order) by `lib/express.ts`.
+ *
+ * Everything config-dependent is built **lazily, on the first request** (see
+ * {@link lazy}) rather than at import time, for two reasons:
+ *   1. This module is reachable from route files (e.g. the auth module imports
+ *      `authRateLimiter`), which app.config itself loads — reading config at
+ *      import time would hit the circular-import TDZ.
+ *   2. Redis only connects during bootstrap; an eagerly-built limiter would
+ *      lock in the in-memory fallback store forever.
  */
 
-const { cors: corsCfg, rateLimit: rlCfg } = config.app.lib.security
+/** Builds a middleware on its first invocation and reuses it afterwards. */
+function lazy(build: () => RequestHandler): RequestHandler {
+    let built: RequestHandler | undefined
+    return (req, res, next) => (built ??= build())(req, res, next)
+}
 
 // ── Security headers (helmet) ───────────────────────────────────────────────
 // API defaults: HSTS on (only bites over HTTPS), framework version hidden.
@@ -29,17 +41,21 @@ export const helmetMiddleware: RequestHandler = helmet({
 // request from a listed origin gets CORS headers; any other origin simply gets
 // no CORS headers (the browser blocks it) — we never throw a 500. "*" in the
 // allowlist allows any origin and is intended for development only.
-const allowAnyOrigin = corsCfg.origins.includes("*")
-const corsOptions: CorsOptions = {
-    origin(origin, callback) {
-        if (!origin || allowAnyOrigin || corsCfg.origins.includes(origin)) {
-            return callback(null, true)
-        }
-        return callback(null, false)
-    },
-    credentials: corsCfg.credentials,
+function buildCorsMiddleware(): RequestHandler {
+    const corsCfg = config.app.lib.security.cors
+    const allowAnyOrigin = corsCfg.origins.includes("*")
+    const corsOptions: CorsOptions = {
+        origin(origin, callback) {
+            if (!origin || allowAnyOrigin || corsCfg.origins.includes(origin)) {
+                return callback(null, true)
+            }
+            return callback(null, false)
+        },
+        credentials: corsCfg.credentials,
+    }
+    return cors(corsOptions)
 }
-export const corsMiddleware: RequestHandler = cors(corsOptions)
+export const corsMiddleware: RequestHandler = lazy(buildCorsMiddleware)
 
 // ── Rate limiting ───────────────────────────────────────────────────────────
 /**
@@ -62,38 +78,31 @@ function makeStore(prefix: string): RedisStore | undefined {
     })
 }
 
-function buildLimiter(opts: { windowMs: number; limit: number; prefix: string }): RateLimitRequestHandler {
+function buildLimiter(limit: (rl: { max: number; authMax: number }) => number, prefix: string): RateLimitRequestHandler {
+    const rlCfg = config.app.lib.security.rateLimit
     const options: Partial<RateLimitOptions> = {
-        windowMs: opts.windowMs,
-        limit: opts.limit,
+        windowMs: rlCfg.windowMs,
+        limit: limit(rlCfg),
         standardHeaders: true, // RateLimit-* headers
         legacyHeaders: false, // no X-RateLimit-* headers
         // Route rejections through the central error handler so they use the
         // unified envelope and per-request i18n (not express-rate-limit's text).
         handler: (_req, _res, next) => next(new TooManyRequestsError()),
     }
-    const store = makeStore(opts.prefix)
+    const store = makeStore(prefix)
     if (store) options.store = store
     return rateLimit(options)
 }
 
 /** Global per-IP limiter — applied to every request. */
-export const rateLimiter = buildLimiter({
-    windowMs: rlCfg.windowMs,
-    limit: rlCfg.max,
-    prefix: "rl:global:",
-})
+export const rateLimiter: RequestHandler = lazy(() => buildLimiter((rl) => rl.max, "rl:global:"))
 
 /**
- * Stricter limiter for authentication routes (login, password reset, …). Not
- * wired globally — attach it per-route once those endpoints exist, e.g.
- * `require("auth.login").post("/login", authRateLimiter, handler)`.
+ * Stricter limiter for authentication routes (login, refresh, register, …).
+ * Not wired globally — attached per-route in the auth module, e.g.
+ * `registry.require("auth:token:login").post("/login").use(authRateLimiter)`.
  */
-export const authRateLimiter = buildLimiter({
-    windowMs: rlCfg.windowMs,
-    limit: rlCfg.authMax,
-    prefix: "rl:auth:",
-})
+export const authRateLimiter: RequestHandler = lazy(() => buildLimiter((rl) => rl.authMax, "rl:auth:"))
 
 // ── Input sanitization ──────────────────────────────────────────────────────
 /** Recursively removes keys that start with `$` or contain `.` (Mongo operators / paths). */

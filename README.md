@@ -77,6 +77,7 @@ Three layers guard the same rule, on purpose:
 ## What's in the box
 
 - 🔐 **Compile-time + runtime ACL** — typed permissions, role→RAI grants merged across modules, enforced by one middleware.
+- 🔑 **Full JWT authentication** — a Django-style `Authenticable` registry (register any model as login-able), one Passport local strategy (email/username + password, argon2id), and access+refresh pairs with single-use rotation and Redis-backed revocation. Bearer tokens only — no session cookies. Endpoints: `/auth/login · refresh · logout · me · register`.
 - 🧱 **Composable route groups** — `prefix()` nests routes (`/categories` → `/:id`); `use()`/`param()` cascade into nested groups, `param()` handlers attach only to routes that declare them, and a param matching nothing **fails fast at boot**.
 - 🧩 **Self-assembling modules** — each module declares its routes, ACL, i18n, and an `onInit` hook; the loader resolves `depends` with a real topological sort (cycles throw).
 - ✅ **Fail-fast config** — env vars *and* role definitions are validated with zod at startup. Bad config = the process refuses to start, with the offending key and file path printed.
@@ -209,7 +210,7 @@ flowchart LR
 Two layers, deliberately separated:
 
 - **`packages/`** — reusable, app-agnostic machinery (`acl/` is the permission engine, `mongoose/` the base plugin, `cache/` the storage-agnostic cache). Copy them to the next project untouched.
-- **`lib/`** — *this* app's policy and infra clients (mongoose, redis, cache, queue, mailer, i18n) plus wiring (`bootstrap.ts`, `express.ts`, `http.ts`, `shutdown.ts`). `access-control.ts` is where you swap the placeholder auth for real JWT. Meant to be edited.
+- **`lib/`** — *this* app's policy and infra clients (mongoose, redis, cache, queue, mailer, i18n) plus wiring (`bootstrap.ts`, `express.ts`, `http.ts`, `shutdown.ts`). `access-control.ts` verifies the JWT Bearer token and enforces the ACL. Meant to be edited.
 
 ---
 
@@ -536,7 +537,7 @@ Edge hardening is applied in `lib/express.ts` (built in `lib/security.ts`), in o
 A stricter `authRateLimiter` is exported, ready to attach to login/reset routes when you build them.
 
 > **Production checklist**
-> - **Replace the placeholder auth.** `lib/access-control.ts` trusts an `x-roles` header — anyone can grant themselves any role. Wire real JWT verification (`config.lib.jwt`) before going live. *This is the one hole headers can't cover.*
+> - **Rotate the secrets.** Fresh `yarn keys:jwt --env production` key pair per deployment; set real `SEED_SYSADMIN_*` credentials (or clear them after first boot).
 > - **Set `CORS_ORIGINS`** to your real front-end origins (never `*`).
 > - **Set `TRUST_PROXY`** to the actual number of proxies in front (it's `1` in staging/prod by default).
 > - **Terminate TLS** at your reverse proxy / load balancer (the app speaks HTTP behind it; HSTS only bites over HTTPS). CSRF isn't needed for this Bearer-token API — add it only if you introduce cookie auth.
@@ -557,6 +558,7 @@ All variables are validated in `config/env.ts`. Loaded from `.envs/.env.${NODE_E
 | **Redis** | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` *(optional)*, `REDIS_DB` |
 | **Queue worker** | `WORKER_INLINE` (run the worker in the web process — dev), `WORKER_CONCURRENCY` |
 | **Auth (JWT)** | `JWT_ALGORITHM` (`HS256` \| `RS256` \| `ES256`), `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` |
+| **Seed** *(optional)* | `SEED_SYSADMIN_EMAIL` + `SEED_SYSADMIN_PASSWORD` (both or neither) — idempotent sysadmin account on boot |
 | **Mailer** | `MAILER_FROM`, `MAILER_HOST`, `MAILER_PORT`, `MAILER_SECURE`, `MAILER_AUTH_USER`, `MAILER_AUTH_PASS`, `MAILER_QUEUE_ENABLED`, `MAILER_LOGGING_ENABLED` |
 | **Logging** *(optional)* | `LOG_LEVEL`, `LOG_DIR`, `LOG_TO_FILE` |
 | **i18n** *(optional)* | `I18N_FALLBACK_LANGUAGE`, `I18N_SUPPORTED_LANGUAGES` (csv), `I18N_DEFAULT_NAMESPACE` |
@@ -588,9 +590,15 @@ default text when no translation exists.
 
 ## Roadmap & honest status
 
-This is a **work in progress**, and a few foundations are intentionally stubbed:
+This is a **work in progress**:
 
-- [ ] **Real authentication wiring.** Token signing/verification is done (`helpers/jwt` — `generateJWTTokens` / `verifyAccessToken` / `verifyRefreshToken`, HS + RS/ES), but `lib/access-control.ts` still trusts an `x-roles` header. Replace that placeholder with Bearer-token verification (and add login/refresh routes) before anything faces the internet.
+- [x] **Real authentication.** The `auth` module ships login / refresh / logout / me / register:
+  Passport local strategy over the `Authenticable` registry (any model can register as
+  login-able), argon2id hashing, and JWT access+refresh pairs (single-use rotation, Redis-backed
+  revocation) — Bearer tokens only, no session cookies.
+  `lib/access-control.ts` verifies the Bearer token — the `x-roles` placeholder is gone.
+- [ ] **Password reset / email verification.** The mailer + React Email templates are ready for
+  them; the flows themselves aren't built yet.
 
 Already handled (not on the list): JWT token signing + verification (`helpers/jwt`, driven by
 `config.lib.jwt`), caching (Redis), background jobs (BullMQ) with a dedicated worker process,

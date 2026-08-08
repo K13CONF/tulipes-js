@@ -10,8 +10,15 @@ import type { Responder } from "@packages/acl/response.js"
 
 /** Authenticated caller context attached to each request. */
 export interface AuthContext {
+    /** Mongoose model name of the authenticated account (e.g. "User") — the
+     *  Authenticable registry decides which models can appear here. */
+    model: string
+    /** The account's document id. */
+    id: string
     /** Role names the caller holds (matched against the merged ACL). */
     roles: string[]
+    /** The token pair's id — lets logout revoke the sibling refresh token. */
+    jti?: string
 }
 
 declare global {

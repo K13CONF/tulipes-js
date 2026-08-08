@@ -7,6 +7,10 @@
         "PAYLOAD_TOO_LARGE": "Le corps de la requête est trop volumineux",
         "TOO_MANY_REQUESTS": "Trop de requêtes — veuillez réessayer plus tard",
         "VALIDATION_ERROR": "Échec de la validation",
-        "INTERNAL_SERVER_ERROR": "Erreur interne du serveur"
+        "INTERNAL_SERVER_ERROR": "Erreur interne du serveur",
+        "CONFLICT": "Conflit avec une ressource existante",
+        "INVALID_CREDENTIALS": "Identifiants invalides",
+        "TOKEN_EXPIRED": "Jeton d'accès expiré",
+        "INVALID_REFRESH_TOKEN": "Jeton de rafraîchissement invalide ou expiré"
     }
 }
