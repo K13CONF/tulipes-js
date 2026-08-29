@@ -1,4 +1,4 @@
-import type { Ctx } from "@forgex/core/boot";
+import type { Ctx } from "@tulipes/core/boot";
 
 /** Idempotent: upsert keeps repeated boots from stacking admin accounts. */
 export default async function seedAdmin({ Environment, models }: Ctx): Promise<void> {

@@ -77,6 +77,19 @@ export class QueueManager {
     return undefined;
   }
 
+  /** Introspection for the startup banner and tooling. */
+  names(): string[] {
+    return [...this.#queues.keys()];
+  }
+
+  get processorCount(): number {
+    return this.#processors.size;
+  }
+
+  get workerCount(): number {
+    return this.#workers.length;
+  }
+
   /** Produce a job. The queue must have been defined by some module. */
   async add(
     queueName: string,

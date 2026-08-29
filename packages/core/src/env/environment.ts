@@ -16,7 +16,7 @@ type Resolved<K extends string> = K extends keyof KnownVariables
 
 /**
  * APP_ENV drives which .env file loads. It is deliberately NOT NODE_ENV:
- * bundlers and libraries overload NODE_ENV as an optimization flag, so Forgex
+ * bundlers and libraries overload NODE_ENV as an optimization flag, so Tulipes
  * keeps its own axis and mirrors a sane NODE_ENV for third-party code.
  */
 export const appEnvs = ["development", "staging", "production", "test"] as const;
@@ -51,7 +51,7 @@ export class Environment {
 
   /**
    * Convenience passthrough: `env.get("PORT")` ≡ `env.store.get("PORT")` —
-   * with per-variable types once `forgex sync` has generated config.d.ts.
+   * with per-variable types once `tulipes sync` has generated config.d.ts.
    */
   get<K extends string>(name: K): Resolved<K> {
     return this.store.get(name) as Resolved<K>;

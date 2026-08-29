@@ -1,4 +1,4 @@
-import type { AclBuilder } from "@forgex/core/acl";
+import type { AclBuilder } from "@tulipes/core/acl";
 
 export default function usersAcl(acl: AclBuilder): void {
   acl.allow("user", "users:read");

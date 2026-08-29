@@ -1,16 +1,16 @@
 {
-  "name": "@forgex-example/app",
+  "name": "@tulipes-example/app",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx app.ts",
+    "dev": "tulipes dev",
     "worker": "tsx worker.ts",
-    "sync": "forgex sync",
-    "check": "forgex env:check",
+    "sync": "tulipes sync",
+    "check": "tulipes env:check",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@forgex/core": "workspace:*",
+    "@tulipes/core": "workspace:*",
     "ioredis": "^5",
     "mongoose": "^8"
   },

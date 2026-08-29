@@ -1,5 +1,5 @@
 {
-  "name": "forgex",
+  "name": "tulipes",
   "private": true,
   "packageManager": "yarn@4.18.0",
   "type": "module",
@@ -9,7 +9,7 @@
     "example/modules/*"
   ],
   "scripts": {
-    "example": "yarn workspace @forgex-example/app dev",
+    "example": "yarn workspace @tulipes-example/app dev",
     "typecheck": "yarn workspaces foreach -A --no-private run typecheck"
   },
   "devDependencies": {

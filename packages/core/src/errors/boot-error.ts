@@ -1,5 +1,5 @@
 /**
- * Forgex fails closed at boot: a phase never crashes on the first problem it
+ * Tulipes fails closed at boot: a phase never crashes on the first problem it
  * meets. It collects everything wrong, then throws once with the full list —
  * so a developer with ten missing env variables fixes ten, not one per restart.
  */
@@ -13,13 +13,13 @@ export interface BootIssue {
   message: string;
 }
 
-export class ForgexBootError extends Error {
+export class TulipesBootError extends Error {
   readonly phase: string;
   readonly issues: readonly BootIssue[];
 
   constructor(phase: string, issues: readonly BootIssue[]) {
-    super(ForgexBootError.#format(phase, issues));
-    this.name = "ForgexBootError";
+    super(TulipesBootError.#format(phase, issues));
+    this.name = "TulipesBootError";
     this.phase = phase;
     this.issues = issues;
   }
@@ -53,7 +53,7 @@ export class BootReport {
 
   throwIfAny(phase: string): void {
     if (this.#issues.length > 0) {
-      throw new ForgexBootError(phase, this.#issues);
+      throw new TulipesBootError(phase, this.#issues);
     }
   }
 }

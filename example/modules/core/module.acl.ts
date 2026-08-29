@@ -1,4 +1,4 @@
-import type { AclBuilder } from "@forgex/core/acl";
+import type { AclBuilder } from "@tulipes/core/acl";
 
 /**
  * The sys core module owns the global role vocabulary. Business modules

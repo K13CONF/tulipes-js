@@ -3,11 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "forgex": {
+  "tulipes": {
     "tier": "sys",
     "priority": 0
   },
   "dependencies": {
-    "@forgex/core": "workspace:*"
+    "@tulipes/core": "workspace:*"
   }
 }

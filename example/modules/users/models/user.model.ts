@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import type { ModelDef } from "@forgex/core/db";
+import type { ModelDef } from "@tulipes/core/db";
 // App-owned conventions from lib/ — a relative reach outside the module is
 // fine for app-level glue that is deliberately NOT a package.
 import { baseSchemaOptions } from "../../../lib/mongoose/index.js";

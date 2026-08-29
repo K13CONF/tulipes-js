@@ -1,0 +1,17 @@
+{
+  "name": "@app/security",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "tulipes": {
+    "tier": "sys",
+    "priority": 10
+  },
+  "dependencies": {
+    "@tulipes/core": "workspace:*",
+    "express": "^5",
+    "pino": "^9",
+    "pino-http": "^10",
+    "pino-pretty": "^13"
+  }
+}

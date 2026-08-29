@@ -1,4 +1,4 @@
-import { boot } from "@forgex/core/boot";
+import { boot } from "@tulipes/core/boot";
 import { registerBasePlugins } from "./lib/mongoose/index.js";
 
 // Global schema plugins must exist before any model compiles (phase 8).

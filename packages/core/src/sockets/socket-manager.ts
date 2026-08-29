@@ -7,7 +7,7 @@ import { BootReport } from "../errors/boot-error.js";
  * Wraps the process-wide Socket.IO server (web branch only, phase 11w).
  *
  * Namespaces are the socket-side equivalent of route prefixes, and get the
- * same ownership rule as everything else in Forgex: a module claims its
+ * same ownership rule as everything else in Tulipes: a module claims its
  * namespace ("/users") exactly once, and emitting into a namespace nobody
  * claimed throws instead of silently broadcasting to nothing.
  */
@@ -33,6 +33,11 @@ export class SocketManager {
       );
     }
     return this.#io.of(name);
+  }
+
+  /** Claimed namespace names — for the startup banner and tooling. */
+  namespaces(): string[] {
+    return [...this.#namespaces.keys()];
   }
 
   /** @internal Module-scoped facade for the loader. */

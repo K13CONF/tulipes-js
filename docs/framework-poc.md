@@ -1,6 +1,6 @@
-# Forgex — Proof of Concept
+# Tulipes — Proof of Concept
 
-> **Working name:** `forgex` / npm scope `@forgex`. Placeholder — rename is a find-and-replace away.
+> **Working name:** `tulipes` / npm scope `@tulipes`. Placeholder — rename is a find-and-replace away.
 >
 > **Goal:** a 2026 Express framework that makes it fast to set up and run a safe, production-grade API without rewriting boilerplate. Convention-driven, module-based, fail-closed.
 >
@@ -14,7 +14,7 @@ The project divides into exactly two things:
 
 | Part | What it is | Who touches it |
 |---|---|---|
-| **`@forgex/core`** | One published (private npm) package holding all engines: Environment, module explorer, config builder, model store, queue manager, socket manager, ACL engine, express wiring, error handler, responder, request logger, i18n runtime, http server, graceful shutdown, CLI. Subpath exports: `@forgex/core/acl`, `@forgex/core/env`, … | Framework author. End developer imports it, never edits it. |
+| **`@tulipes/core`** | One published (private npm) package holding all engines: Environment, module explorer, config builder, model store, queue manager, socket manager, ACL engine, express wiring, error handler, responder, request logger, i18n runtime, http server, graceful shutdown, CLI. Subpath exports: `@tulipes/core/acl`, `@tulipes/core/env`, … | Framework author. End developer imports it, never edits it. |
 | **App skeleton** | The folder structure the end developer sees, owns, and runs. Modules, app-owned glue (`lib/`), env files, locale files, two ~5-line entrypoints. | End developer. |
 
 Deliberately **excluded from core**, staying app-side in `lib/`: the cache helpers and mongoose helpers (thin, app-flavored, developers will want to edit them).
@@ -39,15 +39,14 @@ my-api/
 │   ├── en.json
 │   └── fr.json
 ├── types/
-│   └── config.d.ts           # GENERATED — `forgex sync`, do not edit
+│   └── config.d.ts           # GENERATED — `tulipes sync`, do not edit
 ├── .envs/
 │   ├── .env.development
 │   ├── .env.staging
 │   └── .env.production
 ├── .env.example              # GENERATED from all meta.variables.json
-├── app.ts                    # import { boot } from '@forgex/core'; boot({ mode: 'web' })
+├── app.ts                    # import { boot } from '@tulipes/core'; boot({ mode: 'web' })
 ├── worker.ts                 # boot({ mode: 'worker' })
-├── app.middleware.ts         # global middleware slots: beforeRoutes / afterRoutes
 ├── package.json              # "workspaces": ["modules/*"]
 └── tsconfig.json
 ```
@@ -56,7 +55,7 @@ Entrypoints are intentionally trivial:
 
 ```ts
 // app.ts
-import { boot } from "@forgex/core";
+import { boot } from "@tulipes/core";
 
 boot({ mode: "web" }); // or read PROCESS_MODE, see §8
 ```
@@ -94,7 +93,7 @@ modules/users/
 {
   "name": "@app/users",
   "version": "0.0.0",
-  "forgex": {
+  "tulipes": {
     "tier": "app",
     "priority": 10,
     "dependsOn": ["auth"]
@@ -120,7 +119,7 @@ Each module declares every env variable it needs. Plain JSON — deliberately no
 
 ```json
 {
-  "$schema": "https://forgex.dev/schemas/meta.variables.json",
+  "$schema": "https://tulipes.dev/schemas/meta.variables.json",
   "variables": [
     {
       "name": "USERS_MAX_SESSIONS",
@@ -192,7 +191,7 @@ The first thing that runs. Contract:
 
 ---
 
-## 7. Loader contracts (`@forgex/core` — the actual TypeScript)
+## 7. Loader contracts (`@tulipes/core` — the actual TypeScript)
 
 These signatures are the heart of the framework. Everything else is glue around them.
 
@@ -256,7 +255,7 @@ Single pipeline, **mode fork at phase 9** on `PROCESS_MODE` (`web` | `worker`; `
 | 8 | **Database + models + bootstrap** | connect Mongoose → load all `ModelDef`s into the global model store → run every `BootstrapFn` in load order (indexes, seeds) |
 | 9 | **── MODE FORK ──** | `PROCESS_MODE` decides the tail of the pipeline |
 | 9w | *web:* **Queues (producers)** | init queue manager, register queues (no processors) |
-| 10w | *web:* **Express + routes** | create app, mount core middleware (security headers, request logger, i18n, body parsing), mount every `RoutesFn` router, then error handler + responder last |
+| 10w | *web:* **Express + routes** | create app, mount every `RoutesFn` router in load order — a sys-tier security module supplies the head of the pipeline (headers, request logger, body parsing); core itself mounts only the fail-closed tail (404 + error handler) |
 | 11w | *web:* **HTTP + sockets + listen** | create http server, init socket manager, run `SocketsFn`s, `listen()` |
 | 9k | *worker:* **Queues (processors)** | init queue manager **with processors**, run `QueuesFn`s, start consuming |
 | 12 | **onReady** | fire all `onReady` hooks in load order |
@@ -278,26 +277,26 @@ Single pipeline, **mode fork at phase 9** on `PROCESS_MODE` (`web` | `worker`; `
 
 Chosen approach: **codegen a `config.d.ts`** (over module augmentation), produced by the CLI:
 
-- `forgex sync` reads every module's exported config shape + every `meta.variables.json` and emits:
+- `tulipes sync` reads every module's exported config shape + every `meta.variables.json` and emits:
   - `types/config.d.ts` — augments `GlobalConfig` and types `Environment.get()` keys/returns
   - `.env.example` — every variable with description comments, grouped by module
   - postman collection (feeds the existing postman-generator)
-- `forgex dev` runs sync automatically in watch mode, so generated types never go stale.
+- `tulipes dev` runs sync automatically in watch mode, so generated types never go stale.
 - Generated files are committed, marked `do not edit`.
 
 ---
 
-## 11. CLI (`forgex`)
+## 11. CLI (`tulipes`)
 
-Ships inside `@forgex/core` (bin entry).
+Ships inside `@tulipes/core` (bin entry).
 
 | Command | Does |
 |---|---|
-| `forgex dev` | boot under tsx, watch mode, auto-`sync` on meta/config change |
-| `forgex build` | compile to `dist/`, run `sync`, verify boot phases 1–7 dry-run |
-| `forgex new module <name>` | scaffold full module skeleton (§3) with workspace wiring |
-| `forgex sync` | regenerate `config.d.ts`, `.env.example`, postman collection |
-| `forgex env:check` | phases 1–3 only — validate current `.env` against all meta files, print the report, exit. CI-friendly. |
+| `tulipes dev` | boot under tsx, watch mode, auto-`sync` on meta/config change |
+| `tulipes build` | compile to `dist/`, run `sync`, verify boot phases 1–7 dry-run |
+| `tulipes new module <name>` | scaffold full module skeleton (§3) with workspace wiring |
+| `tulipes sync` | regenerate `config.d.ts`, `.env.example`, postman collection |
+| `tulipes env:check` | phases 1–3 only — validate current `.env` against all meta files, print the report, exit. CI-friendly. |
 
 ---
 
@@ -321,7 +320,7 @@ Opinionated, wired by core, non-negotiable in v1:
 Paste the block below into eraser.io **DiagramGPT** with diagram type **Flow chart**.
 
 ```text
-Create a flow chart of the boot pipeline of "Forgex", a module-based Express framework.
+Create a flow chart of the boot pipeline of "Tulipes", a module-based Express framework.
 Use one subgraph (group) per phase, connected top to bottom. Use a decision node for the mode fork.
 
 Group "Phase 1-3: Environment Engine":

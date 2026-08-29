@@ -4,17 +4,17 @@ import { runNewModule } from "./new-module.js";
 import { runDev } from "./dev.js";
 
 /**
- * The `forgex` CLI. Deliberately dependency-free argument handling — four
+ * The `tulipes` CLI. Deliberately dependency-free argument handling — four
  * commands don't justify a parser library.
  * All commands operate on the app in the current working directory.
  */
-const HELP = `forgex — module-based express framework
+const HELP = `tulipes — module-based express framework
 
 Usage:
-  forgex sync                 regenerate types/config.d.ts and .env.example
-  forgex env:check            validate env against every meta.variables.json (CI-friendly)
-  forgex new module <name>    scaffold a module under ./modules
-  forgex dev [entry]          run with tsx in watch mode (default entry: app.ts), sync first
+  tulipes sync                 regenerate types/config.d.ts and .env.example
+  tulipes env:check            validate env against every meta.variables.json (CI-friendly)
+  tulipes new module <name>    scaffold a module under ./modules
+  tulipes dev [entry]          run with tsx in watch mode (default entry: app.ts), sync first
 `;
 
 export async function main(argv: readonly string[]): Promise<void> {
@@ -28,7 +28,7 @@ export async function main(argv: readonly string[]): Promise<void> {
       return runEnvCheck(rootDir);
     case "new":
       if (rest[0] !== "module" || !rest[1]) {
-        console.error('Usage: forgex new module <name>');
+        console.error('Usage: tulipes new module <name>');
         process.exitCode = 2;
         return;
       }

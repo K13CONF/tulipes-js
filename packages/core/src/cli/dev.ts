@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { runSync } from "./sync.js";
 
 /**
- * `forgex dev [entry]` — sync first (generated types must never be stale
+ * `tulipes dev [entry]` — sync first (generated types must never be stale
  * when the dev server starts), then hand off to tsx in watch mode.
  *
  * tsx is resolved from core's own dependencies rather than trusting PATH,
