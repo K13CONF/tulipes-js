@@ -1,3 +1,4 @@
+import { runInit } from "./init.js";
 import { runSync } from "./sync.js";
 import { runEnvCheck } from "./env-check.js";
 import { runNewModule } from "./new-module.js";
@@ -11,6 +12,7 @@ import { runDev } from "./dev.js";
 const HELP = `tulipes — module-based express framework
 
 Usage:
+  tulipes init [dir]           scaffold a new application (boots with zero infrastructure)
   tulipes sync                 regenerate types/config.d.ts and .env.example
   tulipes env:check            validate env against every meta.variables.json (CI-friendly)
   tulipes new module <name>    scaffold a module under ./modules
@@ -22,6 +24,8 @@ export async function main(argv: readonly string[]): Promise<void> {
   const rootDir = process.cwd();
 
   switch (command) {
+    case "init":
+      return runInit(rootDir, rest[0]);
     case "sync":
       return runSync(rootDir);
     case "env:check":

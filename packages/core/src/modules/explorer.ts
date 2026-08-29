@@ -19,17 +19,51 @@ export type SourceExtension = ".ts" | ".js";
 
 /**
  * In dev the app runs straight from TypeScript (via tsx) so conventions
- * resolve to .ts files; a compiled deployment runs .js from dist. Core infers
- * which world it's in from its own file — this very file is only ever .js
- * after a build. The URL alone isn't trustworthy: tsx's tsImport presents
- * modules under a .js URL while only the .ts source exists on disk, so a
- * .js verdict is confirmed against the filesystem.
+ * resolve to .ts files; a compiled deployment runs .js. Crucially the
+ * verdict must describe the APP's files, never core's own compilation —
+ * the published core is always .js while the app it boots is usually .ts.
+ *
+ * Heuristic fallback (no module dirs to probe): the entry script's
+ * extension, then core's own file. The URL alone isn't trustworthy there:
+ * tsx's tsImport presents modules under a .js URL while only the .ts
+ * source exists on disk, so a .js verdict is confirmed against the disk.
  */
 export function detectSourceExtension(): SourceExtension {
+  const entry = process.argv[1];
+  if (entry?.endsWith(".ts") || entry?.endsWith(".mts")) return ".ts";
+
   const self = fileURLToPath(import.meta.url);
   if (self.endsWith(".ts")) return ".ts";
   if (!existsSync(self) && existsSync(self.replace(/\.js$/, ".ts"))) return ".ts";
   return ".js";
+}
+
+/**
+ * The authoritative verdict: look at what the modules actually contain.
+ * Only when a project has conventional files in BOTH extensions (or none
+ * at all) does the runtime heuristic break the tie.
+ */
+function probeSourceExtension(modules: readonly ModuleManifest[]): SourceExtension {
+  let sawTs = false;
+  let sawJs = false;
+
+  for (const module of modules) {
+    for (const ext of [".ts", ".js"] as const) {
+      const hit =
+        existsSync(join(module.dir, `module.config${ext}`)) ||
+        existsSync(join(module.dir, `module.acl${ext}`)) ||
+        COLLECTIONS.some(
+          ([, dirName, suffix]) =>
+            listWithSuffix(join(module.dir, dirName), suffix + ext).length > 0,
+        );
+      if (ext === ".ts") sawTs ||= hit;
+      else sawJs ||= hit;
+    }
+    if (sawTs && sawJs) break;
+  }
+
+  if (sawTs !== sawJs) return sawTs ? ".ts" : ".js";
+  return detectSourceExtension();
 }
 
 export interface ModuleFiles {
@@ -63,7 +97,7 @@ export function exploreModules(
   modules: readonly ModuleManifest[],
   options: ExploreOptions = {},
 ): ModuleFiles[] {
-  const ext = options.sourceExtension ?? detectSourceExtension();
+  const ext = options.sourceExtension ?? probeSourceExtension(modules);
 
   return modules.map((module) => {
     const files: ModuleFiles = {
