@@ -247,6 +247,7 @@ router.get("/users/:id", async (req) => {
 ## The CLI
 
 ```
+tulipes init [dir]           scaffold a new application — boots with zero infrastructure
 tulipes sync                 regenerate types/config.d.ts and .env.example
 tulipes env:check            validate env against every meta contract — CI gate, exit 1 on failure
 tulipes new module <name>    scaffold a module (scope auto-detected from siblings)

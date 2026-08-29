@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { BootReport } from "../errors/boot-error.js";
-import { detectSourceExtension } from "../modules/explorer.js";
 import { importFile } from "./import-file.js";
 import type { Ctx } from "./contracts.js";
 
@@ -29,8 +28,12 @@ export async function loadAppConfigSeed(
   ctx: Ctx,
   report: BootReport,
 ): Promise<void> {
-  const file = join(rootDir, "config", `app.config${detectSourceExtension()}`);
-  if (!existsSync(file)) return;
+  // Whichever extension exists wins (.ts first) — the app decides its own
+  // world; core's compilation state must never influence discovery.
+  const file = [".ts", ".js"]
+    .map((ext) => join(rootDir, "config", `app.config${ext}`))
+    .find((candidate) => existsSync(candidate));
+  if (!file) return;
 
   const exported = await importFile<{ default?: unknown }>(file, "config", "app", report);
   if (!exported) return;
