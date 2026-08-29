@@ -1,29 +1,16 @@
+node_modules/
+dist/
+logs/
+*.log
+
+# local env overrides — .envs/.env.<mode> files ARE committed in the example,
+# real apps keep secrets out of git via .env.local
+.env.local
+.envs/.env.*.local
+
+# yarn berry
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
-!.yarn/sdks
-!.yarn/versions
-
-# Whether you use PnP or not, the node_modules folder is often used to store
-# build artifacts that should be gitignored
-node_modules
-
-# Swap the comments on the following lines if you wish to use zero-installs
-# In that case, don't forget to run `yarn config set enableGlobalCache false`!
-# Documentation here: https://yarnpkg.com/features/caching#zero-installs
-
-#!.yarn/cache
 .pnp.*
-
-build
-.env.*
-!.env.example
-# Logs
-logs
-# react-email preview app build + export artifacts
-.react-email
-out
-
-# Generated Postman collection + environment (yarn postman:generate)
-postman

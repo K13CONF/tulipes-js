@@ -1,0 +1,13 @@
+{
+  "name": "@app/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "forgex": {
+    "tier": "sys",
+    "priority": 0
+  },
+  "dependencies": {
+    "@forgex/core": "workspace:*"
+  }
+}

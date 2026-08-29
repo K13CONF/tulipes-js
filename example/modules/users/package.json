@@ -1,0 +1,18 @@
+{
+  "name": "@app/users",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "forgex": {
+    "tier": "app",
+    "priority": 10,
+    "dependsOn": [
+      "auth"
+    ]
+  },
+  "dependencies": {
+    "@forgex/core": "workspace:*",
+    "express": "^5",
+    "mongoose": "^8"
+  }
+}

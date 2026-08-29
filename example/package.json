@@ -1,0 +1,20 @@
+{
+  "name": "@forgex-example/app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx app.ts",
+    "worker": "tsx worker.ts",
+    "sync": "forgex sync",
+    "check": "forgex env:check",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@forgex/core": "workspace:*",
+    "ioredis": "^5",
+    "mongoose": "^8"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4"
+  }
+}
