@@ -1,0 +1,40 @@
+{
+  "name": "@forgex/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "forgex": "./bin/forgex.js"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./env": "./src/env/index.ts",
+    "./modules": "./src/modules/index.ts",
+    "./boot": "./src/boot/index.ts",
+    "./acl": "./src/acl/index.ts",
+    "./db": "./src/db/index.ts",
+    "./queues": "./src/queues/index.ts",
+    "./sockets": "./src/sockets/index.ts",
+    "./http": "./src/http/index.ts",
+    "./config": "./src/config/index.ts",
+    "./errors": "./src/errors/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bullmq": "^5",
+    "dotenv": "^16.4.7",
+    "express": "^5",
+    "ioredis": "^5",
+    "mongoose": "^8",
+    "socket.io": "^4",
+    "tsx": "^4",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5",
+    "@types/node": "^24.2.0",
+    "typescript": "^7.0.2"
+  }
+}

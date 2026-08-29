@@ -1,0 +1,14 @@
+{
+  "name": "@app/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "forgex": {
+    "tier": "app",
+    "priority": 5
+  },
+  "dependencies": {
+    "@forgex/core": "workspace:*",
+    "express": "^5"
+  }
+}

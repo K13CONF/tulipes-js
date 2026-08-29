@@ -1,7 +1,0 @@
-{
-    "watch": [
-        "src", "!src/modules"
-    ],
-    "ext": "ts,json",
-    "exec": "yarn build && node build/Application.js"
-}

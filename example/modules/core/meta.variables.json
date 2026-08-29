@@ -1,0 +1,32 @@
+{
+  "variables": [
+    {
+      "name": "PORT",
+      "type": "number",
+      "group": "http",
+      "description": "HTTP port the web process listens on",
+      "default": 3000
+    },
+    {
+      "name": "MONGO_URI",
+      "type": "url",
+      "group": "database",
+      "required": true,
+      "description": "MongoDB connection string"
+    },
+    {
+      "name": "REDIS_URL",
+      "type": "url",
+      "group": "redis",
+      "required": true,
+      "description": "Redis connection string (cache, queues, rate limiting)"
+    },
+    {
+      "name": "JWT_SECRET",
+      "type": "secret",
+      "group": "security",
+      "required": true,
+      "description": "Signing key for access tokens"
+    }
+  ]
+}
