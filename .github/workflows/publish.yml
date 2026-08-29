@@ -44,9 +44,26 @@ jobs:
       - name: Smoke-test compiled CLI
         run: node packages/core/dist/cli/bin.js help
 
+      # Fail fast with a readable message instead of yarn's interactive-login
+      # fallback (YN0033) when the secret is missing.
+      - name: Verify NPM_TOKEN secret is configured
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "The NPM_TOKEN repository secret is not set." >&2
+            echo "Create an npm Automation (or granular) token with publish" >&2
+            echo "rights on the tulipes org and add it in Settings → Secrets." >&2
+            exit 1
+          fi
+
       # yarn pack/publish applies publishConfig: exports and bin flip from
       # src/*.ts to dist/*.js, and only dist/ ships (files field).
+      # Registry is pinned for this step only — the install step must keep
+      # the lockfile's default registry to stay --immutable.
       - name: Publish
         run: yarn workspace @tulipes/core npm publish --access public
         env:
+          YARN_NPM_REGISTRY_SERVER: https://registry.npmjs.org
+          YARN_NPM_PUBLISH_REGISTRY: https://registry.npmjs.org
           YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
