@@ -9,7 +9,7 @@ export {
 export { sortModules } from "./graph.js";
 export {
   DEFAULT_PRIORITY,
-  forgexManifestSchema,
+  tulipesManifestSchema,
   moduleTiers,
   type ModuleManifest,
   type ModuleTier,

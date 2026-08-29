@@ -1,4 +1,4 @@
-import type { Ctx } from "@forgex/core/boot";
+import type { Ctx } from "@tulipes/core/boot";
 
 export default function usersConfig({ Environment }: Ctx) {
   // Types flow from the generated config.d.ts — no annotations needed.

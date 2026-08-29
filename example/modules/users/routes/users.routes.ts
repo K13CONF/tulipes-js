@@ -1,6 +1,6 @@
 import { Router } from "express";
-import type { Ctx } from "@forgex/core/boot";
-import { HttpError } from "@forgex/core/http";
+import type { Ctx } from "@tulipes/core/boot";
+import { HttpError } from "@tulipes/core/http";
 
 export default function usersRoutes({ config, acl, models, queues }: Ctx): Router {
   const router = Router();

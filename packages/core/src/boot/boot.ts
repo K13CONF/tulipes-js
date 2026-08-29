@@ -14,8 +14,8 @@ import { initDatabase } from "../db/database.js";
 import { initQueues } from "../queues/load-queues.js";
 import { initSockets } from "../sockets/load-sockets.js";
 import { errorHandler, notFoundHandler } from "../http/error-handler.js";
-import { requestLogger, securityHeaders } from "../http/middleware.js";
-import { loadAppConfigSeed, loadAppMiddleware } from "./app-files.js";
+import { loadAppConfigSeed } from "./app-files.js";
+import { printStartupBanner } from "./banner.js";
 import { importFile } from "./import-file.js";
 import type { Ctx, ModuleLifecycle, RoutesFn } from "./contracts.js";
 
@@ -49,6 +49,7 @@ export interface BootHandle {
  * with its aggregate report before the next begins.
  */
 export async function boot(options: BootOptions): Promise<BootHandle> {
+  const bootStartedAt = Date.now();
   const mode = resolveMode(options.mode);
 
   // Phases 1–3 — Environment engine (crashes internally on bad env)
@@ -99,7 +100,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   queueReport.throwIfAny("queues");
 
   if (mode === "web") {
-    await startWeb(handle, explored, options.rootDir);
+    await startWeb(handle, explored);
   } else {
     const workerReport = new BootReport();
     const started = ctx.queues?.startWorkers(workerReport) ?? 0;
@@ -111,7 +112,6 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
         "worker mode started with zero processors — no module registered queue work",
       );
     }
-    console.log(`[forgex] worker consuming ${started} queue(s) (${handle.env.appEnv})`);
   }
 
   // Phase 12 — onReady, load order
@@ -126,14 +126,16 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     }
   }
 
+  printStartupBanner(handle, order, Date.now() - bootStartedAt);
+
   if (options.handleSignals !== false) {
     for (const signal of ["SIGINT", "SIGTERM"] as const) {
       process.once(signal, () => {
-        console.log(`\n[forgex] ${signal} — shutting down`);
+        console.log(`\n[tulipes] ${signal} — shutting down`);
         handle.shutdown().then(
           () => process.exit(0),
           (error) => {
-            console.error("[forgex] shutdown failed:", error);
+            console.error("[tulipes] shutdown failed:", error);
             process.exit(1);
           },
         );
@@ -158,32 +160,29 @@ function resolveMode(override: ProcessMode | undefined): ProcessMode {
  * Phases 9w–11w: express, module routes, http server.
  *
  * The request pipeline, in order:
- *   1. securityHeaders          (core)
- *   2. requestLogger            (core)
- *   3. express.json             (core)
- *   4. beforeRoutes             (app.middleware.ts — global middleware slot)
- *   5. every module router      (load order)
- *   6. afterRoutes              (app.middleware.ts)
- *   7. notFoundHandler          (core)
- *   8. errorHandler             (core — terminal, catches async throws too)
+ *   1. every module router      (load order — sys modules first, so their
+ *                                routes files mounting on ctx.app ARE the
+ *                                global middleware slot: request ids and
+ *                                cross-cutting glue in the core module,
+ *                                headers/logging/body parsing in security)
+ *   2. notFoundHandler          (core)
+ *   3. errorHandler             (core — terminal, catches async throws too)
+ *
+ * Core deliberately mounts NO middleware of its own: what runs on every
+ * request is the app's decision, expressed as sys modules within the
+ * developer's reach. Core only guarantees the fail-closed tail — nothing
+ * escapes unrouted or unhandled. @tulipes/core/http ships only that tail's
+ * building blocks (HttpError, notFoundHandler, errorHandler).
  */
 async function startWeb(
   handle: BootHandle,
   explored: readonly ModuleFiles[],
-  rootDir: string,
 ): Promise<void> {
   const app = express();
-  app.use(securityHeaders());
-  app.use(requestLogger());
-  app.use(express.json());
   handle.app = app;
   handle.ctx.app = app;
 
   const report = new BootReport();
-  const hooks = await loadAppMiddleware(rootDir, report);
-
-  await runHook(hooks.beforeRoutes, "beforeRoutes", handle, report);
-
   for (const { module, routeFiles } of explored) {
     for (const file of routeFiles) {
       const exported = await importFile<{ default?: unknown }>(
@@ -214,8 +213,6 @@ async function startWeb(
     }
   }
 
-  await runHook(hooks.afterRoutes, "afterRoutes", handle, report);
-
   app.use(notFoundHandler());
   app.use(errorHandler(handle.env.appEnv));
 
@@ -238,23 +235,6 @@ async function startWeb(
     server.once("error", reject);
     server.listen(port, () => resolve());
   });
-  console.log(`[forgex] web process listening on :${port} (${handle.env.appEnv})`);
-}
-
-async function runHook(
-  hook: ((ctx: Ctx) => void | Promise<void>) | undefined,
-  name: string,
-  handle: BootHandle,
-  report: BootReport,
-): Promise<void> {
-  try {
-    await hook?.(handle.ctx);
-  } catch (error) {
-    report.add({
-      scope: "boot",
-      message: `app.middleware ${name} threw: ${(error as Error).message}`,
-    });
-  }
 }
 
 /** Reverse load order, every hook attempted even if an earlier one throws. */

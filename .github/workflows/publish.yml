@@ -1,0 +1,52 @@
+name: Publish @tulipes/core to npm
+
+# Publish on a version tag (v0.1.0 → package version 0.1.0), or manually.
+# Requires an npm automation token in the NPM_TOKEN repository secret.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable corepack (yarn 4 from packageManager field)
+        run: corepack enable
+
+      - name: Install
+        run: yarn install --immutable
+
+      - name: Verify tag matches package version
+        if: github.event_name == 'push'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./packages/core/package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "tag v$TAG does not match packages/core version $PKG" >&2
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: yarn workspace @tulipes/core typecheck
+
+      - name: Build
+        run: yarn workspace @tulipes/core build
+
+      - name: Smoke-test compiled CLI
+        run: node packages/core/dist/cli/bin.js help
+
+      # yarn pack/publish applies publishConfig: exports and bin flip from
+      # src/*.ts to dist/*.js, and only dist/ ships (files field).
+      - name: Publish
+        run: yarn workspace @tulipes/core npm publish --access public
+        env:
+          YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

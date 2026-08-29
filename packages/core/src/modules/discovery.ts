@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { BootReport } from "../errors/boot-error.js";
-import { forgexManifestSchema, type ModuleManifest } from "./manifest.js";
+import { tulipesManifestSchema, type ModuleManifest } from "./manifest.js";
 
 /**
  * Read each module's package.json (under `modules/<name>`) into a manifest.
@@ -60,7 +60,7 @@ function readManifest(
   folder: string,
   report: BootReport,
 ): ModuleManifest | undefined {
-  let json: { name?: unknown; forgex?: unknown };
+  let json: { name?: unknown; tulipes?: unknown };
   try {
     json = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
   } catch (error) {
@@ -81,14 +81,14 @@ function readManifest(
     return undefined;
   }
 
-  // Absent "forgex" key is a valid module with default ordering.
-  const parsed = forgexManifestSchema.safeParse(json.forgex ?? {});
+  // Absent "tulipes" key is a valid module with default ordering.
+  const parsed = tulipesManifestSchema.safeParse(json.tulipes ?? {});
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
       report.add({
         scope: "modules",
         module: folder,
-        message: `package.json "forgex" key: ${issue.path.join(".") || "(root)"} — ${issue.message}`,
+        message: `package.json "tulipes" key: ${issue.path.join(".") || "(root)"} — ${issue.message}`,
       });
     }
     return undefined;

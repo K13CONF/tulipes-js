@@ -1,4 +1,4 @@
-import type { AppConfigFn } from "@forgex/core/boot";
+import type { AppConfigFn } from "@tulipes/core/boot";
 
 /**
  * Seeds the global config BEFORE any module factory runs (phase 6).
@@ -7,7 +7,7 @@ import type { AppConfigFn } from "@forgex/core/boot";
  */
 const appConfig: AppConfigFn = (Environment) => ({
   app: {
-    name: "forgex-example",
+    name: "tulipes-example",
     env: Environment.appEnv,
   },
 });

@@ -1,4 +1,4 @@
-import type { Ctx } from "@forgex/core/boot";
+import type { Ctx } from "@tulipes/core/boot";
 import { closeCache } from "../../lib/cache/index.js";
 
 export default function coreConfig(_ctx: Ctx) {

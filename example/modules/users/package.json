@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "forgex": {
+  "tulipes": {
     "tier": "app",
     "priority": 10,
     "dependsOn": [
@@ -11,7 +11,7 @@
     ]
   },
   "dependencies": {
-    "@forgex/core": "workspace:*",
+    "@tulipes/core": "workspace:*",
     "express": "^5",
     "mongoose": "^8"
   }

@@ -1,10 +1,10 @@
 {
-  "name": "@forgex/core",
+  "name": "@tulipes/core",
   "version": "0.1.0",
-  "private": true,
+  "description": "Module-based Express framework: convention-driven boot pipeline, env contracts, ACL, queues, sockets and CLI",
   "type": "module",
   "bin": {
-    "forgex": "./bin/forgex.js"
+    "tulipes": "./bin/tulipes.js"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -19,11 +19,36 @@
     "./config": "./src/config/index.ts",
     "./errors": "./src/errors/index.ts"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "prepack": "yarn build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "bin": {
+      "tulipes": "./dist/cli/bin.js"
+    },
+    "exports": {
+      ".": "./dist/index.js",
+      "./env": "./dist/env/index.js",
+      "./modules": "./dist/modules/index.js",
+      "./boot": "./dist/boot/index.js",
+      "./acl": "./dist/acl/index.js",
+      "./db": "./dist/db/index.js",
+      "./queues": "./dist/queues/index.js",
+      "./sockets": "./dist/sockets/index.js",
+      "./http": "./dist/http/index.js",
+      "./config": "./dist/config/index.js",
+      "./errors": "./dist/errors/index.js"
+    }
   },
   "dependencies": {
     "bullmq": "^5",
+    "colorette": "^2",
     "dotenv": "^16.4.7",
     "express": "^5",
     "ioredis": "^5",

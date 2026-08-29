@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * A module's ordering metadata lives under the "forgex" key of its
+ * A module's ordering metadata lives under the "tulipes" key of its
  * package.json — never in the folder name — so reprioritizing a module can
  * never break the `dependsOn` references pointing at it.
  */
@@ -20,7 +20,7 @@ export const DEFAULT_PRIORITY = 100;
  * `.strict()` so a typo like "dependson" crashes boot instead of silently
  * loading the module with default ordering.
  */
-export const forgexManifestSchema = z
+export const tulipesManifestSchema = z
   .object({
     tier: z.enum(moduleTiers).default("app"),
     /** Lower loads earlier; tie-breaker inside a tier. */

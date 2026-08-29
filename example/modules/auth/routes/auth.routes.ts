@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Ctx } from "@forgex/core/boot";
+import type { Ctx } from "@tulipes/core/boot";
 
 export default function authRoutes(_ctx: Ctx): Router {
   const router = Router();

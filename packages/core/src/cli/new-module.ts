@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join } from "node:path";
 
 /**
- * `forgex new module <name>` — scaffold the full module skeleton. The scope
+ * `tulipes new module <name>` — scaffold the full module skeleton. The scope
  * is borrowed from an existing sibling module so the app keeps one naming
  * convention without configuring it anywhere.
  */
@@ -30,14 +30,14 @@ export async function runNewModule(rootDir: string, name: string): Promise<void>
     version: "0.0.0",
     private: true,
     type: "module",
-    forgex: { tier: "app", priority: 100, dependsOn: [] },
-    dependencies: { "@forgex/core": "workspace:*", express: "^5" },
+    tulipes: { tier: "app", priority: 100, dependsOn: [] },
+    dependencies: { "@tulipes/core": "workspace:*", express: "^5" },
   }, null, 2) + "\n");
 
   write(dir, "meta.variables.json", JSON.stringify({ variables: [] }, null, 2) + "\n");
 
   write(dir, "module.config.ts", [
-    `import type { Ctx } from "@forgex/core/boot";`,
+    `import type { Ctx } from "@tulipes/core/boot";`,
     ``,
     `export default function ${camel(name)}Config(_ctx: Ctx) {`,
     `  return {};`,
@@ -47,7 +47,7 @@ export async function runNewModule(rootDir: string, name: string): Promise<void>
 
   write(dir, join("routes", `${name}.routes.ts`), [
     `import { Router } from "express";`,
-    `import type { Ctx } from "@forgex/core/boot";`,
+    `import type { Ctx } from "@tulipes/core/boot";`,
     ``,
     `export default function ${camel(name)}Routes(_ctx: Ctx): Router {`,
     `  const router = Router();`,
@@ -62,7 +62,7 @@ export async function runNewModule(rootDir: string, name: string): Promise<void>
   ].join("\n"));
 
   console.log(`scaffolded modules/${name} (${scope}/${name})`);
-  console.log(`next: yarn install && forgex sync`);
+  console.log(`next: yarn install && tulipes sync`);
 }
 
 function detectScope(modulesDir: string): string | undefined {

@@ -1,6 +1,6 @@
 export {
   BootReport,
-  ForgexBootError,
+  TulipesBootError,
   type BootIssue,
   type BootScope,
 } from "./boot-error.js";

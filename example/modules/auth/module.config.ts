@@ -1,4 +1,4 @@
-import type { Ctx } from "@forgex/core/boot";
+import type { Ctx } from "@tulipes/core/boot";
 
 export default function authConfig({ Environment }: Ctx) {
   return {

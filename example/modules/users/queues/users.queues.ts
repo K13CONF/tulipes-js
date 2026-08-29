@@ -1,5 +1,5 @@
-import type { Ctx } from "@forgex/core/boot";
-import type { QueueRegistry } from "@forgex/core/queues";
+import type { Ctx } from "@tulipes/core/boot";
+import type { QueueRegistry } from "@tulipes/core/queues";
 
 /**
  * Runs in BOTH process modes: web registers the queue and produces into it,

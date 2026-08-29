@@ -1,5 +1,5 @@
-import type { Ctx } from "@forgex/core/boot";
-import type { SocketRegistry } from "@forgex/core/sockets";
+import type { Ctx } from "@tulipes/core/boot";
+import type { SocketRegistry } from "@tulipes/core/sockets";
 
 export default function usersSockets({ config }: Ctx, sockets: SocketRegistry): void {
   sockets.namespace("/users", (nsp) => {

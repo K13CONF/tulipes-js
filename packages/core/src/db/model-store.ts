@@ -31,7 +31,7 @@ export class ModelStore {
 
   /**
    * The generic is a caller-side assertion — the store can't verify it.
-   * Typed accessors per model come with the `forgex sync` codegen.
+   * Typed accessors per model come with the `tulipes sync` codegen.
    */
   get<T = unknown>(name: string): Model<T> {
     const stored = this.#models.get(name);

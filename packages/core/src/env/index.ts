@@ -1,7 +1,7 @@
 export { Environment, appEnvs, type AppEnv, type EnvironmentOptions } from "./environment.js";
 
 /**
- * Augmentation target for the generated `types/config.d.ts` (`forgex sync`):
+ * Augmentation target for the generated `types/config.d.ts` (`tulipes sync`):
  * one property per declared variable, typed from its meta spec. Empty here on
  * purpose — an app without codegen still gets `VariableValue` from get().
  *

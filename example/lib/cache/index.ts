@@ -1,5 +1,5 @@
 import { Redis } from "ioredis";
-import type { Environment } from "@forgex/core/env";
+import type { Environment } from "@tulipes/core/env";
 
 import { MemoryCache } from "./memory-cache.js";
 import { RedisCache } from "./redis-cache.js";
