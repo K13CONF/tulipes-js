@@ -64,6 +64,4 @@ jobs:
       - name: Publish
         run: yarn workspace @tulipes/core npm publish --access public
         env:
-          YARN_NPM_REGISTRY_SERVER: https://registry.npmjs.org
-          YARN_NPM_PUBLISH_REGISTRY: https://registry.npmjs.org
           YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
