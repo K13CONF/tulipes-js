@@ -2,20 +2,35 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+export interface InitOptions {
+  /** Also scaffold the contracts that need mongo and redis. */
+  full?: boolean;
+}
+
 /**
- * `tulipes init [dir]` — scaffold a complete application that boots with
- * ZERO infrastructure: the generated core module declares no MONGO_URI or
- * REDIS_URL, and with no models and no queue files the pipeline skips both
- * engines legitimately. `yarn install && yarn dev` must always succeed on a
- * bare machine; databases arrive later as one meta.variables.json entry.
+ * `tulipes init [dir] [--full]` — scaffold a complete application.
  *
  * Three modules ship: core (sys 0 — env contract, roles, request ids),
- * security (sys 10 — headers, pino logging, body parsing) and hello (the
- * app-tier proof route). Templates live inline, like `new module`.
+ * security (sys 10 — helmet, cors, logging, body parsing) and hello, a
+ * worked example of every module contract.
+ *
+ * By default the app boots with ZERO infrastructure: no MONGO_URI or
+ * REDIS_URL is declared, and with no models and no queue files the
+ * pipeline skips both engines legitimately, so `yarn install && yarn dev`
+ * always succeeds on a bare machine.
+ *
+ * `--full` adds the contracts that cannot work without infrastructure —
+ * models, bootstrap tasks and queues — along with the variables they
+ * require. That app needs mongo and redis running to boot.
  */
-export async function runInit(rootDir: string, target?: string): Promise<void> {
+export async function runInit(
+  rootDir: string,
+  target?: string,
+  options: InitOptions = {},
+): Promise<void> {
   const dir = resolve(rootDir, target ?? ".");
   const name = sanitizeName(basename(dir));
+  const full = options.full ?? false;
 
   if (existsSync(dir) && readdirSync(dir).some((entry) => entry !== ".git")) {
     console.error(`refusing to init: ${dir} is not empty`);
@@ -24,7 +39,7 @@ export async function runInit(rootDir: string, target?: string): Promise<void> {
   }
 
   const coreVersion = ownVersion();
-  const files = renderProject(name, coreVersion);
+  const files = renderProject(name, coreVersion, full);
 
   for (const [relPath, content] of files) {
     const filePath = join(dir, relPath);
@@ -46,8 +61,9 @@ export async function runInit(rootDir: string, target?: string): Promise<void> {
     "",
     "  → http://localhost:3000/hello",
     "",
-    "No database or redis needed to boot — add MONGO_URI / REDIS_URL to",
-    "modules/core/meta.variables.json when your first model or queue lands.",
+    full
+      ? "Needs mongo and redis running (MONGO_URI / REDIS_URL in .envs/.env.development).\nRun `yarn worker` in a second terminal to consume queued jobs."
+      : "No database or redis needed to boot — add MONGO_URI / REDIS_URL to\nmodules/core/meta.variables.json when your first model or queue lands,\nor scaffold them now with `tulipes init --full`.",
   ].filter((line) => line !== undefined).join("\n"));
 }
 
@@ -103,10 +119,14 @@ function sanitizeName(raw: string): string {
 
 const json = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
 
-function renderProject(name: string, coreVersion: string): [string, string][] {
+function renderProject(
+  name: string,
+  coreVersion: string,
+  full: boolean,
+): [string, string][] {
   const core = `^${coreVersion}`;
 
-  return [
+  const files: [string, string][] = [
     ["package.json", json({
       name,
       private: true,
@@ -362,6 +382,13 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `# none; "*" allows any but forbids credentials.`,
       `CORS_ORIGINS=http://localhost:5173`,
       ``,
+      ...(full
+        ? [
+            `MONGO_URI=mongodb://127.0.0.1:27017/${name}`,
+            `REDIS_URL=redis://127.0.0.1:6379`,
+            ``,
+          ]
+        : []),
     ].join("\n")],
 
     // ── modules/core — sys tier, priority 0: the very first router ─────────
@@ -383,6 +410,26 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
           description: "HTTP port the web process listens on",
           default: 3000,
         },
+        // Infra connection strings live in the sys core module because every
+        // feature shares them — one owner per variable, no duplicates.
+        ...(full
+          ? [
+              {
+                name: "MONGO_URI",
+                type: "url",
+                group: "database",
+                required: true,
+                description: "MongoDB connection string",
+              },
+              {
+                name: "REDIS_URL",
+                type: "url",
+                group: "redis",
+                required: true,
+                description: "Redis connection string (queues, cache)",
+              },
+            ]
+          : []),
       ],
     })],
 
@@ -616,18 +663,143 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       private: true,
       type: "module",
       tulipes: { tier: "app", priority: 100, dependsOn: [] },
-      dependencies: { "@tulipes/core": core, express: "^5" },
+      dependencies: {
+        "@tulipes/core": core,
+        express: "^5",
+        ...(full ? { mongoose: "^8" } : {}),
+      },
     })],
+
+    ["modules/hello/meta.variables.json", json({
+      variables: [
+        {
+          name: "HELLO_GREETING",
+          type: "string",
+          group: "hello",
+          description: "Word this module greets callers with",
+          default: "Hello",
+        },
+      ],
+    })],
+
+    ["modules/hello/module.config.ts", [
+      `import type { Ctx } from "@tulipes/core/boot";`,
+      ``,
+      `/**`,
+      ` * Runs in boot phase 6. Whatever this returns is stored at`,
+      ` * \`config.hello\` and typed by \`tulipes sync\`, so every other module`,
+      ` * reads it without importing anything from here.`,
+      ` */`,
+      `export default function helloConfig({ Environment }: Ctx) {`,
+      `  return {`,
+      `    greeting: Environment.get("HELLO_GREETING"),`,
+      `  };`,
+      `}`,
+      ``,
+      `/** After the process is fully up (server listening / worker consuming). */`,
+      `export async function onReady({ config }: Ctx): Promise<void> {`,
+      `  console.log(\`[hello] ready — greeting with "\${config.hello?.greeting}"\`);`,
+      `}`,
+      ``,
+      `/**`,
+      ` * Graceful shutdown. Hooks run in REVERSE load order, so a module can`,
+      ` * rely on its dependencies still being alive while it cleans up.`,
+      ` */`,
+      `export async function onShutdown(): Promise<void> {`,
+      `  // Close anything this module owns: timers, external clients, streams.`,
+      `}`,
+      ``,
+    ].join("\n")],
+
+    ["modules/hello/module.acl.ts", [
+      `import type { AclBuilder } from "@tulipes/core/acl";`,
+      ``,
+      `/**`,
+      ` * Roles are global and defined once by the sys core module; a feature`,
+      ` * module only attaches grants, and always on resources namespaced by`,
+      ` * its own name ("hello:*"). Granting the same role+resource from two`,
+      ` * modules crashes the boot.`,
+      ` */`,
+      `export default function helloAcl(acl: AclBuilder): void {`,
+      `  acl.allow("user", "hello:read");`,
+      `}`,
+      ``,
+    ].join("\n")],
+
+    ["modules/hello/helpers/greeting.ts", [
+      `/**`,
+      ` * Pure logic: no Express, no database, no framework. Trivial to unit`,
+      ` * test, and the framework never scans this folder — helpers are plain`,
+      ` * imports. Anything two modules need moves up to lib/.`,
+      ` */`,
+      `export function buildGreeting(greeting: string, name: string): string {`,
+      `  return \`\${greeting}, \${name}!\`;`,
+      `}`,
+      ``,
+    ].join("\n")],
+
+    ["modules/hello/controllers/hello.controllers.ts", [
+      `import type { Request, Response } from "express";`,
+      `import type { Ctx } from "@tulipes/core/boot";`,
+      ``,
+      `import { buildGreeting } from "../helpers/greeting.js";`,
+      ``,
+      `/**`,
+      ` * Controllers hold the work so routes stay a table of contents. The`,
+      ` * framework does not scan this folder — routes import these directly,`,
+      ` * which keeps the wiring explicit.`,
+      ` *`,
+      ` * Each controller takes ctx and RETURNS the handler. That closure is`,
+      ` * what makes it testable: pass a stub context, get a plain function.`,
+      ` */`,
+      `export function greet({ config }: Ctx) {`,
+      `  return (req: Request, res: Response): void => {`,
+      `    const name = String(req.query.name ?? "world");`,
+      `    res.json({`,
+      `      message: buildGreeting(String(config.hello?.greeting), name),`,
+      `      app: config.app?.name,`,
+      `    });`,
+      `  };`,
+      `}`,
+      ``,
+    ].join("\n")],
 
     ["modules/hello/routes/hello.routes.ts", [
       `import { Router } from "express";`,
       `import type { Ctx } from "@tulipes/core/boot";`,
+      `import { HttpError } from "@tulipes/core/http";`,
       ``,
-      `export default function helloRoutes({ config }: Ctx): Router {`,
+      `import { greet } from "../controllers/hello.controllers.js";`,
+      ``,
+      `export default function helloRoutes(ctx: Ctx): Router {`,
       `  const router = Router();`,
+      `  const { acl, config } = ctx;`,
       ``,
-      `  router.get("/hello", (_req, res) => {`,
-      `    res.json({ hello: "world", app: config.app?.name });`,
+      `  // Built from the shared prefix, so versioning the whole API is a`,
+      `  // one-line change in config/app.config.ts.`,
+      `  const base = String(config.api?.prefix ?? "");`,
+      ``,
+      `  router.get(\`\${base}/hello\`, greet(ctx));`,
+      ``,
+      `  // Literal paths must be registered before parameterised ones, or`,
+      `  // "/hello/:name" would swallow this.`,
+      `  router.get(\`\${base}/hello/secret\`, (req, res) => {`,
+      `    // A real app resolves the role in an auth module and puts it on the`,
+      `    // request; this reads a header purely so the demo is curl-able.`,
+      `    const role = String(req.header("x-demo-role") ?? "guest");`,
+      `    if (!acl!.can(role, "hello:read")) {`,
+      `      throw new HttpError(403, \`role "\${role}" may not read hello\`);`,
+      `    }`,
+      `    res.json({ secret: "only roles granted hello:read see this" });`,
+      `  });`,
+      ``,
+      `  // Throwing is the whole error story — the framework's terminal`,
+      `  // handler renders it. Express 5 forwards async rejections there too.`,
+      `  router.get(\`\${base}/hello/:name\`, async (req, res) => {`,
+      `    if (req.params.name === "nobody") {`,
+      `      throw new HttpError(404, "nobody is not a greetable name");`,
+      `    }`,
+      `    res.json({ message: \`\${config.hello?.greeting}, \${req.params.name}!\` });`,
       `  });`,
       ``,
       `  return router;`,
@@ -635,6 +807,157 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       ``,
     ].join("\n")],
 
+    ["modules/hello/sockets/hello.sockets.ts", [
+      `import type { Ctx } from "@tulipes/core/boot";`,
+      `import type { SocketRegistry } from "@tulipes/core/sockets";`,
+      ``,
+      `/**`,
+      ` * Web mode only. A namespace is claimed by exactly one module; emit`,
+      ` * from anywhere with \`ctx.sockets!.of("/hello")\`.`,
+      ` *`,
+      ` * Try it: wscat -c ws://localhost:3000/hello`,
+      ` */`,
+      `export default function helloSockets({ config }: Ctx, sockets: SocketRegistry): void {`,
+      `  sockets.namespace("/hello", (nsp) => {`,
+      `    nsp.on("connection", (socket) => {`,
+      `      socket.emit("greeting", {`,
+      `        message: config.hello?.greeting,`,
+      `        online: nsp.sockets.size,`,
+      `      });`,
+      ``,
+      `      socket.on("ping", (ack: (reply: string) => void) => ack("pong"));`,
+      `    });`,
+      `  });`,
+      `}`,
+      ``,
+    ].join("\n")],
+
+
+  ];
+
+  // ── --full only: the contracts that need a database or redis ───────────
+  if (full) {
+    files.push(
+      ["modules/hello/models/greeting.model.ts", [
+        `import { Schema } from "mongoose";`,
+        `import type { ModelDef } from "@tulipes/core/db";`,
+        ``,
+        `/**`,
+        ` * A model file is a DECLARATION, never a registration: the framework`,
+        ` * compiles the schema on its own connection and puts it in the model`,
+        ` * store. Never call mongoose.model() yourself.`,
+        ` *`,
+        ` * Read it anywhere the context reaches: models!.get("Greeting").`,
+        ` */`,
+        `const greetingSchema = new Schema(`,
+        `  {`,
+        `    name: { type: String, required: true, unique: true, lowercase: true, trim: true },`,
+        `    message: { type: String, required: true },`,
+        `    timesUsed: { type: Number, default: 0, min: 0 },`,
+        `  },`,
+        `  { timestamps: true },`,
+        `);`,
+        ``,
+        `export default { name: "Greeting", schema: greetingSchema } satisfies ModelDef;`,
+        ``,
+      ].join("\n")],
+
+      ["modules/hello/bootstrap/seed-greetings.bootstrap.ts", [
+        `import type { Ctx } from "@tulipes/core/boot";`,
+        ``,
+        `/**`,
+        ` * Runs after models are registered and before the server accepts`,
+        ` * traffic — the place for indexes, seed rows and defaults.`,
+        ` *`,
+        ` * MUST be idempotent: it runs on every boot of every process, web and`,
+        ` * worker alike. Upsert; never blind-insert.`,
+        ` */`,
+        `export default async function seedGreetings({ models }: Ctx): Promise<void> {`,
+        `  const Greeting = models!.get("Greeting");`,
+        ``,
+        `  await Greeting.updateOne(`,
+        `    { name: "world" },`,
+        `    { $setOnInsert: { name: "world", message: "Hello, world!" } },`,
+        `    { upsert: true },`,
+        `  );`,
+        `}`,
+        ``,
+      ].join("\n")],
+
+      ["modules/hello/queues/hello.queues.ts", [
+        `import type { Ctx } from "@tulipes/core/boot";`,
+        `import type { QueueRegistry } from "@tulipes/core/queues";`,
+        ``,
+        `/**`,
+        ` * ONE file describes both sides. The web process registers the queue`,
+        ` * so routes can produce into it; \`yarn worker\` turns the processor`,
+        ` * into a live consumer. Never duplicate the definition.`,
+        ` *`,
+        ` * Queue names use "." — BullMQ reserves ":" as its redis separator.`,
+        ` */`,
+        `export default function helloQueues({ models }: Ctx, queues: QueueRegistry): void {`,
+        `  queues.define("hello.count-greeting");`,
+        ``,
+        `  queues.process("hello.count-greeting", async (job) => {`,
+        `    // Jobs retry, so processors must be idempotent-safe. Pass ids in`,
+        `    // job.data and re-read state here rather than shipping documents.`,
+        `    const { name } = job.data as { name: string };`,
+        `    await models!.get("Greeting").updateOne({ name }, { $inc: { timesUsed: 1 } });`,
+        `    return { counted: name };`,
+        `  });`,
+        `}`,
+        ``,
+      ].join("\n")],
+
+      ["modules/hello/routes/greetings.routes.ts", [
+        `import { Router } from "express";`,
+        `import type { Ctx } from "@tulipes/core/boot";`,
+        `import { HttpError } from "@tulipes/core/http";`,
+        ``,
+        `/**`,
+        ` * A module may ship several routes files; each is discovered and`,
+        ` * mounted independently. This one shows the database and the queue.`,
+        ` */`,
+        `export default function greetingsRoutes({ config, models, queues }: Ctx): Router {`,
+        `  const router = Router();`,
+        `  const base = String(config.api?.prefix ?? "");`,
+        ``,
+        `  router.get(\`\${base}/greetings\`, async (req, res) => {`,
+        `    // Pagination bounds are app-wide, so every list endpoint clamps`,
+        `    // the same way and no caller can ask for the whole table.`,
+        `    const { defaultLimit = 20, maxLimit = 100 } = config.pagination ?? {};`,
+        `    const asked = Number(req.query.limit ?? defaultLimit);`,
+        `    const limit = Math.min(Number.isFinite(asked) ? asked : defaultLimit, maxLimit);`,
+        ``,
+        `    const greetings = await models!`,
+        `      .get("Greeting")`,
+        `      .find()`,
+        `      .select("name message timesUsed -_id")`,
+        `      .limit(limit)`,
+        `      .lean();`,
+        ``,
+        `    res.json({ count: greetings.length, limit, greetings });`,
+        `  });`,
+        ``,
+        `  router.post(\`\${base}/greetings/:name/use\`, async (req, res) => {`,
+        `    const { name } = req.params;`,
+        `    const greeting = await models!.get("Greeting").findOne({ name }).lean();`,
+        `    if (!greeting) throw new HttpError(404, \`no greeting named "\${name}"\`);`,
+        ``,
+        `    // Slow or retryable work belongs in a job, not in the request.`,
+        `    // Run \`yarn worker\` in another terminal to see it processed.`,
+        `    await queues!.add("hello.count-greeting", "count", { name });`,
+        `    res.status(202).json({ name, queued: true });`,
+        `  });`,
+        ``,
+        `  return router;`,
+        `}`,
+        ``,
+      ].join("\n")],
+    );
+  }
+
+  files.push(
     ["README.md", [
       `# ${name}`,
       ``,
@@ -648,10 +971,41 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `yarn dev          # boot the web process → http://localhost:3000/hello`,
       "```",
       ``,
-      `Boots with no database and no redis: the pipeline skips engines no`,
-      `module asks for. When your first model lands, declare \`MONGO_URI\``,
-      `(type \`url\`, required) in \`modules/core/meta.variables.json\` and set`,
-      `it in \`.envs/.env.development\`; same with \`REDIS_URL\` for queues.`,
+      ...(full
+        ? [
+            `Needs mongo and redis running — see \`MONGO_URI\` and \`REDIS_URL\``,
+            `in \`.envs/.env.development\`. Run \`yarn worker\` in a second`,
+            `terminal to consume queued jobs.`,
+          ]
+        : [
+            `Boots with no database and no redis: the pipeline skips engines no`,
+            `module asks for. When your first model lands, declare \`MONGO_URI\``,
+            `(type \`url\`, required) in \`modules/core/meta.variables.json\` and`,
+            `set it in \`.envs/.env.development\`; same with \`REDIS_URL\` for`,
+            `queues. \`tulipes init --full\` scaffolds all of that up front.`,
+          ]),
+      ``,
+      `## The hello module`,
+      ``,
+      `\`modules/hello\` is a worked example of every module contract — read it`,
+      `before writing your own:`,
+      ``,
+      `| File | Contract |`,
+      `|---|---|`,
+      `| \`meta.variables.json\` | the module's environment contract |`,
+      `| \`module.config.ts\` | config factory + \`onReady\` / \`onShutdown\` hooks |`,
+      `| \`module.acl.ts\` | permission grants on \`hello:*\` |`,
+      `| \`routes/*.routes.ts\` | endpoints, \`HttpError\`, ACL checks |`,
+      `| \`controllers/\` | the work; imported by routes, never scanned |`,
+      `| \`helpers/\` | pure logic, no framework |`,
+      `| \`sockets/*.sockets.ts\` | a claimed Socket.IO namespace |`,
+      ...(full
+        ? [
+            `| \`models/*.model.ts\` | a schema declaration for the model store |`,
+            `| \`bootstrap/*.bootstrap.ts\` | idempotent seeding, before traffic |`,
+            `| \`queues/*.queues.ts\` | a job definition and its processor |`,
+          ]
+        : []),
       ``,
       `## Daily commands`,
       ``,
@@ -664,5 +1018,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `| \`yarn tulipes new module <name>\` | scaffold a module |`,
       ``,
     ].join("\n")],
-  ];
+  );
+
+  return files;
 }

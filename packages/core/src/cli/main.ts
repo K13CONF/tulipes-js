@@ -13,6 +13,7 @@ const HELP = `tulipes — module-based express framework
 
 Usage:
   tulipes init [dir]           scaffold a new application (boots with zero infrastructure)
+  tulipes init [dir] --full    ...and the contracts needing mongo + redis (models, queues)
   tulipes sync                 regenerate types/config.d.ts and .env.example
   tulipes env:check            validate env against every meta.variables.json (CI-friendly)
   tulipes new module <name>    scaffold a module under ./modules
@@ -24,8 +25,11 @@ export async function main(argv: readonly string[]): Promise<void> {
   const rootDir = process.cwd();
 
   switch (command) {
-    case "init":
-      return runInit(rootDir, rest[0]);
+    case "init": {
+      const full = rest.includes("--full");
+      const target = rest.find((arg) => !arg.startsWith("-"));
+      return runInit(rootDir, target, { full });
+    }
     case "sync":
       return runSync(rootDir);
     case "env:check":
