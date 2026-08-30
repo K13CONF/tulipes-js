@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+
+import { coreVersion, packageRoot } from "./package-info.js";
 
 /**
  * `tulipes init [dir]` — scaffold a complete application.
@@ -25,8 +26,8 @@ export async function runInit(rootDir: string, target?: string): Promise<void> {
     return;
   }
 
-  const coreVersion = ownVersion();
-  const files = renderProject(name, coreVersion);
+  const version = coreVersion();
+  const files = renderProject(name, version);
 
   for (const [relPath, content] of files) {
     const filePath = join(dir, relPath);
@@ -52,22 +53,6 @@ export async function runInit(rootDir: string, target?: string): Promise<void> {
     ".envs/.env.development. Run `yarn worker` in a second terminal to",
     "consume queued jobs.",
   ].filter((line) => line !== undefined).join("\n"));
-}
-
-/**
- * The version of the core running this CLI. Resolved relative to this file
- * (src/cli or dist/cli — both sit two levels below the package root) since
- * the exports map deliberately doesn't expose package.json.
- */
-function ownVersion(): string {
-  const pkg = JSON.parse(readFileSync(join(packageRoot(), "package.json"), "utf8")) as {
-    version: string;
-  };
-  return pkg.version;
-}
-
-function packageRoot(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 }
 
 /**
@@ -975,6 +960,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `| \`yarn sync\` | regenerate \`types/config.d.ts\` + \`.env.example\` |`,
       `| \`yarn check\` | validate env against every module contract — CI gate |`,
       `| \`yarn tulipes new module <name>\` | scaffold a module |`,
+      `| \`yarn tulipes update\` | upgrade the framework everywhere it is declared |`,
       ``,
     ].join("\n")],
   );
