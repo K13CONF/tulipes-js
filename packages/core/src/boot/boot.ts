@@ -19,13 +19,13 @@ import { printStartupBanner } from "./banner.js";
 import { importFile } from "./import-file.js";
 import type { Ctx, ModuleLifecycle, RoutesFn } from "./contracts.js";
 
-export const processModes = ["web", "worker"] as const;
+export const processModes = ["backend", "worker"] as const;
 export type ProcessMode = (typeof processModes)[number];
 
 export interface BootOptions {
   /** App root — the directory containing `modules/` and `.envs/`. */
   rootDir: string;
-  /** Defaults to process.env.PROCESS_MODE, then "web". */
+  /** Defaults to process.env.PROCESS_MODE, then "backend". */
   mode?: ProcessMode;
   appEnv?: AppEnv;
   /** Skip SIGTERM/SIGINT wiring — for tests that manage shutdown themselves. */
@@ -45,7 +45,7 @@ export interface BootHandle {
 /**
  * The whole run workflow, in the order the POC pins down:
  * environment → module graph → exploration → global config → (acl, db —
- * future steps) → mode fork (web | worker) → onReady. Each phase crashes
+ * future steps) → mode fork (backend | worker) → onReady. Each phase crashes
  * with its aggregate report before the next begins.
  */
 export async function boot(options: BootOptions): Promise<BootHandle> {
@@ -99,8 +99,8 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   await initQueues(explored, ctx, queueReport);
   queueReport.throwIfAny("queues");
 
-  if (mode === "web") {
-    await startWeb(handle, explored);
+  if (mode === "backend") {
+    await startBackend(handle, explored);
   } else {
     const workerReport = new BootReport();
     const started = ctx.queues?.startWorkers(workerReport) ?? 0;
@@ -147,17 +147,20 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
 }
 
 function resolveMode(override: ProcessMode | undefined): ProcessMode {
-  const raw = override ?? process.env.PROCESS_MODE ?? "web";
+  const raw = override ?? process.env.PROCESS_MODE ?? "backend";
   if (!(processModes as readonly string[]).includes(raw)) {
+    // "web" was this mode's name before 0.1.5; name the replacement rather
+    // than leaving an upgrader to guess from the valid-values list.
+    const hint = raw === "web" ? ' — "web" was renamed to "backend"' : "";
     throw new Error(
-      `PROCESS_MODE "${raw}" is invalid — expected one of: ${processModes.join(", ")}`,
+      `PROCESS_MODE "${raw}" is invalid — expected one of: ${processModes.join(", ")}${hint}`,
     );
   }
   return raw as ProcessMode;
 }
 
 /**
- * Phases 9w–11w: express, module routes, http server.
+ * Phases 9b–11b: express, module routes, http server.
  *
  * The request pipeline, in order:
  *   1. every module router      (load order — sys modules first, so their
@@ -174,7 +177,7 @@ function resolveMode(override: ProcessMode | undefined): ProcessMode {
  * escapes unrouted or unhandled. @tulipes/core/http ships only that tail's
  * building blocks (HttpError, notFoundHandler, errorHandler).
  */
-async function startWeb(
+async function startBackend(
   handle: BootHandle,
   explored: readonly ModuleFiles[],
 ): Promise<void> {
@@ -225,7 +228,7 @@ async function startWeb(
   const server = createServer(app);
   handle.server = server;
 
-  // Phase 11w — sockets attach before listen() so no client can connect
+  // Phase 11b — sockets attach before listen() so no client can connect
   // to a namespace that isn't wired yet.
   const socketReport = new BootReport();
   await initSockets(explored, handle.ctx, server, socketReport);

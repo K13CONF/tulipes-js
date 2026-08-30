@@ -10,7 +10,7 @@ import type { SocketManager } from "../sockets/socket-manager.js";
 /**
  * The context object threaded through every module-authored function.
  * Later-phase members only exist once their phase has run: config factories
- * (phase 6) see neither `acl` (phase 7) nor `app` (web branch, phase 9).
+ * (phase 6) see neither `acl` (phase 7) nor `app` (backend branch, phase 9).
  */
 export interface Ctx {
   Environment: Environment;
@@ -48,7 +48,7 @@ export interface ModuleLifecycle {
 }
 
 /**
- * Default export of `routes/*.routes.ts` (web branch only). May mount
+ * Default export of `routes/*.routes.ts` (backend branch only). May mount
  * directly on `ctx.app`, or return a Router for core to `app.use()` —
  * returning one is the recommended style.
  */

@@ -7,7 +7,7 @@ The reference layout for a Tulipes application. Everything in this folder is
 
 ```
 example/
-├── app.ts                  web entrypoint      — boot({ mode: "web" }), ~3 lines
+├── app.ts                  backend entrypoint      — boot({ mode: "backend" }), ~3 lines
 ├── worker.ts               worker entrypoint   — boot({ mode: "worker" })
 ├── config/
 │   └── app.config.ts       app-wide config seed, runs before every module factory
@@ -46,7 +46,7 @@ every app module, so a sys module's routes file mounting on `ctx.app` IS the
   production, level via its LOG_LEVEL variable), body parsing with a size
   cap. Implementations live in this module's `helpers/`, not the framework.
 
-The web request pipeline, in order:
+The backend request pipeline, in order:
 
 ```
 1. module routers      load order — sys first:
@@ -120,14 +120,14 @@ package.json.
 4. ACL merge (roles from sys core, grants everywhere)
 5. Database: connect → models → bootstrap tasks
 6. Queues register (both modes)
-7. **web**: pipeline above, sockets, listen · **worker**: start consuming
+7. **backend**: pipeline above, sockets, listen · **worker**: start consuming
 8. `onReady` hooks — shutdown runs everything in reverse
 
 ## Daily commands
 
 | command | does |
 |---|---|
-| `yarn dev` / `tulipes dev` | run web process (dev regenerates types first) |
+| `yarn dev` / `tulipes dev` | run backend process (dev regenerates types first) |
 | `yarn worker` | run queue-consumer process |
 | `tulipes sync` | regenerate `types/config.d.ts` + `.env.example` |
 | `tulipes env:check` | validate env without booting — CI gate |

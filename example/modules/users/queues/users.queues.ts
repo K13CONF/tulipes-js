@@ -2,7 +2,7 @@ import type { Ctx } from "@tulipes/core/boot";
 import type { QueueRegistry } from "@tulipes/core/queues";
 
 /**
- * Runs in BOTH process modes: web registers the queue and produces into it,
+ * Runs in BOTH process modes: backend registers the queue and produces into it,
  * the worker process turns the processor into a live consumer.
  */
 export default function usersQueues(_ctx: Ctx, queues: QueueRegistry): void {

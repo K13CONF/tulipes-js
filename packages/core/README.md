@@ -8,11 +8,11 @@ Tulipes exists so you never rewrite Express boilerplate again. You write **modul
 // app.ts — the whole entrypoint
 import { boot } from "@tulipes/core/boot";
 
-await boot({ rootDir: import.meta.dirname, mode: "web" });
+await boot({ rootDir: import.meta.dirname, mode: "backend" });
 ```
 
 ```
-  ▲ my-api  development · web mode
+  ▲ my-api  development · backend mode
 
   ➜  Server     http://localhost:4000  ● listening
   ➜  Database   mongodb://127.0.0.1:27017/my-api  ● connected
@@ -29,7 +29,7 @@ await boot({ rootDir: import.meta.dirname, mode: "web" });
 
 - **Modules, not layers.** A feature lives in one folder: its routes, models, config, permissions, background jobs, and env contract. Delete the folder, the feature is gone.
 - **Fail-closed everywhere.** Missing env vars, dependency cycles, duplicate ACL grants, colliding queue names — all crash the boot with a full report. Reading an undeclared variable or model throws at the call site. Unknown roles deny. Unrouted requests 404. Unexpected errors never leak internals outside development.
-- **One process, two modes.** The same codebase boots as a `web` server or a queue-consuming `worker` — same modules, same config, forked at the last pipeline phase.
+- **One process, two modes.** The same codebase boots as a `backend` server or a queue-consuming `worker` — same modules, same config, forked at the last pipeline phase.
 - **Types generated, not hand-written.** `tulipes sync` reads your modules and emits a `config.d.ts` that types every env variable and every config namespace — enum variables become literal unions, config shapes are inferred from your factories' return types.
 - **The framework stays out of your request path.** Core mounts *no* middleware. Your sys-tier modules own the pipeline head; core only guarantees the tail (404 + terminal error handler).
 
@@ -49,7 +49,7 @@ yarn add @tulipes/core
 
 ```
 my-api/
-├── app.ts                  # boot({ mode: "web" })
+├── app.ts                  # boot({ mode: "backend" })
 ├── worker.ts               # boot({ mode: "worker" })
 ├── config/
 │   └── app.config.ts       # optional: seeds global config before any module
@@ -148,7 +148,7 @@ ctx.Environment.get("TYPO_NAME");         // throws: never declared by any modul
  6. Database         connect Mongoose → model store → bootstrap tasks
  7. Queues           every *.queues.ts registers in BOTH modes
  8. ── mode fork ──
-    web              module routers (load order) → 404 → error handler → listen
+    backend              module routers (load order) → 404 → error handler → listen
     worker           start a BullMQ worker per registered processor
  9. onReady          hooks in load order → startup banner
     shutdown         SIGTERM/SIGINT → onShutdown hooks in REVERSE order →
@@ -168,8 +168,8 @@ interface Ctx {
   acl?: Acl;                  // after phase 5
   models?: ModelStore;        // after phase 6
   queues?: QueueManager;      // after phase 7
-  sockets?: SocketManager;    // web only
-  app?: Express;              // web only
+  sockets?: SocketManager;    // backend only
+  app?: Express;              // backend only
 }
 ```
 
@@ -296,4 +296,4 @@ Express 5 · Mongoose 8 · BullMQ 5 · ioredis 5 · Socket.IO 4 · Zod. Delibera
 
 ## Well-known variables
 
-Core reads three variable names when present (declare them in your sys core module): `PORT` (web listen port, default 3000), `MONGO_URI` (required if any module ships models), `REDIS_URL` (required if any module ships queues). No models and no `MONGO_URI` is a valid database-less app; models without `MONGO_URI` is a boot refusal.
+Core reads three variable names when present (declare them in your sys core module): `PORT` (backend listen port, default 3000), `MONGO_URI` (required if any module ships models), `REDIS_URL` (required if any module ships queues). No models and no `MONGO_URI` is a valid database-less app; models without `MONGO_URI` is a boot refusal.

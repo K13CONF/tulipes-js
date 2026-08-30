@@ -56,7 +56,7 @@ queues → routes. If code needs something another module provides, declare
 
 | Command | Use |
 |---|---|
-| `yarn dev` | run the web process (regenerates types first) |
+| `yarn dev` | run the backend process (regenerates types first) |
 | `yarn worker` | run the queue-consumer process |
 | `yarn sync` | regenerate `types/config.d.ts` + `.env.example` |
 | `yarn check` | validate the environment without booting |

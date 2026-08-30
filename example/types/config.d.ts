@@ -2,7 +2,7 @@
 
 declare module "@tulipes/core/env" {
   interface KnownVariables {
-    /** [core] HTTP port the web process listens on */
+    /** [core] HTTP port the backend process listens on */
     PORT: number;
     /** [core] MongoDB connection string */
     MONGO_URI: string;
