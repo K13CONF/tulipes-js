@@ -5,10 +5,16 @@ import { HttpError } from "@tulipes/core/http";
 export default function usersRoutes({ config, acl, models, queues }: Ctx): Router {
   const router = Router();
 
-  router.get("/users", async (_req, res) => {
+  router.get("/users", async (req, res) => {
+    // Pagination bounds are app-wide (config/app.config.ts), so every list
+    // endpoint in every module clamps the same way.
+    const { defaultLimit = 20, maxLimit = 100 } = config.pagination ?? {};
+    const requested = Number(req.query.limit ?? defaultLimit);
+    const limit = Math.min(Number.isFinite(requested) ? requested : defaultLimit, maxLimit);
+
     const User = models!.get("User");
-    const users = await User.find().select("email role -_id").lean();
-    res.json({ count: users.length, users });
+    const users = await User.find().select("email role -_id").limit(limit).lean();
+    res.json({ count: users.length, limit, users });
   });
 
   // Soft delete via the app's base plugin: the document stays in mongo but

@@ -5,5 +5,5 @@
     "declaration": false,
     "sourceMap": false
   },
-  "include": ["app.ts", "worker.ts", "types", "modules"]
+  "include": ["app.ts", "worker.ts", "types", "modules", "config", "lib"]
 }

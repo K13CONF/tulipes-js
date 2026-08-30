@@ -22,6 +22,19 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * A 4xx carried on a non-HttpError (express, body-parser, multer…), or
+ * undefined when the error is ours to own as a 500.
+ */
+function clientErrorStatus(error: unknown): number | undefined {
+  const candidate = (error as { status?: unknown; statusCode?: unknown } | null)
+    ?.status ?? (error as { statusCode?: unknown } | null)?.statusCode;
+
+  return typeof candidate === "number" && candidate >= 400 && candidate <= 499
+    ? candidate
+    : undefined;
+}
+
 /** Terminal 404 — anything no router claimed. */
 export function notFoundHandler(): RequestHandler {
   return (req, _res, next) => {
@@ -43,6 +56,17 @@ export function errorHandler(appEnv: AppEnv): ErrorRequestHandler {
         error: error.message,
         ...(error.details !== undefined && { details: error.details }),
       });
+      return;
+    }
+
+    // Express middleware signals client faults with a numeric status on the
+    // error — a body over the parser's limit is 413, malformed JSON is 400.
+    // Flattening those to 500 would blame the server for the caller's
+    // mistake, so 4xx statuses are honored and their messages passed
+    // through (they describe the request, never our internals).
+    const status = clientErrorStatus(error);
+    if (status !== undefined) {
+      res.status(status).json({ error: (error as Error).message });
       return;
     }
 

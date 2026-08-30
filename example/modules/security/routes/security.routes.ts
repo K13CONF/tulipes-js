@@ -13,7 +13,7 @@ import { logger } from "../helpers/logger.js";
  * Mounts directly on ctx.app (returns no Router): middleware here applies
  * to the whole app, not to a path prefix.
  */
-export default function securityRoutes({ app, Environment }: Ctx): void {
+export default function securityRoutes({ app, Environment, config }: Ctx): void {
   app!.use(securityHeaders());
 
   app!.use(
@@ -34,6 +34,6 @@ export default function securityRoutes({ app, Environment }: Ctx): void {
   );
 
   // Body-size cap is a security control too — a parser without a limit is
-  // a memory-exhaustion invitation.
-  app!.use(express.json({ limit: "1mb" }));
+  // a memory-exhaustion invitation. Tuned from config/app.config.ts.
+  app!.use(express.json({ limit: config.http?.bodyLimit ?? "1mb" }));
 }
