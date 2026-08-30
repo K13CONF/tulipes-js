@@ -10,6 +10,8 @@ declare module "@tulipes/core/env" {
     REDIS_URL: string;
     /** [core] Signing key for access tokens */
     JWT_SECRET: string;
+    /** [core] Public hostname this API is served from; "localhost" means not deployed */
+    PUBLIC_DOMAIN: string;
     /** [security] Minimum pino log level */
     LOG_LEVEL: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
     /** [security] Comma-separated browser origins allowed to call this API; "*" allows any, empty allows none (same-origin only) */

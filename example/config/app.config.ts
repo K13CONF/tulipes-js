@@ -92,7 +92,14 @@ const appConfig = ((Environment) => ({
    * host from the incoming request. Env-driven, since PORT is declared.
    */
   urls: {
-    api: `http://localhost:${Environment.get("PORT")}`,
+    // Built from PUBLIC_DOMAIN so links generated in production — reset
+    // emails, webhook callbacks — point at the real host instead of a
+    // localhost URL that is broken everywhere but this machine. The
+    // "localhost" sentinel is what separates the two cases.
+    api:
+      Environment.get("PUBLIC_DOMAIN") === "localhost"
+        ? `http://localhost:${Environment.get("PORT")}`
+        : `https://${Environment.get("PUBLIC_DOMAIN")}`,
     frontend: "http://localhost:5173",
   },
 

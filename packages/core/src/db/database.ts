@@ -31,10 +31,20 @@ const MONGO_URI = "MONGO_URI";
  * phase. Declaring models *without* a connection string, though, is a
  * contradiction the boot must refuse.
  */
+export interface InitDatabaseOptions {
+  /**
+   * Bootstrap tasks seed and ensure indexes for a process about to serve.
+   * A one-shot script skips them: they are somebody else's startup work,
+   * and running them on every `ls`-style script is wasted writes.
+   */
+  runBootstrap?: boolean;
+}
+
 export async function initDatabase(
   explored: readonly ModuleFiles[],
   ctx: Ctx,
   report: BootReport,
+  options: InitDatabaseOptions = {},
 ): Promise<Connection | undefined> {
   const hasModels = explored.some((files) => files.modelFiles.length > 0);
   const uri = ctx.Environment.store.has(MONGO_URI)
@@ -73,7 +83,7 @@ export async function initDatabase(
 
   // Bootstrap tasks only make sense against a fully-populated model store,
   // and only when nothing above them failed.
-  if (report.issues.length === 0) {
+  if ((options.runBootstrap ?? true) && report.issues.length === 0) {
     await runBootstrapTasks(explored, ctx, report);
   }
 
