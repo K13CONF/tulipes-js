@@ -110,6 +110,21 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       include: ["app.ts", "worker.ts", "types", "modules", "config"],
     })],
 
+    [".yarnrc.yml", [
+      `nodeLinker: node-modules`,
+      ``,
+      `# tsx (esbuild) and bullmq's native helpers need their install scripts;`,
+      `# stated explicitly so a restrictive global yarn config can't break dev.`,
+      `enableScripts: true`,
+      ``,
+      `# Yarn's release-age gate quarantines freshly published packages, which`,
+      `# would block brand-new @tulipes releases from installing. Preapprove the`,
+      `# framework scope only — the gate stays active for everything else.`,
+      `npmPreapprovedPackages:`,
+      `  - "@tulipes/*"`,
+      ``,
+    ].join("\n")],
+
     [".gitignore", [
       "node_modules/",
       "dist/",
