@@ -20,7 +20,8 @@
     "./errors": "./src/errors/index.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "templates"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",

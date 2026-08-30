@@ -34,3 +34,11 @@ jobs:
         run: |
           yarn workspace @tulipes-example/app sync
           yarn workspace @tulipes-example/app typecheck
+
+      # The example carries copies of the agent guides that `tulipes init`
+      # ships, so the reference app demonstrates them. Copies drift; this
+      # fails the build when they do.
+      - name: Agent guides match the shipped templates
+        run: |
+          diff packages/core/templates/CLAUDE.md example/CLAUDE.md
+          diff -r packages/core/templates/claude example/.claude

@@ -12,6 +12,12 @@ declare module "@tulipes/core/env" {
     JWT_SECRET: string;
     /** [security] Minimum pino log level */
     LOG_LEVEL: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
+    /** [security] Comma-separated browser origins allowed to call this API; "*" allows any, empty allows none (same-origin only) */
+    CORS_ORIGINS: string;
+    /** [security] Allow cookies and Authorization headers on cross-origin requests (cannot be combined with CORS_ORIGINS=*) */
+    CORS_CREDENTIALS: boolean;
+    /** [security] Strict-Transport-Security max-age in seconds; 0 disables the header (browsers only honour it over HTTPS) */
+    HSTS_MAX_AGE: number;
     /** [users] Max concurrent sessions per user */
     USERS_MAX_SESSIONS: number;
     /** [users] Who can register */

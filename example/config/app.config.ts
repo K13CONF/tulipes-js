@@ -56,11 +56,14 @@ const appConfig = ((Environment) => ({
   http: {
     // → express.json({ limit }) in modules/security/routes
     bodyLimit: "1mb",
-    // Browser origins allowed to call this API — feed a cors() middleware
-    corsOrigins: ["http://localhost:5173"],
     // true behind nginx / a load balancer, so req.ip is the real client
     trustProxy: false,
     requestTimeout: 30,
+    // NB: allowed CORS origins are NOT here. They differ per deployment,
+    // so they belong to the env contract (CORS_ORIGINS, declared in
+    // modules/security/meta.variables.json) — one source of truth per
+    // value. Shared policy lives in this file; deployment-varying values
+    // live in meta.variables.json.
   },
 
   /**
