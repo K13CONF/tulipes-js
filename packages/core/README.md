@@ -247,8 +247,7 @@ router.get("/users/:id", async (req) => {
 ## The CLI
 
 ```
-tulipes init [dir]           scaffold a new application — boots with zero infrastructure
-tulipes init [dir] --full    ...plus models, bootstrap tasks and queues (needs mongo + redis)
+tulipes init [dir]           scaffold a new application (needs mongo + redis)
 tulipes sync                 regenerate types/config.d.ts and .env.example
 tulipes env:check            validate env against every meta contract — CI gate, exit 1 on failure
 tulipes new module <name>    scaffold a module (scope auto-detected from siblings)
@@ -257,9 +256,9 @@ tulipes dev [entry]          sync, then run the entry under tsx watch
 
 The scaffolded `modules/hello` is a worked example of every module
 contract — config factory with lifecycle hooks, ACL grants, routes with
-`HttpError` and permission checks, a controller, a pure helper, and a
-socket namespace. `--full` adds the three that need infrastructure: a
-model, an idempotent bootstrap task, and a queue with its processor.
+`HttpError` and permission checks, a controller, a pure helper, a model,
+an idempotent bootstrap task, a queue with its processor, and a socket
+namespace. The generated app expects mongo and redis to be running.
 
 ### Built for AI-assisted work
 
