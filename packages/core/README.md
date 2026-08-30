@@ -251,6 +251,8 @@ tulipes init [dir]           scaffold a new application (needs mongo + redis)
 tulipes sync                 regenerate types/config.d.ts and .env.example
 tulipes env:check            validate env against every meta contract — CI gate, exit 1 on failure
 tulipes new module <name>    scaffold a module (scope auto-detected from siblings)
+tulipes update               upgrade @tulipes/core to the latest release, everywhere
+tulipes -v                   print the installed core version
 tulipes dev [entry]          sync, then run the entry under tsx watch
 ```
 
