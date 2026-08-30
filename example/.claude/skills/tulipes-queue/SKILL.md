@@ -1,12 +1,12 @@
 ---
 name: tulipes-queue
-description: Use when adding background work to a Tulipes app — emails, webhooks, exports, scheduled retries — or when a request handler is doing something slow. Covers the queues contract, producing jobs, and the web/worker process split.
+description: Use when adding background work to a Tulipes app — emails, webhooks, exports, scheduled retries — or when a request handler is doing something slow. Covers the queues contract, producing jobs, and the backend/worker process split.
 ---
 
 # Adding a background job
 
 One file declares both sides of a queue, and the process mode decides what
-happens with it: the **web** process registers the queue so routes can
+happens with it: the **backend** process registers the queue so routes can
 produce into it; the **worker** process turns the processor into a live
 consumer. Never duplicate the definition.
 

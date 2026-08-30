@@ -6,11 +6,11 @@ import type { Ctx } from "../boot/contracts.js";
 import type { ModuleFiles } from "../modules/explorer.js";
 import { SocketManager, type SocketRegistry } from "./socket-manager.js";
 
-/** Default export of `sockets/*.sockets.ts` (web branch only). */
+/** Default export of `sockets/*.sockets.ts` (backend branch only). */
 export type SocketsFn = (ctx: Ctx, sockets: SocketRegistry) => void | Promise<void>;
 
 /**
- * Phase 11w: attach Socket.IO to the http server and run every
+ * Phase 11b: attach Socket.IO to the http server and run every
  * `*.sockets.ts` in load order. No socket files → no Socket.IO server at
  * all; websockets are opt-in per app, not a standing cost.
  */

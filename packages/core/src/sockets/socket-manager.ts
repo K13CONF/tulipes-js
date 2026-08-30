@@ -4,7 +4,7 @@ import { Server, type Namespace, type ServerOptions } from "socket.io";
 import { BootReport } from "../errors/boot-error.js";
 
 /**
- * Wraps the process-wide Socket.IO server (web branch only, phase 11w).
+ * Wraps the process-wide Socket.IO server (backend branch only, phase 11b).
  *
  * Namespaces are the socket-side equivalent of route prefixes, and get the
  * same ownership rule as everything else in Tulipes: a module claims its

@@ -15,7 +15,7 @@ import { BootReport } from "../errors/boot-error.js";
  * run in BOTH modes — definitions and processors are always registered — and
  * the mode decides what happens with them:
  *
- *   web    → queues produce; processors are registered but never started
+ *   backend    → queues produce; processors are registered but never started
  *   worker → `startWorkers()` turns every registered processor into a
  *            consuming BullMQ Worker
  *

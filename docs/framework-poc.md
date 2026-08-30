@@ -45,7 +45,7 @@ my-api/
 │   ├── .env.staging
 │   └── .env.production
 ├── .env.example              # GENERATED from all meta.variables.json
-├── app.ts                    # import { boot } from '@tulipes/core'; boot({ mode: 'web' })
+├── app.ts                    # import { boot } from '@tulipes/core'; boot({ mode: 'backend' })
 ├── worker.ts                 # boot({ mode: 'worker' })
 ├── package.json              # "workspaces": ["modules/*"]
 └── tsconfig.json
@@ -57,7 +57,7 @@ Entrypoints are intentionally trivial:
 // app.ts
 import { boot } from "@tulipes/core";
 
-boot({ mode: "web" }); // or read PROCESS_MODE, see §8
+boot({ mode: "backend" }); // or read PROCESS_MODE, see §8
 ```
 
 ---
@@ -241,7 +241,7 @@ export type AclFn = (acl: AclBuilder) => void;
 
 ## 8. Boot pipeline
 
-Single pipeline, **mode fork at phase 9** on `PROCESS_MODE` (`web` | `worker`; `cron` reserved for later).
+Single pipeline, **mode fork at phase 9** on `PROCESS_MODE` (`backend` | `worker`; `cron` reserved for later).
 
 | # | Phase | Detail |
 |---|---|---|
@@ -254,9 +254,9 @@ Single pipeline, **mode fork at phase 9** on `PROCESS_MODE` (`web` | `worker`; `
 | 7 | **ACL merge** | run each `module.acl.ts` against the AclBuilder (§9); crash on conflicts |
 | 8 | **Database + models + bootstrap** | connect Mongoose → load all `ModelDef`s into the global model store → run every `BootstrapFn` in load order (indexes, seeds) |
 | 9 | **── MODE FORK ──** | `PROCESS_MODE` decides the tail of the pipeline |
-| 9w | *web:* **Queues (producers)** | init queue manager, register queues (no processors) |
-| 10w | *web:* **Express + routes** | create app, mount every `RoutesFn` router in load order — a sys-tier security module supplies the head of the pipeline (headers, request logger, body parsing); core itself mounts only the fail-closed tail (404 + error handler) |
-| 11w | *web:* **HTTP + sockets + listen** | create http server, init socket manager, run `SocketsFn`s, `listen()` |
+| 9b | *backend:* **Queues (producers)** | init queue manager, register queues (no processors) |
+| 10b | *backend:* **Express + routes** | create app, mount every `RoutesFn` router in load order — a sys-tier security module supplies the head of the pipeline (headers, request logger, body parsing); core itself mounts only the fail-closed tail (404 + error handler) |
+| 11b | *backend:* **HTTP + sockets + listen** | create http server, init socket manager, run `SocketsFn`s, `listen()` |
 | 9k | *worker:* **Queues (processors)** | init queue manager **with processors**, run `QueuesFn`s, start consuming |
 | 12 | **onReady** | fire all `onReady` hooks in load order |
 | — | **Shutdown** (SIGTERM/SIGINT) | fire `onShutdown` hooks in **reverse** load order → close sockets → drain queues → close http → disconnect DB/Redis → exit |
@@ -341,9 +341,9 @@ Group "Phase 6-7: Config & ACL":
 Group "Phase 8: Database":
 "Connect Mongoose" -> "Load all *.model.ts into global model store" -> "Run bootstrap/*.bootstrap.ts in load order (ensure indexes, seed roles, default admin)".
 
-Decision node "PROCESS_MODE?" with two branches: "web" and "worker".
+Decision node "PROCESS_MODE?" with two branches: "backend" and "worker".
 
-Group "Web branch (phases 9w-11w)" (from "web"):
+Group "Backend branch (phases 9b-11b)" (from "backend"):
 "Init queue manager (producers only)" -> "Create Express app" -> "Mount core middleware: security headers, request logger, i18n, parsers" -> "Mount every *.routes.ts router in load order" -> "Mount error handler + responder last" -> "Create HTTP server" -> "Init socket manager, run *.sockets.ts" -> "listen()".
 
 Group "Worker branch (phase 9k)" (from "worker"):

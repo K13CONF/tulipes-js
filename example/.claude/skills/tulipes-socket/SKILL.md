@@ -27,7 +27,7 @@ export default function billingSockets({ config }: Ctx, sockets: SocketRegistry)
 ```
 
 Emit from anywhere with the context — a route, a bootstrap task, a queue
-processor in the web process:
+processor in the backend process:
 
 ```ts
 ctx.sockets!.of("/billing").to(`invoice:${id}`).emit("invoice:paid", payload);
@@ -40,16 +40,16 @@ ctx.sockets!.of("/billing").to(`invoice:${id}`).emit("invoice:paid", payload);
 - `sockets.of()` throws on a namespace nobody claimed. Socket.IO's raw
   `io.of()` would silently create it and emit into the void — use the
   framework accessor so typos surface.
-- Sockets exist in **web mode only**. `ctx.sockets` is undefined in the
+- Sockets exist in **backend mode only**. `ctx.sockets` is undefined in the
   worker process, so a queue processor cannot emit directly — publish to
-  Redis, or have the web process subscribe.
+  Redis, or have the backend process subscribe.
 - Namespace names are lowercase kebab-case with a leading slash.
 
 ## Gotchas
 
 - Authenticate in namespace middleware (`nsp.use(...)`), not per event —
   the framework's HTTP pipeline does not run for socket connections.
-- Scaling past one web process needs the Socket.IO Redis adapter;
+- Scaling past one backend process needs the Socket.IO Redis adapter;
   otherwise an emit only reaches clients connected to that instance.
 - Socket handlers run outside the request pipeline: no `HttpError`, no
   request logging. Handle failures explicitly and emit an error event.
