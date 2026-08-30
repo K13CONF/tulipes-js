@@ -63,7 +63,7 @@ queues → routes. If code needs something another module provides, declare
 | `yarn check` | validate the environment without booting |
 | `yarn typecheck` | typecheck the whole app |
 | `yarn tulipes new module <name>` | scaffold a module |
-| `yarn tulipes update` | upgrade the framework in the root and every module |
+| `tulipes update` | upgrade the global cli and the framework in every manifest |
 | `yarn script scripts/x.ts` | run a one-off script against the real app |
 
 ## Verifying your work
