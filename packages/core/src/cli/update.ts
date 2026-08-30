@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
-import { coreVersion } from "./package-info.js";
+import { appCoreVersion, coreVersion, packageRoot } from "./package-info.js";
 
 const PACKAGE = "@tulipes/core";
 const REGISTRY = "https://registry.npmjs.org";
@@ -14,13 +14,19 @@ interface Manifest {
 }
 
 /**
- * `tulipes update` — move the app to the latest published core.
+ * `tulipes update` — move to the latest published core.
  *
- * The framework is depended on in more than one place: the app root and
- * every module, since modules are workspace packages that declare their
- * own dependencies. Bumping them by hand is the tedium this removes —
- * and a module left behind on an older range is exactly the kind of
- * split-version install that produces baffling type errors.
+ * There are two things that can be out of date, and they are genuinely
+ * separate installs:
+ *
+ *   the CLI    the globally installed `tulipes` on your PATH
+ *   the app    @tulipes/core in the app root and in every module, since
+ *              modules are workspace packages that declare it themselves
+ *
+ * Updating only the app leaves you typing an old CLI against a new
+ * framework; updating only the CLI leaves the app behind. This does both,
+ * and either alone when only one applies — so it is also useful outside an
+ * app, where it upgrades just the CLI.
  */
 export async function runUpdate(rootDir: string): Promise<void> {
   const current = coreVersion();
@@ -34,29 +40,112 @@ export async function runUpdate(rootDir: string): Promise<void> {
     return;
   }
 
-  const manifests = findManifests(rootDir);
-  if (manifests.length === 0) {
-    console.error(
-      `no package.json in ${rootDir} depends on ${PACKAGE} — run this from an app root`,
-    );
-    process.exitCode = 1;
-    return;
+  const cliRoot = packageRoot();
+  // Updatable-as-a-CLI means: an installed package (it lives under some
+  // node_modules) that is NOT this app's own copy — the app's copy is
+  // covered by the dependency update below. A source checkout matches
+  // neither and is left alone, since git owns its version, not npm.
+  const cliIsGlobal =
+    !cliRoot.startsWith(resolve(rootDir) + sep) &&
+    cliRoot.includes(`${sep}node_modules${sep}`);
+
+  let didSomething = false;
+
+  if (cliIsGlobal) {
+    didSomething = true;
+    if (current === latest) {
+      console.log(`cli already on ${latest}`);
+    } else {
+      await updateGlobalCli(cliRoot, current, latest);
+    }
   }
 
+  const manifests = findManifests(rootDir);
+  if (manifests.length > 0) {
+    didSomething = true;
+    // The app's installed version, not the CLI's — they are separate
+    // installs, and reporting one as the other is how this whole confusion
+    // started.
+    await updateApp(rootDir, manifests, appCoreVersion(rootDir), latest);
+  }
+
+  if (!didSomething) {
+    console.error(
+      `no package.json in ${rootDir} depends on ${PACKAGE}, and this CLI is not a global install — run it from an app root`,
+    );
+    process.exitCode = 1;
+  }
+}
+
+/**
+ * Reinstalls the global CLI into the prefix it already lives in.
+ *
+ * That prefix matters: with a version manager, `npm install -g` installs
+ * for whichever node is *active*, which may not be the one whose bin
+ * directory holds the `tulipes` on your PATH. Deriving the prefix from the
+ * running CLI's own location updates the binary you actually type.
+ */
+async function updateGlobalCli(
+  cliRoot: string,
+  current: string,
+  latest: string,
+): Promise<void> {
+  console.log(`cli: ${current} → ${latest}`);
+
+  const prefix = globalPrefixOf(cliRoot);
+  const args = ["install", "-g", ...(prefix ? ["--prefix", prefix] : []), `${PACKAGE}@${latest}`];
+
+  const code = await run("npm", args, cliRoot);
+  if (code !== 0) {
+    console.error(
+      `\ncould not update the global cli — try: npm install -g ${PACKAGE}@${latest}`,
+    );
+    process.exitCode = code === -1 ? 1 : code;
+    return;
+  }
+  console.log(`cli updated — the next \`tulipes\` invocation runs ${latest}\n`);
+}
+
+/** `<prefix>/lib/node_modules/@tulipes/core` → `<prefix>`, for npm layouts. */
+function globalPrefixOf(cliRoot: string): string | undefined {
+  const marker = `${sep}lib${sep}node_modules${sep}`;
+  const index = cliRoot.indexOf(marker);
+  // pnpm and bun keep globals elsewhere; without a recognisable prefix we
+  // let npm pick its own, which is right for a plain npm install.
+  return index === -1 ? undefined : cliRoot.slice(0, index);
+}
+
+async function updateApp(
+  rootDir: string,
+  manifests: { path: string }[],
+  current: string | undefined,
+  latest: string,
+): Promise<void> {
   const range = `^${latest}`;
   const changed = manifests.filter(({ path }) => rewrite(path, range));
 
   if (changed.length === 0) {
-    console.log(`already on ${PACKAGE}@${range} (installed ${current}, latest ${latest})`);
+    console.log(`app already on ${PACKAGE}@${range}`);
     return;
   }
 
   for (const { path } of changed) {
     console.log(`  update ${relative(rootDir, path) || "package.json"} → ${range}`);
   }
-  console.log(`\n${PACKAGE}: ${current} → ${latest}\n`);
+  console.log(`\napp: ${current ?? "not installed"} → ${latest}\n`);
 
-  await install(rootDir);
+  // Rewriting manifests without installing would leave the app claiming a
+  // version it does not have.
+  const manager = detectManager(rootDir);
+  console.log(`running ${manager} install…\n`);
+  const code = await run(manager, ["install"], rootDir);
+
+  if (code === -1) {
+    console.error(`\ncould not run "${manager}" — manifests are updated, install manually`);
+    process.exitCode = 1;
+  } else if (code !== 0) {
+    process.exitCode = code;
+  }
 }
 
 async function fetchLatest(): Promise<string> {
@@ -103,8 +192,7 @@ function dependsOnCore(path: string): boolean {
 
 /** Returns true when the file actually changed. */
 function rewrite(path: string, range: string): boolean {
-  const raw = readFileSync(path, "utf8");
-  const manifest = JSON.parse(raw) as Manifest;
+  const manifest = JSON.parse(readFileSync(path, "utf8")) as Manifest;
 
   let touched = false;
   for (const field of ["dependencies", "devDependencies"] as const) {
@@ -120,27 +208,13 @@ function rewrite(path: string, range: string): boolean {
   return true;
 }
 
-/**
- * Rewriting manifests without installing would leave the app claiming a
- * version it does not have, so the install is part of the command rather
- * than a step to remember.
- */
-async function install(rootDir: string): Promise<void> {
-  const manager = detectManager(rootDir);
-  console.log(`running ${manager} install…\n`);
-
-  const code = await new Promise<number>((resolve) => {
-    const child = spawn(manager, ["install"], { cwd: rootDir, stdio: "inherit" });
-    child.on("error", () => resolve(-1));
-    child.on("exit", (status) => resolve(status ?? 1));
+/** Resolves to the exit code, or -1 when the command could not be spawned. */
+async function run(command: string, args: string[], cwd: string): Promise<number> {
+  return new Promise<number>((resolve_) => {
+    const child = spawn(command, args, { cwd, stdio: "inherit" });
+    child.on("error", () => resolve_(-1));
+    child.on("exit", (status) => resolve_(status ?? 1));
   });
-
-  if (code === -1) {
-    console.error(`\ncould not run "${manager}" — manifests are updated, install manually`);
-    process.exitCode = 1;
-  } else if (code !== 0) {
-    process.exitCode = code;
-  }
 }
 
 function detectManager(rootDir: string): "yarn" | "npm" | "pnpm" {

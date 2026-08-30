@@ -4,7 +4,7 @@ import { runEnvCheck } from "./env-check.js";
 import { runNewModule } from "./new-module.js";
 import { runDev } from "./dev.js";
 import { runUpdate } from "./update.js";
-import { coreVersion } from "./package-info.js";
+import { appCoreVersion, coreVersion } from "./package-info.js";
 
 /**
  * The `tulipes` CLI. Deliberately dependency-free argument handling — a
@@ -19,8 +19,8 @@ Usage:
   tulipes sync                 regenerate types/config.d.ts and .env.example
   tulipes env:check            validate env against every meta.variables.json (CI-friendly)
   tulipes new module <name>    scaffold a module under ./modules
-  tulipes update               upgrade @tulipes/core to the latest release, everywhere
-  tulipes -v                   print the installed core version
+  tulipes update               upgrade the global cli and, inside an app, the app itself
+  tulipes -v                   print the cli version (and the app's, when they differ)
 `;
 
 export async function main(argv: readonly string[]): Promise<void> {
@@ -47,9 +47,15 @@ export async function main(argv: readonly string[]): Promise<void> {
       return runDev(rootDir, rest[0] ?? "app.ts");
     case "-v":
     case "--version":
-    case "version":
-      console.log(coreVersion());
+    case "version": {
+      const cli = coreVersion();
+      const app = appCoreVersion(rootDir);
+      // The CLI on your PATH and the copy an app installs are separate
+      // installs. Printing one number would hide a mismatch that explains
+      // otherwise baffling behaviour, so say both whenever they differ.
+      console.log(app && app !== cli ? `cli ${cli}\napp ${app}` : cli);
       return;
+    }
     case undefined:
     case "help":
     case "--help":

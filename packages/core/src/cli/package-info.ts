@@ -13,8 +13,25 @@ export function packageRoot(): string {
 
 /** Version of the @tulipes/core running this CLI. */
 export function coreVersion(): string {
-  const pkg = JSON.parse(readFileSync(join(packageRoot(), "package.json"), "utf8")) as {
-    version: string;
-  };
-  return pkg.version;
+  return versionAt(packageRoot()) ?? "unknown";
+}
+
+/**
+ * Version of the core installed in an app, which is a different install
+ * from the global CLI and can therefore be a different version. Undefined
+ * when the directory is not an app, or its dependencies aren't installed.
+ */
+export function appCoreVersion(rootDir: string): string | undefined {
+  return versionAt(join(rootDir, "node_modules", "@tulipes", "core"));
+}
+
+function versionAt(packageDir: string): string | undefined {
+  try {
+    const pkg = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as {
+      version?: unknown;
+    };
+    return typeof pkg.version === "string" ? pkg.version : undefined;
+  } catch {
+    return undefined;
+  }
 }

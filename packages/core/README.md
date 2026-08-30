@@ -254,8 +254,8 @@ tulipes init [dir]           scaffold a new application (needs mongo + redis)
 tulipes sync                 regenerate types/config.d.ts and .env.example
 tulipes env:check            validate env against every meta contract — CI gate, exit 1 on failure
 tulipes new module <name>    scaffold a module (scope auto-detected from siblings)
-tulipes update               upgrade @tulipes/core to the latest release, everywhere
-tulipes -v                   print the installed core version
+tulipes update               upgrade the global cli and, inside an app, the app itself
+tulipes -v                   print the cli version (and the app's, when they differ)
 tulipes dev [entry]          sync, then run the entry under tsx watch
 ```
 
@@ -273,6 +273,15 @@ permissions, and reading boot errors. They encode the conventions an agent
 would otherwise guess wrong: declaring variables instead of reaching for
 `process.env`, where global middleware belongs, why `mongoose.model()` is
 never called directly, and how to read an aggregate boot report.
+
+The global CLI on your PATH and the `@tulipes/core` an app installs are
+**separate installs** that drift apart. `tulipes update` handles both: it
+reinstalls the global CLI into the prefix it already lives in (which is what
+makes it work under nvm, where a plain `npm install -g` may target a
+different node version than the one holding your `tulipes` binary), and,
+when run inside an app, rewrites the range in the app root and every module
+before installing. Outside an app it still updates the CLI. `tulipes -v`
+prints both numbers whenever they differ.
 
 `sync` output — committed, marked generated:
 
