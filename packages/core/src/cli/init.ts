@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +33,8 @@ export async function runInit(rootDir: string, target?: string): Promise<void> {
     console.log(`  create ${relPath}`);
   }
 
+  copyAgentGuides(dir);
+
   console.log([
     "",
     `Project "${name}" is ready. Next:`,
@@ -55,9 +57,43 @@ export async function runInit(rootDir: string, target?: string): Promise<void> {
  * the exports map deliberately doesn't expose package.json.
  */
 function ownVersion(): string {
-  const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json");
-  const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version: string };
+  const pkg = JSON.parse(readFileSync(join(packageRoot(), "package.json"), "utf8")) as {
+    version: string;
+  };
   return pkg.version;
+}
+
+function packageRoot(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+}
+
+/**
+ * Instructions for AI coding agents working in the generated app: an
+ * always-loaded CLAUDE.md plus task-scoped skills. They ship as real
+ * markdown in the package (templates/) rather than string literals here,
+ * so they stay editable and reviewable as documents.
+ *
+ * The source tree uses `claude/` and is written out as `.claude/`: npm
+ * has a long history of mangling dot-prefixed paths inside published
+ * tarballs, and this sidesteps it entirely.
+ */
+function copyAgentGuides(dir: string): void {
+  const templates = join(packageRoot(), "templates");
+  if (!existsSync(templates)) return; // tolerate a stripped install
+
+  const claudeMd = join(templates, "CLAUDE.md");
+  if (existsSync(claudeMd)) {
+    cpSync(claudeMd, join(dir, "CLAUDE.md"));
+    console.log("  create CLAUDE.md");
+  }
+
+  const skills = join(templates, "claude");
+  if (existsSync(skills)) {
+    cpSync(skills, join(dir, ".claude"), { recursive: true });
+    for (const skill of readdirSync(join(skills, "skills"))) {
+      console.log(`  create .claude/skills/${skill}/SKILL.md`);
+    }
+  }
 }
 
 function sanitizeName(raw: string): string {
@@ -322,6 +358,10 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `PORT=3000`,
       `LOG_LEVEL=debug`,
       ``,
+      `# Browser origins allowed to call this API. Empty (the default) allows`,
+      `# none; "*" allows any but forbids credentials.`,
+      `CORS_ORIGINS=http://localhost:5173`,
+      ``,
     ].join("\n")],
 
     // ── modules/core — sys tier, priority 0: the very first router ─────────
@@ -389,11 +429,14 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       tulipes: { tier: "sys", priority: 10 },
       dependencies: {
         "@tulipes/core": core,
+        cors: "^2",
         express: "^5",
+        helmet: "^8",
         pino: "^9",
         "pino-http": "^10",
         "pino-pretty": "^13",
       },
+      devDependencies: { "@types/cors": "^2" },
     })],
 
     ["modules/security/meta.variables.json", json({
@@ -406,32 +449,92 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
           description: "Minimum pino log level",
           default: "info",
         },
+        {
+          name: "CORS_ORIGINS",
+          type: "string",
+          group: "cors",
+          description:
+            'Comma-separated browser origins allowed to call this API; "*" allows any, empty allows none (same-origin only)',
+          default: "",
+        },
+        {
+          name: "CORS_CREDENTIALS",
+          type: "boolean",
+          group: "cors",
+          description:
+            "Allow cookies and Authorization headers on cross-origin requests (cannot be combined with CORS_ORIGINS=*)",
+          default: false,
+        },
+        {
+          name: "HSTS_MAX_AGE",
+          type: "number",
+          group: "hardening",
+          description:
+            "Strict-Transport-Security max-age in seconds; 0 disables the header (browsers only honour it over HTTPS)",
+          default: 15_552_000,
+        },
       ],
     })],
 
-    ["modules/security/helpers/security-headers.ts", [
-      `import type { RequestHandler } from "express";`,
+    ["modules/security/helpers/hardening.ts", [
+      `import type { CorsOptions } from "cors";`,
+      `import type { HelmetOptions } from "helmet";`,
+      `import type { Environment } from "@tulipes/core/env";`,
       ``,
       `/**`,
-      ` * Baseline hardening applied to every response before anything else`,
-      ` * runs. Dependency-free — swap in the full helmet suite here if this`,
-      ` * app ever needs it.`,
+      ` * Helmet tuned for an API rather than a web page. Its defaults assume a`,
+      ` * site serving HTML and its own assets; this one serves JSON and`,
+      ` * nothing else, so the policy can be far stricter.`,
       ` */`,
-      `export function securityHeaders(): RequestHandler {`,
-      `  return (_req, res, next) => {`,
-      `    res.setHeader("X-Content-Type-Options", "nosniff");`,
-      `    res.setHeader("X-Frame-Options", "DENY");`,
-      `    res.setHeader("Referrer-Policy", "no-referrer");`,
-      `    // An API serves no active content; a restrictive CSP costs nothing`,
-      `    // and defuses any HTML-ish response a bug might produce.`,
-      `    res.setHeader("Content-Security-Policy", "default-src 'none'");`,
-      `    next();`,
+      `export function helmetOptions(environment: Environment): HelmetOptions {`,
+      `  const maxAge = Number(environment.get("HSTS_MAX_AGE"));`,
+      ``,
+      `  return {`,
+      `    // An API serves no active content: deny every resource type`,
+      `    // outright, which defuses any HTML-ish response a bug produces.`,
+      `    contentSecurityPolicy: {`,
+      `      useDefaults: false,`,
+      `      directives: { "default-src": ["'none'"], "frame-ancestors": ["'none'"] },`,
+      `    },`,
+      `    // Browsers only honour HSTS over HTTPS, so it is inert in local dev`,
+      `    // — but a max-age of 0 lets a deployment switch it off deliberately.`,
+      `    hsts: maxAge > 0 ? { maxAge, includeSubDomains: true } : false,`,
+      `    // Helmet defaults to SAMEORIGIN; an API is never framed at all.`,
+      `    frameguard: { action: "deny" },`,
+      `    // Irrelevant without a browsing context, and each costs a header.`,
+      `    originAgentCluster: false,`,
+      `    crossOriginEmbedderPolicy: false,`,
       `  };`,
+      `}`,
+      ``,
+      `/**`,
+      ` * CORS from the environment, because allowed origins differ per`,
+      ` * deployment. Fail-closed: the default is an empty list, meaning no`,
+      ` * cross-origin browser may call this API until one is named.`,
+      ` */`,
+      `export function corsOptions(environment: Environment): CorsOptions {`,
+      `  const raw = String(environment.get("CORS_ORIGINS")).trim();`,
+      `  const credentials = Boolean(environment.get("CORS_CREDENTIALS"));`,
+      ``,
+      `  if (raw === "*") {`,
+      `    // "*" and credentials are mutually exclusive per the CORS spec — the`,
+      `    // browser rejects the response, so refuse the combination at boot`,
+      `    // rather than shipping an API that silently fails in production.`,
+      `    if (credentials) {`,
+      `      throw new Error(`,
+      `        'CORS_ORIGINS="*" cannot be combined with CORS_CREDENTIALS=true — list the origins explicitly',`,
+      `      );`,
+      `    }`,
+      `    return { origin: true, credentials: false };`,
+      `  }`,
+      ``,
+      `  const origins = raw.split(",").map((origin) => origin.trim()).filter(Boolean);`,
+      `  return { origin: origins, credentials };`,
       `}`,
       ``,
     ].join("\n")],
 
-    ["modules/security/helpers/logger.ts", [
+["modules/security/helpers/logger.ts", [
       `import { pino, type Logger } from "pino";`,
       `import type { Environment } from "@tulipes/core/env";`,
       ``,
@@ -459,27 +562,36 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       ``,
     ].join("\n")],
 
-    ["modules/security/routes/security.routes.ts", [
+        ["modules/security/routes/security.routes.ts", [
+      `import cors from "cors";`,
       `import express from "express";`,
+      `import helmet from "helmet";`,
       `import { pinoHttp } from "pino-http";`,
       `import type { Ctx } from "@tulipes/core/boot";`,
       ``,
-      `import { securityHeaders } from "../helpers/security-headers.js";`,
+      `import { corsOptions, helmetOptions } from "../helpers/hardening.js";`,
       `import { logger } from "../helpers/logger.js";`,
       ``,
       `/**`,
       ` * The app's request-hardening stack. Sys tier, so this mounts ahead of`,
       ` * every app-tier router — the framework core mounts no middleware of`,
       ` * its own; this module IS the pipeline's head.`,
+      ` *`,
+      ` * Order matters:`,
+      ` *   helmet  — headers on every response, including errors and preflights`,
+      ` *   cors    — must answer OPTIONS preflights before anything parses a body`,
+      ` *   pino    — logs the request once the two above have had their say`,
+      ` *   json    — parsing last, so a rejected origin never reaches the parser`,
       ` */`,
-      `export default function securityRoutes({ app, Environment }: Ctx): void {`,
-      `  app!.use(securityHeaders());`,
+      `export default function securityRoutes({ app, Environment, config }: Ctx): void {`,
+      `  app!.use(helmet(helmetOptions(Environment)));`,
+      `  app!.use(cors(corsOptions(Environment)));`,
       ``,
       `  app!.use(`,
       `    pinoHttp({`,
       `      logger: logger(Environment),`,
-      `      // The core module (priority 0) stamps X-Request-Id first — reuse`,
-      `      // it so log lines and response headers tell one story.`,
+      `      // The core module (priority 0) stamps X-Request-Id before this`,
+      `      // runs — reuse it so logs and response headers tell one story.`,
       `      genReqId: (_req, res) => String(res.getHeader("X-Request-Id") ?? ""),`,
       `      serializers: {`,
       `        req: (req: { method: string; url: string }) => ({`,
@@ -492,13 +604,12 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `  );`,
       ``,
       `  // Body-size cap is a security control too — a parser without a limit`,
-      `  // is a memory-exhaustion invitation.`,
-      `  app!.use(express.json({ limit: "1mb" }));`,
+      `  // is a memory-exhaustion invitation. Tuned from config/app.config.ts.`,
+      `  app!.use(express.json({ limit: config.http?.bodyLimit ?? "1mb" }));`,
       `}`,
       ``,
     ].join("\n")],
 
-    // ── modules/hello — app tier: the proof route ──────────────────────────
     ["modules/hello/package.json", json({
       name: `@app/hello`,
       version: "0.0.0",

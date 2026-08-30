@@ -9,9 +9,14 @@
   },
   "dependencies": {
     "@tulipes/core": "workspace:*",
+    "cors": "^2",
     "express": "^5",
+    "helmet": "^8",
     "pino": "^9",
     "pino-http": "^10",
     "pino-pretty": "^13"
+  },
+  "devDependencies": {
+    "@types/cors": "^2"
   }
 }

@@ -1,28 +1,33 @@
+import cors from "cors";
 import express from "express";
+import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import type { Ctx } from "@tulipes/core/boot";
 
-import { securityHeaders } from "../helpers/security-headers.js";
+import { corsOptions, helmetOptions } from "../helpers/hardening.js";
 import { logger } from "../helpers/logger.js";
 
 /**
- * The app's request-hardening stack. A sys-tier module, so this mounts
- * ahead of every app-tier router — core itself mounts no middleware, this
- * module IS the pipeline's head and stays in the developer's reach.
+ * The app's request-hardening stack. Sys tier, so this mounts ahead of
+ * every app-tier router — the framework core mounts no middleware of its
+ * own; this module IS the pipeline's head.
  *
- * Mounts directly on ctx.app (returns no Router): middleware here applies
- * to the whole app, not to a path prefix.
+ * Order matters:
+ *   helmet  — headers on every response, including errors and preflights
+ *   cors    — must answer OPTIONS preflights before anything parses a body
+ *   pino    — logs the request once the two above have had their say
+ *   json    — parsing last, so a rejected origin never reaches the parser
  */
 export default function securityRoutes({ app, Environment, config }: Ctx): void {
-  app!.use(securityHeaders());
+  app!.use(helmet(helmetOptions(Environment)));
+  app!.use(cors(corsOptions(Environment)));
 
   app!.use(
     pinoHttp({
       logger: logger(Environment),
-      // The sys core module (priority 0) stamps X-Request-Id before this
-      // runs — reuse it so log lines and response headers tell one story.
+      // The core module (priority 0) stamps X-Request-Id before this runs —
+      // reuse it so log lines and response headers tell one story.
       genReqId: (_req, res) => String(res.getHeader("X-Request-Id") ?? ""),
-      // Default serializers dump whole req/res objects; one lean line each.
       serializers: {
         req: (req: { method: string; url: string }) => ({
           method: req.method,

@@ -7,6 +7,27 @@
       "group": "logging",
       "description": "Minimum pino log level",
       "default": "info"
+    },
+    {
+      "name": "CORS_ORIGINS",
+      "type": "string",
+      "group": "cors",
+      "description": "Comma-separated browser origins allowed to call this API; \"*\" allows any, empty allows none (same-origin only)",
+      "default": ""
+    },
+    {
+      "name": "CORS_CREDENTIALS",
+      "type": "boolean",
+      "group": "cors",
+      "description": "Allow cookies and Authorization headers on cross-origin requests (cannot be combined with CORS_ORIGINS=*)",
+      "default": false
+    },
+    {
+      "name": "HSTS_MAX_AGE",
+      "type": "number",
+      "group": "hardening",
+      "description": "Strict-Transport-Security max-age in seconds; 0 disables the header (browsers only honour it over HTTPS)",
+      "default": 15552000
     }
   ]
 }

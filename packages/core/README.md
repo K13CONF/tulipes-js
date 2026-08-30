@@ -254,6 +254,15 @@ tulipes new module <name>    scaffold a module (scope auto-detected from sibling
 tulipes dev [entry]          sync, then run the entry under tsx watch
 ```
 
+### Built for AI-assisted work
+
+`tulipes init` also writes a `CLAUDE.md` and eight task-scoped skills under
+`.claude/skills/` — module, env variable, endpoint, model, queue, socket,
+permissions, and reading boot errors. They encode the conventions an agent
+would otherwise guess wrong: declaring variables instead of reaching for
+`process.env`, where global middleware belongs, why `mongoose.model()` is
+never called directly, and how to read an aggregate boot report.
+
 `sync` output — committed, marked generated:
 
 - **`types/config.d.ts`** — augments `KnownVariables` (every variable typed from its spec) and `GlobalConfig` (each namespace typed as its factory's return type via `typeof import(...)` — inference, never execution).
