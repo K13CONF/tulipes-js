@@ -29,7 +29,7 @@ await boot({ rootDir: import.meta.dirname, mode: "backend" });
 
 - **Modules, not layers.** A feature lives in one folder: its routes, models, config, permissions, background jobs, and env contract. Delete the folder, the feature is gone.
 - **Fail-closed everywhere.** Missing env vars, dependency cycles, duplicate ACL grants, colliding queue names — all crash the boot with a full report. Reading an undeclared variable or model throws at the call site. Unknown roles deny. Unrouted requests 404. Unexpected errors never leak internals outside development.
-- **One process, two modes.** The same codebase boots as a `backend` server or a queue-consuming `worker` — same modules, same config, forked at the last pipeline phase.
+- **One codebase, three modes.** The same app boots as a `backend` server, a queue-consuming `worker`, or a one-shot `script` — same modules, same config, forked at the last pipeline phase. A maintenance script therefore runs against exactly the configuration the server has, never a hand-rolled approximation of it.
 - **Types generated, not hand-written.** `tulipes sync` reads your modules and emits a `config.d.ts` that types every env variable and every config namespace — enum variables become literal unions, config shapes are inferred from your factories' return types.
 - **The framework stays out of your request path.** Core mounts *no* middleware. Your sys-tier modules own the pipeline head; core only guarantees the tail (404 + terminal error handler).
 
@@ -148,8 +148,11 @@ ctx.Environment.get("TYPO_NAME");         // throws: never declared by any modul
  6. Database         connect Mongoose → model store → bootstrap tasks
  7. Queues           every *.queues.ts registers in BOTH modes
  8. ── mode fork ──
-    backend              module routers (load order) → 404 → error handler → listen
+    backend          module routers (load order) → 404 → error handler → listen
     worker           start a BullMQ worker per registered processor
+    script           start nothing; the caller owns the process and calls
+                     handle.shutdown() when done (also skips bootstrap
+                     tasks, the banner and onReady)
  9. onReady          hooks in load order → startup banner
     shutdown         SIGTERM/SIGINT → onShutdown hooks in REVERSE order →
                      disconnect sockets → close http → drain queues → close redis → close mongo

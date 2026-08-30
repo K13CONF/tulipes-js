@@ -19,7 +19,15 @@ import { printStartupBanner } from "./banner.js";
 import { importFile } from "./import-file.js";
 import type { Ctx, ModuleLifecycle, RoutesFn } from "./contracts.js";
 
-export const processModes = ["backend", "worker"] as const;
+/**
+ * "script" is a one-shot mode: it runs every shared phase — environment,
+ * modules, config, ACL, database, models, queue registration — then starts
+ * nothing at all, so a maintenance script gets exactly what a request
+ * handler gets minus the server. It is deliberately the same code path as
+ * the long-running modes, so a script can never be handed config the real
+ * app does not have.
+ */
+export const processModes = ["backend", "worker", "script"] as const;
 export type ProcessMode = (typeof processModes)[number];
 
 export interface BootOptions {
@@ -81,7 +89,9 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
 
   // Phase 8 — DB + models + bootstrap
   const dbReport = new BootReport();
-  const connection = await initDatabase(explored, ctx, dbReport);
+  const connection = await initDatabase(explored, ctx, dbReport, {
+    runBootstrap: mode !== "script",
+  });
   dbReport.throwIfAny("database");
 
   // Phase 9 — mode fork
@@ -101,7 +111,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
 
   if (mode === "backend") {
     await startBackend(handle, explored);
-  } else {
+  } else if (mode === "worker") {
     const workerReport = new BootReport();
     const started = ctx.queues?.startWorkers(workerReport) ?? 0;
     workerReport.throwIfAny("workers");
@@ -113,20 +123,25 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
       );
     }
   }
+  // "script" starts nothing: the caller owns what happens next, and owns
+  // calling handle.shutdown() when it is done.
 
-  // Phase 12 — onReady, load order
-  for (const { module, onReady } of lifecycles) {
-    try {
-      await onReady?.(ctx);
-    } catch (error) {
-      // Late-phase hook failures must still take the process down cleanly:
-      // a half-ready app serving traffic is worse than no app.
-      await handle.shutdown();
-      throw new Error(`onReady hook of "${module}" failed: ${(error as Error).message}`);
+  // Phase 12 — onReady, load order. Scripts skip it: those hooks announce a
+  // process that is up and serving, which a script never is.
+  if (mode !== "script") {
+    for (const { module, onReady } of lifecycles) {
+      try {
+        await onReady?.(ctx);
+      } catch (error) {
+        // Late-phase hook failures must still take the process down cleanly:
+        // a half-ready app serving traffic is worse than no app.
+        await handle.shutdown();
+        throw new Error(`onReady hook of "${module}" failed: ${(error as Error).message}`);
+      }
     }
-  }
 
-  printStartupBanner(handle, order, Date.now() - bootStartedAt);
+    printStartupBanner(handle, order, Date.now() - bootStartedAt);
+  }
 
   if (options.handleSignals !== false) {
     for (const signal of ["SIGINT", "SIGTERM"] as const) {

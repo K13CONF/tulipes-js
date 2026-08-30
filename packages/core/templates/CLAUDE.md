@@ -44,6 +44,7 @@ applies before you write code.
 | Middleware for one feature's routes | that module's own `Router` |
 | Helper used by ≥2 modules | `lib/` |
 | Helper used by one module | that module's `helpers/` |
+| One-off task (backfill, export, admin chore) | `scripts/`, booted with `mode: "script"` |
 
 ## Boot order (why load order matters)
 
@@ -63,6 +64,7 @@ queues → routes. If code needs something another module provides, declare
 | `yarn typecheck` | typecheck the whole app |
 | `yarn tulipes new module <name>` | scaffold a module |
 | `yarn tulipes update` | upgrade the framework in the root and every module |
+| `yarn script scripts/x.ts` | run a one-off script against the real app |
 
 ## Verifying your work
 

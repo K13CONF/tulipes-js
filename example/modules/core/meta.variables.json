@@ -27,6 +27,13 @@
       "group": "security",
       "required": true,
       "description": "Signing key for access tokens"
+    },
+    {
+      "name": "PUBLIC_DOMAIN",
+      "type": "string",
+      "group": "deploy",
+      "description": "Public hostname this API is served from; \"localhost\" means not deployed",
+      "default": "localhost"
     }
   ]
 }

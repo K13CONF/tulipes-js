@@ -21,6 +21,8 @@ example/
 │   ├── core/               tier "sys" — infra env vars, global roles
 │   ├── auth/
 │   └── users/
+├── scripts/                one-off tasks — boot in script mode, no server
+├── nginx/                  per-env site templates for scripts/deploy-nginx.ts
 ├── locales/                i18n dictionaries (planned)
 ├── CLAUDE.md               rules for AI agents working in this project
 ├── .claude/skills/         task-scoped skills (module, endpoint, model, queue…)
