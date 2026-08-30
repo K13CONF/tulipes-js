@@ -2,35 +2,22 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export interface InitOptions {
-  /** Also scaffold the contracts that need mongo and redis. */
-  full?: boolean;
-}
-
 /**
- * `tulipes init [dir] [--full]` — scaffold a complete application.
+ * `tulipes init [dir]` — scaffold a complete application.
  *
  * Three modules ship: core (sys 0 — env contract, roles, request ids),
  * security (sys 10 — helmet, cors, logging, body parsing) and hello, a
- * worked example of every module contract.
+ * worked example of EVERY module contract: config with lifecycle hooks,
+ * ACL grants, routes, a controller, a helper, a model, a bootstrap task,
+ * a queue with its processor, and a socket namespace.
  *
- * By default the app boots with ZERO infrastructure: no MONGO_URI or
- * REDIS_URL is declared, and with no models and no queue files the
- * pipeline skips both engines legitimately, so `yarn install && yarn dev`
- * always succeeds on a bare machine.
- *
- * `--full` adds the contracts that cannot work without infrastructure —
- * models, bootstrap tasks and queues — along with the variables they
- * require. That app needs mongo and redis running to boot.
+ * The generated app therefore needs mongo and redis running — models and
+ * queues cannot work without them, and the boot refuses rather than
+ * degrading quietly.
  */
-export async function runInit(
-  rootDir: string,
-  target?: string,
-  options: InitOptions = {},
-): Promise<void> {
+export async function runInit(rootDir: string, target?: string): Promise<void> {
   const dir = resolve(rootDir, target ?? ".");
   const name = sanitizeName(basename(dir));
-  const full = options.full ?? false;
 
   if (existsSync(dir) && readdirSync(dir).some((entry) => entry !== ".git")) {
     console.error(`refusing to init: ${dir} is not empty`);
@@ -39,7 +26,7 @@ export async function runInit(
   }
 
   const coreVersion = ownVersion();
-  const files = renderProject(name, coreVersion, full);
+  const files = renderProject(name, coreVersion);
 
   for (const [relPath, content] of files) {
     const filePath = join(dir, relPath);
@@ -61,9 +48,9 @@ export async function runInit(
     "",
     "  → http://localhost:3000/hello",
     "",
-    full
-      ? "Needs mongo and redis running (MONGO_URI / REDIS_URL in .envs/.env.development).\nRun `yarn worker` in a second terminal to consume queued jobs."
-      : "No database or redis needed to boot — add MONGO_URI / REDIS_URL to\nmodules/core/meta.variables.json when your first model or queue lands,\nor scaffold them now with `tulipes init --full`.",
+    "Needs mongo and redis running — see MONGO_URI / REDIS_URL in",
+    ".envs/.env.development. Run `yarn worker` in a second terminal to",
+    "consume queued jobs.",
   ].filter((line) => line !== undefined).join("\n"));
 }
 
@@ -119,11 +106,7 @@ function sanitizeName(raw: string): string {
 
 const json = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
 
-function renderProject(
-  name: string,
-  coreVersion: string,
-  full: boolean,
-): [string, string][] {
+function renderProject(name: string, coreVersion: string): [string, string][] {
   const core = `^${coreVersion}`;
 
   const files: [string, string][] = [
@@ -382,13 +365,9 @@ function renderProject(
       `# none; "*" allows any but forbids credentials.`,
       `CORS_ORIGINS=http://localhost:5173`,
       ``,
-      ...(full
-        ? [
-            `MONGO_URI=mongodb://127.0.0.1:27017/${name}`,
-            `REDIS_URL=redis://127.0.0.1:6379`,
-            ``,
-          ]
-        : []),
+      `MONGO_URI=mongodb://127.0.0.1:27017/${name}`,
+      `REDIS_URL=redis://127.0.0.1:6379`,
+      ``,
     ].join("\n")],
 
     // ── modules/core — sys tier, priority 0: the very first router ─────────
@@ -412,24 +391,20 @@ function renderProject(
         },
         // Infra connection strings live in the sys core module because every
         // feature shares them — one owner per variable, no duplicates.
-        ...(full
-          ? [
-              {
-                name: "MONGO_URI",
-                type: "url",
-                group: "database",
-                required: true,
-                description: "MongoDB connection string",
-              },
-              {
-                name: "REDIS_URL",
-                type: "url",
-                group: "redis",
-                required: true,
-                description: "Redis connection string (queues, cache)",
-              },
-            ]
-          : []),
+        {
+          name: "MONGO_URI",
+          type: "url",
+          group: "database",
+          required: true,
+          description: "MongoDB connection string",
+        },
+        {
+          name: "REDIS_URL",
+          type: "url",
+          group: "redis",
+          required: true,
+          description: "Redis connection string (queues, cache)",
+        },
       ],
     })],
 
@@ -666,7 +641,7 @@ function renderProject(
       dependencies: {
         "@tulipes/core": core,
         express: "^5",
-        ...(full ? { mongoose: "^8" } : {}),
+        mongoose: "^8",
       },
     })],
 
@@ -835,9 +810,8 @@ function renderProject(
 
   ];
 
-  // ── --full only: the contracts that need a database or redis ───────────
-  if (full) {
-    files.push(
+  // ── the contracts that need a database or redis ────────────────────────
+  files.push(
       ["modules/hello/models/greeting.model.ts", [
         `import { Schema } from "mongoose";`,
         `import type { ModelDef } from "@tulipes/core/db";`,
@@ -953,9 +927,8 @@ function renderProject(
         `  return router;`,
         `}`,
         ``,
-      ].join("\n")],
-    );
-  }
+    ].join("\n")],
+  );
 
   files.push(
     ["README.md", [
@@ -971,19 +944,9 @@ function renderProject(
       `yarn dev          # boot the web process → http://localhost:3000/hello`,
       "```",
       ``,
-      ...(full
-        ? [
-            `Needs mongo and redis running — see \`MONGO_URI\` and \`REDIS_URL\``,
-            `in \`.envs/.env.development\`. Run \`yarn worker\` in a second`,
-            `terminal to consume queued jobs.`,
-          ]
-        : [
-            `Boots with no database and no redis: the pipeline skips engines no`,
-            `module asks for. When your first model lands, declare \`MONGO_URI\``,
-            `(type \`url\`, required) in \`modules/core/meta.variables.json\` and`,
-            `set it in \`.envs/.env.development\`; same with \`REDIS_URL\` for`,
-            `queues. \`tulipes init --full\` scaffolds all of that up front.`,
-          ]),
+      `Needs mongo and redis running — see \`MONGO_URI\` and \`REDIS_URL\` in`,
+      `\`.envs/.env.development\`. Run \`yarn worker\` in a second terminal to`,
+      `consume queued jobs.`,
       ``,
       `## The hello module`,
       ``,
@@ -999,13 +962,9 @@ function renderProject(
       `| \`controllers/\` | the work; imported by routes, never scanned |`,
       `| \`helpers/\` | pure logic, no framework |`,
       `| \`sockets/*.sockets.ts\` | a claimed Socket.IO namespace |`,
-      ...(full
-        ? [
-            `| \`models/*.model.ts\` | a schema declaration for the model store |`,
-            `| \`bootstrap/*.bootstrap.ts\` | idempotent seeding, before traffic |`,
-            `| \`queues/*.queues.ts\` | a job definition and its processor |`,
-          ]
-        : []),
+      `| \`models/*.model.ts\` | a schema declaration for the model store |`,
+      `| \`bootstrap/*.bootstrap.ts\` | idempotent seeding, before traffic |`,
+      `| \`queues/*.queues.ts\` | a job definition and its processor |`,
       ``,
       `## Daily commands`,
       ``,
