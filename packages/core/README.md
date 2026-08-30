@@ -242,7 +242,7 @@ router.get("/users/:id", async (req) => {
 });
 ```
 
-`HttpError` renders `{ error, details? }` with its status. Anything else becomes an anonymous `500 internal server error` — full message only in `development`/`test`.
+`HttpError` renders `{ error, details? }` with its status. Errors raised by express middleware that carry a 4xx `status` are honored too — an oversized body stays a `413`, malformed JSON a `400` — since those describe the caller's request, not your internals. Everything else becomes an anonymous `500 internal server error`, with the real message only in `development`/`test`.
 
 ## The CLI
 
