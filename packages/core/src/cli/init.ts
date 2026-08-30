@@ -86,8 +86,12 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         check: "tulipes env:check",
         typecheck: "tsc --noEmit",
       },
-      dependencies: { "@tulipes/core": core },
+      dependencies: {
+        "@tulipes/core": core,
+        express: "^5",
+      },
       devDependencies: {
+        "@types/express": "^5",
         "@types/node": "^24",
         tsx: "^4",
         typescript: "^7",
