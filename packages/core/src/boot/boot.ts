@@ -76,7 +76,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   const explored = exploreModules(order);
 
   // Phase 6 — global config: app-level seed first, then module factories
-  const ctx: Ctx = { Environment: env, config: {} };
+  const ctx: Ctx = { mode, Environment: env, config: {} };
   const configReport = new BootReport();
   await loadAppConfigSeed(options.rootDir, ctx, configReport);
   const lifecycles = await buildGlobalConfig(explored, ctx, configReport);

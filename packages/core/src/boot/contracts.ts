@@ -1,6 +1,7 @@
 import type { Express, Router } from "express";
 
 import type { Environment } from "../env/environment.js";
+import type { ProcessMode } from "./boot.js";
 import type { GlobalConfig } from "../config/index.js";
 import type { Acl } from "../acl/acl.js";
 import type { ModelStore } from "../db/model-store.js";
@@ -13,6 +14,12 @@ import type { SocketManager } from "../sockets/socket-manager.js";
  * (phase 6) see neither `acl` (phase 7) nor `app` (backend branch, phase 9).
  */
 export interface Ctx {
+  /**
+   * Which process this is. Modules that must behave differently per
+   * process read it here — a logger naming its file per mode, so backend
+   * and worker never rotate the same file, is the motivating case.
+   */
+  mode: ProcessMode;
   Environment: Environment;
   config: GlobalConfig;
   acl?: Acl;
