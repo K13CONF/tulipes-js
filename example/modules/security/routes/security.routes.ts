@@ -5,7 +5,7 @@ import { pinoHttp } from "pino-http";
 import type { Ctx } from "@tulipes/core/boot";
 
 import { corsOptions, helmetOptions } from "../helpers/hardening.js";
-import { logger } from "../helpers/logger.js";
+import { logger } from "@app/core";
 
 /**
  * The app's request-hardening stack. Sys tier, so this mounts ahead of
@@ -18,13 +18,19 @@ import { logger } from "../helpers/logger.js";
  *   pino    — logs the request once the two above have had their say
  *   json    — parsing last, so a rejected origin never reaches the parser
  */
-export default function securityRoutes({ app, Environment, config }: Ctx): void {
+export default function securityRoutes(ctx: Ctx): void {
+  const { app, Environment, config, mode } = ctx
+
   app!.use(helmet(helmetOptions(Environment)));
   app!.use(cors(corsOptions(Environment)));
 
   app!.use(
     pinoHttp({
-      logger: logger(Environment),
+      logger: logger(Environment, mode),
+      // Without this a 500 is logged at info, so the errors-only log file
+      // stays empty exactly when you need it.
+      customLogLevel: (_req, res, err) =>
+        err || res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
       // The core module (priority 0) stamps X-Request-Id before this runs —
       // reuse it so log lines and response headers tell one story.
       genReqId: (_req, res) => String(res.getHeader("X-Request-Id") ?? ""),

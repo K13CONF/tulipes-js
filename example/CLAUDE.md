@@ -47,6 +47,7 @@ applies before you write code.
 | Helper used by ≥2 modules | the sys core module, exported from its `index.ts` and imported as `@app/core` |
 | Helper used by one module | that module's `helpers/` |
 | One-off task (backfill, export, admin chore) | `scripts/`, booted with `mode: "script"` |
+| Anything you would `console.log` | `moduleLogger(ctx.Environment, "<module>", ctx.mode)` from `@app/core` |
 
 ## Boot order (why load order matters)
 

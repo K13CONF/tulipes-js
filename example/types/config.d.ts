@@ -12,8 +12,24 @@ declare module "@tulipes/core/env" {
     JWT_SECRET: string;
     /** [core] Public hostname this API is served from; "localhost" means not deployed */
     PUBLIC_DOMAIN: string;
-    /** [security] Minimum pino log level */
+    /** [core] Lowest level that reaches any destination */
     LOG_LEVEL: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
+    /** [core] Pretty coloured logs on stdout; turn off where a collector reads files only */
+    LOG_CONSOLE: boolean;
+    /** [core] Write JSON-line log files under LOG_DIR */
+    LOG_FILE: boolean;
+    /** [core] Directory for log files, relative to the app root or absolute */
+    LOG_DIR: string;
+    /** [core] Base name of the all-levels log file; the process mode and date are appended */
+    LOG_BASENAME: string;
+    /** [core] Base name of the errors-only log file; the process mode and date are appended */
+    LOG_ERROR_BASENAME: string;
+    /** [core] Rotate on this schedule: "daily", "hourly", or milliseconds */
+    LOG_ROTATION_FREQUENCY: string;
+    /** [core] Also rotate once a file reaches this size, e.g. "20m" */
+    LOG_ROTATION_SIZE: string;
+    /** [core] How many rotated files to keep per destination, besides the current one */
+    LOG_RETENTION_FILES: number;
     /** [security] Comma-separated browser origins allowed to call this API; "*" allows any, empty allows none (same-origin only) */
     CORS_ORIGINS: string;
     /** [security] Allow cookies and Authorization headers on cross-origin requests (cannot be combined with CORS_ORIGINS=*) */

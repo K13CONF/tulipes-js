@@ -21,6 +21,9 @@ __metadata:
     "@tulipes/core": "workspace:*"
     ioredis: "npm:^5"
     mongoose: "npm:^8"
+    pino: "npm:^9"
+    pino-pretty: "npm:^13"
+    pino-roll: "npm:^3"
   languageName: unknown
   linkType: soft
 
@@ -28,14 +31,13 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@app/security@workspace:example/modules/security"
   dependencies:
+    "@app/core": "workspace:*"
     "@tulipes/core": "workspace:*"
     "@types/cors": "npm:^2"
     cors: "npm:^2"
     express: "npm:^5"
     helmet: "npm:^8"
-    pino: "npm:^9"
     pino-http: "npm:^10"
-    pino-pretty: "npm:^13"
   languageName: unknown
   linkType: soft
 
@@ -816,6 +818,13 @@ __metadata:
   dependencies:
     luxon: "npm:^3.2.1"
   checksum: 10c0/348622bdcd1a15695b61fc33af8a60133e5913a85cf99f6344367579e7002896514ba3b0a9d6bb569b02667d6b06836722bf2295fcd101b3de378f71d37bed0b
+  languageName: node
+  linkType: hard
+
+"date-fns@npm:^4.1.0":
+  version: 4.4.0
+  resolution: "date-fns@npm:4.4.0"
+  checksum: 10c0/988f0a13db183f5dfc85c36bbb6847a9c135a9225888bbea4005876ec15539a8613c21a07370a4e7ea543918d5a1cafb423c528b42cdbbde5fdfddb178126b21
   languageName: node
   linkType: hard
 
@@ -1754,6 +1763,16 @@ __metadata:
   bin:
     pino-pretty: bin.js
   checksum: 10c0/36fa382521a893290c8f6a5b2ddc28dfb87fda1d161adb6b97d80bf7d24184970d0a7eab6f8ee45c39aff4b2ec3b2e533c756899798adc270010f34ba4411063
+  languageName: node
+  linkType: hard
+
+"pino-roll@npm:^3":
+  version: 3.1.0
+  resolution: "pino-roll@npm:3.1.0"
+  dependencies:
+    date-fns: "npm:^4.1.0"
+    sonic-boom: "npm:^4.0.1"
+  checksum: 10c0/0ae1b475889748d8f87f9a4bd622b841500b76ae279a2409e1453e74bed23d227b1a7a21069c8226e65311e37cc34217592199a09d4b01db5e5c236678b67040
   languageName: node
   linkType: hard
 
