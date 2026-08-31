@@ -1,14 +1,6 @@
 {
   "variables": [
     {
-      "name": "LOG_LEVEL",
-      "type": "enum",
-      "enum": ["fatal", "error", "warn", "info", "debug", "trace"],
-      "group": "logging",
-      "description": "Minimum pino log level",
-      "default": "info"
-    },
-    {
       "name": "CORS_ORIGINS",
       "type": "string",
       "group": "cors",

@@ -82,6 +82,12 @@ package.json instead of hidden in a relative path.
 
 Two live examples ship inside `modules/core/helpers/`:
 
+- **`logger/`** — pino with two destinations at once: coloured and
+  human-readable on the console, JSON lines in `logs/` for querying, plus
+  an errors-only file. Log file names carry the process mode, since
+  backend and worker run together and would otherwise rotate the same
+  file. Use it as `moduleLogger(env, "users", mode)` — the module name
+  shows as `[users]` on the console and as a queryable field in the files.
 - **`cache/`** — a small `Cache` contract with two drivers: `RedisCache`
   (JSON-serialized, key-prefixed so it never collides with BullMQ) and
   `MemoryCache` (LRU-capped, for tests and redis-less runs). `appCache(env)`
