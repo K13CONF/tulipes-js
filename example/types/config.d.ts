@@ -30,6 +30,8 @@ declare module "@tulipes/core/env" {
     LOG_ROTATION_SIZE: string;
     /** [core] How many rotated files to keep per destination, besides the current one */
     LOG_RETENTION_FILES: number;
+    /** [security] Largest JSON request body express will parse, e.g. "1mb"; nginx client_max_body_size must be at least this */
+    BODY_LIMIT: string;
     /** [security] Comma-separated browser origins allowed to call this API; "*" allows any, empty allows none (same-origin only) */
     CORS_ORIGINS: string;
     /** [security] Allow cookies and Authorization headers on cross-origin requests (cannot be combined with CORS_ORIGINS=*) */

@@ -5,8 +5,8 @@ import type { AppConfigFn } from "@tulipes/core/boot";
  *
  * Runs FIRST in boot phase 6, before any module.config.ts factory, and
  * whatever it returns becomes the base of the global config. Modules read
- * it through `ctx.config.<key>` — see `modules/security/routes` (body
- * limit) and `modules/users/routes` (pagination) for live consumers.
+ * it through `ctx.config.<key>` — see `modules/users/routes`, which
+ * clamps page size with the shared pagination bounds.
  *
  * The framework reads exactly ONE field: `app.name`, which titles the
  * startup banner. Everything else here is convention — your keys, read by
@@ -54,16 +54,14 @@ const appConfig = ((Environment) => ({
    * stack is tuned from here rather than by editing that module.
    */
   http: {
-    // → express.json({ limit }) in modules/security/routes
-    bodyLimit: "1mb",
     // true behind nginx / a load balancer, so req.ip is the real client
     trustProxy: false,
     requestTimeout: 30,
-    // NB: allowed CORS origins are NOT here. They differ per deployment,
-    // so they belong to the env contract (CORS_ORIGINS, declared in
-    // modules/security/meta.variables.json) — one source of truth per
-    // value. Shared policy lives in this file; deployment-varying values
-    // live in meta.variables.json.
+    // NB: neither the CORS origins nor the body limit are here. Both
+    // differ per deployment, so they belong to the env contract
+    // (CORS_ORIGINS, BODY_LIMIT — declared in the security module) — one
+    // source of truth per value. Shared policy lives in this file;
+    // deployment-varying values live in meta.variables.json.
   },
 
   /**

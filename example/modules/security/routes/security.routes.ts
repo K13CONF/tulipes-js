@@ -45,6 +45,8 @@ export default function securityRoutes(ctx: Ctx): void {
   );
 
   // Body-size cap is a security control too — a parser without a limit is
-  // a memory-exhaustion invitation. Tuned from config/app.config.ts.
-  app!.use(express.json({ limit: config.http?.bodyLimit ?? "1mb" }));
+  // a memory-exhaustion invitation. Declared by this module, because it
+  // varies per deployment: an upload-heavy API raises it without touching
+  // code.
+  app!.use(express.json({ limit: String(Environment.get("BODY_LIMIT")) }));
 }
