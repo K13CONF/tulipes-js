@@ -1,6 +1,13 @@
 {
   "variables": [
     {
+      "name": "BODY_LIMIT",
+      "type": "string",
+      "group": "http",
+      "description": "Largest JSON request body express will parse, e.g. \"1mb\"; nginx client_max_body_size must be at least this",
+      "default": "1mb"
+    },
+    {
       "name": "CORS_ORIGINS",
       "type": "string",
       "group": "cors",

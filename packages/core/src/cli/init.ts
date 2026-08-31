@@ -323,9 +323,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `   * or CORS origins here rather than editing that file.`,
       `   */`,
       `  http: {`,
-      `    // Passed to express.json({ limit }) — a parser without a cap is a`,
-      `    // memory-exhaustion invitation.`,
-      `    bodyLimit: "1mb",`,
+
       `    // Browser origins allowed to call this API. Add a cors() middleware`,
       `    // in the security module and feed it this list.`,
       `    corsOrigins: ["http://localhost:5173"],`,
@@ -594,7 +592,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `        root /var/www/html;`,
       `    }`,
       ``,
-      `    # Keep in step with config.app.ts http.bodyLimit. If nginx is stricter,`,
+      `    # Keep in step with the BODY_LIMIT variable. If nginx is stricter,`,
       `    # oversized requests die here as an nginx HTML page instead of the`,
       `    # API's JSON 413.`,
       `    client_max_body_size 1m;`,
@@ -1617,6 +1615,14 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
     ["modules/security/meta.variables.json", json({
       variables: [
         {
+          name: "BODY_LIMIT",
+          type: "string",
+          group: "http",
+          description:
+            'Largest JSON request body express will parse, e.g. "1mb"; nginx client_max_body_size must be at least this',
+          default: "1mb",
+        },
+        {
           name: "CORS_ORIGINS",
           type: "string",
           group: "cors",
@@ -1722,7 +1728,9 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
           ` *   pino    — logs the request once the two above have had their say`,
           ` *   json    — parsing last, so a rejected origin never reaches the parser`,
           ` */`,
-          `export default function securityRoutes({ app, Environment, config, mode }: Ctx): void {`,
+          `export default function securityRoutes(ctx: Ctx): void {`,
+          `  const { app, Environment, config, mode } = ctx`,
+          ``,
           `  app!.use(helmet(helmetOptions(Environment)));`,
           `  app!.use(cors(corsOptions(Environment)));`,
           ``,
@@ -1747,8 +1755,10 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
           `  );`,
           ``,
           `  // Body-size cap is a security control too — a parser without a limit is`,
-          `  // a memory-exhaustion invitation. Tuned from config/app.config.ts.`,
-          `  app!.use(express.json({ limit: config.http?.bodyLimit ?? "1mb" }));`,
+          `  // a memory-exhaustion invitation. Declared by this module, because it`,
+          `  // varies per deployment: an upload-heavy API raises it without touching`,
+          `  // code.`,
+          `  app!.use(express.json({ limit: String(Environment.get("BODY_LIMIT")) }));`,
           `}`,
           ``,
         ].join("\n")],
