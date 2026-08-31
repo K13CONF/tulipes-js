@@ -28,7 +28,7 @@ problems the report has not reached yet.
 | `environment` | `"abc" is not a number` / `not one of: …` | Value fails its declared `type`/`enum`. Fix the value or the spec. |
 | `environment` | `variable "X" is already declared by module "y"` | Two modules declare the same name. Delete the duplicate; read the other module's variable instead. |
 | `module graph` | `dependsOn "x" — no such module exists` | Typo, or you used the package name. `dependsOn` takes short names (`"users"`). |
-| `module graph` | `dependency cycle: a → b → a` | Mutual dependency. Move the shared part to `lib/` or a third module. |
+| `module graph` | `dependency cycle: a → b → a` | Mutual dependency. Move the shared part into the core module or a third module. |
 | `module graph` | `sys module cannot depend on app module` | A sys module needs something app-tier. Either it is not really sys, or the dependency belongs in `lib/`. |
 | `config` | `module.config must default-export a function` | Missing/misspelled `export default`. |
 | `acl` | `allow() on unknown role "x"` | Role never defined. Define it in the sys `core` module, and `dependsOn` that module. |

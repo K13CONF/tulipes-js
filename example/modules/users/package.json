@@ -7,10 +7,12 @@
     "tier": "app",
     "priority": 10,
     "dependsOn": [
-      "auth"
+      "auth",
+      "core"
     ]
   },
   "dependencies": {
+    "@app/core": "workspace:*",
     "@tulipes/core": "workspace:*",
     "express": "^5",
     "mongoose": "^8"

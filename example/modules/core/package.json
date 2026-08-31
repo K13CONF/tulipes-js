@@ -8,6 +8,11 @@
     "priority": 0
   },
   "dependencies": {
-    "@tulipes/core": "workspace:*"
+    "@tulipes/core": "workspace:*",
+    "ioredis": "^5",
+    "mongoose": "^8"
+  },
+  "exports": {
+    ".": "./index.ts"
   }
 }

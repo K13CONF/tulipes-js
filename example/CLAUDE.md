@@ -29,9 +29,11 @@ applies before you write code.
 6. **Errors are `HttpError`.** `throw new HttpError(404, "…")` from
    anywhere in a route; the framework's terminal handler renders it.
    Never hand-roll an error-response shape.
-7. **Cross-module imports use the package name** (`@app/users`), never a
-   relative path that climbs out of the module. The workspace boundary is
-   what keeps modules independent.
+7. **Cross-module imports use the package name** (`@app/users`,
+   `@app/core`), never a relative path that climbs out of the module. The
+   workspace boundary is what keeps modules independent, and a package
+   name makes the dependency visible in package.json — declare it there
+   and in `dependsOn`.
 
 ## Where things go
 
@@ -42,7 +44,7 @@ applies before you write code.
 | Config for one feature | that module's `module.config.ts` |
 | Middleware for every request | a sys-tier module's routes file |
 | Middleware for one feature's routes | that module's own `Router` |
-| Helper used by ≥2 modules | `lib/` |
+| Helper used by ≥2 modules | the sys core module, exported from its `index.ts` and imported as `@app/core` |
 | Helper used by one module | that module's `helpers/` |
 | One-off task (backfill, export, admin chore) | `scripts/`, booted with `mode: "script"` |
 

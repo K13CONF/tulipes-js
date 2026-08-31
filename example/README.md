@@ -11,14 +11,10 @@ example/
 ├── worker.ts               worker entrypoint   — boot({ mode: "worker" })
 ├── config/
 │   └── app.config.ts       app-wide config seed, runs before every module factory
-├── lib/                    app-owned glue — cross-cutting helpers you shape freely
-│   ├── cache/              Cache contract + memory (LRU-capped) and redis drivers,
-│   │                       appCache() picks one from the environment
-│   └── mongoose/           base plugins every model gets: snake_case timestamps,
-│                           soft delete (is_deleted/deleted_at/deleted_by, auto-
-│                           excluded from queries) — registerBasePlugins() in app.ts
 ├── modules/                the app itself: one folder = one feature = one package
-│   ├── core/               tier "sys" — infra env vars, global roles
+│   ├── core/               tier "sys" — infra env vars, global roles, and the
+│   │                       shared helpers (cache, mongoose plugins) other
+│   │                       modules import as `@app/core`
 │   ├── auth/
 │   └── users/
 ├── scripts/                one-off tasks — boot in script mode, no server
@@ -70,28 +66,35 @@ on that module's own Router inside its `*.routes.ts`.
 module factory runs, so every module can read it (`ctx.config.app.name`).
 Config that belongs to one module goes in that module's `module.config.ts`.
 
-### What is lib/ for?
+### Where do shared helpers go?
 
-Cross-cutting helpers that are neither a feature (→ module) nor framework
-(→ core): cache wrappers, mongoose conventions, date/format utilities.
-Modules may reach into it with a relative import — it's deliberately not a
-package, it's your app's shared drawer.
+Into a module — there is no top-level `lib/`. Helpers that more than one
+module needs belong to the sys `core` module, exported from its `index.ts`
+and imported by package name:
 
-Two real examples ship with the skeleton:
+```ts
+import { baseSchemaOptions } from "@app/core";
+```
 
-- **`lib/cache/`** — a small `Cache` contract with two drivers: `RedisCache`
+That keeps the coupling visible: a module using them declares `@app/core`
+in its `dependencies` and `"core"` in `dependsOn`, so the dependency is in
+package.json instead of hidden in a relative path.
+
+Two live examples ship inside `modules/core/helpers/`:
+
+- **`cache/`** — a small `Cache` contract with two drivers: `RedisCache`
   (JSON-serialized, key-prefixed so it never collides with BullMQ) and
   `MemoryCache` (LRU-capped, for tests and redis-less runs). `appCache(env)`
-  picks the driver from the environment; the sys core module's `onShutdown`
+  picks the driver from the environment; the core module's `onShutdown`
   closes it.
-- **`lib/mongoose/`** — plugins every model gets via `registerBasePlugins()`
-  (called in app.ts/worker.ts *before* boot, since global plugins only affect
-  models compiled after registration): snake_case `created_at`/`updated_at`,
-  and soft delete — `doc.softDelete(actor)` flags instead of removing,
-  ordinary queries auto-exclude flagged docs, `.withDeleted()` /
-  `.onlyDeleted()` opt out, hard `deleteOne`/`deleteMany` stay literal on
-  purpose. Extend `BaseDocument` in model interfaces to inherit the typed
-  fields and methods.
+- **`mongoose/`** — plugins every model gets via `registerBasePlugins()`,
+  called from the core module's `module.config.ts` (phase 6, before models
+  compile in phase 8, so it covers scripts too): snake_case
+  `created_at`/`updated_at`, and soft delete — `doc.softDelete(actor)` flags
+  instead of removing, ordinary queries auto-exclude flagged docs,
+  `.withDeleted()` / `.onlyDeleted()` opt out, and hard `deleteOne` stays
+  literal on purpose. Extend `BaseDocument` in model interfaces to inherit
+  the typed fields and methods.
 
 ## Anatomy of a module
 
