@@ -63,12 +63,20 @@ export default async function seedPlans({ models }: Ctx): Promise<void> {
 **Make bootstrap tasks idempotent** — they run on every boot, in every
 process, including each worker. Upsert; never blind-insert.
 
+**And tolerate concurrency.** Backend and worker start together, so two
+processes run the same seed at the same time. Concurrent upserts on a
+unique index race: one inserts, the other gets a duplicate-key error
+(`code: 11000`). Catch that one code and carry on — the row exists, which
+is all the task wanted.
+
 ## Gotchas
 
 - Global plugins (timestamps, soft delete) only apply to schemas compiled
-  *after* registration, which is why `registerBasePlugins()` runs in
-  `app.ts` before `boot()`. Adding a plugin later than that silently
-  misses your models.
+  *after* registration, which is why `registerBasePlugins()` is called from
+  the sys core module's `module.config.ts` — phase 6, before models compile
+  in phase 8. That covers every mode, scripts included; calling it from
+  `app.ts` instead would leave scripts compiling models without the
+  soft-delete guard.
 - Mongoose queries are lazy: `await` them, and prefer `.lean()` for reads
   you only serialize.
 - If the app soft-deletes, ordinary queries already exclude deleted rows;
