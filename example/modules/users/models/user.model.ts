@@ -1,8 +1,8 @@
 import { Schema } from "mongoose";
 import type { ModelDef } from "@tulipes/core/db";
-// App-owned conventions from lib/ — a relative reach outside the module is
-// fine for app-level glue that is deliberately NOT a package.
-import { baseSchemaOptions } from "../../../lib/mongoose/index.js";
+// Cross-module import by package name, never a relative path out of the
+// module — the dependency is declared in package.json, so it is visible.
+import { baseSchemaOptions } from "@app/core";
 
 const userSchema = new Schema(
   {

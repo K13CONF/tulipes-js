@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Ctx } from "@tulipes/core/boot";
 
-import { appCache } from "../../../lib/cache/index.js";
+import { appCache } from "../helpers/cache/index.js";
 
 /**
  * Global middleware lives HERE: the core module is tier "sys", priority 0 —

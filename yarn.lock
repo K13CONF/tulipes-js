@@ -14,11 +14,13 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@app/core@workspace:example/modules/core":
+"@app/core@workspace:*, @app/core@workspace:example/modules/core":
   version: 0.0.0-use.local
   resolution: "@app/core@workspace:example/modules/core"
   dependencies:
     "@tulipes/core": "workspace:*"
+    ioredis: "npm:^5"
+    mongoose: "npm:^8"
   languageName: unknown
   linkType: soft
 
@@ -41,6 +43,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@app/users@workspace:example/modules/users"
   dependencies:
+    "@app/core": "workspace:*"
     "@tulipes/core": "workspace:*"
     express: "npm:^5"
     mongoose: "npm:^8"
