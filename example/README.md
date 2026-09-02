@@ -12,7 +12,7 @@ example/
 ├── config/
 │   └── app.config.ts       app-wide config seed, runs before every module factory
 ├── modules/                the app itself: one folder = one feature = one package
-│   ├── core/               tier "sys" — infra env vars, global roles, and the
+│   ├── core/               tier "sys" — infra env vars, logger, cache, and the
 │   │                       shared helpers (cache, mongoose plugins) other
 │   │                       modules import as `@app/core`
 │   ├── auth/
@@ -128,7 +128,7 @@ package.json.
    validated variable store (crashes with ALL problems at once)
 2. Module graph: sort + cycle detection
 3. `config/app.config.ts` seed → every `module.config.ts` factory
-4. ACL merge (roles from sys core, grants everywhere)
+4. ACL merge (roles from the sys auth module, grants everywhere)
 5. Database: connect → models → bootstrap tasks
 6. Queues register (both modes)
 7. **backend**: pipeline above, sockets, listen · **worker**: start consuming

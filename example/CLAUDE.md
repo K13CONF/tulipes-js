@@ -29,7 +29,13 @@ applies before you write code.
 6. **Errors are `HttpError`.** `throw new HttpError(404, "…")` from
    anywhere in a route; the framework's terminal handler renders it.
    Never hand-roll an error-response shape.
-7. **Cross-module imports use the package name** (`@app/users`,
+7. **Every route names a permission.** `requirePermission(ctx, "x:read")`
+   from `@app/auth`. An unauthenticated request carries the `guest` role
+   rather than being rejected, so a route with no check is public —
+   forgetting a guard fails OPEN. Public is `acl.allow("guest", ...)`.
+8. **Secrets never go on the User model.** Passwords and keys belong in
+   the auth module's `Credential` model, which is `select: false`.
+9. **Cross-module imports use the package name** (`@app/users`,
    `@app/core`), never a relative path that climbs out of the module. The
    workspace boundary is what keeps modules independent, and a package
    name makes the dependency visible in package.json — declare it there
