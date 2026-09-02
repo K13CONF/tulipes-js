@@ -12,6 +12,7 @@
     ]
   },
   "dependencies": {
+    "@app/auth": "workspace:*",
     "@app/core": "workspace:*",
     "@tulipes/core": "workspace:*",
     "express": "^5",
