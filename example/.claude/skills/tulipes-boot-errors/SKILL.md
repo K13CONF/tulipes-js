@@ -31,7 +31,7 @@ problems the report has not reached yet.
 | `module graph` | `dependency cycle: a → b → a` | Mutual dependency. Move the shared part into the core module or a third module. |
 | `module graph` | `sys module cannot depend on app module` | A sys module needs something app-tier. Either it is not really sys, or the dependency belongs in `lib/`. |
 | `config` | `module.config must default-export a function` | Missing/misspelled `export default`. |
-| `acl` | `allow() on unknown role "x"` | Role never defined. Define it in the sys `core` module, and `dependsOn` that module. |
+| `acl` | `allow() on unknown role "x"` | Role never defined. Roles live in the sys `auth` module; define it there and `dependsOn: ["auth"]`. |
 | `acl` | `already granted … duplicate grant` | Two modules grant the same role+resource. Namespace the resource by module. |
 | `database` | `connection failed` | Mongo unreachable or `MONGO_URI` wrong. Check the service is running. |
 | `database` | `modules declare models but "MONGO_URI" is not declared` | Add the variable to the sys `core` module's meta file. |
