@@ -2,8 +2,7 @@ import type { Ctx } from "@tulipes/core/boot";
 
 export default function authConfig({ Environment }: Ctx) {
   return {
-    // Reads a secret owned by the sys core module — any module may read,
-    // only one declares.
-    jwtConfigured: Environment.store.has("JWT_SECRET"),
+    accessTtl: Environment.get("JWT_ACCESS_TTL"),
+    refreshTtl: Environment.get("JWT_REFRESH_TTL"),
   };
 }

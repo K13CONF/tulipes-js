@@ -8,6 +8,11 @@ const userSchema = new Schema(
   {
     email: { type: String, required: true, unique: true, lowercase: true },
     role: { type: String, required: true, default: "user" },
+    // Every access token issued before this instant is rejected. Auth
+    // moves it forward on a password change, which is how one action logs
+    // the account out everywhere. Not a secret — the password hash lives
+    // in the auth module's Credential model, never here.
+    tokensValidFrom: { type: Date },
   },
   baseSchemaOptions,
 );

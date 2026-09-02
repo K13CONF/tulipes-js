@@ -3,12 +3,28 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
   "tulipes": {
-    "tier": "app",
-    "priority": 5
+    "tier": "sys",
+    "priority": 20
   },
   "dependencies": {
+    "@app/core": "workspace:*",
     "@tulipes/core": "workspace:*",
-    "express": "^5"
+    "bcryptjs": "^3",
+    "express": "^5",
+    "jsonwebtoken": "^9",
+    "mongoose": "^8",
+    "passport": "^0.7",
+    "passport-jwt": "^4",
+    "passport-local": "^1"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9",
+    "@types/passport": "^1",
+    "@types/passport-jwt": "^4",
+    "@types/passport-local": "^1"
   }
 }

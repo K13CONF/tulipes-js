@@ -38,6 +38,18 @@ declare module "@tulipes/core/env" {
     CORS_CREDENTIALS: boolean;
     /** [security] Strict-Transport-Security max-age in seconds; 0 disables the header (browsers only honour it over HTTPS) */
     HSTS_MAX_AGE: number;
+    /** [auth] Signing key for short-lived access tokens */
+    JWT_ACCESS_SECRET: string;
+    /** [auth] Signing key for refresh tokens; separate from the access key so leaking one cannot mint the other */
+    JWT_REFRESH_SECRET: string;
+    /** [auth] Access token lifetime, as an ms/jsonwebtoken duration. Keep it short: a revoked user keeps their role until it expires */
+    JWT_ACCESS_TTL: string;
+    /** [auth] Refresh token lifetime; also the TTL on its database record */
+    JWT_REFRESH_TTL: string;
+    /** [auth] Email of the admin account seeded on first boot */
+    AUTH_ADMIN_EMAIL: string;
+    /** [auth] Password for the seeded admin account; change it after the first login */
+    AUTH_ADMIN_PASSWORD: string;
     /** [users] Max concurrent sessions per user */
     USERS_MAX_SESSIONS: number;
     /** [users] Who can register */

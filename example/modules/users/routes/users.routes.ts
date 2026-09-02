@@ -1,11 +1,19 @@
 import { Router } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
+import { requirePermission } from "@app/auth";
 
-export default function usersRoutes({ config, acl, models, queues }: Ctx): Router {
+export default function usersRoutes(ctx: Ctx): Router {
+  const { config, acl, models, queues } = ctx;
   const router = Router();
 
-  router.get("/users", async (req, res) => {
+  // Every route names a permission. A route without one would be reachable
+  // by `guest`, since the pipeline authenticates rather than rejects — so
+  // "I forgot the guard" and "I meant this to be public" must not look the
+  // same. Naming one always is what keeps that honest.
+  const may = (permission: string) => requirePermission(ctx, permission);
+
+  router.get("/users", may("users:read"), async (req, res) => {
     // Pagination bounds are app-wide (config/app.config.ts), so every list
     // endpoint in every module clamps the same way.
     const { defaultLimit = 20, maxLimit = 100 } = config.pagination ?? {};
@@ -19,7 +27,7 @@ export default function usersRoutes({ config, acl, models, queues }: Ctx): Route
 
   // Soft delete via the app's base plugin: the document stays in mongo but
   // vanishes from every ordinary query.
-  router.delete("/users/:email", async (req, res) => {
+  router.delete("/users/:email", may("users:write"), async (req, res) => {
     const User = models!.get("User");
     const user = await User.findOne({ email: req.params.email });
     if (!user) throw new HttpError(404, "no such user");
@@ -27,7 +35,7 @@ export default function usersRoutes({ config, acl, models, queues }: Ctx): Route
     res.json({ email: req.params.email, softDeleted: true });
   });
 
-  router.get("/users/deleted", async (_req, res) => {
+  router.get("/users/deleted", may("users:read"), async (_req, res) => {
     const User = models!.get("User");
     const deleted = await User.find({ is_deleted: true })
       .setOptions({ withDeleted: true } as Record<string, unknown>)
@@ -36,7 +44,7 @@ export default function usersRoutes({ config, acl, models, queues }: Ctx): Route
     res.json({ count: deleted.length, deleted });
   });
 
-  router.post("/users", async (req, res) => {
+  router.post("/users", may("users:write"), async (req, res) => {
     const { email } = req.body as { email?: string };
     if (!email) {
       res.status(422).json({ error: "email is required" });
@@ -57,7 +65,7 @@ export default function usersRoutes({ config, acl, models, queues }: Ctx): Route
     throw new Error("secret internals that must not leak in production");
   });
 
-  router.get("/users/ping", (_req, res) => {
+  router.get("/users/ping", may("users:read"), (_req, res) => {
     res.json({
       module: "users",
       maxSessions: config.users?.maxSessions,
