@@ -348,6 +348,8 @@ __metadata:
     colorette: "npm:^2"
     dotenv: "npm:^16.4.7"
     express: "npm:^5"
+    i18next: "npm:^26.4.2"
+    i18next-fs-backend: "npm:^2.6.7"
     ioredis: "npm:^5"
     mongoose: "npm:^8"
     socket.io: "npm:^4"
@@ -1396,6 +1398,25 @@ __metadata:
     statuses: "npm:~2.0.2"
     toidentifier: "npm:~1.0.1"
   checksum: 10c0/fb38906cef4f5c83952d97661fe14dc156cb59fe54812a42cd448fa57b5c5dfcb38a40a916957737bd6b87aab257c0648d63eb5b6a9ca9f548e105b6072712d4
+  languageName: node
+  linkType: hard
+
+"i18next-fs-backend@npm:^2.6.7":
+  version: 2.6.7
+  resolution: "i18next-fs-backend@npm:2.6.7"
+  checksum: 10c0/06216cdbf838936bfc27a9dc99181363b94d3fcc16b7e767a91587977b9c67e38bdfe2144ea436edb8e613f09818a3ffff7435f69be0660f77565daa311a9f37
+  languageName: node
+  linkType: hard
+
+"i18next@npm:^26.4.2":
+  version: 26.4.2
+  resolution: "i18next@npm:26.4.2"
+  peerDependencies:
+    typescript: ^5 || ^6 || ^7
+  peerDependenciesMeta:
+    typescript:
+      optional: true
+  checksum: 10c0/f2c9613e03e09e56a84aee939d8fbe3442a58622915e11f97e47f9ab358dfa65be783230b37a21483152711f786fccfe697d7f5ea9269c54f16179dc59960e4b
   languageName: node
   linkType: hard
 

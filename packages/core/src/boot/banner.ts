@@ -81,6 +81,16 @@ export function printStartupBanner(
     )}  ${dim("·")}  ${gray("* sys tier")}`,
   ]);
 
+  const { defaultLocale, supportedLocales } = handle.i18n.settings;
+  rows.push([
+    "Locales",
+    `${supportedLocales
+      .map((locale) => (locale === defaultLocale ? bold(locale) : gray(locale)))
+      .join(gray(", "))}  ${dim("\u00b7")}  ${gray(
+      `${handle.i18n.namespaces.length} translated module(s)`,
+    )}`,
+  ]);
+
   if (ctx.acl) {
     const roles = ctx.acl.roles();
     rows.push(["Roles", `${bold(String(roles.length))} ${gray(`(${roles.join(", ")})`)}`]);

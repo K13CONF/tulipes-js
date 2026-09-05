@@ -100,10 +100,19 @@ export class RouteRegistry {
 export function createRai(
   registry: RouteRegistry,
   can: (role: string, permission: string) => boolean,
+  /**
+   * Binds per-request state that depends on which module declared the
+   * route — the i18n namespace. Runs before the access check so a refusal
+   * can still be phrased in the caller's language.
+   */
+  bind?: (req: Request, module: string) => void,
 ): (info: RouteInfo) => RequestHandler {
   return (info) => {
+    const module = registry.currentModule;
+
     const handler: RequestHandler = (req, _res, next) => {
       req.rai = info;
+      bind?.(req, module);
 
       const who = req.principal ?? ANONYMOUS;
       const allowed = registry.checker
@@ -118,7 +127,7 @@ export function createRai(
         : new HttpError(401, "authentication required");
     };
 
-    const tag: RaiTag = { info, module: registry.currentModule };
+    const tag: RaiTag = { info, module };
     Object.defineProperty(handler, RAI_TAG, { value: tag, enumerable: false });
     return handler;
   };

@@ -15,6 +15,7 @@ import { initQueues } from "../queues/load-queues.js";
 import { initSockets } from "../sockets/load-sockets.js";
 import { errorHandler, notFoundHandler } from "../http/error-handler.js";
 import { createRai, RouteRegistry } from "../http/rai.js";
+import { I18n } from "../i18n/i18n.js";
 import { scanRoutes } from "../http/route-scan.js";
 import { loadAppConfigSeed } from "./app-files.js";
 import { printStartupBanner } from "./banner.js";
@@ -52,6 +53,8 @@ export interface BootHandle {
   mode: ProcessMode;
   env: Environment;
   ctx: Ctx;
+  /** Translations: the locales served and the module namespaces loaded. */
+  i18n: I18n;
   connection?: Connection;
   app?: Express;
   server?: Server;
@@ -87,17 +90,39 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   // The registry exists before any module runs, so a routes file can
   // declare into it the moment it is called.
   const routes = new RouteRegistry();
+  // The i18next instance exists from here on and is never replaced, so
+  // ctx.i18n and ctx.t are safe to hold from any phase; phase 6b is where
+  // the resources arrive.
+  const i18n = new I18n();
   const ctx: Ctx = {
     mode,
     Environment: env,
     config: {},
     routes,
-    rai: createRai(routes, (role, permission) => ctx.acl!.can(role, permission)),
+    rai: createRai(
+      routes,
+      (role, permission) => ctx.acl!.can(role, permission),
+      (req, module) => i18n.attach_(req, module),
+    ),
+    t: (namespace, locale) => i18n.t(namespace, locale),
+    i18n: i18n.instance,
   };
   const configReport = new BootReport();
   await loadAppConfigSeed(options.rootDir, ctx, configReport);
   const lifecycles = await buildGlobalConfig(explored, ctx, configReport);
   configReport.throwIfAny("config");
+
+  // Phase 6b — translations. After config, because the locales an app ships
+  // are app policy read from config.i18n; before everything that might want
+  // to say something to a user.
+  const i18nReport = new BootReport();
+  await i18n.load(
+    explored,
+    I18n.readSettings(ctx.config.i18n, i18nReport),
+    env.appEnv,
+    i18nReport,
+  );
+  i18nReport.throwIfAny("i18n");
 
   // Phase 7 — ACL merge
   const aclReport = new BootReport();
@@ -116,6 +141,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     mode,
     env,
     ctx,
+    i18n,
     connection,
     shutdown: () => shutdown(handle, lifecycles),
   };

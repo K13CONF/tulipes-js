@@ -5,6 +5,7 @@ import type { ProcessMode } from "./boot.js";
 import type { GlobalConfig } from "../config/index.js";
 import type { Acl } from "../acl/acl.js";
 import type { RouteInfo, RouteRegistry } from "../http/rai.js";
+import type { I18nextInstance, TFunction } from "../i18n/index.js";
 import type { ModelStore } from "../db/model-store.js";
 import type { QueueManager } from "../queues/queue-manager.js";
 import type { SocketManager } from "../sockets/socket-manager.js";
@@ -39,6 +40,17 @@ export interface Ctx {
   rai: (info: RouteInfo) => RequestHandler;
   /** Every declared endpoint, filled once routes are mounted. */
   routes: RouteRegistry;
+  /**
+   * A translator bound to one module's namespace, for code with no request
+   * to negotiate a locale from — queue processors, scripts, bootstrap:
+   *
+   *   const t = ctx.t("users", recipient.locale);
+   *
+   * Inside a request handler use `req.t`, which is bound already.
+   */
+  t: (namespace: string, locale?: string) => TFunction;
+  /** The i18next instance, for anything `ctx.t` does not cover. */
+  i18n: I18nextInstance;
 }
 
 /**
