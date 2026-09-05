@@ -1,7 +1,7 @@
 import type { Request, RequestHandler } from "express";
 
 import { HttpError } from "./error-handler.js";
-import type { Principal } from "./index.js";
+import type { Auth } from "./index.js";
 
 /**
  * RAI — Resource Access Identifier.
@@ -27,13 +27,32 @@ export interface RouteInfo {
   description?: string;
 }
 
-export const ANONYMOUS: Principal = { role: "guest", authenticated: false };
+/** The role a caller has before anyone identifies them. */
+export const GUEST_ROLE = "guest";
+
+export const ANONYMOUS: Auth = { isAuthenticated: false, user: null, session: null };
+
+/**
+ * The ACL's input. Core reads the role THROUGH the user, so an app that
+ * keeps roles elsewhere overrides the whole decision with
+ * `ctx.routes.setAccessChecker()` rather than faking a user.
+ */
+export function roleOf(req: Request): string {
+  // The framework's one assumption about an app's user model, kept to a
+  // single cast: the ACL needs a role and the app said it lives here.
+  const user = req.auth?.user as { role?: string } | null | undefined;
+  return user?.role ?? GUEST_ROLE;
+}
 
 declare global {
   namespace Express {
     interface Request {
-      /** Set by an auth module; absent means anonymous. */
-      principal?: Principal;
+      /**
+       * Who is calling: `{ isAuthenticated, user, session }`. Set by an
+       * auth module; `rai()` falls back to the anonymous value, so inside
+       * a declared route this is never undefined.
+       */
+      auth: Auth;
       /** The matched route's declaration, set before its handler runs. */
       rai?: RouteInfo;
     }
@@ -55,8 +74,9 @@ export interface RouteRecord extends RaiTag {
 }
 
 /**
- * Decides whether a principal may perform a RAI. Replaceable for policies
- * the ACL cannot express — ownership, tenancy, time windows.
+ * Decides whether the caller may perform a RAI. Replaceable for policies
+ * the ACL cannot express — ownership, tenancy, time windows — and for apps
+ * whose roles do not live on the user document.
  */
 export type AccessChecker = (req: Request, info: RouteInfo) => boolean;
 
@@ -114,16 +134,20 @@ export function createRai(
       req.rai = info;
       bind?.(req, module);
 
-      const who = req.principal ?? ANONYMOUS;
+      // An app with no auth module still gets a well-formed req.auth, so a
+      // handler never has to ask whether the field is there.
+      req.auth ??= ANONYMOUS;
+
+      const role = roleOf(req);
       const allowed = registry.checker
         ? registry.checker(req, info)
-        : can(who.role, info.id);
+        : can(role, info.id);
       if (allowed) return next();
 
       // 401 says "sign in and this may work"; 403 says it will not. A
       // client can act on the difference, so they are not merged.
-      throw who.authenticated
-        ? new HttpError(403, `role "${who.role}" may not ${info.id}`)
+      throw req.auth.isAuthenticated
+        ? new HttpError(403, `role "${role}" may not ${info.id}`)
         : new HttpError(401, "authentication required");
     };
 
