@@ -15,7 +15,13 @@ export default function usersQueues(ctx: Ctx, queues: QueueRegistry): void {
   queues.define("users.welcome");
 
   queues.process("users.welcome", async (job) => {
-    log.info({ email: job.data.email }, "sending welcome email");
+    // No request here to negotiate a locale from, so the one the caller
+    // was using travelled with the job. `ctx.t` binds this module's
+    // namespace explicitly — the part `req.t` normally does for free.
+    const t = ctx.t("users", job.data.locale);
+
+    log.info({ email: job.data.email, subject: t("welcome.subject", { email: job.data.email }) },
+      "sending welcome email");
     return { sent: true };
   });
 }

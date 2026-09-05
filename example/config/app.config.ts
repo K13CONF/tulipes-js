@@ -36,6 +36,22 @@ const appConfig = (() => ({
   },
 
   /**
+   * The languages this app speaks. Every module owns its own strings in
+   * `modules/<name>/i18n/<locale>.json` — the module is the namespace —
+   * and `req.t` inside an endpoint is already bound to the module that
+   * declared it. A request picks its locale with `?lang=fr` or an
+   * Accept-Language header, narrowed to this list.
+   *
+   * `defaultLocale` is also the fallback: a key missing from fr.json is
+   * served from en.json, and outside production the gap is recorded in
+   * `fr.missing.json` next to it.
+   */
+  i18n: {
+    defaultLocale: "en",
+    supportedLocales: ["en", "fr"],
+  },
+
+  /**
    * List-endpoint defaults, so every module paginates identically and no
    * caller can ask for ten thousand rows. → modules/users/routes
    */

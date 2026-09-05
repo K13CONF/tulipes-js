@@ -1,0 +1,13 @@
+{
+  "credentialsRequired": "Une adresse email et un mot de passe sont requis",
+  "invalidCredentials": "Email ou mot de passe invalide",
+  "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
+  "registrationClosed": "Les inscriptions sont {{mode}}",
+  "emailUnavailable": "Cette adresse email ne peut pas être enregistrée",
+  "refreshRequired": "Un jeton de rafraîchissement est requis",
+  "refreshInvalid": "Jeton de rafraîchissement invalide",
+  "refreshUsed": "Ce jeton de rafraîchissement a déjà été utilisé ou révoqué",
+  "accountGone": "Ce compte n'existe plus",
+  "loggedOut": "Déconnecté",
+  "passwordChanged": "Mot de passe modifié — toutes les autres sessions ont été fermées"
+}
