@@ -3,12 +3,15 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 
-import { principal } from "../helpers/principal.js";
+import { auth } from "../helpers/auth.js";
 import type { UserDoc } from "../helpers/documents.js";
 import { setPassword } from "../helpers/passwords.js";
 import {
-  consumeRefresh,
-  issuePair,
+  endSession,
+  listSessions,
+  originOf,
+  rotateSession,
+  startSession,
   revokeAccess,
   verify,
   type TokenClaims,
@@ -54,7 +57,7 @@ export class AuthController {
       const user = await User.create({ email: normalised, role: "user" });
       await setPassword(this.ctx, String(user._id), password!);
 
-      const tokens = await issuePair(this.ctx, String(user._id));
+      const tokens = await startSession(this.ctx, String(user._id), originOf(req));
       res.status(201).json({
         user: { id: String(user._id), email: normalised, role: "user" },
         ...tokens,
@@ -74,7 +77,7 @@ export class AuthController {
           if (!user) return next(new HttpError(401, req.t("invalidCredentials")));
 
           try {
-            const tokens = await issuePair(this.ctx, String(user._id));
+            const tokens = await startSession(this.ctx, String(user._id), originOf(req));
             res.json({
               user: { id: String(user._id), email: user.email, role: user.role },
               ...tokens,
@@ -96,60 +99,116 @@ export class AuthController {
       const claims = verify(this.ctx, refreshToken, "refresh");
       if (!claims) throw new HttpError(401, req.t("refreshInvalid"));
 
-      // Consuming the old jti here is what stops the same refresh token
-      // being exchanged twice.
-      if (!(await consumeRefresh(this.ctx, claims.jti))) {
-        throw new HttpError(401, req.t("refreshUsed"));
-      }
-
       const user = await this.ctx.models!.get<UserDoc>("User").findById(claims.sub).lean();
       if (!user) throw new HttpError(401, req.t("accountGone"));
 
-      res.json(await issuePair(this.ctx, claims.sub));
+      // Rotating in place is what stops the same refresh token being
+      // exchanged twice: the update matches only the jti still current on
+      // the session row, so a replay — or the loser of a race — finds
+      // nothing. The session itself survives, keeping its device and its
+      // history.
+      const tokens = await rotateSession(this.ctx, claims);
+      if (!tokens) throw new HttpError(401, req.t("refreshUsed"));
+
+      res.json(tokens);
     };
   }
 
   /** Ends this session immediately — both halves of it. */
   logout(): RequestHandler {
     return async (req: Request, res: Response) => {
-      const who = principal(req);
-      const { refreshToken } = (req.body ?? {}) as { refreshToken?: string };
+      const { user, session } = auth(req);
 
-      if (refreshToken) {
-        const claims = verify(this.ctx, refreshToken, "refresh");
-        if (claims) await consumeRefresh(this.ctx, claims.jti);
-      }
+      // Deleting the row kills the refresh half: no session, no rotation,
+      // and the next request carrying this access token resolves to guest.
+      if (session) await endSession(this.ctx, session.sid);
 
       // Blacklisting the access token is what makes logout take effect
       // now, rather than whenever the token would have expired.
       const access = this.#accessClaims(req);
       if (access) await revokeAccess(this.ctx, access);
 
-      res.json({ message: req.t("loggedOut"), loggedOut: true, user: who.id });
+      res.json({
+        message: req.t("loggedOut"),
+        loggedOut: true,
+        user: user ? String(user._id) : null,
+      });
     };
   }
 
-  /** The principal the request pipeline resolved. */
+  /** Whoever the request pipeline resolved, and the session behind it. */
   me(): RequestHandler {
     return (req: Request, res: Response) => {
-      const { id, email, role } = principal(req);
-      res.json({ id, email, role, locale: req.locale });
+      const { isAuthenticated, user, session } = req.auth;
+
+      res.json({
+        isAuthenticated,
+        locale: req.locale,
+        user: user && { id: String(user._id), email: user.email, role: user.role },
+        session: session && {
+          sid: session.sid,
+          ip: session.ip,
+          userAgent: session.userAgent,
+          startedAt: session.createdAt,
+          lastSeenAt: session.lastSeenAt,
+          expiresAt: session.expiresAt,
+          accessExpiresAt: session.accessExpiresAt,
+        },
+      });
+    };
+  }
+
+  /** Every device this account is signed in on. */
+  sessions(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const { user, session } = req.auth;
+      const rows = await listSessions(this.ctx, String(user!._id));
+
+      res.json({
+        count: rows.length,
+        sessions: rows.map((row) => ({
+          sid: row.sid,
+          current: row.sid === session?.sid,
+          ip: row.ip,
+          userAgent: row.userAgent,
+          startedAt: row.createdAt,
+          lastSeenAt: row.lastSeenAt,
+        })),
+      });
+    };
+  }
+
+  /** Sign one other device out, by the sid from `sessions()`. */
+  revokeSession(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const { user } = req.auth;
+      const { sid } = req.params;
+
+      // Scoped to the caller's own sessions: a sid is guessable enough
+      // that ending anyone else's must not be one request away.
+      const owned = await listSessions(this.ctx, String(user!._id));
+      if (!owned.some((row) => row.sid === sid)) throw new HttpError(404, req.t("noSuchSession"));
+
+      await endSession(this.ctx, String(sid));
+      res.json({ message: req.t("sessionEnded"), sid });
     };
   }
 
   /** Changes own password, ending every other session. */
   changePassword(): RequestHandler {
     return async (req: Request, res: Response) => {
-      const who = principal(req);
+      const userId = String(req.auth.user!._id);
       const { password } = (req.body ?? {}) as { password?: string };
       this.#assertPassword(req, password);
 
-      await setPassword(this.ctx, who.id!, password!);
+      // setPassword bumps the token epoch AND drops every session row,
+      // so there is nothing left to sign out here.
+      await setPassword(this.ctx, userId, password!);
 
       // Every earlier token is dead now, including the one that made this
-      // request — a fresh pair keeps this client signed in while the other
-      // devices are signed out.
-      const tokens = await issuePair(this.ctx, who.id!);
+      // request — a fresh session keeps this client signed in while the
+      // other devices are signed out.
+      const tokens = await startSession(this.ctx, userId, originOf(req));
       res.json({
         message: req.t("passwordChanged"),
         changed: true,

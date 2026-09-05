@@ -17,7 +17,15 @@ export default function authAcl(acl: AclBuilder): void {
   // not stand in the way of renewing it.
   acl.allow("guest", "auth:login", "auth:register", "auth:refresh");
 
-  // Signed in: end your session, read yourself, change your own password.
-  acl.allow("user", "auth:logout", "auth:me", "auth:password");
+  // Signed in: end your session, read yourself, change your own password,
+  // and manage the devices you are signed in on.
+  acl.allow(
+    "user",
+    "auth:logout",
+    "auth:me",
+    "auth:password",
+    "auth:sessions",
+    "auth:session-end",
+  );
   acl.allow("admin", "*");
 }

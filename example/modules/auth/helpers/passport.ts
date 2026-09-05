@@ -2,18 +2,19 @@ import passport from "passport";
 import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
 import { Strategy as LocalStrategy } from "passport-local";
 import type { Ctx } from "@tulipes/core/boot";
+import type { Auth } from "@tulipes/core/http";
 
 import { verifyPassword } from "./passwords.js";
-import { isRevoked, type TokenClaims } from "./tokens.js";
-import { GUEST } from "./principal.js";
-import type { Principal } from "@tulipes/core/http";
-import type { CredentialDoc, UserDoc } from "./documents.js";
+import { isRevoked, loadSession, touchSession, type TokenClaims } from "./tokens.js";
+import { GUEST } from "./auth.js";
+import type { CredentialDoc, SessionDoc, UserDoc } from "./documents.js";
 
 /**
- * Two strategies, both stateless (`session: false`):
+ * Two strategies, both stateless as far as passport is concerned
+ * (`session: false` — this module keeps its own session rows):
  *
  *   local  runs once, at login, to check an email and password
- *   jwt    runs on every request, to turn a Bearer token into a principal
+ *   jwt    runs on every request, to turn a Bearer token into a req.auth
  *
  * The jwt strategy reloads the user on each request rather than trusting
  * the token's claims. It costs a query, and it is what makes a demotion or
@@ -27,8 +28,7 @@ export function configurePassport(ctx: Ctx): void {
         try {
           const user = await ctx.models!
             .get<UserDoc>("User")
-            .findOne({ email: String(email).toLowerCase() })
-            .lean();
+            .findOne({ email: String(email).toLowerCase() });
           if (!user) return done(null, false);
 
           // The hash is select:false, so it has to be asked for by name.
@@ -63,8 +63,14 @@ export function configurePassport(ctx: Ctx): void {
           // token keeps working until it expires.
           if (await isRevoked(ctx, claims.jti)) return done(null, false);
 
-          const record = await ctx.models!.get<UserDoc>("User").findById(claims.sub).lean();
-          if (!record) return done(null, false);
+          // The session row is the server-side half: deleting it signs the
+          // device out even though the access token is still signed and
+          // unexpired. A token whose session is gone is not a caller.
+          const session = await loadSession(ctx, claims.sid);
+          if (!session) return done(null, false);
+
+          const user = await ctx.models!.get<UserDoc>("User").findById(claims.sub);
+          if (!user) return done(null, false);
 
           // A password change moves this epoch forward, which invalidates
           // every token issued before it — on every device at once.
@@ -72,19 +78,14 @@ export function configurePassport(ctx: Ctx): void {
           // Compared at second precision, because `iat` only has seconds:
           // a token minted milliseconds *after* the epoch would otherwise
           // look older than it and reject itself the moment it was issued.
-          if (record.tokensValidFrom) {
-            const epochSeconds = Math.floor(record.tokensValidFrom.getTime() / 1000);
+          if (user.tokensValidFrom) {
+            const epochSeconds = Math.floor(user.tokensValidFrom.getTime() / 1000);
             if (claims.iat < epochSeconds) return done(null, false);
           }
 
-          const resolved: Principal = {
-            id: String(record._id),
-            email: record.email,
-            role: record.role,
-            jti: claims.jti,
-            authenticated: true,
-          };
-          return done(null, resolved as Express.User);
+          await touchSession(ctx, session, touchInterval(ctx));
+
+          return done(null, resolve(user, session, claims) as unknown as Express.User);
         } catch (error) {
           return done(error as Error);
         }
@@ -94,13 +95,35 @@ export function configurePassport(ctx: Ctx): void {
 }
 
 /**
- * Runs on every request. Populates `req.principal`, and never rejects:
- * an unauthenticated caller becomes GUEST, and the ACL decides from there.
+ * The session row plus the token in hand. The three access-token fields
+ * are attached to the document rather than stored on it — they belong to
+ * one request, while the row outlives every token it ever issued.
+ */
+function resolve(user: UserDoc, session: SessionDoc, claims: TokenClaims): Auth {
+  return {
+    isAuthenticated: true,
+    user,
+    session: Object.assign(session, {
+      accessJti: claims.jti,
+      accessIssuedAt: new Date(claims.iat * 1000),
+      accessExpiresAt: new Date(claims.exp * 1000),
+    }),
+  };
+}
+
+/** How stale `lastSeenAt` may get before a request pays for a write. */
+function touchInterval(ctx: Ctx): number {
+  return Number(ctx.config.auth?.sessionTouchSeconds ?? 60);
+}
+
+/**
+ * Runs on every request. Populates `req.auth`, and never rejects: an
+ * unauthenticated caller becomes the guest, and the ACL decides from there.
  */
 export function authenticate(): import("express").RequestHandler {
   return (req, res, next) => {
-    passport.authenticate("jwt", { session: false }, (_err: unknown, user: Principal | false) => {
-      req.principal = user || GUEST;
+    passport.authenticate("jwt", { session: false }, (_err: unknown, resolved: Auth | false) => {
+      req.auth = resolved || GUEST;
       next();
     })(req, res, next);
   };

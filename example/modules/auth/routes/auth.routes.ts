@@ -9,8 +9,9 @@ import { authenticate, configurePassport } from "../helpers/passport.js";
  * Auth is a sys-tier module, so this runs before every feature router.
  * It does two things:
  *
- *   1. mounts the global principal resolver on ctx.app — every request
- *      downstream carries a `req.principal`, `guest` when unauthenticated
+ *   1. mounts the global caller resolver on ctx.app — every request
+ *      downstream carries a `req.auth` of `{ isAuthenticated, user,
+ *      session }`, the guest value when unauthenticated
  *   2. returns its own endpoints as a Router, like any other module
  *
  * Every route declares a RAI. The id is also the ACL permission, so login
@@ -72,10 +73,30 @@ export default function authRoutes(ctx: Ctx): Router {
     `${base}/me`,
     rai({
       id: "auth:me",
-      name: "Current principal",
-      description: "Who the request pipeline resolved",
+      name: "Who am I",
+      description: "The caller and the session behind this request",
     }),
     auth.me(),
+  );
+
+  router.get(
+    `${base}/sessions`,
+    rai({
+      id: "auth:sessions",
+      name: "List sessions",
+      description: "Every device this account is signed in on",
+    }),
+    auth.sessions(),
+  );
+
+  router.delete(
+    `${base}/sessions/:sid`,
+    rai({
+      id: "auth:session-end",
+      name: "End a session",
+      description: "Sign one other device out",
+    }),
+    auth.revokeSession(),
   );
 
   router.post(
