@@ -1,0 +1,13 @@
+{
+  "credentialsRequired": "An email address and a password are required",
+  "invalidCredentials": "Invalid email or password",
+  "passwordTooShort": "Password must be at least 8 characters",
+  "registrationClosed": "Registration is {{mode}}",
+  "emailUnavailable": "That email cannot be registered",
+  "refreshRequired": "A refresh token is required",
+  "refreshInvalid": "Invalid refresh token",
+  "refreshUsed": "That refresh token has already been used or revoked",
+  "accountGone": "This account no longer exists",
+  "loggedOut": "Signed out",
+  "passwordChanged": "Password changed — every other session was signed out"
+}

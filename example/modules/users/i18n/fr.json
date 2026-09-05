@@ -1,0 +1,13 @@
+{
+  "created": "Utilisateur {{email}} créé",
+  "deleted": "Utilisateur {{email}} supprimé",
+  "notFound": "Utilisateur introuvable",
+  "emailRequired": "Une adresse email est requise",
+  "list": {
+    "count_one": "{{count}} utilisateur",
+    "count_other": "{{count}} utilisateurs"
+  },
+  "welcome": {
+    "subject": "Bienvenue, {{email}}"
+  }
+}

@@ -19,7 +19,6 @@ example/
 │   └── users/
 ├── scripts/                one-off tasks — boot in script mode, no server
 ├── nginx/                  per-env site templates for scripts/deploy-nginx.ts
-├── locales/                i18n dictionaries (planned)
 ├── CLAUDE.md               rules for AI agents working in this project
 ├── .claude/skills/         task-scoped skills (module, endpoint, model, queue…)
 ├── types/
@@ -115,6 +114,7 @@ modules/users/
 ├── bootstrap/*.bootstrap.ts  post-DB, pre-server tasks (indexes, seeds)
 ├── queues/*.queues.ts      default-export (ctx, queues) => define + process
 ├── sockets/*.sockets.ts    default-export (ctx, sockets) => claim namespaces
+├── i18n/<locale>.json      this module's strings — the module is the namespace
 └── controllers/            convention only — routes import them directly
 ```
 
@@ -128,11 +128,42 @@ package.json.
    validated variable store (crashes with ALL problems at once)
 2. Module graph: sort + cycle detection
 3. `config/app.config.ts` seed → every `module.config.ts` factory
-4. ACL merge (roles from the sys auth module, grants everywhere)
-5. Database: connect → models → bootstrap tasks
-6. Queues register (both modes)
-7. **backend**: pipeline above, sockets, listen · **worker**: start consuming
-8. `onReady` hooks — shutdown runs everything in reverse
+4. Translations: every `modules/*/i18n/*.json`, one namespace per module
+5. ACL merge (roles from the sys auth module, grants everywhere)
+6. Database: connect → models → bootstrap tasks
+7. Queues register (both modes)
+8. **backend**: pipeline above, sockets, listen · **worker**: start consuming
+9. `onReady` hooks — shutdown runs everything in reverse
+
+## Translations
+
+Each module owns its strings, and the module IS the namespace. `req.t` is
+bound to the module that declared the route, because `rai()` binds it:
+
+```ts
+// modules/users/controllers/users.controllers.ts
+res.json({ message: req.t("created", { email }) });  // modules/users/i18n/<locale>.json
+```
+
+The locale is `?lang=fr`, else `Accept-Language`, else
+`config.i18n.defaultLocale` — narrowed to `supportedLocales`. Try it:
+
+```sh
+curl -X POST 'localhost:4000/api/v1/auth/login?lang=fr' \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@example.com","password":"wrong"}'
+# {"error":"Email ou mot de passe invalide"}
+
+curl 'localhost:4000/users?lang=fr' -H "authorization: Bearer <token>"
+# {"summary":"3 utilisateurs", …}   ← plural form chosen by i18next
+```
+
+Off-request code names both — which is why the welcome job carries the
+locale that queued it:
+
+```ts
+const t = ctx.t("users", job.data.locale);   // modules/users/queues/users.queues.ts
+```
 
 ## Daily commands
 

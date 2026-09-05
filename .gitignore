@@ -3,6 +3,10 @@ dist/
 logs/
 *.log
 
+# collected by i18next's saveMissing outside production — a working note
+# for whoever writes the translations, never a source file
+modules/*/i18n/*.missing.json
+
 # local env overrides — .envs/.env.<mode> files ARE committed in the example,
 # real apps keep secrets out of git via .env.local
 .env.local
