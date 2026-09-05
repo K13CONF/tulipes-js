@@ -32,7 +32,7 @@ touching anything else.
 {
   "name": "@app/billing",
   "tulipes": { "tier": "app", "priority": 100, "dependsOn": ["users"] },
-  "dependencies": { "@tulipes/core": "^0.3.0", "express": "^5" }
+  "dependencies": { "@tulipes/core": "^0.4.0", "express": "^5" }
 }
 ```
 
