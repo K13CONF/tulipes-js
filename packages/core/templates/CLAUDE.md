@@ -37,9 +37,13 @@ applies before you write code.
    inside a route reads that module's `i18n/<locale>.json` — the module is
    the namespace and `rai()` binds it. Never concatenate a translated
    string with a variable. → skill `tulipes-i18n`
-9. **Secrets never go on the User model.** Passwords and keys belong in
-   the auth module's `Credential` model, which is `select: false`.
-10. **Cross-module imports use the package name** (`@app/users`,
+9. **`req.auth` is who is calling** — `{ isAuthenticated, user, session }`,
+   resolved before any feature route and never undefined inside one. Never
+   re-parse the Authorization header or trust a claim from a token.
+   → skill `tulipes-permissions`
+10. **Secrets never go on the User model.** Passwords and keys belong in
+    the auth module's `Credential` model, which is `select: false`.
+11. **Cross-module imports use the package name** (`@app/users`,
     `@app/core`), never a relative path that climbs out of the module. The
     workspace boundary is what keeps modules independent, and a package
     name makes the dependency visible in package.json — declare it there

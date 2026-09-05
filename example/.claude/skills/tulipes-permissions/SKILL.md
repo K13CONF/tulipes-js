@@ -26,19 +26,21 @@ export default function billingAcl(acl: AclBuilder): void {
 }
 ```
 
-Guard a route with the permission it needs:
+Guarding is the route's RAI — its `id` **is** the permission, so there is
+no second call to forget:
 
 ```ts
-import { requirePermission } from "@app/auth";
-
-const may = (permission: string) => requirePermission(ctx, permission);
-router.get(`${base}/invoices`, may("invoices:read"), handler);
+router.get(
+  `${base}/invoices`,
+  rai({ id: "invoices:read", name: "List invoices" }),
+  billing.list(),
+);
 ```
 
 ## Public routes are grants, not exceptions
 
 A request with no valid token is not rejected — it becomes the **`guest`**
-principal. So "public" means guest holds the permission:
+caller. So "public" means guest holds the permission:
 
 ```ts
 acl.allow("guest", "docs:read");   // now anyone may read the docs
@@ -65,12 +67,29 @@ every route, even ones you expect everybody to reach.
   `admin` only.
 - Unknown roles always deny at runtime.
 
+## Who is calling
+
+`req.auth` is resolved before any feature route runs, and is never
+undefined inside a declared route:
+
+```ts
+const { isAuthenticated, user, session } = req.auth;
+user?.email          // the hydrated user document, or null for a guest
+session?.sid         // this device's session row, or null
+session?.accessJti   // the token in hand, for revoking exactly it
+```
+
+Never re-parse the Authorization header or trust a claim out of a token —
+the pipeline already resolved both, and reloads the user on every request
+so a demotion takes effect immediately.
+
+A route that only cares that somebody is signed in still declares a RAI
+and grants it to `user`; there is no separate "just needs auth" guard.
+
 ## Denials
 
-`requirePermission` answers 401 when the caller is a guest (signing in
-would help) and 403 when they are authenticated but lack the grant (it
-would not). `requireAuth` is the guard for routes that only care that
-somebody is signed in, like `/me`.
+The RAI answers 401 when the caller is a guest (signing in would help) and
+403 when they are authenticated but lack the grant (it would not).
 
 ## Gotchas
 
@@ -79,5 +98,8 @@ somebody is signed in, like `/me`.
   and therefore loads later; if you make one sys-tier, give it a higher
   priority than auth or it will crash with "unknown role".
 - `acl.can()` answers *what a role may do*, not *who the caller is*.
-  Resolving the caller is the auth module's job.
+  Resolving the caller is the auth module's job — it sets `req.auth`.
+- The role core checks is `req.auth.user.role`. An app whose roles live
+  elsewhere replaces the decision with `ctx.routes.setAccessChecker()`
+  rather than inventing a fake user.
 - Roles are lowercase kebab-case; resources are `name:action`.

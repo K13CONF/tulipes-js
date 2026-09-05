@@ -228,6 +228,29 @@ on each non-production boot and never written in production. Invalid JSON, or
 an `i18n/` folder with no default-locale file, aborts the boot: i18next would
 otherwise serve raw keys with nothing in the log to explain it.
 
+## Who is calling
+
+Core reads one field, `req.auth`, and an auth module's only job is to put
+one there — swap JWT for sessions or mTLS and nothing else changes:
+
+```ts
+interface Auth {
+  isAuthenticated: boolean;
+  user: AuthUser | null;      // augmented by the app's auth module
+  session: AuthSession | null;
+}
+```
+
+`rai()` guarantees it: inside a declared route `req.auth` is never
+undefined, falling back to the guest value, and the ACL check reads the
+role through `req.auth.user`. An app whose roles do not live on the user —
+a claims service, a join table — replaces the decision itself with
+`ctx.routes.setAccessChecker()` rather than faking a user.
+
+`AuthUser` and `AuthSession` are empty interfaces in core, filled in by the
+app through declaration merging, so `req.auth.user.email` is typed at every
+call site without core knowing anything about your models.
+
 ## The boot pipeline
 
 ```
@@ -363,8 +386,9 @@ edit:
   that is fail-closed by default, pino-http request logging, and a body-size
   cap. Core mounts no middleware; this module *is* the head of the pipeline.
 - **`modules/auth`** (sys) — JWT with refresh rotation and blacklisting,
-  passport, and a `Credential` model so no secret ever touches the user
-  document.
+  passport, a `Credential` model so no secret ever touches the user
+  document, and `Session` rows that survive rotation, so an account can
+  list and end its own devices. It resolves `req.auth` for every request.
 - **`modules/hello`** — a worked example of every contract.
 - **`scripts/`** — one-off tasks that boot in `script` mode, plus an nginx
   deploy script that renders a per-environment template, links `sites-enabled`,
