@@ -23,8 +23,8 @@ touching anything else.
 
 1. Scaffold: `yarn tulipes new module billing`. It creates every
    contract — package.json (scope detected from siblings), meta.variables,
-   config with lifecycle hooks, ACL, helper, controller, routes, model,
-   bootstrap, queue and socket. Delete the ones this feature does not
+   config with lifecycle hooks, ACL, helper, a controller class, routes
+   declaring a RAI, model, bootstrap, queue and socket. Delete the ones this feature does not
    need; an absent file is always valid.
 2. Set ordering in `modules/billing/package.json`:
 

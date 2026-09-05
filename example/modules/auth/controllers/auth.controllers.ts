@@ -1,5 +1,5 @@
 import passport from "passport";
-import type { Request, RequestHandler, Response } from "express";
+import type { NextFunction, Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 
@@ -19,130 +19,150 @@ interface Credentials {
   password?: string;
 }
 
-/** POST /auth/register — creates the account and its credential. */
-export function register(ctx: Ctx): RequestHandler {
-  return async (req: Request, res: Response) => {
-    const { email, password } = (req.body ?? {}) as Credentials;
-    if (!email || !password) {
-      throw new HttpError(422, "email and password are required");
-    }
-    if (password.length < 8) {
-      throw new HttpError(422, "password must be at least 8 characters");
-    }
-    if (ctx.config.users?.signupMode !== "open") {
-      throw new HttpError(403, `registration is ${ctx.config.users?.signupMode ?? "closed"}`);
-    }
+/**
+ * One class per controller, holding the context.
+ *
+ * Each method *returns* a handler rather than being one, so the routes
+ * file reads as a table of contents — `auth.login()` — and the class can
+ * keep private helpers beside the handlers that use them without
+ * threading ctx through every signature.
+ */
+export class AuthController {
+  constructor(private readonly ctx: Ctx) {}
 
-    const User = ctx.models!.get<UserDoc>("User");
-    const normalised = email.toLowerCase();
-    if (await User.countDocuments({ email: normalised }).limit(1)) {
-      // Deliberately the same shape as any other validation failure: a
-      // different message here would turn registration into an oracle for
-      // which addresses have accounts.
-      throw new HttpError(422, "that email cannot be registered");
-    }
+  /** Creates the account and its credential. */
+  register(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const { email, password } = (req.body ?? {}) as Credentials;
+      if (!email) throw new HttpError(422, "email and password are required");
+      this.#assertPassword(password);
 
-    const user = await User.create({ email: normalised, role: "user" });
-    await setPassword(ctx, String(user._id), password);
+      if (this.ctx.config.users?.signupMode !== "open") {
+        const mode = this.ctx.config.users?.signupMode ?? "closed";
+        throw new HttpError(403, `registration is ${mode}`);
+      }
 
-    const tokens = await issuePair(ctx, String(user._id));
-    res.status(201).json({ user: { id: String(user._id), email: normalised, role: "user" }, ...tokens });
-  };
-}
+      const User = this.ctx.models!.get<UserDoc>("User");
+      const normalised = email.toLowerCase();
+      if (await User.countDocuments({ email: normalised }).limit(1)) {
+        // Deliberately the same shape as any other validation failure: a
+        // distinct message would turn registration into an oracle for
+        // which addresses already have accounts.
+        throw new HttpError(422, "that email cannot be registered");
+      }
 
-/** POST /auth/login — passport-local checks the password, then we mint. */
-export function login(ctx: Ctx): RequestHandler {
-  return (req, res, next) => {
-    passport.authenticate(
-      "local",
-      { session: false },
-      async (error: unknown, user: { _id: unknown; email: string; role: string } | false) => {
-        if (error) return next(error);
-        // One message for "no such user" and "wrong password" alike.
-        if (!user) return next(new HttpError(401, "invalid email or password"));
+      const user = await User.create({ email: normalised, role: "user" });
+      await setPassword(this.ctx, String(user._id), password!);
 
-        try {
-          const tokens = await issuePair(ctx, String(user._id));
-          res.json({
-            user: { id: String(user._id), email: user.email, role: user.role },
-            ...tokens,
-          });
-        } catch (issueError) {
-          next(issueError);
-        }
-      },
-    )(req, res, next);
-  };
-}
+      const tokens = await issuePair(this.ctx, String(user._id));
+      res.status(201).json({
+        user: { id: String(user._id), email: normalised, role: "user" },
+        ...tokens,
+      });
+    };
+  }
 
-/** POST /auth/refresh — rotates the pair. */
-export function refresh(ctx: Ctx): RequestHandler {
-  return async (req, res) => {
-    const { refreshToken } = (req.body ?? {}) as { refreshToken?: string };
-    if (!refreshToken) throw new HttpError(422, "refreshToken is required");
+  /** passport-local checks the password; this mints the pair. */
+  login(): RequestHandler {
+    return (req: Request, res: Response, next: NextFunction) => {
+      passport.authenticate(
+        "local",
+        { session: false },
+        async (error: unknown, user: UserDoc | false) => {
+          if (error) return next(error);
+          // One message for "no such user" and "wrong password" alike.
+          if (!user) return next(new HttpError(401, "invalid email or password"));
 
-    const claims = verify(ctx, refreshToken, "refresh");
-    if (!claims) throw new HttpError(401, "invalid refresh token");
+          try {
+            const tokens = await issuePair(this.ctx, String(user._id));
+            res.json({
+              user: { id: String(user._id), email: user.email, role: user.role },
+              ...tokens,
+            });
+          } catch (issueError) {
+            next(issueError);
+          }
+        },
+      )(req, res, next);
+    };
+  }
 
-    // Rotation: the old jti is consumed here, so the same refresh token
-    // cannot be exchanged twice.
-    if (!(await consumeRefresh(ctx, claims.jti))) {
-      throw new HttpError(401, "refresh token already used or revoked");
-    }
+  /** Rotates the pair, consuming the refresh token presented. */
+  refresh(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const { refreshToken } = (req.body ?? {}) as { refreshToken?: string };
+      if (!refreshToken) throw new HttpError(422, "refreshToken is required");
 
-    const user = await ctx.models!.get<UserDoc>("User").findById(claims.sub).lean();
-    if (!user) throw new HttpError(401, "account no longer exists");
+      const claims = verify(this.ctx, refreshToken, "refresh");
+      if (!claims) throw new HttpError(401, "invalid refresh token");
 
-    res.json(await issuePair(ctx, claims.sub));
-  };
-}
+      // Consuming the old jti here is what stops the same refresh token
+      // being exchanged twice.
+      if (!(await consumeRefresh(this.ctx, claims.jti))) {
+        throw new HttpError(401, "refresh token already used or revoked");
+      }
 
-/** POST /auth/logout — ends this session immediately. */
-export function logout(ctx: Ctx): RequestHandler {
-  return async (req, res) => {
-    const who = principal(req);
-    const { refreshToken } = (req.body ?? {}) as { refreshToken?: string };
+      const user = await this.ctx.models!.get<UserDoc>("User").findById(claims.sub).lean();
+      if (!user) throw new HttpError(401, "account no longer exists");
 
-    // Drop the refresh token so it cannot be rotated…
-    if (refreshToken) {
-      const claims = verify(ctx, refreshToken, "refresh");
-      if (claims) await consumeRefresh(ctx, claims.jti);
-    }
+      res.json(await issuePair(this.ctx, claims.sub));
+    };
+  }
 
-    // …and blacklist the access token, so it stops working now rather than
-    // when it expires.
-    const header = req.header("authorization") ?? "";
-    const bearer = header.startsWith("Bearer ") ? header.slice(7) : undefined;
-    const access = bearer ? (verify(ctx, bearer, "access") as TokenClaims | undefined) : undefined;
-    if (access) await revokeAccess(ctx, access);
+  /** Ends this session immediately — both halves of it. */
+  logout(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const who = principal(req);
+      const { refreshToken } = (req.body ?? {}) as { refreshToken?: string };
 
-    res.json({ loggedOut: true, user: who.id });
-  };
-}
+      if (refreshToken) {
+        const claims = verify(this.ctx, refreshToken, "refresh");
+        if (claims) await consumeRefresh(this.ctx, claims.jti);
+      }
 
-/** GET /auth/me — the principal the request pipeline resolved. */
-export function me(): RequestHandler {
-  return (req, res) => {
-    const { id, email, role } = principal(req);
-    res.json({ id, email, role });
-  };
-}
+      // Blacklisting the access token is what makes logout take effect
+      // now, rather than whenever the token would have expired.
+      const access = this.#accessClaims(req);
+      if (access) await revokeAccess(this.ctx, access);
 
-/** POST /auth/password — change own password, ending every other session. */
-export function changePassword(ctx: Ctx): RequestHandler {
-  return async (req, res) => {
-    const who = principal(req);
-    const { password } = (req.body ?? {}) as { password?: string };
+      res.json({ loggedOut: true, user: who.id });
+    };
+  }
+
+  /** The principal the request pipeline resolved. */
+  me(): RequestHandler {
+    return (req: Request, res: Response) => {
+      const { id, email, role } = principal(req);
+      res.json({ id, email, role });
+    };
+  }
+
+  /** Changes own password, ending every other session. */
+  changePassword(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const who = principal(req);
+      const { password } = (req.body ?? {}) as { password?: string };
+      this.#assertPassword(password);
+
+      await setPassword(this.ctx, who.id!, password!);
+
+      // Every earlier token is dead now, including the one that made this
+      // request — a fresh pair keeps this client signed in while the other
+      // devices are signed out.
+      const tokens = await issuePair(this.ctx, who.id!);
+      res.json({ changed: true, sessionsRevoked: true, ...tokens });
+    };
+  }
+
+  #assertPassword(password: string | undefined): asserts password is string {
     if (!password || password.length < 8) {
       throw new HttpError(422, "password must be at least 8 characters");
     }
+  }
 
-    await setPassword(ctx, who.id!, password);
-
-    // Every previous token is now dead, including the one that made this
-    // request. Handing back a fresh pair keeps the client that just
-    // changed its password signed in, while every other device is out.
-    const tokens = await issuePair(ctx, who.id!);
-    res.json({ changed: true, sessionsRevoked: true, ...tokens });
-  };
+  #accessClaims(req: Request): TokenClaims | undefined {
+    const header = req.header("authorization") ?? "";
+    if (!header.startsWith("Bearer ")) return undefined;
+    return verify(this.ctx, header.slice(7), "access");
+  }
 }
