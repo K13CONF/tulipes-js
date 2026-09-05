@@ -117,6 +117,7 @@ modules/billing/
 ├── routes/*.routes.ts        (ctx) => Router
 ├── controllers/              the work; routes import it directly
 ├── helpers/                  pure logic, no framework
+├── i18n/<locale>.json        this module's strings — the module is the namespace
 ├── models/*.model.ts         { name, schema } — a declaration, not a registration
 ├── bootstrap/*.bootstrap.ts  post-database, pre-traffic: indexes, seeds
 ├── queues/*.queues.ts        (ctx, queues) => define + process
@@ -185,6 +186,48 @@ startup banner.
 The mode comes from `APP_ENV`, deliberately **not** `NODE_ENV` — bundlers and
 libraries overload that one as an optimisation flag.
 
+## Translations
+
+A module is an i18n namespace. `modules/users/i18n/en.json` holds everything
+the users module can say, and `req.t` inside a users endpoint is already bound
+to it — because `rai()` recorded which module declared that route.
+
+```ts
+// modules/users/controllers/users.controllers.ts
+res.json({ message: req.t("created", { email }) });   // modules/users/i18n/<locale>.json
+throw new HttpError(404, req.t("notFound"));
+```
+
+```jsonc
+// modules/users/i18n/en.json
+{
+  "created": "User {{email}} created",
+  "notFound": "No such user",
+  "list": { "count_one": "{{count}} user", "count_other": "{{count}} users" }
+}
+```
+
+The locale is negotiated per request: `?lang=fr` first, then
+`Accept-Language` with its q-values, then `config.i18n.defaultLocale` —
+each candidate narrowed to `supportedLocales`, so an unsupported language
+falls through rather than serving raw keys. `fr-CA` is served by `fr`
+unless the app ships `fr-CA` itself.
+
+Code with no request names both explicitly, which is how a queue processor
+translates against the recipient's own locale rather than the enqueuer's:
+
+```ts
+const t = ctx.t("users", recipient.locale);
+await sendMail(t("welcome.subject", { name }));
+```
+
+Only the default locale has to be complete. A key another locale lacks
+falls back to it, and every gap is written to `modules/<name>/i18n/<locale>.missing.json`
+with the default text as the value — a work list for a translator, rewritten
+on each non-production boot and never written in production. Invalid JSON, or
+an `i18n/` folder with no default-locale file, aborts the boot: i18next would
+otherwise serve raw keys with nothing in the log to explain it.
+
 ## The boot pipeline
 
 ```
@@ -192,14 +235,15 @@ libraries overload that one as an optimisation flag.
  2  Module graph     "tulipes" keys → tier / priority / topological sort
  3  Exploration      resolve conventional paths in load order, import nothing
  4  Global config    config/app.config.ts seed → each module.config.ts factory
- 5  ACL              module.acl.ts in load order
- 6  Database         connect → model store → bootstrap tasks
- 7  Queues           every *.queues.ts registers, in all modes
- 8  ── fork ──
+ 5  Translations     modules/*/i18n/*.json, one namespace per module
+ 6  ACL              module.acl.ts in load order
+ 7  Database         connect → model store → bootstrap tasks
+ 8  Queues           every *.queues.ts registers, in all modes
+ 9  ── fork ──
     backend          module routers → 404 → error handler → listen
     worker           one BullMQ worker per registered processor
     script           start nothing; the caller owns the process
- 9  onReady          hooks in load order → startup banner
+10  onReady          hooks in load order → startup banner
     shutdown         SIGTERM → onShutdown in REVERSE order → sockets →
                      http → queues → redis → mongo
 ```
@@ -216,9 +260,11 @@ interface Ctx {
   routes: RouteRegistry;    // every declared endpoint
   Environment: Environment; // typed variable store
   config: GlobalConfig;     // namespaced by module: config.billing
-  acl?: Acl;                // after phase 5
-  models?: ModelStore;      // after phase 6
-  queues?: QueueManager;    // after phase 7
+  t: (ns: string, locale?: string) => TFunction;  // off-request translator
+  i18n: I18nextInstance;    // the instance underneath
+  acl?: Acl;                // after phase 6
+  models?: ModelStore;      // after phase 7
+  queues?: QueueManager;    // after phase 8
   sockets?: SocketManager;  // backend only
   app?: Express;            // backend only
 }
@@ -316,6 +362,9 @@ edit:
 - **`modules/security`** (sys, priority 10) — helmet tuned for an API, CORS
   that is fail-closed by default, pino-http request logging, and a body-size
   cap. Core mounts no middleware; this module *is* the head of the pipeline.
+- **`modules/auth`** (sys) — JWT with refresh rotation and blacklisting,
+  passport, and a `Credential` model so no secret ever touches the user
+  document.
 - **`modules/hello`** — a worked example of every contract.
 - **`scripts/`** — one-off tasks that boot in `script` mode, plus an nginx
   deploy script that renders a per-environment template, links `sites-enabled`,

@@ -39,7 +39,8 @@ touching anything else.
 3. `yarn install` — the module is a workspace, so the package manager must
    link it before imports resolve.
 4. Add only what the feature needs (every file is optional): `routes/`,
-   `models/`, `queues/`, `sockets/`, `bootstrap/`, `module.acl.ts`.
+   `models/`, `queues/`, `sockets/`, `bootstrap/`, `module.acl.ts`,
+   `i18n/` — the module is its own i18n namespace. → skill `tulipes-i18n`
 5. `yarn sync && yarn dev` — the banner must list the module.
 
 ## The manifest key
