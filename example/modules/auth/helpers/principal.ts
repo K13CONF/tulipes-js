@@ -1,34 +1,27 @@
 import type { Request } from "express";
+import { ANONYMOUS, type Principal } from "@tulipes/core/http";
 
 /**
- * Who is making this request.
+ * Core owns the Principal shape and reads `req.principal`; this module's
+ * only job is putting one there. That is the whole contract between an
+ * auth implementation and the framework — swap JWT for sessions or mTLS
+ * and nothing else changes.
  *
- * There is always one — a request with no valid token is the `guest`
- * principal rather than an absent user. That is what lets a public
- * endpoint be an ordinary ACL grant (`allow("guest", "auth:login")`)
- * instead of a second, parallel allowlist mechanism.
+ * The jti is this module's addition, not core's: it identifies the access
+ * token so logout can revoke exactly this session. Added by augmentation,
+ * the same way plugins extend RouteInfo.
  */
-export interface Principal {
-  id?: string;
-  email?: string;
-  role: string;
-  /** jti of the access token, so logout can revoke this exact session. */
-  jti?: string;
-  authenticated: boolean;
-}
-
-export const GUEST: Principal = { role: "guest", authenticated: false };
-
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace Express {
-    interface Request {
-      principal: Principal;
-    }
+declare module "@tulipes/core/http" {
+  interface Principal {
+    /** jti of the access token behind this request. */
+    jti?: string;
   }
 }
 
-/** Never undefined: middleware assigns GUEST before any route runs. */
+export type { Principal };
+export { ANONYMOUS as GUEST };
+
+/** Never undefined: the middleware assigns the anonymous principal. */
 export function principal(req: Request): Principal {
-  return req.principal ?? GUEST;
+  return req.principal ?? ANONYMOUS;
 }

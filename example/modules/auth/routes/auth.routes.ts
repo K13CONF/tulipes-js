@@ -11,7 +11,6 @@ import {
   register,
 } from "../controllers/auth.controllers.js";
 import { authenticate, configurePassport } from "../helpers/passport.js";
-import { requirePermission } from "../helpers/guards.js";
 
 /**
  * Auth is a sys-tier module, so this runs before every feature router.
@@ -26,6 +25,7 @@ import { requirePermission } from "../helpers/guards.js";
  * module.acl.ts — one mechanism, visible in one place.
  */
 export default function authRoutes(ctx: Ctx): Router {
+  const { rai } = ctx;
   configurePassport(ctx);
 
   ctx.app!.use(passport.initialize());
@@ -33,14 +33,37 @@ export default function authRoutes(ctx: Ctx): Router {
 
   const router = Router();
   const base = `${String(ctx.config.api?.prefix ?? "")}/auth`;
-  const may = (permission: string) => requirePermission(ctx, permission);
 
-  router.post(`${base}/register`, may("auth:register"), register(ctx));
-  router.post(`${base}/login`, may("auth:login"), login(ctx));
-  router.post(`${base}/refresh`, may("auth:refresh"), refresh(ctx));
-  router.post(`${base}/logout`, may("auth:logout"), logout(ctx));
-  router.get(`${base}/me`, may("auth:me"), me());
-  router.post(`${base}/password`, may("auth:password"), changePassword(ctx));
+  router.post(
+    `${base}/register`,
+    rai({ id: "auth:register", name: "Register", description: "Create an account and its credential" }),
+    register(ctx),
+  );
+  router.post(
+    `${base}/login`,
+    rai({ id: "auth:login", name: "Log in", description: "Exchange email and password for a token pair" }),
+    login(ctx),
+  );
+  router.post(
+    `${base}/refresh`,
+    rai({ id: "auth:refresh", name: "Refresh tokens", description: "Rotate a refresh token for a new pair" }),
+    refresh(ctx),
+  );
+  router.post(
+    `${base}/logout`,
+    rai({ id: "auth:logout", name: "Log out", description: "Revoke this session immediately" }),
+    logout(ctx),
+  );
+  router.get(
+    `${base}/me`,
+    rai({ id: "auth:me", name: "Current principal", description: "Who the request pipeline resolved" }),
+    me(),
+  );
+  router.post(
+    `${base}/password`,
+    rai({ id: "auth:password", name: "Change password", description: "Set a new password and end every other session" }),
+    changePassword(ctx),
+  );
 
   return router;
 }

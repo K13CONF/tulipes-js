@@ -5,7 +5,8 @@ import type { Ctx } from "@tulipes/core/boot";
 
 import { verifyPassword } from "./passwords.js";
 import { isRevoked, type TokenClaims } from "./tokens.js";
-import { GUEST, type Principal } from "./principal.js";
+import { GUEST } from "./principal.js";
+import type { Principal } from "@tulipes/core/http";
 import type { CredentialDoc, UserDoc } from "./documents.js";
 
 /**
