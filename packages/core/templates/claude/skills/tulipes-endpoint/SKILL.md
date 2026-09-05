@@ -22,7 +22,7 @@ export class BillingController {
   show(): RequestHandler {
     return async (req: Request, res: Response) => {
       const invoice = await this.ctx.models!.get("Invoice").findById(req.params.id).lean();
-      if (!invoice) throw new HttpError(404, "no such invoice");
+      if (!invoice) throw new HttpError(404, req.t("noSuchInvoice"));
       res.json(invoice);
     };
   }
@@ -59,8 +59,10 @@ export default function billingRoutes(ctx: Ctx): Router {
 ## The RAI is not optional
 
 `id` names a resource and an access to it, and **is** the ACL permission.
-One declaration identifies the endpoint, gates it, and marks the route as
-declared. Core walks the router stack after mounting; a route without a
+One declaration identifies the endpoint, gates it, marks the route as
+declared, and binds `req.t` to the declaring module's i18n namespace —
+which is why the message above needs no namespace of its own. → skill
+`tulipes-i18n` Core walks the router stack after mounting; a route without a
 RAI, or two routes sharing an id, abort the boot:
 
 ```

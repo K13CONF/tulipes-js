@@ -33,13 +33,17 @@ applies before you write code.
    The id is also the ACL permission, and core refuses to boot if a route
    is missing one. Public is `acl.allow("guest", "x:read")`, never a
    missing check. → skill `tulipes-endpoint`
-8. **Secrets never go on the User model.** Passwords and keys belong in
+8. **User-facing strings are keys, never literals.** `req.t("notFound")`
+   inside a route reads that module's `i18n/<locale>.json` — the module is
+   the namespace and `rai()` binds it. Never concatenate a translated
+   string with a variable. → skill `tulipes-i18n`
+9. **Secrets never go on the User model.** Passwords and keys belong in
    the auth module's `Credential` model, which is `select: false`.
-9. **Cross-module imports use the package name** (`@app/users`,
-   `@app/core`), never a relative path that climbs out of the module. The
-   workspace boundary is what keeps modules independent, and a package
-   name makes the dependency visible in package.json — declare it there
-   and in `dependsOn`.
+10. **Cross-module imports use the package name** (`@app/users`,
+    `@app/core`), never a relative path that climbs out of the module. The
+    workspace boundary is what keeps modules independent, and a package
+    name makes the dependency visible in package.json — declare it there
+    and in `dependsOn`.
 
 ## Where things go
 
@@ -48,6 +52,7 @@ applies before you write code.
 | Value differs per deployment (URL, secret, toggle) | that module's `meta.variables.json` |
 | Policy shared by ≥2 modules (pagination, body limit) | `config/app.config.ts` |
 | Config for one feature | that module's `module.config.ts` |
+| A string a user will read | that module's `i18n/<locale>.json`, reached with `req.t` |
 | Middleware for every request | a sys-tier module's routes file |
 | Middleware for one feature's routes | that module's own `Router` |
 | Helper used by ≥2 modules | the sys core module, exported from its `index.ts` and imported as `@app/core` |
@@ -58,9 +63,9 @@ applies before you write code.
 ## Boot order (why load order matters)
 
 `sys` modules load before `app` modules; within a tier, lower `priority`
-first; then `dependsOn` topological order. Config → ACL → database →
-queues → routes. If code needs something another module provides, declare
-`dependsOn` — do not rely on luck.
+first; then `dependsOn` topological order. Config → translations → ACL →
+database → queues → routes. If code needs something another module
+provides, declare `dependsOn` — do not rely on luck.
 
 ## Commands
 
