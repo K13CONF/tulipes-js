@@ -29,10 +29,10 @@ applies before you write code.
 6. **Errors are `HttpError`.** `throw new HttpError(404, "…")` from
    anywhere in a route; the framework's terminal handler renders it.
    Never hand-roll an error-response shape.
-7. **Every route names a permission.** `requirePermission(ctx, "x:read")`
-   from `@app/auth`. An unauthenticated request carries the `guest` role
-   rather than being rejected, so a route with no check is public —
-   forgetting a guard fails OPEN. Public is `acl.allow("guest", ...)`.
+7. **Every route declares a RAI**: `rai({ id: "x:read" })` from `ctx`.
+   The id is also the ACL permission, and core refuses to boot if a route
+   is missing one. Public is `acl.allow("guest", "x:read")`, never a
+   missing check. → skill `tulipes-endpoint`
 8. **Secrets never go on the User model.** Passwords and keys belong in
    the auth module's `Credential` model, which is `select: false`.
 9. **Cross-module imports use the package name** (`@app/users`,

@@ -10,6 +10,17 @@ import { boot } from "../boot/boot.js";
  * plugs into later.
  */
 export async function runRoutes(rootDir: string): Promise<void> {
+  // The published CLI runs as plain node, but an app's modules are
+  // TypeScript — booting it therefore needs a loader registered first, or
+  // every dynamic import of a .ts file fails to resolve. Harmless when the
+  // app is already compiled.
+  try {
+    const tsx = (await import("tsx/esm/api")) as { register?: () => void };
+    tsx.register?.();
+  } catch {
+    // No tsx available: a compiled app still boots fine without it.
+  }
+
   // Routes are mounted by the backend branch, so this needs that branch —
   // but it must not listen. handleSignals stays off; we shut down below.
   const handle = await boot({

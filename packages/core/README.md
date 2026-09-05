@@ -212,6 +212,8 @@ Each phase crashes with its own aggregate report before the next begins.
 ```ts
 interface Ctx {
   mode: ProcessMode;        // "backend" | "worker" | "script"
+  rai: (info: RouteInfo) => RequestHandler;  // declare + gate an endpoint
+  routes: RouteRegistry;    // every declared endpoint
   Environment: Environment; // typed variable store
   config: GlobalConfig;     // namespaced by module: config.billing
   acl?: Acl;                // after phase 5
@@ -228,12 +230,16 @@ export default function billingConfig({ Environment }: Ctx) {
 export async function onReady(ctx: Ctx) {}
 export async function onShutdown(ctx: Ctx) {}    // reverse load order
 
-// routes/*.routes.ts — return a Router, or mount on ctx.app directly
-export default function billingRoutes({ config, models }: Ctx): Router {
+// routes/*.routes.ts — every route declares a RAI, or the boot fails
+export default function billingRoutes(ctx: Ctx): Router {
   const router = Router();
-  router.get(`${config.api!.prefix}/invoices`, async (_req, res) => {
-    res.json(await models!.get("Invoice").find().lean());
-  });
+  const billing = new BillingController(ctx);   // controllers are classes
+
+  router.get(
+    `${ctx.config.api!.prefix}/invoices`,
+    ctx.rai({ id: "invoices:read", name: "List invoices" }),
+    billing.list(),
+  );
   return router;
 }
 
@@ -284,6 +290,7 @@ only in development.
 | `tulipes dev [entry]` | regenerate types, then run under tsx watch |
 | `tulipes sync` | regenerate `types/config.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting — a CI gate |
+| `tulipes routes` | list every endpoint with its RAI and the roles that reach it |
 | `tulipes new module <name>` | scaffold a module with every contract |
 | `tulipes update` | upgrade the global CLI and, inside an app, the app itself |
 | `tulipes -v` | print the CLI version, and the app's when they differ |
