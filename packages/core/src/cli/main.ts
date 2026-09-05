@@ -4,6 +4,7 @@ import { runEnvCheck } from "./env-check.js";
 import { runNewModule } from "./new-module.js";
 import { runDev } from "./dev.js";
 import { runUpdate } from "./update.js";
+import { runRoutes } from "./routes.js";
 import { appCoreVersion, coreVersion } from "./package-info.js";
 
 /**
@@ -18,6 +19,7 @@ Usage:
   tulipes dev [entry]          run with tsx in watch mode (default entry: app.ts), sync first
   tulipes sync                 regenerate types/config.d.ts and .env.example
   tulipes env:check            validate env against every meta.variables.json (CI-friendly)
+  tulipes routes               list every declared endpoint, with the roles that reach it
   tulipes new module <name>    scaffold a module under ./modules
   tulipes update               upgrade the global cli and, inside an app, the app itself
   tulipes -v                   print the cli version (and the app's, when they differ)
@@ -34,6 +36,8 @@ export async function main(argv: readonly string[]): Promise<void> {
       return runSync(rootDir);
     case "env:check":
       return runEnvCheck(rootDir);
+    case "routes":
+      return runRoutes(rootDir);
     case "update":
       return runUpdate(rootDir);
     case "new":

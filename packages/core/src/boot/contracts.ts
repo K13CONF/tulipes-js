@@ -1,9 +1,10 @@
-import type { Express, Router } from "express";
+import type { Express, RequestHandler, Router } from "express";
 
 import type { Environment } from "../env/environment.js";
 import type { ProcessMode } from "./boot.js";
 import type { GlobalConfig } from "../config/index.js";
 import type { Acl } from "../acl/acl.js";
+import type { RouteInfo, RouteRegistry } from "../http/rai.js";
 import type { ModelStore } from "../db/model-store.js";
 import type { QueueManager } from "../queues/queue-manager.js";
 import type { SocketManager } from "../sockets/socket-manager.js";
@@ -27,6 +28,17 @@ export interface Ctx {
   queues?: QueueManager;
   sockets?: SocketManager;
   app?: Express;
+  /**
+   * Declares an endpoint and gates it. `id` is the Resource Access
+   * Identifier, which is also the ACL permission:
+   *
+   *   router.get(path, rai({ id: "users:read" }), handler);
+   *
+   * A route without one aborts the boot — see the route scan.
+   */
+  rai: (info: RouteInfo) => RequestHandler;
+  /** Every declared endpoint, filled once routes are mounted. */
+  routes: RouteRegistry;
 }
 
 /**

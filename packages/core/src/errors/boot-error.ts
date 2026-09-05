@@ -4,7 +4,7 @@
  * so a developer with ten missing env variables fixes ten, not one per restart.
  */
 
-export type BootScope = "env" | "modules" | "config" | "acl" | "boot";
+export type BootScope = "env" | "modules" | "config" | "acl" | "routes" | "boot";
 
 export interface BootIssue {
   scope: BootScope;

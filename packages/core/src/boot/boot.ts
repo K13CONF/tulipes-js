@@ -14,6 +14,8 @@ import { initDatabase } from "../db/database.js";
 import { initQueues } from "../queues/load-queues.js";
 import { initSockets } from "../sockets/load-sockets.js";
 import { errorHandler, notFoundHandler } from "../http/error-handler.js";
+import { createRai, RouteRegistry } from "../http/rai.js";
+import { scanRoutes } from "../http/route-scan.js";
 import { loadAppConfigSeed } from "./app-files.js";
 import { printStartupBanner } from "./banner.js";
 import { importFile } from "./import-file.js";
@@ -38,6 +40,12 @@ export interface BootOptions {
   appEnv?: AppEnv;
   /** Skip SIGTERM/SIGINT wiring — for tests that manage shutdown themselves. */
   handleSignals?: boolean;
+  /**
+   * Build the app and mount every route, but do not bind a port. For
+   * tooling that needs the routes without taking the port from a server
+   * that is already running — `tulipes routes` is the reason it exists.
+   */
+  listen?: boolean;
 }
 
 export interface BootHandle {
@@ -76,7 +84,16 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   const explored = exploreModules(order);
 
   // Phase 6 — global config: app-level seed first, then module factories
-  const ctx: Ctx = { mode, Environment: env, config: {} };
+  // The registry exists before any module runs, so a routes file can
+  // declare into it the moment it is called.
+  const routes = new RouteRegistry();
+  const ctx: Ctx = {
+    mode,
+    Environment: env,
+    config: {},
+    routes,
+    rai: createRai(routes, (role, permission) => ctx.acl!.can(role, permission)),
+  };
   const configReport = new BootReport();
   await loadAppConfigSeed(options.rootDir, ctx, configReport);
   const lifecycles = await buildGlobalConfig(explored, ctx, configReport);
@@ -110,7 +127,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   queueReport.throwIfAny("queues");
 
   if (mode === "backend") {
-    await startBackend(handle, explored);
+    await startBackend(handle, explored, options.listen !== false);
   } else if (mode === "worker") {
     const workerReport = new BootReport();
     const started = ctx.queues?.startWorkers(workerReport) ?? 0;
@@ -128,7 +145,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
 
   // Phase 12 — onReady, load order. Scripts skip it: those hooks announce a
   // process that is up and serving, which a script never is.
-  if (mode !== "script") {
+  if (mode !== "script" && options.listen !== false) {
     for (const { module, onReady } of lifecycles) {
       try {
         await onReady?.(ctx);
@@ -195,6 +212,7 @@ function resolveMode(override: ProcessMode | undefined): ProcessMode {
 async function startBackend(
   handle: BootHandle,
   explored: readonly ModuleFiles[],
+  listen = true,
 ): Promise<void> {
   const app = express();
   handle.app = app;
@@ -216,7 +234,11 @@ async function startBackend(
         continue;
       }
       try {
+        // Declarations happen synchronously inside this call, so recording
+        // the module here is enough to attribute every one of them.
+        handle.ctx.routes.currentModule = module.name;
         const router = await (exported.default as RoutesFn)(handle.ctx);
+        handle.ctx.routes.currentModule = "(app)";
         // Mounting the return value is optional sugar — a routes fn may
         // have attached handlers to ctx.app directly instead. Routers are
         // callables in express, so a function return is a mountable.
@@ -234,6 +256,11 @@ async function startBackend(
   app.use(notFoundHandler());
   app.use(errorHandler(handle.env.appEnv));
 
+  // Every route must have declared a RAI. Checked here, once everything is
+  // mounted, so the failure is a refused boot rather than an endpoint that
+  // silently answers anyone.
+  handle.ctx.routes.record_(scanRoutes(app, report));
+
   report.throwIfAny("routes");
 
   const port = handle.env.store.has("PORT")
@@ -248,6 +275,8 @@ async function startBackend(
   const socketReport = new BootReport();
   await initSockets(explored, handle.ctx, server, socketReport);
   socketReport.throwIfAny("sockets");
+
+  if (!listen) return;
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
