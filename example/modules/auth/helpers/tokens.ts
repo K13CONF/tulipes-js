@@ -1,10 +1,20 @@
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
+import type { Request } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 
-/** What a verified token tells us. Roles are never trusted from here. */
+import type { SessionDoc } from "./documents.js";
+
+/**
+ * What a verified token tells us. Roles are never trusted from here.
+ *
+ * `sid` names the session both tokens of a pair belong to; `jti` names the
+ * individual token. The split is what lets an access token find its own
+ * session row, whose refresh jti has meanwhile rotated out from under it.
+ */
 export interface TokenClaims {
   sub: string;
+  sid: string;
   jti: string;
   typ: "access" | "refresh";
   iat: number;
@@ -17,6 +27,12 @@ export interface TokenPair {
   expiresIn: string;
 }
 
+/** Where a session was started, for the row and for the user to review. */
+export interface SessionOrigin {
+  ip?: string;
+  userAgent?: string;
+}
+
 const secret = (ctx: Ctx, typ: "access" | "refresh"): string =>
   String(ctx.Environment.get(typ === "access" ? "JWT_ACCESS_SECRET" : "JWT_REFRESH_SECRET"));
 
@@ -24,36 +40,71 @@ const ttl = (ctx: Ctx, typ: "access" | "refresh"): string =>
   String(ctx.Environment.get(typ === "access" ? "JWT_ACCESS_TTL" : "JWT_REFRESH_TTL"));
 
 /**
- * Issue a pair and record the refresh token so it can be revoked.
+ * Mint a pair for an existing session.
  *
  * The access token deliberately carries no role. Roles change, tokens do
  * not, and a stale role in a signed token is a privilege bug waiting to
  * happen — the request pipeline reloads the user instead.
  */
-export async function issuePair(ctx: Ctx, userId: string): Promise<TokenPair> {
-  const accessJti = randomUUID();
+function mint(ctx: Ctx, userId: string, sid: string): TokenPair & { refreshJti: string; refreshExp: number } {
   const refreshJti = randomUUID();
 
-  const accessToken = jwt.sign({ typ: "access" }, secret(ctx, "access"), {
+  const accessToken = jwt.sign({ typ: "access", sid }, secret(ctx, "access"), {
     subject: userId,
-    jwtid: accessJti,
+    jwtid: randomUUID(),
     expiresIn: ttl(ctx, "access") as jwt.SignOptions["expiresIn"],
   });
 
-  const refreshToken = jwt.sign({ typ: "refresh" }, secret(ctx, "refresh"), {
+  const refreshToken = jwt.sign({ typ: "refresh", sid }, secret(ctx, "refresh"), {
     subject: userId,
     jwtid: refreshJti,
     expiresIn: ttl(ctx, "refresh") as jwt.SignOptions["expiresIn"],
   });
 
   const { exp } = jwt.decode(refreshToken) as { exp: number };
-  await ctx.models!.get("RefreshToken").create({
-    jti: refreshJti,
+  return { accessToken, refreshToken, expiresIn: ttl(ctx, "access"), refreshJti, refreshExp: exp };
+}
+
+/** Open a session — a sign-in, from a device worth remembering. */
+export async function startSession(
+  ctx: Ctx,
+  userId: string,
+  origin: SessionOrigin = {},
+): Promise<TokenPair> {
+  const sid = randomUUID();
+  const { refreshJti, refreshExp, ...pair } = mint(ctx, userId, sid);
+
+  await ctx.models!.get("Session").create({
+    sid,
     user: userId,
-    expiresAt: new Date(exp * 1000),
+    refreshJti,
+    ip: origin.ip,
+    userAgent: origin.userAgent,
+    expiresAt: new Date(refreshExp * 1000),
   });
 
-  return { accessToken, refreshToken, expiresIn: ttl(ctx, "access") };
+  return pair;
+}
+
+/**
+ * Rotate the pair, keeping the session. The update is conditional on the
+ * refresh jti presented still being the current one, which is what makes
+ * a replayed refresh token match nothing — atomically, so two racing
+ * requests cannot both win.
+ */
+export async function rotateSession(
+  ctx: Ctx,
+  claims: TokenClaims,
+): Promise<TokenPair | undefined> {
+  const sid = claims.sid;
+  const { refreshJti, refreshExp, ...pair } = mint(ctx, claims.sub, sid);
+
+  const session = await ctx.models!.get("Session").findOneAndUpdate(
+    { sid, refreshJti: claims.jti },
+    { refreshJti, expiresAt: new Date(refreshExp * 1000), lastSeenAt: new Date() },
+  );
+
+  return session ? pair : undefined;
 }
 
 /** Verify signature and type. Returns undefined rather than throwing. */
@@ -70,9 +121,31 @@ export function verify(
   }
 }
 
-/** Consume a refresh token: valid only if its row still exists. */
-export async function consumeRefresh(ctx: Ctx, jti: string): Promise<boolean> {
-  const result = await ctx.models!.get("RefreshToken").deleteOne({ jti });
+/** The session behind a request, or null when the row is gone. */
+export async function loadSession(ctx: Ctx, sid: string): Promise<SessionDoc | null> {
+  return ctx.models!.get<SessionDoc>("Session").findOne({ sid });
+}
+
+/**
+ * Record that a session is still in use — at most once per `afterSeconds`,
+ * because a write on every request would cost more than the field is worth.
+ */
+export async function touchSession(
+  ctx: Ctx,
+  session: SessionDoc,
+  afterSeconds: number,
+): Promise<void> {
+  const age = Date.now() - (session.lastSeenAt?.getTime() ?? 0);
+  if (age < afterSeconds * 1000) return;
+
+  const now = new Date();
+  session.lastSeenAt = now;
+  await ctx.models!.get("Session").updateOne({ sid: session.sid }, { lastSeenAt: now });
+}
+
+/** End one session: the refresh half dies with its row. */
+export async function endSession(ctx: Ctx, sid: string): Promise<boolean> {
+  const result = await ctx.models!.get("Session").deleteOne({ sid });
   return result.deletedCount === 1;
 }
 
@@ -89,7 +162,17 @@ export async function isRevoked(ctx: Ctx, jti: string): Promise<boolean> {
   return (await ctx.models!.get("RevokedToken").countDocuments({ jti }).limit(1)) > 0;
 }
 
-/** Drop every refresh token a user holds — used after a password change. */
-export async function revokeAllForUser(ctx: Ctx, userId: string): Promise<void> {
-  await ctx.models!.get("RefreshToken").deleteMany({ user: userId });
+/** Drop every session a user holds — used after a password change. */
+export async function endAllSessions(ctx: Ctx, userId: string): Promise<void> {
+  await ctx.models!.get("Session").deleteMany({ user: userId });
+}
+
+/** Everything the caller is signed in on, newest first. */
+export async function listSessions(ctx: Ctx, userId: string): Promise<SessionDoc[]> {
+  return ctx.models!.get<SessionDoc>("Session").find({ user: userId }).sort({ createdAt: -1 });
+}
+
+/** Where a request came from, for the session row. */
+export function originOf(req: Request): SessionOrigin {
+  return { ip: req.ip, userAgent: req.header("user-agent") };
 }

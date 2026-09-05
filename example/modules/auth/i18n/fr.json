@@ -9,5 +9,7 @@
   "refreshUsed": "Ce jeton de rafraîchissement a déjà été utilisé ou révoqué",
   "accountGone": "Ce compte n'existe plus",
   "loggedOut": "Déconnecté",
-  "passwordChanged": "Mot de passe modifié — toutes les autres sessions ont été fermées"
+  "passwordChanged": "Mot de passe modifié — toutes les autres sessions ont été fermées",
+  "noSuchSession": "Session introuvable",
+  "sessionEnded": "Session terminée"
 }

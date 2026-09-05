@@ -9,5 +9,7 @@
   "refreshUsed": "That refresh token has already been used or revoked",
   "accountGone": "This account no longer exists",
   "loggedOut": "Signed out",
-  "passwordChanged": "Password changed — every other session was signed out"
+  "passwordChanged": "Password changed — every other session was signed out",
+  "noSuchSession": "No such session",
+  "sessionEnded": "Session ended"
 }

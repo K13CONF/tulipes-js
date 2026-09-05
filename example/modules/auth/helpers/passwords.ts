@@ -38,6 +38,6 @@ export async function setPassword(ctx: Ctx, userId: string, plain: string): Prom
     { $set: { tokensValidFrom: new Date() } },
   );
 
-  const { revokeAllForUser } = await import("./tokens.js");
-  await revokeAllForUser(ctx, userId);
+  const { endAllSessions } = await import("./tokens.js");
+  await endAllSessions(ctx, userId);
 }
