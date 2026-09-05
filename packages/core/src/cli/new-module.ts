@@ -28,8 +28,9 @@ export async function runNewModule(rootDir: string, name: string): Promise<void>
   }
 
   const scope = detectScope(modulesDir) ?? "@app";
+  const locales = detectLocales(modulesDir);
 
-  for (const [relPath, content] of renderModule(name, scope)) {
+  for (const [relPath, content] of renderModule(name, scope, locales)) {
     const filePath = join(dir, relPath);
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, content);
@@ -52,11 +53,27 @@ export async function runNewModule(rootDir: string, name: string): Promise<void>
 
 const json = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
 
-function renderModule(name: string, scope: string): [string, string][] {
+function renderModule(
+  name: string,
+  scope: string,
+  locales: readonly string[],
+): [string, string][] {
   const fn = camel(name);
   const Model = pascal(name);
 
   return [
+    // One file per locale the app already ships. The module IS the i18n
+    // namespace, so `req.t("title")` in this module's endpoints resolves
+    // here and nowhere else. Only the default locale has to be complete —
+    // gaps in the others fall back to it, and are listed in
+    // `<locale>.missing.json` on the next boot.
+    ...locales.map(
+      (locale): [string, string] => [
+        `i18n/${locale}.json`,
+        json({ title: `${name} module` }),
+      ],
+    ),
+
     ["package.json", json({
       name: `${scope}/${name}`,
       version: "0.0.0",
@@ -146,8 +163,14 @@ function renderModule(name: string, scope: string): [string, string][] {
       `  constructor(private readonly ctx: Ctx) {}`,
       ``,
       `  index(): RequestHandler {`,
-      `    return (_req: Request, res: Response): void => {`,
-      `      res.json({ module: describe${Model}(), app: this.ctx.config.app?.name });`,
+      `    return (req: Request, res: Response): void => {`,
+      `      // req.t is already bound to this module's i18n namespace — rai()`,
+      `      // binds it, which is one more thing a declared route buys you.`,
+      `      res.json({`,
+      `        module: describe${Model}(),`,
+      `        title: req.t("title"),`,
+      `        app: this.ctx.config.app?.name,`,
+      `      });`,
       `    };`,
       `  }`,
       `}`,
@@ -267,6 +290,37 @@ function renderModule(name: string, scope: string): [string, string][] {
       ``,
     ].join("\n")],
   ];
+}
+
+/**
+ * The locales a sibling module already ships — the same trick as the
+ * package scope: the app's own conventions decide, with nothing to
+ * configure. `en` alone when nothing is translated yet.
+ */
+function detectLocales(modulesDir: string): string[] {
+  const found = new Set<string>();
+  let entries: string[];
+  try {
+    entries = readdirSync(modulesDir);
+  } catch {
+    return ["en"];
+  }
+
+  for (const entry of entries) {
+    let files: string[];
+    try {
+      files = readdirSync(join(modulesDir, entry, "i18n"));
+    } catch {
+      continue; // that module has no translations
+    }
+    for (const file of files) {
+      if (file.endsWith(".json") && !file.endsWith(".missing.json")) {
+        found.add(file.replace(/\.json$/, ""));
+      }
+    }
+  }
+
+  return found.size > 0 ? [...found].sort() : ["en"];
 }
 
 function detectScope(modulesDir: string): string | undefined {
