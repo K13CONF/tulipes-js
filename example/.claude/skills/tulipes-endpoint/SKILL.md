@@ -96,7 +96,7 @@ inside `async` without a try/catch.
 ```
 module routers, in load order:
   sys modules      request ids, helmet, cors, logging, body parsing,
-                   then auth resolving req.principal (guest if no token)
+                   then auth resolving req.auth (guest if no token)
   app modules      your feature routes, each gated by its RAI
 notFoundHandler    framework — 404 for anything unclaimed
 errorHandler       framework — terminal
