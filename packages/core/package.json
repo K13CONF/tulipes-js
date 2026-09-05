@@ -16,6 +16,7 @@
     "./queues": "./src/queues/index.ts",
     "./sockets": "./src/sockets/index.ts",
     "./http": "./src/http/index.ts",
+    "./i18n": "./src/i18n/index.ts",
     "./config": "./src/config/index.ts",
     "./errors": "./src/errors/index.ts"
   },
@@ -43,6 +44,7 @@
       "./queues": "./dist/queues/index.js",
       "./sockets": "./dist/sockets/index.js",
       "./http": "./dist/http/index.js",
+      "./i18n": "./dist/i18n/index.js",
       "./config": "./dist/config/index.js",
       "./errors": "./dist/errors/index.js"
     }
@@ -52,6 +54,8 @@
     "colorette": "^2",
     "dotenv": "^16.4.7",
     "express": "^5",
+    "i18next": "^26.4.2",
+    "i18next-fs-backend": "^2.6.7",
     "ioredis": "^5",
     "mongoose": "^8",
     "socket.io": "^4",

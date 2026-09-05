@@ -4,6 +4,7 @@ export * from "./config/index.js";
 export * from "./db/index.js";
 export * from "./env/index.js";
 export * from "./http/index.js";
+export * from "./i18n/index.js";
 export * from "./modules/index.js";
 export * from "./queues/index.js";
 export * from "./sockets/index.js";
