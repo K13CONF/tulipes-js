@@ -19,8 +19,9 @@ applies before you write code.
    `modules/`. Never add a top-level `services/` or `middlewares/` folder.
    → skill `tulipes-module`
 3. **Never call `mongoose.model()` yourself.** Models are declarations
-   picked up by the framework and read from `ctx.models`. → skill
-   `tulipes-model`
+   picked up by the framework and read from `ctx.models`. Persisted and
+   wire field names are `snake_case` (`created_at`, never `createdAt`);
+   camelCase is for TypeScript-only names. → skill `tulipes-model`
 4. **Global middleware belongs to a sys-tier module**, not to the
    entrypoint. `app.ts` stays three lines. → skill `tulipes-endpoint`
 5. **Run `yarn sync` after touching any `meta.variables.json` or

@@ -23,11 +23,11 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
  * compromise: leaving other devices signed in would defeat it.
  */
 export async function setPassword(ctx: Ctx, userId: string, plain: string): Promise<void> {
-  const passwordHash = await hashPassword(ctx, plain);
+  const password_hash = await hashPassword(ctx, plain);
 
   await ctx.models!.get("Credential").updateOne(
     { user: userId },
-    { $set: { passwordHash } },
+    { $set: { password_hash } },
     { upsert: true },
   );
 
@@ -35,7 +35,7 @@ export async function setPassword(ctx: Ctx, userId: string, plain: string): Prom
   // against, so tokens issued before this moment stop being accepted.
   await ctx.models!.get("User").updateOne(
     { _id: userId },
-    { $set: { tokensValidFrom: new Date() } },
+    { $set: { tokens_valid_from: new Date() } },
   );
 
   const { endAllSessions } = await import("./tokens.js");

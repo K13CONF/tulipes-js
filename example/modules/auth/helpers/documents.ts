@@ -12,19 +12,21 @@ export interface UserAttrs {
   _id: Types.ObjectId;
   email: string;
   role: string;
-  tokensValidFrom?: Date;
+  tokens_valid_from?: Date;
+  created_at: Date;
 }
 
 export interface SessionAttrs {
   _id: Types.ObjectId;
   sid: string;
   user: Types.ObjectId;
-  refreshJti: string;
+  refresh_jti: string;
   ip?: string;
-  userAgent?: string;
-  lastSeenAt?: Date;
-  expiresAt: Date;
-  createdAt: Date;
+  user_agent?: string;
+  last_seen_at?: Date;
+  expires_at: Date;
+  /** From baseSchemaOptions, like every model's. */
+  created_at: Date;
 }
 
 /**
@@ -42,5 +44,5 @@ export type SessionDoc = HydratedDocument<SessionAttrs>;
 export interface CredentialDoc {
   _id: Types.ObjectId;
   user: Types.ObjectId;
-  passwordHash: string;
+  password_hash: string;
 }

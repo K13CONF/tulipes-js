@@ -14,7 +14,7 @@ import type { ModelDef } from "@tulipes/core/db";
  */
 const revokedTokenSchema = new Schema({
   jti: { type: String, required: true, unique: true, index: true },
-  expiresAt: { type: Date, required: true, expires: 0 },
+  expires_at: { type: Date, required: true, expires: 0 },
 });
 
 export default { name: "RevokedToken", schema: revokedTokenSchema } satisfies ModelDef;

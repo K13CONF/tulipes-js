@@ -14,15 +14,34 @@ connection and puts it in the model store.
 ```ts
 import { Schema } from "mongoose";
 import type { ModelDef } from "@tulipes/core/db";
+import { baseSchemaOptions } from "@app/core";
 
-const invoiceSchema = new Schema({
-  customer: { type: Schema.Types.ObjectId, ref: "User", required: true },
-  amountCents: { type: Number, required: true, min: 0 },
-  status: { type: String, enum: ["draft", "paid"], default: "draft", index: true },
-});
+const invoiceSchema = new Schema(
+  {
+    customer: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    amount_cents: { type: Number, required: true, min: 0 },
+    status: { type: String, enum: ["draft", "paid"], default: "draft", index: true },
+  },
+  baseSchemaOptions,
+);
 
 export default { name: "Invoice", schema: invoiceSchema } satisfies ModelDef;
 ```
+
+## Field names are snake_case
+
+Every persisted field — and therefore every field that reaches a response
+body — is `snake_case`: `amount_cents`, `created_at`, `last_seen_at`,
+`password_hash`. camelCase is for TypeScript-only names: locals, function
+parameters, helper return shapes that never reach mongo or the wire.
+
+**Never declare `createdAt` / `updatedAt` yourself.** `baseSchemaOptions`
+already provides them as `created_at` and `updated_at`, and a hand-declared
+camelCase field silently shadows the plugin, leaving you with both.
+
+Renaming a persisted field is a data migration, not a rename: existing
+documents keep the old key and stop matching queries. Write a bootstrap
+task with `$rename` when you change one on live data.
 
 Read it anywhere the context reaches:
 
@@ -54,7 +73,7 @@ export default async function seedPlans({ models }: Ctx): Promise<void> {
   const Plan = models!.get("Plan");
   await Plan.updateOne(
     { code: "free" },
-    { $setOnInsert: { code: "free", priceCents: 0 } },
+    { $setOnInsert: { code: "free", price_cents: 0 } },
     { upsert: true },
   );
 }

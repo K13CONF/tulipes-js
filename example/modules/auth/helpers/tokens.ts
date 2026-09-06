@@ -30,7 +30,7 @@ export interface TokenPair {
 /** Where a session was started, for the row and for the user to review. */
 export interface SessionOrigin {
   ip?: string;
-  userAgent?: string;
+  user_agent?: string;
 }
 
 const secret = (ctx: Ctx, typ: "access" | "refresh"): string =>
@@ -77,10 +77,10 @@ export async function startSession(
   await ctx.models!.get("Session").create({
     sid,
     user: userId,
-    refreshJti,
+    refresh_jti: refreshJti,
     ip: origin.ip,
-    userAgent: origin.userAgent,
-    expiresAt: new Date(refreshExp * 1000),
+    user_agent: origin.user_agent,
+    expires_at: new Date(refreshExp * 1000),
   });
 
   return pair;
@@ -100,8 +100,12 @@ export async function rotateSession(
   const { refreshJti, refreshExp, ...pair } = mint(ctx, claims.sub, sid);
 
   const session = await ctx.models!.get("Session").findOneAndUpdate(
-    { sid, refreshJti: claims.jti },
-    { refreshJti, expiresAt: new Date(refreshExp * 1000), lastSeenAt: new Date() },
+    { sid, refresh_jti: claims.jti },
+    {
+      refresh_jti: refreshJti,
+      expires_at: new Date(refreshExp * 1000),
+      last_seen_at: new Date(),
+    },
   );
 
   return session ? pair : undefined;
@@ -135,12 +139,12 @@ export async function touchSession(
   session: SessionDoc,
   afterSeconds: number,
 ): Promise<void> {
-  const age = Date.now() - (session.lastSeenAt?.getTime() ?? 0);
+  const age = Date.now() - (session.last_seen_at?.getTime() ?? 0);
   if (age < afterSeconds * 1000) return;
 
   const now = new Date();
-  session.lastSeenAt = now;
-  await ctx.models!.get("Session").updateOne({ sid: session.sid }, { lastSeenAt: now });
+  session.last_seen_at = now;
+  await ctx.models!.get("Session").updateOne({ sid: session.sid }, { last_seen_at: now });
 }
 
 /** End one session: the refresh half dies with its row. */
@@ -153,7 +157,7 @@ export async function endSession(ctx: Ctx, sid: string): Promise<boolean> {
 export async function revokeAccess(ctx: Ctx, claims: TokenClaims): Promise<void> {
   await ctx.models!.get("RevokedToken").updateOne(
     { jti: claims.jti },
-    { $setOnInsert: { jti: claims.jti, expiresAt: new Date(claims.exp * 1000) } },
+    { $setOnInsert: { jti: claims.jti, expires_at: new Date(claims.exp * 1000) } },
     { upsert: true },
   );
 }
@@ -169,10 +173,10 @@ export async function endAllSessions(ctx: Ctx, userId: string): Promise<void> {
 
 /** Everything the caller is signed in on, newest first. */
 export async function listSessions(ctx: Ctx, userId: string): Promise<SessionDoc[]> {
-  return ctx.models!.get<SessionDoc>("Session").find({ user: userId }).sort({ createdAt: -1 });
+  return ctx.models!.get<SessionDoc>("Session").find({ user: userId }).sort({ created_at: -1 });
 }
 
 /** Where a request came from, for the session row. */
 export function originOf(req: Request): SessionOrigin {
-  return { ip: req.ip, userAgent: req.header("user-agent") };
+  return { ip: req.ip, user_agent: req.header("user-agent") };
 }

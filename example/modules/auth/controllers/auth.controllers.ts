@@ -142,17 +142,17 @@ export class AuthController {
       const { isAuthenticated, user, session } = req.auth;
 
       res.json({
-        isAuthenticated,
+        is_authenticated: isAuthenticated,
         locale: req.locale,
         user: user && { id: String(user._id), email: user.email, role: user.role },
         session: session && {
           sid: session.sid,
           ip: session.ip,
-          userAgent: session.userAgent,
-          startedAt: session.createdAt,
-          lastSeenAt: session.lastSeenAt,
-          expiresAt: session.expiresAt,
-          accessExpiresAt: session.accessExpiresAt,
+          user_agent: session.user_agent,
+          started_at: session.created_at,
+          last_seen_at: session.last_seen_at,
+          expires_at: session.expires_at,
+          access_expires_at: session.access_expires_at,
         },
       });
     };
@@ -170,9 +170,9 @@ export class AuthController {
           sid: row.sid,
           current: row.sid === session?.sid,
           ip: row.ip,
-          userAgent: row.userAgent,
-          startedAt: row.createdAt,
-          lastSeenAt: row.lastSeenAt,
+          user_agent: row.user_agent,
+          started_at: row.created_at,
+          last_seen_at: row.last_seen_at,
         })),
       });
     };
