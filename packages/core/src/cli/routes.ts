@@ -1,4 +1,4 @@
-import { boot } from "../boot/boot.js";
+import { appBoot, registerTypeScript } from "./app-core.js";
 
 /**
  * `tulipes routes` — every endpoint the app declares, with the roles that
@@ -10,16 +10,12 @@ import { boot } from "../boot/boot.js";
  * plugs into later.
  */
 export async function runRoutes(rootDir: string): Promise<void> {
-  // The published CLI runs as plain node, but an app's modules are
-  // TypeScript — booting it therefore needs a loader registered first, or
-  // every dynamic import of a .ts file fails to resolve. Harmless when the
-  // app is already compiled.
-  try {
-    const tsx = (await import("tsx/esm/api")) as { register?: () => void };
-    tsx.register?.();
-  } catch {
-    // No tsx available: a compiled app still boots fine without it.
-  }
+  await registerTypeScript();
+
+  // The APP's boot, not this CLI's — see appBoot. A globally installed
+  // CLI booting through its own copy gives the app two mongooses, and
+  // every model fails its instanceof check.
+  const boot = await appBoot(rootDir);
 
   // Routes are mounted by the backend branch, so this needs that branch —
   // but it must not listen. handleSignals stays off; we shut down below.

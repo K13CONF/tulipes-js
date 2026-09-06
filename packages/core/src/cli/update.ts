@@ -143,9 +143,45 @@ async function updateApp(
   if (code === -1) {
     console.error(`\ncould not run "${manager}" — manifests are updated, install manually`);
     process.exitCode = 1;
-  } else if (code !== 0) {
-    process.exitCode = code;
+    return;
   }
+  if (code !== 0) {
+    process.exitCode = code;
+    return;
+  }
+
+  warnAboutBreakingChanges(current, latest);
+}
+
+/**
+ * Minor bumps below 1.0 carry breaking changes in this project, and an app
+ * skipping several of them will not boot until each is dealt with. Saying
+ * so here — where the jump is actually visible — beats leaving it to be
+ * discovered as a stack trace.
+ */
+function warnAboutBreakingChanges(current: string | undefined, latest: string): void {
+  const from = minorOf(current);
+  const to = minorOf(latest);
+  if (from === undefined || to === undefined || from >= to) return;
+
+  console.log(
+    [
+      "",
+      `This crossed ${to - from} minor version(s), each of which may have`,
+      "changed something breaking. Before running the app:",
+      "",
+      `  https://github.com/kemora13conf/bp-backend-express/blob/v${latest}/packages/core/MIGRATING.md`,
+      "",
+      "It is ordered oldest-first, because the steps build on each other.",
+    ].join("\n"),
+  );
+}
+
+/** The minor of a 0.x version — 0 for anything already at 1.0 or beyond. */
+function minorOf(version: string | undefined): number | undefined {
+  if (!version) return undefined;
+  const [major, minor] = version.split(".").map(Number);
+  return major === 0 && Number.isInteger(minor) ? minor : undefined;
 }
 
 async function fetchLatest(): Promise<string> {

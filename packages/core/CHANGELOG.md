@@ -11,6 +11,24 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-09-06
+
+### Fixed
+
+- **Every command that boots the app was broken when `tulipes` is installed
+  globally** — which is how `tulipes update` installs it. The CLI booted
+  through its *own* `@tulipes/core`, giving the process two copies of
+  mongoose, so every model failed its `instanceof Schema` check and the
+  boot aborted with a report blaming the models. `tulipes routes` has had
+  this since 0.3.0; `tulipes spec` inherited it. Both now boot through the
+  app's own core, keeping mongoose and every other shared singleton to one
+  copy.
+- `tulipes spec` reported `@tulipes/spec` as missing even when it was
+  installed, for the same reason: a global CLI resolved the import against
+  its own `node_modules` rather than the app's.
+- `tulipes update` now names the migration guide when it crosses minor
+  versions, since each one below 1.0 may carry breaking changes.
+
 ## [0.6.0] — 2026-09-06
 
 ### Added
@@ -192,7 +210,8 @@ generated types, ACL, the model store, queues, sockets, the three process
 modes (`backend`, `worker`, `script`), the startup banner, and the CLI —
 `init`, `dev`, `sync`, `env:check`, `new module`, `update`.
 
-[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.0...v0.5.1
