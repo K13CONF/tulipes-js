@@ -7,7 +7,6 @@ export default function usersConfig({ Environment }: Ctx) {
   return {
     maxSessions: Environment.get("USERS_MAX_SESSIONS"),
     signupMode: Environment.get("USERS_SIGNUP_MODE"),
-    adminEmail: Environment.get("USERS_ADMIN_EMAIL"),
   };
 }
 

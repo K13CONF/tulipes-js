@@ -38,6 +38,18 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@app/hello@workspace:example/modules/hello":
+  version: 0.0.0-use.local
+  resolution: "@app/hello@workspace:example/modules/hello"
+  dependencies:
+    "@app/auth": "workspace:*"
+    "@app/core": "workspace:*"
+    "@tulipes/core": "workspace:*"
+    express: "npm:^5"
+    mongoose: "npm:^8"
+  languageName: unknown
+  linkType: soft
+
 "@app/security@workspace:example/modules/security":
   version: 0.0.0-use.local
   resolution: "@app/security@workspace:example/modules/security"

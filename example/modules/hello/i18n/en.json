@@ -1,0 +1,8 @@
+{
+  "secret": "Only roles granted hello:read see this",
+  "noSuchGreeting": "No greeting named \"{{name}}\"",
+  "list": {
+    "count_one": "{{count}} greeting",
+    "count_other": "{{count}} greetings"
+  }
+}

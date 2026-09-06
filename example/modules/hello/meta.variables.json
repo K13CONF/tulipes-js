@@ -1,0 +1,11 @@
+{
+  "variables": [
+    {
+      "name": "HELLO_GREETING",
+      "type": "string",
+      "group": "hello",
+      "description": "Word this module greets callers with",
+      "default": "Hello"
+    }
+  ]
+}

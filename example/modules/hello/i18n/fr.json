@@ -1,0 +1,8 @@
+{
+  "secret": "Seuls les rôles disposant de hello:read voient ceci",
+  "noSuchGreeting": "Aucune salutation nommée « {{name}} »",
+  "list": {
+    "count_one": "{{count}} salutation",
+    "count_other": "{{count}} salutations"
+  }
+}
