@@ -7,8 +7,11 @@ logs/
 # for whoever writes the translations, never a source file
 **/modules/*/i18n/*.missing.json
 
-# local env overrides — .envs/.env.<mode> files ARE committed in the example,
-# real apps keep secrets out of git via .env.local
+# The example's .envs/.env.<mode> files are committed deliberately: this is
+# the reference app, its values are throwaway dev defaults, and a clone must
+# be able to run it. A scaffolded app is the opposite — `tulipes init`
+# git-ignores .envs/ entirely, since those files hold working credentials.
+.env
 .env.local
 .envs/.env.*.local
 

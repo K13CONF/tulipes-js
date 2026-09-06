@@ -1,3 +1,9 @@
+<div align="center">
+
+<img src="../assets/tulipesjs-logo.png" alt="TulipesJs" width="340">
+
+</div>
+
 # Tulipes example app
 
 The reference layout for a Tulipes application. Everything in this folder is
