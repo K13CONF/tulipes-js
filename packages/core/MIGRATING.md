@@ -11,6 +11,30 @@ what makes it work under nvm.
 
 ---
 
+## Adopting the settings module (0.7)
+
+The settings module is an infrastructure console reachable only by
+`sysadmin`. Nothing forces you to adopt it — `tulipes update` does not
+rewrite your modules — but if you copy it into an existing app, **narrow
+your `admin` grant first**:
+
+```ts
+// modules/auth/module.acl.ts — before
+acl.allow("admin", "*");
+
+// after: explicit namespaces, and a sysadmin role
+acl.defineRole("sysadmin");
+acl.allow("admin",    "auth:*", "users:*", "…your modules");
+acl.allow("sysadmin", "auth:*", "users:*", "…your modules");
+```
+
+`*` reaches `settings:*` like any other id, so leaving it in place means
+every admin can read your secrets and restart production. After narrowing,
+remember that a **new** module's namespace must be added to both grants or
+neither role can reach it.
+
+Then promote one account: `sysadmin` is a role no one holds by default.
+
 ## 0.4 → 0.5
 
 Three separate breaks: the response shape, the `HttpError` signature, and

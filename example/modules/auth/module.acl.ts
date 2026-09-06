@@ -10,7 +10,7 @@ import type { AclBuilder } from "@tulipes/core/acl";
  * appears on an allowlist somewhere else.
  */
 export default function authAcl(acl: AclBuilder): void {
-  acl.defineRole("guest").defineRole("user").defineRole("admin");
+  acl.defineRole("guest").defineRole("user").defineRole("admin").defineRole("sysadmin");
 
   // Anyone may attempt to authenticate. Refresh is public because the
   // refresh token itself is the credential — an expired access token must
@@ -27,5 +27,15 @@ export default function authAcl(acl: AclBuilder): void {
     "auth:sessions",
     "auth:session-end",
   );
-  acl.allow("admin", "*");
+  // `admin` is granted each feature namespace EXPLICITLY rather than "*".
+  // A wildcard would also reach settings:*, and the infrastructure console
+  // is meant to be a boundary an ordinary administrator cannot cross — a
+  // grant that quietly includes everything makes "sysadmin only" a label
+  // rather than a rule. Add your own namespaces here as modules arrive.
+  acl.allow("admin", "auth:*", "users:*", "hello:*");
+
+  // `sysadmin` is an admin who can also administer the deployment. The
+  // settings grant is NOT here: a module grants its own namespace, so
+  // `settings:*` is declared by the settings module itself.
+  acl.allow("sysadmin", "auth:*", "users:*", "hello:*");
 }

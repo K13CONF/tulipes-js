@@ -5,7 +5,7 @@ import { parse as parseDotenv } from "dotenv";
 import { BootReport } from "../errors/boot-error.js";
 import { coerceValue } from "./coerce.js";
 import { discoverModuleMeta, type ModuleMeta } from "./meta-discovery.js";
-import { VariableStore } from "./variable-store.js";
+import { VariableStore, type VariableSource } from "./variable-store.js";
 import type { VariableValue } from "./spec.js";
 import type { KnownVariables } from "./index.js";
 
@@ -43,10 +43,17 @@ export interface EnvironmentOptions {
 export class Environment {
   readonly appEnv: AppEnv;
   readonly store: VariableStore;
+  /**
+   * The file this run loaded, whether or not it exists — the one place a
+   * deployment-time value belongs, and therefore where anything writing a
+   * variable back has to write.
+   */
+  readonly envFile: string;
 
-  private constructor(appEnv: AppEnv, store: VariableStore) {
+  private constructor(appEnv: AppEnv, store: VariableStore, envFile: string) {
     this.appEnv = appEnv;
     this.store = store;
+    this.envFile = envFile;
   }
 
   /**
@@ -69,14 +76,15 @@ export class Environment {
     const envsDir = options.envsDir ?? join(options.rootDir, ".envs");
     const modulesDir = options.modulesDir ?? join(options.rootDir, "modules");
 
-    const fileValues = Environment.#readEnvFile(join(envsDir, `.env.${appEnv}`));
+    const envFile = join(envsDir, `.env.${appEnv}`);
+    const fileValues = Environment.#readEnvFile(envFile);
     const metas = discoverModuleMeta(modulesDir, report);
 
     const store = new VariableStore();
     Environment.#resolveAll(metas, fileValues, store, report);
 
     report.throwIfAny("environment");
-    return new Environment(appEnv, store);
+    return new Environment(appEnv, store, envFile);
   }
 
   static #resolveAppEnv(
@@ -127,6 +135,17 @@ export class Environment {
         }
         owners.set(spec.name, meta.module);
 
+        // Resolved and *attributed* in one pass: which source won is not
+        // recoverable later, and a write needs it.
+        const source: VariableSource | undefined =
+          process.env[spec.name] !== undefined
+            ? "process.env"
+            : fileValues[spec.name] !== undefined
+              ? "file"
+              : spec.default !== undefined
+                ? "default"
+                : undefined;
+
         const raw = process.env[spec.name] ?? fileValues[spec.name] ?? spec.default;
 
         if (raw === undefined) {
@@ -151,7 +170,7 @@ export class Environment {
           continue;
         }
 
-        store.declare_(spec, meta.module, coerced.value);
+        store.declare_(spec, meta.module, coerced.value, source!);
       }
     }
   }

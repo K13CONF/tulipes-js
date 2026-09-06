@@ -5,6 +5,7 @@ import type { ProcessMode } from "./boot.js";
 import type { GlobalConfig } from "../config/index.js";
 import type { Acl } from "../acl/acl.js";
 import type { RouteInfo, RouteRegistry } from "../http/rai.js";
+import type { ModuleManifest } from "../modules/manifest.js";
 import type { I18nextInstance, TFunction } from "../i18n/index.js";
 import type { ModelStore } from "../db/model-store.js";
 import type { QueueManager } from "../queues/queue-manager.js";
@@ -23,6 +24,14 @@ export interface Ctx {
    */
   mode: ProcessMode;
   Environment: Environment;
+  /**
+   * Every module in load order, with its manifest and resolved directory.
+   *
+   * The authoritative answer to "what modules does this app have?" —
+   * `config` cannot answer it, because the app-level seed puts keys there
+   * that belong to no module.
+   */
+  modules: readonly ModuleManifest[];
   config: GlobalConfig;
   acl?: Acl;
   models?: ModelStore;

@@ -98,6 +98,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   const ctx: Ctx = {
     mode,
     Environment: env,
+    modules: order,
     config: {},
     routes,
     rai: createRai(

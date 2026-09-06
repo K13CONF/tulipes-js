@@ -11,6 +11,38 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-06
+
+### Added
+
+- **`ctx.modules`** — every module's manifest in load order, with its
+  resolved directory. The authoritative answer to "what modules does this
+  app have?", which `config` cannot give: the app-level seed puts keys
+  there that belong to no module.
+- **The variable store records which source won** (`process.env`, the env
+  file, or the declared default) and exposes `describe()` returning each
+  variable's full spec, owner, source and value. Not recoverable
+  afterwards, and anything writing a value back needs it.
+- `Environment.envFile` — the file this run loaded, and therefore the one
+  place a deployment-time value belongs.
+- `coerceValue` is exported, so a value can be validated against a
+  variable's declared type before it is written.
+- **A `settings` module in the scaffold**: an infrastructure console
+  reachable only by `sysadmin`. Describes every module (manifest,
+  variables with full spec and resolved source, config, i18n, routes),
+  edits variables and translations, restarts through PM2, and streams logs
+  over SSE — tailing the log files, so it sees the worker as well as the
+  backend. Every reveal, write and reboot is audited at `warn`, and a
+  secret's value is never recorded in either direction.
+
+### Changed
+
+- The scaffold's auth module grants `admin` its namespaces **explicitly**
+  rather than `*`, and adds a `sysadmin` role. A wildcard would reach
+  `settings:*` like any other id, making the console's boundary a label
+  rather than a rule. Existing apps are unaffected until they adopt the
+  settings module — see [MIGRATING.md](./MIGRATING.md).
+
 ## [0.6.1] — 2026-09-06
 
 ### Fixed
@@ -210,7 +242,8 @@ generated types, ACL, the model store, queues, sockets, the three process
 modes (`backend`, `worker`, `script`), the startup banner, and the CLI —
 `init`, `dev`, `sync`, `env:check`, `new module`, `update`.
 
-[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.1...v0.5.2
