@@ -6,29 +6,32 @@ import { HttpError } from "@tulipes/core/http";
  * One class per controller, holding the context. Each method returns a
  * handler, so the routes file stays a table of contents.
  *
- * `req.t` is already bound to this module's namespace — every key below
- * reads modules/users/i18n/<locale>.json, negotiated per request.
+ * Every response goes through `res.respond`, which wraps the payload in
+ * the app's envelope. Failures are thrown rather than responded — the
+ * framework's terminal handler builds the same envelope from them — so a
+ * handler only ever writes the happy path.
+ *
+ * Thrown messages are i18n KEYS: the handler translates them in this
+ * module's namespace and derives the error code from the key, so
+ * "notFound" becomes NOT_FOUND with a translated message.
  */
 export class UsersController {
   constructor(private readonly ctx: Ctx) {}
 
   list(): RequestHandler {
     return async (req: Request, res: Response) => {
-      const limit = this.#limit(req);
-      const users = await this.ctx.models!
-        .get("User")
-        .find()
-        .select("email role -_id")
-        .limit(limit)
-        .lean();
+      // ?page and ?per_page, already clamped by config.pagination.
+      const { per_page, skip } = req.page;
+      const User = this.ctx.models!.get("User");
 
-      res.json({
-        // i18next picks the plural form from `count`, which is why the key
-        // has _one/_other variants rather than a hand-written ternary.
-        summary: req.t("list.count", { count: users.length }),
-        limit,
-        users,
-      });
+      const [users, total_items] = await Promise.all([
+        User.find().select("email role -_id").skip(skip).limit(per_page).lean(),
+        User.countDocuments(),
+      ]);
+
+      // Passing total_items is what marks this a page: respond fills in
+      // page, per_page and total_pages from the request and the count.
+      res.respond({ data: users, meta: { total_items } });
     };
   }
 
@@ -36,14 +39,10 @@ export class UsersController {
   softDelete(): RequestHandler {
     return async (req: Request, res: Response) => {
       const user = await this.ctx.models!.get("User").findOne({ email: req.params.email });
-      if (!user) throw new HttpError(404, req.t("notFound"));
+      if (!user) throw new HttpError(404, "notFound");
 
       await (user as unknown as { softDelete(): Promise<unknown> }).softDelete();
-      res.json({
-        message: req.t("deleted", { email: req.params.email }),
-        email: req.params.email,
-        softDeleted: true,
-      });
+      res.respond({ data: { email: req.params.email, soft_deleted: true } });
     };
   }
 
@@ -56,14 +55,15 @@ export class UsersController {
         .select("email role -_id")
         .lean();
 
-      res.json({ count: deleted.length, deleted });
+      res.respond({ data: deleted });
     };
   }
 
   create(): RequestHandler {
     return async (req: Request, res: Response) => {
       const { email } = (req.body ?? {}) as { email?: string };
-      if (!email) throw new HttpError(422, req.t("emailRequired"));
+      // `field` is what puts this against the input in the envelope.
+      if (!email) throw new HttpError(422, "emailRequired", { field: "email" });
 
       await this.ctx.models!.get("User").create({ email });
       // The locale travels with the job: the worker has no request to
@@ -73,28 +73,26 @@ export class UsersController {
         locale: req.locale,
       });
 
-      res.status(201).json({
-        message: req.t("created", { email }),
-        email,
-        welcomeQueued: true,
-      });
+      res.respond({ status: 201, data: { email, welcome_queued: true } });
     };
   }
 
   ping(): RequestHandler {
     return (req: Request, res: Response) => {
-      res.json({
-        module: "users",
-        locale: req.locale,
-        maxSessions: this.ctx.config.users?.maxSessions,
+      res.respond({
+        data: {
+          module: "users",
+          locale: req.locale,
+          max_sessions: this.ctx.config.users?.maxSessions,
+        },
       });
     };
   }
 
-  /** Demonstrates HttpError — the framework renders it. */
+  /** Demonstrates HttpError — the framework renders it into the envelope. */
   demoMissing(): RequestHandler {
-    return async (req: Request) => {
-      throw new HttpError(404, req.t("notFound"), { hint: "demo endpoint" });
+    return async () => {
+      throw new HttpError(404, "notFound", { details: { hint: "demo endpoint" } });
     };
   }
 
@@ -103,12 +101,5 @@ export class UsersController {
     return async () => {
       throw new Error("secret internals that must not leak in production");
     };
-  }
-
-  /** Pagination bounds are app-wide, so every list endpoint clamps alike. */
-  #limit(req: Request): number {
-    const { defaultLimit = 20, maxLimit = 100 } = this.ctx.config.pagination ?? {};
-    const asked = Number(req.query.limit ?? defaultLimit);
-    return Math.min(Number.isFinite(asked) ? asked : defaultLimit, maxLimit);
   }
 }

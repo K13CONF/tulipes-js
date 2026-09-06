@@ -228,6 +228,59 @@ on each non-production boot and never written in production. Invalid JSON, or
 an `i18n/` folder with no default-locale file, aborts the boot: i18next would
 otherwise serve raw keys with nothing in the log to explain it.
 
+## One response shape
+
+Every endpoint answers with the same envelope, so a client writes its
+unwrapping once and branches on a code rather than parsing prose:
+
+```jsonc
+{ "success": true, "data": { }, "errors": [], "meta": {} }
+{ "success": false, "data": null,
+  "errors": [{ "field": "email", "message": "Cette adresse est prise",
+               "code": "EMAIL_TAKEN" }],
+  "meta": {} }
+```
+
+`res.respond` builds it. Express is untouched — `res.json`, `res.send` and
+`res.status` behave exactly as they always did:
+
+```ts
+res.respond({ data: user });
+res.respond({ data: user, status: 201 });
+res.respond({ data: null, meta: { action: "complete_profile" } });
+```
+
+Failures are **thrown**, never responded, and the terminal handler builds
+the same envelope from them — so a handler only ever writes the happy
+path. The message is an i18n key: it is translated in the module's
+namespace (the one the route's RAI recorded) and the error code is derived
+from it, so `notFound` becomes `NOT_FOUND` with no second string to keep
+in step.
+
+```ts
+throw new HttpError(404, "notFound");
+throw new HttpError(422, "emailTaken", { field: "email" });
+throw new ValidationError([               // several fields, one response
+  { field: "email", message: "emailRequired" },
+  { field: "password", message: "passwordTooShort" },
+]);
+```
+
+Pagination is opt-in per response. `req.page` is parsed from `?page` and
+`?per_page` and clamped by `config.pagination`, and passing `total_items`
+is what marks a response as a page — so a single record's `meta` stays
+`{}` rather than carrying four nulls:
+
+```ts
+const { per_page, skip } = req.page;
+res.respond({ data: items, meta: { total_items } });
+// meta: { page: 2, per_page: 10, total_pages: 5, total_items: 50 }
+```
+
+In development, a route that answers without `res.respond` logs a warning
+naming it. Nothing is intercepted and the raw body still ships — the point
+is that the slip is visible the first time the route is hit.
+
 ## Who is calling
 
 Core reads one field, `req.auth`, and an auth module's only job is to put

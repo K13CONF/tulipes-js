@@ -135,6 +135,30 @@ package.json.
 8. **backend**: pipeline above, sockets, listen · **worker**: start consuming
 9. `onReady` hooks — shutdown runs everything in reverse
 
+## Responses
+
+Every endpoint answers with one envelope — `{ success, data, errors, meta }`
+— built by `res.respond`. Express is untouched; `res.json` and `res.status`
+behave exactly as they always did.
+
+```sh
+curl localhost:4000/users -H "authorization: Bearer <token>"
+# { "success": true, "data": [ … ], "errors": [],
+#   "meta": { "page": 1, "per_page": 20, "total_pages": 1, "total_items": 8 } }
+
+curl -X POST 'localhost:4000/api/v1/auth/register?lang=fr' \
+  -H 'content-type: application/json' -d '{"password":"short"}'
+# { "success": false, "data": null, "errors": [
+#     { "field": "email", "message": "Une adresse email est requise",
+#       "code": "EMAIL_REQUIRED" },
+#     { "field": "password", "message": "Le mot de passe doit …",
+#       "code": "PASSWORD_TOO_SHORT" } ], "meta": {} }
+```
+
+Failures are thrown, never responded. The message is an i18n key: it gets
+translated in the module's namespace and the code derives from it, so
+`notFound` becomes `NOT_FOUND` with nothing to keep in step.
+
 ## Translations
 
 Each module owns its strings, and the module IS the namespace. `req.t` is

@@ -1,7 +1,7 @@
 import passport from "passport";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
-import { HttpError } from "@tulipes/core/http";
+import { HttpError, ValidationError, type FieldIssue } from "@tulipes/core/http";
 
 import { auth } from "../helpers/auth.js";
 import type { UserDoc } from "../helpers/documents.js";
@@ -29,6 +29,14 @@ interface Credentials {
  * file reads as a table of contents — `auth.login()` — and the class can
  * keep private helpers beside the handlers that use them without
  * threading ctx through every signature.
+ *
+ * Every response goes through `res.respond`; failures are thrown and the
+ * framework's terminal handler builds the same envelope from them.
+ *
+ * Thrown messages are i18n KEYS — the handler translates them in this
+ * module's namespace and derives the code from the key, so
+ * "invalidCredentials" becomes INVALID_CREDENTIALS with a translated
+ * message and there is no second string to keep in step.
  */
 export class AuthController {
   constructor(private readonly ctx: Ctx) {}
@@ -37,30 +45,44 @@ export class AuthController {
   register(): RequestHandler {
     return async (req: Request, res: Response) => {
       const { email, password } = (req.body ?? {}) as Credentials;
-      if (!email) throw new HttpError(422, req.t("credentialsRequired"));
-      this.#assertPassword(req, password);
+
+      // Both fields are checked before answering: a form wrong in two
+      // places should say so once, not across two round trips.
+      const issues: FieldIssue[] = [];
+      if (!email) issues.push({ field: "email", message: "emailRequired" });
+      if (!password || password.length < 8) {
+        issues.push({ field: "password", message: "passwordTooShort" });
+      }
+      if (issues.length > 0) throw new ValidationError(issues);
+      // The guards above threw unless both are present — a narrowing
+      // TypeScript cannot make through the issues array.
 
       if (this.ctx.config.users?.signupMode !== "open") {
         const mode = this.ctx.config.users?.signupMode ?? "closed";
-        throw new HttpError(403, req.t("registrationClosed", { mode }));
+        throw new HttpError(403, req.t("registrationClosed", { mode }), {
+          code: "REGISTRATION_CLOSED",
+        });
       }
 
       const User = this.ctx.models!.get<UserDoc>("User");
-      const normalised = email.toLowerCase();
+      const normalised = email!.toLowerCase();
       if (await User.countDocuments({ email: normalised }).limit(1)) {
         // Deliberately the same shape as any other validation failure: a
         // distinct message would turn registration into an oracle for
         // which addresses already have accounts.
-        throw new HttpError(422, req.t("emailUnavailable"));
+        throw new HttpError(422, "emailUnavailable", { field: "email" });
       }
 
       const user = await User.create({ email: normalised, role: "user" });
       await setPassword(this.ctx, String(user._id), password!);
 
       const tokens = await startSession(this.ctx, String(user._id), originOf(req));
-      res.status(201).json({
-        user: { id: String(user._id), email: normalised, role: "user" },
-        ...tokens,
+      res.respond({
+        status: 201,
+        data: {
+          user: { id: String(user._id), email: normalised, role: "user" },
+          ...tokens,
+        },
       });
     };
   }
@@ -74,13 +96,15 @@ export class AuthController {
         async (error: unknown, user: UserDoc | false) => {
           if (error) return next(error);
           // One message for "no such user" and "wrong password" alike.
-          if (!user) return next(new HttpError(401, req.t("invalidCredentials")));
+          if (!user) return next(new HttpError(401, "invalidCredentials"));
 
           try {
             const tokens = await startSession(this.ctx, String(user._id), originOf(req));
-            res.json({
-              user: { id: String(user._id), email: user.email, role: user.role },
-              ...tokens,
+            res.respond({
+              data: {
+                user: { id: String(user._id), email: user.email, role: user.role },
+                ...tokens,
+              },
             });
           } catch (issueError) {
             next(issueError);
@@ -93,14 +117,16 @@ export class AuthController {
   /** Rotates the pair, consuming the refresh token presented. */
   refresh(): RequestHandler {
     return async (req: Request, res: Response) => {
-      const { refreshToken } = (req.body ?? {}) as { refreshToken?: string };
-      if (!refreshToken) throw new HttpError(422, req.t("refreshRequired"));
+      const { refresh_token } = (req.body ?? {}) as { refresh_token?: string };
+      if (!refresh_token) {
+        throw new HttpError(422, "refreshRequired", { field: "refresh_token" });
+      }
 
-      const claims = verify(this.ctx, refreshToken, "refresh");
-      if (!claims) throw new HttpError(401, req.t("refreshInvalid"));
+      const claims = verify(this.ctx, refresh_token, "refresh");
+      if (!claims) throw new HttpError(401, "refreshInvalid", { field: "refresh_token" });
 
       const user = await this.ctx.models!.get<UserDoc>("User").findById(claims.sub).lean();
-      if (!user) throw new HttpError(401, req.t("accountGone"));
+      if (!user) throw new HttpError(401, "accountGone");
 
       // Rotating in place is what stops the same refresh token being
       // exchanged twice: the update matches only the jti still current on
@@ -108,9 +134,9 @@ export class AuthController {
       // nothing. The session itself survives, keeping its device and its
       // history.
       const tokens = await rotateSession(this.ctx, claims);
-      if (!tokens) throw new HttpError(401, req.t("refreshUsed"));
+      if (!tokens) throw new HttpError(401, "refreshUsed", { field: "refresh_token" });
 
-      res.json(tokens);
+      res.respond({ data: tokens });
     };
   }
 
@@ -128,10 +154,12 @@ export class AuthController {
       const access = this.#accessClaims(req);
       if (access) await revokeAccess(this.ctx, access);
 
-      res.json({
-        message: req.t("loggedOut"),
-        loggedOut: true,
-        user: user ? String(user._id) : null,
+      res.respond({
+        data: {
+          message: req.t("loggedOut"),
+          logged_out: true,
+          user: user ? String(user._id) : null,
+        },
       });
     };
   }
@@ -141,18 +169,20 @@ export class AuthController {
     return (req: Request, res: Response) => {
       const { isAuthenticated, user, session } = req.auth;
 
-      res.json({
-        is_authenticated: isAuthenticated,
-        locale: req.locale,
-        user: user && { id: String(user._id), email: user.email, role: user.role },
-        session: session && {
-          sid: session.sid,
-          ip: session.ip,
-          user_agent: session.user_agent,
-          started_at: session.created_at,
-          last_seen_at: session.last_seen_at,
-          expires_at: session.expires_at,
-          access_expires_at: session.access_expires_at,
+      res.respond({
+        data: {
+          is_authenticated: isAuthenticated,
+          locale: req.locale,
+          user: user && { id: String(user._id), email: user.email, role: user.role },
+          session: session && {
+            sid: session.sid,
+            ip: session.ip,
+            user_agent: session.user_agent,
+            started_at: session.created_at,
+            last_seen_at: session.last_seen_at,
+            expires_at: session.expires_at,
+            access_expires_at: session.access_expires_at,
+          },
         },
       });
     };
@@ -164,9 +194,8 @@ export class AuthController {
       const { user, session } = req.auth;
       const rows = await listSessions(this.ctx, String(user!._id));
 
-      res.json({
-        count: rows.length,
-        sessions: rows.map((row) => ({
+      res.respond({
+        data: rows.map((row) => ({
           sid: row.sid,
           current: row.sid === session?.sid,
           ip: row.ip,
@@ -174,6 +203,7 @@ export class AuthController {
           started_at: row.created_at,
           last_seen_at: row.last_seen_at,
         })),
+        meta: { total_items: rows.length },
       });
     };
   }
@@ -187,10 +217,12 @@ export class AuthController {
       // Scoped to the caller's own sessions: a sid is guessable enough
       // that ending anyone else's must not be one request away.
       const owned = await listSessions(this.ctx, String(user!._id));
-      if (!owned.some((row) => row.sid === sid)) throw new HttpError(404, req.t("noSuchSession"));
+      if (!owned.some((row) => row.sid === sid)) {
+        throw new HttpError(404, "noSuchSession", { field: "sid" });
+      }
 
       await endSession(this.ctx, String(sid));
-      res.json({ message: req.t("sessionEnded"), sid });
+      res.respond({ data: { message: req.t("sessionEnded"), sid } });
     };
   }
 
@@ -199,7 +231,7 @@ export class AuthController {
     return async (req: Request, res: Response) => {
       const userId = String(req.auth.user!._id);
       const { password } = (req.body ?? {}) as { password?: string };
-      this.#assertPassword(req, password);
+      this.#assertPassword(password);
 
       // setPassword bumps the token epoch AND drops every session row,
       // so there is nothing left to sign out here.
@@ -209,20 +241,22 @@ export class AuthController {
       // request — a fresh session keeps this client signed in while the
       // other devices are signed out.
       const tokens = await startSession(this.ctx, userId, originOf(req));
-      res.json({
-        message: req.t("passwordChanged"),
-        changed: true,
-        sessionsRevoked: true,
-        ...tokens,
+      res.respond({
+        data: {
+          message: req.t("passwordChanged"),
+          changed: true,
+          sessions_revoked: true,
+          ...tokens,
+        },
       });
     };
   }
 
   // Takes the request only to reach `req.t`: a rule the user broke has to
   // be explained in the language they asked for.
-  #assertPassword(req: Request, password: string | undefined): asserts password is string {
+  #assertPassword(password: string | undefined): asserts password is string {
     if (!password || password.length < 8) {
-      throw new HttpError(422, req.t("passwordTooShort"));
+      throw new HttpError(422, "passwordTooShort", { field: "password" });
     }
   }
 

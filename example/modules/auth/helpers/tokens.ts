@@ -22,9 +22,9 @@ export interface TokenClaims {
 }
 
 export interface TokenPair {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: string;
+  access_token: string;
+  refresh_token: string;
+  expires_in: string;
 }
 
 /** Where a session was started, for the row and for the user to review. */
@@ -49,20 +49,26 @@ const ttl = (ctx: Ctx, typ: "access" | "refresh"): string =>
 function mint(ctx: Ctx, userId: string, sid: string): TokenPair & { refreshJti: string; refreshExp: number } {
   const refreshJti = randomUUID();
 
-  const accessToken = jwt.sign({ typ: "access", sid }, secret(ctx, "access"), {
+  const access_token = jwt.sign({ typ: "access", sid }, secret(ctx, "access"), {
     subject: userId,
     jwtid: randomUUID(),
     expiresIn: ttl(ctx, "access") as jwt.SignOptions["expiresIn"],
   });
 
-  const refreshToken = jwt.sign({ typ: "refresh", sid }, secret(ctx, "refresh"), {
+  const refresh_token = jwt.sign({ typ: "refresh", sid }, secret(ctx, "refresh"), {
     subject: userId,
     jwtid: refreshJti,
     expiresIn: ttl(ctx, "refresh") as jwt.SignOptions["expiresIn"],
   });
 
-  const { exp } = jwt.decode(refreshToken) as { exp: number };
-  return { accessToken, refreshToken, expiresIn: ttl(ctx, "access"), refreshJti, refreshExp: exp };
+  const { exp } = jwt.decode(refresh_token) as { exp: number };
+  return {
+    access_token,
+    refresh_token,
+    expires_in: ttl(ctx, "access"),
+    refreshJti,
+    refreshExp: exp,
+  };
 }
 
 /** Open a session — a sign-in, from a device worth remembering. */

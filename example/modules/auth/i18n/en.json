@@ -11,5 +11,6 @@
   "loggedOut": "Signed out",
   "passwordChanged": "Password changed — every other session was signed out",
   "noSuchSession": "No such session",
-  "sessionEnded": "Session ended"
+  "sessionEnded": "Session ended",
+  "emailRequired": "An email address is required"
 }
