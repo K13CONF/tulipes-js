@@ -9,7 +9,12 @@ export { Environment, appEnvs, type AppEnv, type EnvironmentOptions } from "./en
  * augmentation only merges with the module that declares the interface.
  */
 export interface KnownVariables {}
-export { VariableStore } from "./variable-store.js";
+export {
+  VariableStore,
+  type DescribedVariable,
+  type VariableSource,
+} from "./variable-store.js";
+export { coerceValue } from "./coerce.js";
 export { discoverModuleMeta, META_FILENAME, type ModuleMeta } from "./meta-discovery.js";
 export {
   metaFileSchema,

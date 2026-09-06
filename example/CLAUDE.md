@@ -50,7 +50,11 @@ applies before you write code.
     → skill `tulipes-permissions`
 11. **Secrets never go on the User model.** Passwords and keys belong in
     the auth module's `Credential` model, which is `select: false`.
-12. **Cross-module imports use the package name** (`@app/users`,
+12. **A new feature module's namespace goes in BOTH the `admin` and
+    `sysadmin` grants** in `modules/auth/module.acl.ts`. Neither role holds
+    `*` — a wildcard would reach `settings:*` and make the sysadmin
+    boundary a label rather than a rule. → skill `tulipes-settings`
+13. **Cross-module imports use the package name** (`@app/users`,
     `@app/core`), never a relative path that climbs out of the module. The
     workspace boundary is what keeps modules independent, and a package
     name makes the dependency visible in package.json — declare it there

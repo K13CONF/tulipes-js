@@ -1,10 +1,21 @@
 import type { VariableSpec, VariableValue } from "./spec.js";
 
-interface StoredVariable {
+/**
+ * Which of the three sources supplied the value, in precedence order.
+ *
+ * Recorded because it is not recoverable afterwards, and anything that
+ * writes a value back has to know: a variable injected by the container
+ * cannot be changed by editing a file, and one still on its default has
+ * no file entry to edit yet.
+ */
+export type VariableSource = "process.env" | "file" | "default";
+
+export interface StoredVariable {
   spec: VariableSpec;
   /** Module that owns (declared) this variable. */
   owner: string;
   value: VariableValue;
+  source: VariableSource;
 }
 
 /**
@@ -19,8 +30,13 @@ export class VariableStore {
   readonly #variables = new Map<string, StoredVariable>();
 
   /** @internal Populated by the Environment engine during boot. */
-  declare_(spec: VariableSpec, owner: string, value: VariableValue): void {
-    this.#variables.set(spec.name, { spec, owner, value });
+  declare_(
+    spec: VariableSpec,
+    owner: string,
+    value: VariableValue,
+    source: VariableSource,
+  ): void {
+    this.#variables.set(spec.name, { spec, owner, value, source });
   }
 
   has(name: string): boolean {
@@ -50,6 +66,27 @@ export class VariableStore {
     return this.#variables.get(name)?.owner;
   }
 
+  sourceOf(name: string): VariableSource | undefined {
+    return this.#variables.get(name)?.source;
+  }
+
+  /**
+   * Every declared variable with its spec, owner, value and source — what
+   * a settings console needs to render a form and decide where a write
+   * lands. Secrets carry `value: undefined`; nothing but an explicit
+   * reveal should ever produce one.
+   */
+  describe(options: { revealSecrets?: boolean } = {}): DescribedVariable[] {
+    return [...this.#variables.values()].map(({ spec, owner, value, source }) => ({
+      spec,
+      owner,
+      source,
+      isSecret: spec.type === "secret",
+      value: spec.type === "secret" && !options.revealSecrets ? undefined : value,
+      isSet: value !== undefined,
+    }));
+  }
+
   /**
    * Flat view for logging / debugging. Secrets are redacted by default and
    * opting out is deliberately loud in the caller's code.
@@ -62,4 +99,14 @@ export class VariableStore {
     }
     return view;
   }
+}
+
+export interface DescribedVariable {
+  spec: VariableSpec;
+  owner: string;
+  source: VariableSource;
+  isSecret: boolean;
+  /** Absent for a secret unless explicitly revealed. */
+  value: VariableValue | undefined;
+  isSet: boolean;
 }

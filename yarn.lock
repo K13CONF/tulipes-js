@@ -64,6 +64,18 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@app/settings@workspace:example/modules/settings":
+  version: 0.0.0-use.local
+  resolution: "@app/settings@workspace:example/modules/settings"
+  dependencies:
+    "@app/auth": "workspace:*"
+    "@app/core": "workspace:*"
+    "@tulipes/core": "workspace:*"
+    express: "npm:^5"
+    zod: "npm:^3.25"
+  languageName: unknown
+  linkType: soft
+
 "@app/users@workspace:example/modules/users":
   version: 0.0.0-use.local
   resolution: "@app/users@workspace:example/modules/users"

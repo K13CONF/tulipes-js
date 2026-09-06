@@ -1,0 +1,11 @@
+{
+  "noSuchVariable": "Aucune variable de ce nom n'est déclarée par un module",
+  "noSuchModule": "Module introuvable",
+  "noSuchLocale": "Ce module ne fournit pas cette langue",
+  "invalidVariableName": "Les noms de variables sont en UPPER_SNAKE_CASE",
+  "invalidModuleName": "Les noms de modules sont en kebab-case minuscule",
+  "invalidLocale": "La langue doit ressembler à « en » ou « en-GB »",
+  "valueRequired": "Une valeur est requise",
+  "notSupervised": "Pas géré par PM2 — redémarrez manuellement pour appliquer les changements",
+  "fileLoggingDisabled": "LOG_FILE est désactivé — aucun fichier de log à diffuser"
+}

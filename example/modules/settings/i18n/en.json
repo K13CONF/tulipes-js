@@ -1,0 +1,11 @@
+{
+  "noSuchVariable": "No variable by that name is declared by any module",
+  "noSuchModule": "No such module",
+  "noSuchLocale": "That module ships no such locale",
+  "invalidVariableName": "Variable names are UPPER_SNAKE_CASE",
+  "invalidModuleName": "Module names are lowercase kebab-case",
+  "invalidLocale": "Locale must look like \"en\" or \"en-GB\"",
+  "valueRequired": "A value is required",
+  "notSupervised": "Not running under PM2 — restart manually for changes to take effect",
+  "fileLoggingDisabled": "LOG_FILE is off — there are no log files to stream"
+}
