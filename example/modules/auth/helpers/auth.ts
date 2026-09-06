@@ -12,7 +12,7 @@ import type { SessionDoc, UserDoc } from "./documents.js";
  * Core declares `user` and `session` as empty interfaces on purpose: it
  * knows the shape of the contract, and the app says what fills it. These
  * augmentations are what make `req.auth.user.email` and
- * `req.auth.session.lastSeenAt` typed at every call site.
+ * `req.auth.session.last_seen_at` typed at every call site.
  */
 declare module "@tulipes/core/http" {
   interface AuthUser extends UserDoc {}
@@ -23,9 +23,9 @@ declare module "@tulipes/core/http" {
      * stored on it: the row outlives any single token, and these three
      * are what let a handler revoke exactly the token in its hand.
      */
-    accessJti: string;
-    accessIssuedAt: Date;
-    accessExpiresAt: Date;
+    access_jti: string;
+    access_issued_at: Date;
+    access_expires_at: Date;
   }
 }
 

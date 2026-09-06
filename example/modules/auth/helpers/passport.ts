@@ -35,11 +35,11 @@ export function configurePassport(ctx: Ctx): void {
           const credential = await ctx.models!
             .get<CredentialDoc>("Credential")
             .findOne({ user: user._id })
-            .select("+passwordHash")
+            .select("+password_hash")
             .lean();
           if (!credential) return done(null, false);
 
-          const ok = await verifyPassword(password, credential.passwordHash);
+          const ok = await verifyPassword(password, credential.password_hash);
           return done(null, ok ? (user as Express.User) : false);
         } catch (error) {
           return done(error as Error);
@@ -78,8 +78,8 @@ export function configurePassport(ctx: Ctx): void {
           // Compared at second precision, because `iat` only has seconds:
           // a token minted milliseconds *after* the epoch would otherwise
           // look older than it and reject itself the moment it was issued.
-          if (user.tokensValidFrom) {
-            const epochSeconds = Math.floor(user.tokensValidFrom.getTime() / 1000);
+          if (user.tokens_valid_from) {
+            const epochSeconds = Math.floor(user.tokens_valid_from.getTime() / 1000);
             if (claims.iat < epochSeconds) return done(null, false);
           }
 
@@ -104,14 +104,14 @@ function resolve(user: UserDoc, session: SessionDoc, claims: TokenClaims): Auth 
     isAuthenticated: true,
     user,
     session: Object.assign(session, {
-      accessJti: claims.jti,
-      accessIssuedAt: new Date(claims.iat * 1000),
-      accessExpiresAt: new Date(claims.exp * 1000),
+      access_jti: claims.jti,
+      access_issued_at: new Date(claims.iat * 1000),
+      access_expires_at: new Date(claims.exp * 1000),
     }),
   };
 }
 
-/** How stale `lastSeenAt` may get before a request pays for a write. */
+/** How stale `last_seen_at` may get before a request pays for a write. */
 function touchInterval(ctx: Ctx): number {
   return Number(ctx.config.auth?.sessionTouchSeconds ?? 60);
 }
