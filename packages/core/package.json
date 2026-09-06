@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/core",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Module-based Express framework: convention-driven boot pipeline, env contracts, ACL, queues, sockets and CLI",
   "type": "module",
   "bin": {
@@ -22,7 +22,9 @@
   },
   "files": [
     "dist",
-    "templates"
+    "templates",
+    "CHANGELOG.md",
+    "MIGRATING.md"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",

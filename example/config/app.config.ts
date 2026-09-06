@@ -32,7 +32,6 @@ const appConfig = (() => ({
    */
   api: {
     prefix: "/api/v1",
-    docsPath: "/api/docs",
   },
 
   /**
