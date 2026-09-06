@@ -5,6 +5,7 @@ import { runNewModule } from "./new-module.js";
 import { runDev } from "./dev.js";
 import { runUpdate } from "./update.js";
 import { runRoutes } from "./routes.js";
+import { runSpec } from "./spec.js";
 import { appCoreVersion, coreVersion } from "./package-info.js";
 
 /**
@@ -20,6 +21,8 @@ Usage:
   tulipes sync                 regenerate types/config.d.ts and .env.example
   tulipes env:check            validate env against every meta.variables.json (CI-friendly)
   tulipes routes               list every declared endpoint, with the roles that reach it
+  tulipes spec [options]       write an OpenAPI document / Postman collection (needs @tulipes/spec)
+                                 --openapi <file>  --postman <file>  --url <base>
   tulipes new module <name>    scaffold a module under ./modules
   tulipes update               upgrade the global cli and, inside an app, the app itself
   tulipes -v                   print the cli version (and the app's, when they differ)
@@ -38,6 +41,12 @@ export async function main(argv: readonly string[]): Promise<void> {
       return runEnvCheck(rootDir);
     case "routes":
       return runRoutes(rootDir);
+    case "spec":
+      return runSpec(rootDir, {
+        ...(flag(rest, "--openapi") && { openapi: flag(rest, "--openapi")! }),
+        ...(flag(rest, "--postman") && { postman: flag(rest, "--postman")! }),
+        ...(flag(rest, "--url") && { url: flag(rest, "--url")! }),
+      });
     case "update":
       return runUpdate(rootDir);
     case "new":
@@ -69,4 +78,12 @@ export async function main(argv: readonly string[]): Promise<void> {
       console.error(`Unknown command "${command}"\n\n${HELP}`);
       process.exitCode = 2;
   }
+}
+
+/** `--name value` → value. Absent, or missing its value, reads as unset. */
+function flag(argv: readonly string[], name: string): string | undefined {
+  const index = argv.indexOf(name);
+  if (index === -1) return undefined;
+  const value = argv[index + 1];
+  return value && !value.startsWith("--") ? value : undefined;
 }

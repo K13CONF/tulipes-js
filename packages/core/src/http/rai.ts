@@ -1,6 +1,7 @@
 import type { Request, RequestHandler, Response } from "express";
 
-import { HttpError } from "./error-handler.js";
+import { HttpError, ValidationError, type FieldIssue } from "./error-handler.js";
+import { codeOfIssue, fieldOf, type RouteSchemas, type ValidatableSchema } from "./schema.js";
 import type { Auth } from "./index.js";
 
 /**
@@ -19,12 +20,26 @@ import type { Auth } from "./index.js";
  *     interface RouteInfo { openapi?: { tags: string[] } }
  *   }
  */
-export interface RouteInfo {
+export interface RouteInfo extends RouteSchemas {
   /** Resource Access Identifier, e.g. "users:read". Also the permission. */
   id: string;
   /** Human label, for generated documentation. */
   name?: string;
   description?: string;
+  /**
+   * Groups this endpoint in generated specs — a folder in a Postman
+   * collection, a tag in OpenAPI. Defaults to the declaring module, so
+   * grouping comes out right without anyone saying anything; set it to
+   * gather routes from several modules under one heading, or to split one
+   * module's routes apart.
+   */
+  folder?: string;
+  /**
+   * The success payload — what goes in the envelope's `data`. Never
+   * validated (a handler is trusted with its own output); it exists so a
+   * generated spec can describe the response.
+   */
+  returns?: ValidatableSchema;
 }
 
 /** The role a caller has before anyone identifies them. */
@@ -143,28 +158,83 @@ export function createRai(
       const allowed = registry.checker
         ? registry.checker(req, info)
         : can(role, info.id);
-      if (allowed) return next();
 
-      // 401 says "sign in and this may work"; 403 says it will not. A
-      // client can act on the difference, so they are not merged.
-      //
-      // Both carry a key AND an English default: an app that defines
-      // "forbidden" in a module's i18n gets it translated, and one that
-      // never thinks about it still reads correctly.
-      throw req.auth.isAuthenticated
-        ? new HttpError(403, "forbidden", {
-            code: "FORBIDDEN",
-            vars: { role, permission: info.id },
-            defaultMessage: `role "${role}" may not ${info.id}`,
-          })
-        : new HttpError(401, "unauthenticated", {
-            code: "UNAUTHENTICATED",
-            defaultMessage: "authentication required",
-          });
+      if (!allowed) {
+        // 401 says "sign in and this may work"; 403 says it will not. A
+        // client can act on the difference, so they are not merged.
+        //
+        // Both carry a key AND an English default: an app that defines
+        // "forbidden" in a module's i18n gets it translated, and one that
+        // never thinks about it still reads correctly.
+        throw req.auth.isAuthenticated
+          ? new HttpError(403, "forbidden", {
+              code: "FORBIDDEN",
+              vars: { role, permission: info.id },
+              defaultMessage: `role "${role}" may not ${info.id}`,
+            })
+          : new HttpError(401, "unauthenticated", {
+              code: "UNAUTHENTICATED",
+              defaultMessage: "authentication required",
+            });
+      }
+
+      // Validation runs AFTER the access check, never before: telling a
+      // caller which fields are wrong on a route they may not reach leaks
+      // its shape to someone with no business knowing it.
+      validate(req, info);
+      return next();
     };
 
     const tag: RaiTag = { info, module };
     Object.defineProperty(handler, RAI_TAG, { value: tag, enumerable: false });
     return handler;
   };
+}
+
+/**
+ * Parses every declared segment and writes the coerced values back, so a
+ * handler reads `req.body.age` as the number the schema promised rather
+ * than the string that arrived.
+ *
+ * All three segments are checked before throwing: a request wrong in the
+ * query AND the body should say so once.
+ */
+function validate(req: Request, info: RouteInfo): void {
+  const issues: FieldIssue[] = [];
+
+  for (const segment of ["params", "query", "body"] as const) {
+    const schema = info[segment];
+    if (!schema) continue;
+
+    const result = schema.safeParse(req[segment]);
+    if (result.success) {
+      assign(req, segment, result.data);
+      continue;
+    }
+
+    for (const issue of result.error.issues) {
+      issues.push({
+        field: fieldOf(segment, issue.path),
+        // Zod's message doubles as an i18n key when the schema names one:
+        // `z.string().email("invalidEmail")` is translated downstream, and
+        // a plain sentence passes through. The error handler decides.
+        message: issue.message,
+        ...(codeOfIssue(issue) && { code: codeOfIssue(issue)! }),
+      });
+    }
+  }
+
+  if (issues.length > 0) throw new ValidationError(issues);
+}
+
+/**
+ * Express 5 exposes `req.query` through a getter, so it cannot be assigned
+ * like the others — the coerced value is defined over it per request.
+ */
+function assign(req: Request, segment: "params" | "query" | "body", value: unknown): void {
+  if (segment !== "query") {
+    (req as unknown as Record<string, unknown>)[segment] = value;
+    return;
+  }
+  Object.defineProperty(req, "query", { value, writable: true, configurable: true });
 }

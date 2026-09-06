@@ -344,9 +344,11 @@ __metadata:
   resolution: "@tulipes-example/app@workspace:example"
   dependencies:
     "@tulipes/core": "workspace:*"
+    "@tulipes/spec": "workspace:*"
     ioredis: "npm:^5"
     mongoose: "npm:^8"
     socket.io-client: "npm:^4"
+    zod: "npm:^3.25"
   languageName: unknown
   linkType: soft
 
@@ -370,6 +372,20 @@ __metadata:
     zod: "npm:^3.24.1"
   bin:
     tulipes: ./bin/tulipes.js
+  languageName: unknown
+  linkType: soft
+
+"@tulipes/spec@workspace:*, @tulipes/spec@workspace:packages/spec":
+  version: 0.0.0-use.local
+  resolution: "@tulipes/spec@workspace:packages/spec"
+  dependencies:
+    "@tulipes/core": "workspace:*"
+    "@types/node": "npm:^24.2.0"
+    typescript: "npm:^7.0.2"
+    zod: "npm:^3.25"
+  peerDependencies:
+    "@tulipes/core": ^0.6.0
+    zod: ^3.25 || ^4
   languageName: unknown
   linkType: soft
 
@@ -2738,7 +2754,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:^3.24.1":
+"zod@npm:^3.24.1, zod@npm:^3.25":
   version: 3.25.76
   resolution: "zod@npm:3.25.76"
   checksum: 10c0/5718ec35e3c40b600316c5b4c5e4976f7fee68151bc8f8d90ec18a469be9571f072e1bbaace10f1e85cf8892ea12d90821b200e980ab46916a6166a4260a983c

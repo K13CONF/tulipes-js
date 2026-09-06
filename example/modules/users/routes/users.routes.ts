@@ -1,7 +1,9 @@
 import { Router } from "express";
+import { z } from "zod/v4";
 import type { Ctx } from "@tulipes/core/boot";
 
 import { UsersController } from "../controllers/users.controllers.js";
+import { createBody, emailParam, listQuery, userShape } from "../schemas.js";
 
 export default function usersRoutes(ctx: Ctx): Router {
   const { rai } = ctx;
@@ -17,6 +19,10 @@ export default function usersRoutes(ctx: Ctx): Router {
       id: "users:read",
       name: "List users",
       description: "Page through accounts, clamped by the shared bounds",
+      // Validated on the way in, and described on the way out: one
+      // declaration, so the spec cannot drift from what is enforced.
+      query: listQuery,
+      returns: z.array(userShape),
     }),
     users.list(),
   );
@@ -27,6 +33,7 @@ export default function usersRoutes(ctx: Ctx): Router {
       id: "users:delete",
       name: "Soft-delete a user",
       description: "Flags the account; ordinary queries stop returning it",
+      params: emailParam,
     }),
     users.softDelete(),
   );
@@ -46,6 +53,7 @@ export default function usersRoutes(ctx: Ctx): Router {
       id: "users:create",
       name: "Create a user",
       description: "Adds the account and queues its welcome email",
+      body: createBody,
     }),
     users.create(),
   );

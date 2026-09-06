@@ -93,6 +93,9 @@ const json = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
 
 function renderProject(name: string, coreVersion: string): [string, string][] {
   const core = `^${coreVersion}`;
+  // The generator ships its own version line; it only has to be recent
+  // enough to understand the RouteInfo schemas this core declares.
+  const specVersion = "^0.1.0";
 
   const files: [string, string][] = [
     ["package.json", json({
@@ -110,6 +113,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         check: "tulipes env:check",
         typecheck: "tsc --noEmit",
         script: "tsx",
+        spec: "tulipes spec --openapi docs/openapi.json --postman docs/collection.json",
         "pm2:start": "pm2 start ecosystem.config.cjs",
         "pm2:start:staging": "pm2 start ecosystem.config.cjs --env staging",
         "pm2:start:production": "pm2 start ecosystem.config.cjs --env production",
@@ -122,10 +126,15 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       dependencies: {
         "@tulipes/core": core,
         express: "^5",
+        // Route schemas: validated by rai(), described by `yarn spec`.
+        // The v4 subpath is what `z.toJSONSchema` understands.
+        zod: "^3.25",
       },
       devDependencies: {
         "@types/express": "^5",
         "@types/node": "^24",
+        // Only needed to generate documents, never to run the app.
+        "@tulipes/spec": specVersion,
         // Local convenience: servers usually install pm2 globally instead.
         pm2: "^6",
         tsx: "^4",
@@ -1369,7 +1378,9 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
           "passwordChanged": "Password changed — every other session was signed out",
           "noSuchSession": "No such session",
           "sessionEnded": "Session ended",
-          "emailRequired": "An email address is required"
+          "emailRequired": "An email address is required",
+          "emailInvalid": "Must be a valid email address",
+          "passwordRequired": "A password is required"
     })],
 
     ["modules/auth/i18n/fr.json", json({
@@ -1386,7 +1397,9 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
           "passwordChanged": "Mot de passe modifié — toutes les autres sessions ont été fermées",
           "noSuchSession": "Session introuvable",
           "sessionEnded": "Session terminée",
-          "emailRequired": "Une adresse email est requise"
+          "emailRequired": "Une adresse email est requise",
+          "emailInvalid": "Doit être une adresse email valide",
+          "passwordRequired": "Un mot de passe est requis"
     })],
 
     ["modules/auth/controllers/auth.controllers.ts", [
@@ -1668,6 +1681,14 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       ``,
       `import { AuthController } from "../controllers/auth.controllers.js";`,
       `import { authenticate, configurePassport } from "../helpers/passport.js";`,
+      `import {`,
+      `  credentials,`,
+      `  newPassword,`,
+      `  refreshBody,`,
+      `  registration,`,
+      `  sidParam,`,
+      `  tokenPair,`,
+      `} from "../schemas.js";`,
       ``,
       `/**`,
       ` * Auth is a sys-tier module, so this runs before every feature router.`,
@@ -1699,6 +1720,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `      id: "auth:register",`,
       `      name: "Register",`,
       `      description: "Create an account and its credential",`,
+      `      body: registration,`,
       `    }),`,
       `    auth.register(),`,
       `  );`,
@@ -1709,6 +1731,8 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `      id: "auth:login",`,
       `      name: "Log in",`,
       `      description: "Exchange email and password for a token pair",`,
+      `      body: credentials,`,
+      `      returns: tokenPair,`,
       `    }),`,
       `    auth.login(),`,
       `  );`,
@@ -1719,6 +1743,8 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `      id: "auth:refresh",`,
       `      name: "Refresh tokens",`,
       `      description: "Rotate a refresh token for a new pair",`,
+      `      body: refreshBody,`,
+      `      returns: tokenPair,`,
       `    }),`,
       `    auth.refresh(),`,
       `  );`,
@@ -1749,6 +1775,10 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `      id: "auth:sessions",`,
       `      name: "List sessions",`,
       `      description: "Every device this account is signed in on",`,
+      `      // These two are auth's, but they answer a different question from`,
+      `      // signing in — \`folder\` puts them under their own heading in the`,
+      `      // generated collection and spec.`,
+      `      folder: "sessions",`,
       `    }),`,
       `    auth.sessions(),`,
       `  );`,
@@ -1759,6 +1789,8 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `      id: "auth:session-end",`,
       `      name: "End a session",`,
       `      description: "Sign one other device out",`,
+      `      folder: "sessions",`,
+      `      params: sidParam,`,
       `    }),`,
       `    auth.revokeSession(),`,
       `  );`,
@@ -1769,6 +1801,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `      id: "auth:password",`,
       `      name: "Change password",`,
       `      description: "Set a new password and end every other session",`,
+      `      body: newPassword,`,
       `    }),`,
       `    auth.changePassword(),`,
       `  );`,
@@ -1984,7 +2017,8 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
           },
           "welcome": {
                 "subject": "Welcome, {{email}}"
-          }
+          },
+          "emailInvalid": "Must be a valid email address"
     })],
 
     ["modules/users/i18n/fr.json", json({
@@ -1998,7 +2032,8 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
           },
           "welcome": {
                 "subject": "Bienvenue, {{email}}"
-          }
+          },
+          "emailInvalid": "Doit être une adresse email valide"
     })],
 
     ["modules/users/controllers/users.controllers.ts", [
@@ -2112,9 +2147,11 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
 
     ["modules/users/routes/users.routes.ts", [
       `import { Router } from "express";`,
+      `import { z } from "zod/v4";`,
       `import type { Ctx } from "@tulipes/core/boot";`,
       ``,
       `import { UsersController } from "../controllers/users.controllers.js";`,
+      `import { createBody, emailParam, listQuery, userShape } from "../schemas.js";`,
       ``,
       `export default function usersRoutes(ctx: Ctx): Router {`,
       `  const { rai } = ctx;`,
@@ -2130,6 +2167,10 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `      id: "users:read",`,
       `      name: "List users",`,
       `      description: "Page through accounts, clamped by the shared bounds",`,
+      `      // Validated on the way in, and described on the way out: one`,
+      `      // declaration, so the spec cannot drift from what is enforced.`,
+      `      query: listQuery,`,
+      `      returns: z.array(userShape),`,
       `    }),`,
       `    users.list(),`,
       `  );`,
@@ -2140,6 +2181,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `      id: "users:delete",`,
       `      name: "Soft-delete a user",`,
       `      description: "Flags the account; ordinary queries stop returning it",`,
+      `      params: emailParam,`,
       `    }),`,
       `    users.softDelete(),`,
       `  );`,
@@ -2159,6 +2201,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `      id: "users:create",`,
       `      name: "Create a user",`,
       `      description: "Adds the account and queues its welcome email",`,
+      `      body: createBody,`,
       `    }),`,
       `    users.create(),`,
       `  );`,
@@ -2312,6 +2355,80 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
                 }
           ]
     })],
+
+    ["modules/users/schemas.ts", [
+      `import { z } from "zod/v4";`,
+      ``,
+      `/**`,
+      ` * Shapes for the users endpoints. Declared once and used twice: \`rai()\``,
+      ` * validates the request against them, and \`tulipes spec\` describes them`,
+      ` * in the generated OpenAPI document and Postman collection — so the`,
+      ` * documentation can never claim a shape the endpoint would reject.`,
+      ` *`,
+      ` * zod/v4, not the classic import: \`z.toJSONSchema\` is what the generator`,
+      ` * uses, and it only understands v4 schemas.`,
+      ` */`,
+      `export const listQuery = z.object({`,
+      `  page: z.coerce.number().int().min(1).optional(),`,
+      `  per_page: z.coerce.number().int().min(1).max(100).optional(),`,
+      `});`,
+      ``,
+      `export const createBody = z.object({`,
+      `  // The message doubles as an i18n key: the error handler translates it`,
+      `  // in this module's namespace, and falls back to the text as written.`,
+      `  email: z.email("emailInvalid"),`,
+      `});`,
+      ``,
+      `export const emailParam = z.object({`,
+      `  email: z.email("emailInvalid"),`,
+      `});`,
+      ``,
+      `export const userShape = z.object({`,
+      `  email: z.string(),`,
+      `  role: z.string(),`,
+      `});`,
+      ``,
+    ].join("\n")],
+
+    ["modules/auth/schemas.ts", [
+      `import { z } from "zod/v4";`,
+      ``,
+      `/**`,
+      ` * Request shapes for the auth endpoints, used twice from one declaration:`,
+      ` * \`rai()\` validates against them, and \`tulipes spec\` describes them.`,
+      ` *`,
+      ` * Messages are i18n keys — the error handler translates them in this`,
+      ` * module's namespace, so a rejected field speaks the caller's language.`,
+      ` */`,
+      `export const credentials = z.object({`,
+      `  email: z.email("emailInvalid"),`,
+      `  password: z.string("passwordRequired").min(1, "passwordRequired"),`,
+      `});`,
+      ``,
+      `export const registration = z.object({`,
+      `  email: z.email("emailInvalid"),`,
+      `  password: z.string("passwordTooShort").min(8, "passwordTooShort"),`,
+      `});`,
+      ``,
+      `export const refreshBody = z.object({`,
+      `  refresh_token: z.string("refreshRequired").min(1, "refreshRequired"),`,
+      `});`,
+      ``,
+      `export const newPassword = z.object({`,
+      `  password: z.string("passwordTooShort").min(8, "passwordTooShort"),`,
+      `});`,
+      ``,
+      `export const sidParam = z.object({`,
+      `  sid: z.uuid("noSuchSession"),`,
+      `});`,
+      ``,
+      `export const tokenPair = z.object({`,
+      `  access_token: z.string(),`,
+      `  refresh_token: z.string(),`,
+      `  expires_in: z.string(),`,
+      `});`,
+      ``,
+    ].join("\n")],
 
     ["modules/users/package.json", json({
       name: `@app/users`,

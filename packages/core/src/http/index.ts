@@ -35,6 +35,13 @@ export {
   type RouteRecord,
 } from "./rai.js";
 export { scanRoutes } from "./route-scan.js";
+export {
+  codeOfIssue,
+  fieldOf,
+  type RouteSchemas,
+  type SchemaIssue,
+  type ValidatableSchema,
+} from "./schema.js";
 
 /**
  * Who is making a request. Core owns the shape and reads `req.auth`; an

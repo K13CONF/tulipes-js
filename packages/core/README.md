@@ -478,6 +478,51 @@ middleware belongs, and how to read an aggregate boot report.
 
 </details>
 
+## Generated API documentation
+
+Every route already declares its id, name, description, owning module and
+the roles that reach it. Add zod schemas to the same `rai()` and the
+framework validates requests against them — then
+[`@tulipes/spec`](https://www.npmjs.com/package/@tulipes/spec) turns the
+whole registry into an OpenAPI 3.1 document and a Postman collection:
+
+```ts
+import { z } from "zod/v4";
+
+router.post(
+  `${base}/users`,
+  rai({
+    id: "users:create",
+    name: "Create a user",
+    folder: "users",                                    // Postman folder / OpenAPI tag
+    body: z.object({ email: z.email("emailInvalid") }),  // validated AND described
+    returns: z.object({ id: z.string(), email: z.string() }),
+  }),
+  users.create(),
+);
+```
+
+```sh
+yarn add -D @tulipes/spec
+yarn tulipes spec --openapi docs/openapi.json --postman docs/collection.json
+```
+
+One declaration validates the request and documents it, so the two cannot
+disagree. A rejected field is reported through the normal envelope, and
+the zod message doubles as an i18n key — so it arrives in the caller's
+language:
+
+```jsonc
+{ "success": false, "data": null,
+  "errors": [{ "field": "email", "message": "Doit être une adresse email valide",
+               "code": "INVALID_FORMAT" }],
+  "meta": {} }
+```
+
+Generation boots the app **without listening**, so it works while the app
+is running and describes the router actually mounted rather than a
+parser's guess of it.
+
 ## Versioning
 
 `0.x`, and a minor bump may break — `0.2` through `0.5` each did. The

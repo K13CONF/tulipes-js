@@ -1,0 +1,48 @@
+{
+  "name": "@tulipes/spec",
+  "version": "0.1.0",
+  "description": "Generate OpenAPI documents and Postman collections from a Tulipes app's declared routes",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "prepack": "yarn build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@tulipes/core": "^0.6.0",
+    "zod": "^3.25 || ^4"
+  },
+  "devDependencies": {
+    "@tulipes/core": "workspace:*",
+    "@types/node": "^24.2.0",
+    "typescript": "^7.0.2",
+    "zod": "^3.25"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kemora13conf/bp-backend-express.git",
+    "directory": "packages/spec"
+  },
+  "keywords": [
+    "tulipes",
+    "openapi",
+    "postman",
+    "api-documentation",
+    "express",
+    "zod"
+  ],
+  "license": "MIT"
+}

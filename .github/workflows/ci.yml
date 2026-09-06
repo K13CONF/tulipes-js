@@ -30,6 +30,9 @@ jobs:
       - name: Smoke-test compiled CLI
         run: node packages/core/dist/cli/bin.js help
 
+      - name: Typecheck the spec generator
+        run: yarn workspace @tulipes/spec typecheck
+
       - name: Codegen + typecheck example against generated types
         run: |
           yarn workspace @tulipes-example/app sync
