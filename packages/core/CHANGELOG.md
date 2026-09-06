@@ -11,6 +11,32 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-06
+
+### Added
+
+- **Request validation on the RAI.** `rai({ body, query, params })` takes
+  zod schemas; the framework parses each segment, writes the coerced values
+  back, and reports failures as the envelope's `errors[]` with no handler
+  code. All three segments are checked before answering, so a request wrong
+  in two places says so once.
+- The zod message doubles as an i18n key, so a rejected field arrives in
+  the caller's language; the code comes from zod's issue code
+  (`INVALID_FORMAT`, `TOO_SMALL`).
+- `returns` on the RAI — never validated, it describes the response for
+  generated documents.
+- `folder` on the RAI — the Postman folder and OpenAPI tag for an endpoint,
+  defaulting to the declaring module.
+- `tulipes spec`, writing an OpenAPI 3.1 document and/or a Postman
+  collection. The generator lives in the new
+  [`@tulipes/spec`](https://www.npmjs.com/package/@tulipes/spec) package,
+  imported lazily so core carries no dependency on it.
+
+### Changed
+
+- Validation runs **after** the access check, never before: telling a caller
+  which fields are wrong on a route they may not reach would leak its shape.
+
 ## [0.5.2] — 2026-09-06
 
 ### Added
@@ -166,7 +192,8 @@ generated types, ACL, the model store, queues, sockets, the three process
 modes (`backend`, `worker`, `script`), the startup banner, and the CLI —
 `init`, `dev`, `sync`, `env:check`, `new module`, `update`.
 
-[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.4.0...v0.5.0

@@ -36,10 +36,14 @@ jobs:
           fi
 
       - name: Typecheck
-        run: yarn workspace @tulipes/core typecheck
+        run: |
+          yarn workspace @tulipes/core typecheck
+          yarn workspace @tulipes/spec typecheck
 
       - name: Build
-        run: yarn workspace @tulipes/core build
+        run: |
+          yarn workspace @tulipes/core build
+          yarn workspace @tulipes/spec build
 
       - name: Smoke-test compiled CLI
         run: node packages/core/dist/cli/bin.js help
@@ -61,7 +65,21 @@ jobs:
       # src/*.ts to dist/*.js, and only dist/ ships (files field).
       # Registry is pinned for this step only — the install step must keep
       # the lockfile's default registry to stay --immutable.
-      - name: Publish
+      - name: Publish @tulipes/core
         run: yarn workspace @tulipes/core npm publish --access public
+        env:
+          YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # The generator versions independently of core, so a tag that does
+      # not move it simply finds the version already published and skips.
+      # `|| true` would hide a real failure, so the check is explicit.
+      - name: Publish @tulipes/spec
+        run: |
+          VERSION="$(node -p "require('./packages/spec/package.json').version")"
+          if npm view "@tulipes/spec@$VERSION" version >/dev/null 2>&1; then
+            echo "@tulipes/spec@$VERSION already published — skipping"
+          else
+            yarn workspace @tulipes/spec npm publish --access public
+          fi
         env:
           YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

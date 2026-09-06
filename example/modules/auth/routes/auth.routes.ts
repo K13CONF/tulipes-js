@@ -4,6 +4,14 @@ import type { Ctx } from "@tulipes/core/boot";
 
 import { AuthController } from "../controllers/auth.controllers.js";
 import { authenticate, configurePassport } from "../helpers/passport.js";
+import {
+  credentials,
+  newPassword,
+  refreshBody,
+  registration,
+  sidParam,
+  tokenPair,
+} from "../schemas.js";
 
 /**
  * Auth is a sys-tier module, so this runs before every feature router.
@@ -35,6 +43,7 @@ export default function authRoutes(ctx: Ctx): Router {
       id: "auth:register",
       name: "Register",
       description: "Create an account and its credential",
+      body: registration,
     }),
     auth.register(),
   );
@@ -45,6 +54,8 @@ export default function authRoutes(ctx: Ctx): Router {
       id: "auth:login",
       name: "Log in",
       description: "Exchange email and password for a token pair",
+      body: credentials,
+      returns: tokenPair,
     }),
     auth.login(),
   );
@@ -55,6 +66,8 @@ export default function authRoutes(ctx: Ctx): Router {
       id: "auth:refresh",
       name: "Refresh tokens",
       description: "Rotate a refresh token for a new pair",
+      body: refreshBody,
+      returns: tokenPair,
     }),
     auth.refresh(),
   );
@@ -85,6 +98,10 @@ export default function authRoutes(ctx: Ctx): Router {
       id: "auth:sessions",
       name: "List sessions",
       description: "Every device this account is signed in on",
+      // These two are auth's, but they answer a different question from
+      // signing in — `folder` puts them under their own heading in the
+      // generated collection and spec.
+      folder: "sessions",
     }),
     auth.sessions(),
   );
@@ -95,6 +112,8 @@ export default function authRoutes(ctx: Ctx): Router {
       id: "auth:session-end",
       name: "End a session",
       description: "Sign one other device out",
+      folder: "sessions",
+      params: sidParam,
     }),
     auth.revokeSession(),
   );
@@ -105,6 +124,7 @@ export default function authRoutes(ctx: Ctx): Router {
       id: "auth:password",
       name: "Change password",
       description: "Set a new password and end every other session",
+      body: newPassword,
     }),
     auth.changePassword(),
   );

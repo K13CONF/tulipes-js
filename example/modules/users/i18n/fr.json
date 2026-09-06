@@ -9,5 +9,6 @@
   },
   "welcome": {
     "subject": "Bienvenue, {{email}}"
-  }
+  },
+  "emailInvalid": "Doit être une adresse email valide"
 }

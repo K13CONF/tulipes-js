@@ -12,5 +12,7 @@
   "passwordChanged": "Mot de passe modifié — toutes les autres sessions ont été fermées",
   "noSuchSession": "Session introuvable",
   "sessionEnded": "Session terminée",
-  "emailRequired": "Une adresse email est requise"
+  "emailRequired": "Une adresse email est requise",
+  "emailInvalid": "Doit être une adresse email valide",
+  "passwordRequired": "Un mot de passe est requis"
 }

@@ -8,14 +8,17 @@
     "sync": "tulipes sync",
     "check": "tulipes env:check",
     "typecheck": "tsc --noEmit",
-    "script": "tsx"
+    "script": "tsx",
+    "spec": "tulipes spec --openapi docs/openapi.json --postman docs/collection.json"
   },
   "dependencies": {
     "@tulipes/core": "workspace:*",
     "ioredis": "^5",
-    "mongoose": "^8"
+    "mongoose": "^8",
+    "zod": "^3.25"
   },
   "devDependencies": {
+    "@tulipes/spec": "workspace:*",
     "socket.io-client": "^4"
   }
 }
