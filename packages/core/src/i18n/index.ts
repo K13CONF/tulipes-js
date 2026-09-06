@@ -23,6 +23,12 @@ declare global {
     interface Request {
       /** Translator bound to the matched route's module namespace. */
       t: TFunction;
+      /**
+       * Whether this module defines that key — a question worth asking
+       * before translating a string that may already be finished prose,
+       * because `t()` on a non-key records it as missing.
+       */
+      hasTranslation: (key: string) => boolean;
       /** The negotiated locale: `?lang`, then Accept-Language, then default. */
       locale: string;
     }

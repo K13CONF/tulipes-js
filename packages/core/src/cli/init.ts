@@ -241,7 +241,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       "",
       "# written outside production for whoever writes the translations:",
       "# every key a locale is still missing, with the default-locale text",
-      "modules/*/i18n/*.missing.json",
+      "**/modules/*/i18n/*.missing.json",
       "",
     ].join("\n")],
 

@@ -63,11 +63,14 @@ export class I18n {
     return this.instance.getFixedT(locale ?? this.#settings.defaultLocale, namespace);
   }
 
-  /** @internal Binds `req.locale` and `req.t` — called by `rai()`. */
+  /** @internal Binds `req.locale`, `req.t` and `req.hasTranslation`. */
   attach_(req: Request, module: string): void {
     const { supportedLocales, defaultLocale } = this.#settings;
-    req.locale = resolveLocale(req, supportedLocales, defaultLocale);
-    req.t = this.instance.getFixedT(req.locale, module);
+    const locale = resolveLocale(req, supportedLocales, defaultLocale);
+
+    req.locale = locale;
+    req.t = this.instance.getFixedT(locale, module);
+    req.hasTranslation = (key) => this.instance.exists(key, { lng: locale, ns: module });
   }
 
   /**
