@@ -22,8 +22,8 @@ export class BillingController {
   show(): RequestHandler {
     return async (req: Request, res: Response) => {
       const invoice = await this.ctx.models!.get("Invoice").findById(req.params.id).lean();
-      if (!invoice) throw new HttpError(404, req.t("noSuchInvoice"));
-      res.json(invoice);
+      if (!invoice) throw new HttpError(404, "noSuchInvoice");
+      res.respond({ data: invoice });
     };
   }
 }
@@ -78,18 +78,29 @@ Grant the id in `module.acl.ts` — to `guest` if the endpoint is public.
 `tulipes routes` lists every declared endpoint with the roles that reach
 it.
 
-## Errors
+## Responses and errors
 
-Throw `HttpError(status, message, details?)`. Express 5 forwards rejected
-async handlers to the framework's terminal handler, so `throw` works
-inside `async` without a try/catch.
+Every response goes through `res.respond`, which builds the app's
+envelope — `{ success, data, errors, meta }`. Failures are **thrown**, and
+the terminal handler builds the same envelope from them, so a handler only
+ever writes the happy path. → skill `tulipes-response`
 
-- `HttpError` → `{ error, details? }` with your status.
+```ts
+res.respond({ data: invoice });
+res.respond({ data: invoices, meta: { total_items } });   // paginated
+throw new HttpError(404, "noSuchInvoice");                // → NOT_FOUND
+```
+
+Express 5 forwards rejected async handlers to the terminal handler, so
+`throw` works inside `async` without a try/catch.
+
 - Middleware errors carrying a 4xx pass through (oversized body → 413,
   malformed JSON → 400).
 - Anything else → anonymous `500`, real message only in development.
   **Never** catch an error just to `res.status(500).json(...)` yourself;
   that leaks what the framework hides.
+- **Never `res.json`** — it ships a raw, unenveloped body. Development
+  logs a warning naming the route; production does not.
 
 ## The request pipeline
 

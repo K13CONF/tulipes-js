@@ -27,9 +27,11 @@ applies before you write code.
 5. **Run `yarn sync` after touching any `meta.variables.json` or
    `module.config.ts`.** It regenerates `types/config.d.ts` and
    `.env.example`; stale generated types are a lie.
-6. **Errors are `HttpError`.** `throw new HttpError(404, "…")` from
-   anywhere in a route; the framework's terminal handler renders it.
-   Never hand-roll an error-response shape.
+6. **Every response is `res.respond({ data, meta })`** — never `res.json`,
+   which ships a raw body outside the envelope. Failures are **thrown**:
+   `throw new HttpError(404, "notFound")`, where the message is an i18n
+   key and the code derives from it. Never hand-roll an error shape.
+   → skill `tulipes-response`
 7. **Every route declares a RAI**: `rai({ id: "x:read" })` from `ctx`.
    The id is also the ACL permission, and core refuses to boot if a route
    is missing one. Public is `acl.allow("guest", "x:read")`, never a
