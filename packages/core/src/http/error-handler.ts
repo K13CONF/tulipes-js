@@ -130,21 +130,23 @@ function resolve(req: Request, error: Resolvable, status: number): {
 } {
   const { message, defaultMessage, vars } = error;
 
-  const translated = req.t?.(message, { defaultValue: defaultMessage, ...vars }) as
-    | string
-    | undefined;
-
-  // Three outcomes: the key translated; the key was missing and i18next
-  // handed back the default; or the string was never a key at all and
-  // came straight back. Only the last means "already a finished message".
-  const translatedToSomethingElse = translated !== undefined && translated !== message;
-  const wasKey = defaultMessage !== undefined || translatedToSomethingElse;
+  // Asked BEFORE translating, never after. Calling t() on a string that is
+  // already finished prose would record that whole sentence as a missing
+  // key, filling a translator's work list with English it must never
+  // contain.
+  const isKey = req.hasTranslation?.(message) ?? false;
 
   return {
-    message: translatedToSomethingElse ? translated : (defaultMessage ?? message),
+    message: isKey
+      ? (req.t(message, { ...vars }) as string)
+      : (defaultMessage ?? message),
+    // A defaultMessage declares intent: the author wrote a key, so the
+    // code comes from it even when no locale defines it yet.
     code:
       error.code ??
-      (wasKey ? codeFromKey(message) : (STATUS_CODES[status] ?? `HTTP_${status}`)),
+      (isKey || defaultMessage !== undefined
+        ? codeFromKey(message)
+        : (STATUS_CODES[status] ?? `HTTP_${status}`)),
   };
 }
 
