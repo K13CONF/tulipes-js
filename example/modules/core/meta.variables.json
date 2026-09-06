@@ -19,14 +19,7 @@
       "type": "url",
       "group": "redis",
       "required": true,
-      "description": "Redis connection string (cache, queues, rate limiting)"
-    },
-    {
-      "name": "JWT_SECRET",
-      "type": "secret",
-      "group": "security",
-      "required": true,
-      "description": "Signing key for access tokens"
+      "description": "Redis connection string (queues, cache)"
     },
     {
       "name": "PUBLIC_DOMAIN",

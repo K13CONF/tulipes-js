@@ -6,10 +6,8 @@ declare module "@tulipes/core/env" {
     PORT: number;
     /** [core] MongoDB connection string */
     MONGO_URI: string;
-    /** [core] Redis connection string (cache, queues, rate limiting) */
+    /** [core] Redis connection string (queues, cache) */
     REDIS_URL: string;
-    /** [core] Signing key for access tokens */
-    JWT_SECRET: string;
     /** [core] Public hostname this API is served from; "localhost" means not deployed */
     PUBLIC_DOMAIN: string;
     /** [core] Lowest level that reaches any destination */
@@ -54,8 +52,8 @@ declare module "@tulipes/core/env" {
     USERS_MAX_SESSIONS: number;
     /** [users] Who can register */
     USERS_SIGNUP_MODE: "open" | "invite" | "closed";
-    /** [users] Seeded admin account email */
-    USERS_ADMIN_EMAIL: string;
+    /** [hello] Word this module greets callers with */
+    HELLO_GREETING: string;
   }
 }
 
@@ -69,6 +67,9 @@ declare module "@tulipes/core/config" {
     >;
     users?: Awaited<
       ReturnType<(typeof import("./../modules/users/module.config.js"))["default"]>
+    >;
+    hello?: Awaited<
+      ReturnType<(typeof import("./../modules/hello/module.config.js"))["default"]>
     >;
   }
 }

@@ -10,15 +10,13 @@
     {
       "name": "USERS_SIGNUP_MODE",
       "type": "enum",
-      "enum": ["open", "invite", "closed"],
+      "enum": [
+        "open",
+        "invite",
+        "closed"
+      ],
       "description": "Who can register",
       "default": "open"
-    },
-    {
-      "name": "USERS_ADMIN_EMAIL",
-      "type": "string",
-      "required": true,
-      "description": "Seeded admin account email"
     }
   ]
 }

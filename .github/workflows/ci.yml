@@ -42,3 +42,14 @@ jobs:
         run: |
           diff packages/core/templates/CLAUDE.md example/CLAUDE.md
           diff -r packages/core/templates/claude example/.claude
+
+      # The example IS what `tulipes init` produces, so it exercises exactly
+      # what a user gets. Every module must therefore be byte-identical to
+      # the scaffold's — except package.json, whose dependency ranges
+      # legitimately differ (workspace:* in here, a published range out
+      # there). Without this the two drift silently, and the app we test is
+      # not the app we ship.
+      - name: Example modules match `tulipes init` output
+        run: |
+          node packages/core/dist/cli/bin.js init "$RUNNER_TEMP/scaffold" >/dev/null
+          diff -r -x 'package.json' "$RUNNER_TEMP/scaffold/modules" example/modules
