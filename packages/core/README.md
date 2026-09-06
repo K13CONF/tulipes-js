@@ -478,6 +478,16 @@ middleware belongs, and how to read an aggregate boot report.
 
 </details>
 
+## Versioning
+
+`0.x`, and a minor bump may break — `0.2` through `0.5` each did. The
+[CHANGELOG](./CHANGELOG.md) records what changed and
+[MIGRATING.md](./MIGRATING.md) gives the upgrade steps, including the one
+data migration that can lock users out of an app if it is skipped (the
+`snake_case` field rename in `0.5`).
+
+`tulipes update` moves the global CLI and every module manifest together.
+
 ## Requirements
 
 Node.js ≥ 20.11 · Yarn workspaces · MongoDB and Redis when your modules use

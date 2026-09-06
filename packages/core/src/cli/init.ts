@@ -299,7 +299,6 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `   */`,
       `  api: {`,
       `    prefix: "/api/v1",`,
-      `    docsPath: "/api/docs",`,
       `  },`,
       ``,
       `  /**`,
