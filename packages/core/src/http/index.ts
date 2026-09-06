@@ -1,4 +1,27 @@
-export { HttpError, errorHandler, notFoundHandler } from "./error-handler.js";
+export {
+  HttpError,
+  ValidationError,
+  errorHandler,
+  notFoundHandler,
+  type FieldIssue,
+  type HttpErrorOptions,
+} from "./error-handler.js";
+export {
+  buildMeta,
+  envelope,
+  type ApiError,
+  type Envelope,
+  type MetaAction,
+  type MetaActions,
+  type ResponseMeta,
+  type RespondOptions,
+} from "./envelope.js";
+export {
+  parsePage,
+  type PageRequest,
+  type PaginationBounds,
+} from "./pagination.js";
+export { bindRespond, markResponded, warnOnRawResponse } from "./respond.js";
 export {
   ANONYMOUS,
   createRai,
