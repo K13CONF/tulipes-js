@@ -15,6 +15,7 @@ import { initQueues } from "../queues/load-queues.js";
 import { initSockets } from "../sockets/load-sockets.js";
 import { errorHandler, notFoundHandler } from "../http/error-handler.js";
 import { createRai, RouteRegistry } from "../http/rai.js";
+import { bindRespond, warnOnRawResponse } from "../http/respond.js";
 import { I18n } from "../i18n/i18n.js";
 import { scanRoutes } from "../http/route-scan.js";
 import { loadAppConfigSeed } from "./app-files.js";
@@ -102,7 +103,13 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     rai: createRai(
       routes,
       (role, permission) => ctx.acl!.can(role, permission),
-      (req, module) => i18n.attach_(req, module),
+      (req, res, module) => {
+        i18n.attach_(req, module);
+        // Bounds live in config.pagination, so every list endpoint in the
+        // app clamps identically and no caller can ask for ten thousand.
+        bindRespond(req, res, ctx.config.pagination ?? {});
+        if (env.appEnv === "development") warnOnRawResponse(req, res);
+      },
     ),
     t: (namespace, locale) => i18n.t(namespace, locale),
     i18n: i18n.instance,

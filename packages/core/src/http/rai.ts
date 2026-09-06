@@ -1,4 +1,4 @@
-import type { Request, RequestHandler } from "express";
+import type { Request, RequestHandler, Response } from "express";
 
 import { HttpError } from "./error-handler.js";
 import type { Auth } from "./index.js";
@@ -121,18 +121,19 @@ export function createRai(
   registry: RouteRegistry,
   can: (role: string, permission: string) => boolean,
   /**
-   * Binds per-request state that depends on which module declared the
-   * route — the i18n namespace. Runs before the access check so a refusal
-   * can still be phrased in the caller's language.
+   * Binds per-request state: the i18n namespace (which depends on the
+   * declaring module), req.page and res.respond. Runs before the access
+   * check, so a refusal is phrased in the caller's language and the
+   * envelope is available to build it.
    */
-  bind?: (req: Request, module: string) => void,
+  bind?: (req: Request, res: Response, module: string) => void,
 ): (info: RouteInfo) => RequestHandler {
   return (info) => {
     const module = registry.currentModule;
 
-    const handler: RequestHandler = (req, _res, next) => {
+    const handler: RequestHandler = (req, res, next) => {
       req.rai = info;
-      bind?.(req, module);
+      bind?.(req, res, module);
 
       // An app with no auth module still gets a well-formed req.auth, so a
       // handler never has to ask whether the field is there.
@@ -146,9 +147,20 @@ export function createRai(
 
       // 401 says "sign in and this may work"; 403 says it will not. A
       // client can act on the difference, so they are not merged.
+      //
+      // Both carry a key AND an English default: an app that defines
+      // "forbidden" in a module's i18n gets it translated, and one that
+      // never thinks about it still reads correctly.
       throw req.auth.isAuthenticated
-        ? new HttpError(403, `role "${role}" may not ${info.id}`)
-        : new HttpError(401, "authentication required");
+        ? new HttpError(403, "forbidden", {
+            code: "FORBIDDEN",
+            vars: { role, permission: info.id },
+            defaultMessage: `role "${role}" may not ${info.id}`,
+          })
+        : new HttpError(401, "unauthenticated", {
+            code: "UNAUTHENTICATED",
+            defaultMessage: "authentication required",
+          });
     };
 
     const tag: RaiTag = { info, module };
