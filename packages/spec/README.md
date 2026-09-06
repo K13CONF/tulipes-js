@@ -1,3 +1,9 @@
+<div align="center">
+
+<img src="https://cdn.jsdelivr.net/npm/@tulipes/core@0.7.1/assets/tulipesjs-logo.png" alt="TulipesJs" width="340">
+
+</div>
+
 # @tulipes/spec
 
 Generates an **OpenAPI 3.1 document** and a **Postman collection** from a
