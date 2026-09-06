@@ -386,6 +386,9 @@ __metadata:
   peerDependencies:
     "@tulipes/core": ^0.6.0
     zod: ^3.25 || ^4
+  peerDependenciesMeta:
+    zod:
+      optional: true
   languageName: unknown
   linkType: soft
 

@@ -1,8 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
-
-import { boot } from "../boot/boot.js";
+import { appBoot, importFromApp, registerTypeScript } from "./app-core.js";
 
 /**
  * `tulipes spec` — an OpenAPI document and/or a Postman collection, built
@@ -44,17 +43,13 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
     return;
   }
 
-  const spec = await loadGenerator();
+  const spec = await loadGenerator(rootDir);
   if (!spec) return;
 
-  // The published CLI runs as plain node while an app's modules are
-  // TypeScript, so booting one needs a loader registered first.
-  try {
-    const tsx = (await import("tsx/esm/api")) as { register?: () => void };
-    tsx.register?.();
-  } catch {
-    // No tsx available: a compiled app still boots fine without it.
-  }
+  await registerTypeScript();
+
+  // The app's own boot, so mongoose and friends stay to one copy.
+  const boot = await appBoot(rootDir);
 
   const handle = await boot({
     rootDir,
@@ -103,20 +98,41 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
   }
 }
 
-async function loadGenerator(): Promise<SpecModule | undefined> {
+/**
+ * Loads the generator **from the app**, not from wherever this CLI lives.
+ *
+ * `tulipes` is normally installed globally, so a bare `import("@tulipes/spec")`
+ * resolves against the CLI's own node_modules and misses the copy the app
+ * just installed — reporting it as absent while it sits right there. The
+ * app's own resolution root is the only one that can be right.
+ */
+async function loadGenerator(rootDir: string): Promise<SpecModule | undefined> {
+  for (const load of [() => fromApp(rootDir), fromCli]) {
+    const spec = await load();
+    if (spec) return spec;
+  }
+
+  console.error(
+    [
+      "`tulipes spec` needs the generator package:",
+      "",
+      "  yarn add -D @tulipes/spec",
+      "",
+      "It is separate so an app that never generates a spec never installs it.",
+    ].join("\n"),
+  );
+  process.exitCode = 2;
+  return undefined;
+}
+
+const fromApp = (rootDir: string): Promise<SpecModule | undefined> =>
+  importFromApp<SpecModule>(rootDir, "@tulipes/spec");
+
+/** A locally installed CLI, or a hoisted layout, resolves it directly. */
+async function fromCli(): Promise<SpecModule | undefined> {
   try {
     return (await import("@tulipes/spec")) as unknown as SpecModule;
   } catch {
-    console.error(
-      [
-        "`tulipes spec` needs the generator package:",
-        "",
-        "  yarn add -D @tulipes/spec",
-        "",
-        "It is separate so an app that never generates a spec never installs it.",
-      ].join("\n"),
-    );
-    process.exitCode = 2;
     return undefined;
   }
 }
