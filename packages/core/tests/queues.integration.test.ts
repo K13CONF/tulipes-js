@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Queue } from "bullmq";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { fixture } from "./fixture.js";
 
 const redisUrl = process.env.TEST_REDIS_URL;
 const integration = test.skipIf(!redisUrl);
+
+beforeEach(() => { if (redisUrl) vi.stubEnv("REDIS_URL", redisUrl); });
 
 integration("worker shutdown finishes active jobs before hooks and keeps producers available for hooks", async () => {
   const name = `probe.${randomUUID()}`;
@@ -54,7 +56,6 @@ integration("worker shutdown finishes active jobs before hooks and keeps produce
 });
 
 integration("releases Redis connections even if a queue fails to close", async () => {
-  const { vi } = await import("vitest");
   const { QueueManager } = await import("../src/queues/queue-manager.js");
   const { BootReport } = await import("../src/errors/boot-error.js");
   const manager = new QueueManager(redisUrl!);

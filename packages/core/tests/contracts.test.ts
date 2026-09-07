@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { Environment } from "../src/env/environment.js";
 import { sortModules } from "../src/modules/graph.js";
 import type { ModuleManifest } from "../src/modules/manifest.js";
@@ -16,6 +16,10 @@ test("environment resolves and attributes deployment overrides while redacting s
   const file = Environment.load({ rootDir: app.rootDir, appEnv: "test" });
   expect(file.get("TEST_CONTRACT_NUMBER")).toBe(2);
   expect(file.store.sourceOf("TEST_CONTRACT_NUMBER")).toBe("file");
+  vi.stubEnv("TEST_CONTRACT_NUMBER", "3");
+  const injected = Environment.load({ rootDir: app.rootDir, appEnv: "test" });
+  expect(injected.get("TEST_CONTRACT_NUMBER")).toBe(3);
+  expect(injected.store.sourceOf("TEST_CONTRACT_NUMBER")).toBe("process.env");
   expect(file.store.snapshot().TEST_CONTRACT_SECRET).toBe("•••");
   expect(() => file.get("TEST_CONTRACT_TYPO")).toThrow(/never declared/);
 });
