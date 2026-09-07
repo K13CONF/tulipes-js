@@ -1,15 +1,15 @@
 # Tulipes reliability proposal
 
-Status: proposed; implementation and validation are pending.
+Status: implementation added on this branch; see `docs/testing.md` for validation.
 
 Tulipes centralizes application wiring through module conventions and boot-time
 validation. Some guarantees currently have gaps: failed startup can leave resources
 open, route scanning does not prove authorization executes, and documentation
 generation can run database bootstrap tasks.
 
-This proposal covers five improvements using the existing architecture: explicit
+This plan covers five improvements using the existing architecture: explicit
 boot phases, module-owned behavior, aggregate diagnostics, and shared route
-declarations. It does not introduce implementation changes.
+declarations. The implementation retains these module conventions and adds regression coverage.
 
 ## 1. Lifecycle reliability
 
@@ -35,11 +35,11 @@ subsequent cleanup.
 
 **Acceptance criteria:**
 
-- [ ] Failures during database registration, queue setup, route loading, socket
+- [x] Failures during database registration, queue setup, route loading, socket
   setup, and readiness leave no acquired resources running.
-- [ ] In-flight requests and jobs retain required resources while draining.
-- [ ] Repeated shutdown calls share one cleanup operation.
-- [ ] One cleanup failure does not prevent the remaining cleanup attempts.
+- [x] In-flight requests and jobs retain required resources while draining.
+- [x] Repeated shutdown calls share one cleanup operation.
+- [x] One cleanup failure does not prevent the remaining cleanup attempts.
 
 **Relevant code:** `packages/core/src/boot/boot.ts`,
 `packages/core/src/db/database.ts`,
@@ -67,11 +67,11 @@ documented guarantee.
 
 **Acceptance criteria:**
 
-- [ ] Missing or incorrectly positioned `rai()` declarations abort boot.
-- [ ] Every supported method chain executes authorization before its endpoint
+- [x] Missing or incorrectly positioned `rai()` declarations abort boot.
+- [x] Every supported method chain executes authorization before its endpoint
   handler.
-- [ ] Unknown roles and denied permissions retain the expected rejection behavior.
-- [ ] Documentation accurately describes what scanning verifies and its middleware
+- [x] Unknown roles and denied permissions retain the expected rejection behavior.
+- [x] Documentation accurately describes what scanning verifies and its middleware
   boundary.
 
 **Relevant code:** `packages/core/src/http/route-scan.ts`,
@@ -101,10 +101,10 @@ URLs.
 
 **Acceptance criteria:**
 
-- [ ] Inspection never invokes framework bootstrap tasks or starts traffic consumers.
-- [ ] Inspection releases every resource it initializes.
-- [ ] Supported nested routers produce complete URLs in both output formats.
-- [ ] Unsupported paths and dynamic authorization policies produce clear diagnostics.
+- [x] Inspection never invokes framework bootstrap tasks or starts traffic consumers.
+- [x] Inspection releases every resource it initializes.
+- [x] Supported nested routers produce complete URLs in both output formats.
+- [x] Unsupported paths and dynamic authorization policies produce clear diagnostics.
 
 **Relevant code:** `packages/core/src/cli/spec.ts`,
 `packages/core/src/cli/routes.ts`, `packages/core/src/boot/boot.ts`,
@@ -128,11 +128,11 @@ automated behavioral test suite was found during source inspection.
 
 **Acceptance criteria:**
 
-- [ ] CI detects authorization bypasses and failed-boot resource leaks.
-- [ ] Validation tests verify both coerced handler inputs and client-facing error
+- [x] CI detects authorization bypasses and failed-boot resource leaks.
+- [x] Validation tests verify both coerced handler inputs and client-facing error
   envelopes.
-- [ ] Lifecycle tests exercise failure paths and active work during shutdown.
-- [ ] Fixtures use isolated resources and clean up after failures.
+- [x] Lifecycle tests exercise failure paths and active work during shutdown.
+- [x] Fixtures use isolated resources and clean up after failures.
 
 **Relevant code:** `.github/workflows/ci.yml`, `packages/core/package.json`,
 `packages/spec/package.json`.
@@ -156,11 +156,11 @@ distinguish a configuration factory from a backend route factory.
 
 **Acceptance criteria:**
 
-- [ ] Configuration factories cannot access services unavailable during configuration.
-- [ ] Backend route factories receive a typed Express application.
-- [ ] Database-free applications remain valid.
-- [ ] Required infrastructure can be accessed without unchecked non-null assertions.
-- [ ] Compile-time fixtures demonstrate both accepted and rejected usage.
+- [x] Configuration factories cannot access services unavailable during configuration.
+- [x] Backend route factories receive a typed Express application.
+- [x] Database-free applications remain valid.
+- [x] Required infrastructure can be accessed without unchecked non-null assertions.
+- [x] Compile-time fixtures demonstrate both accepted and rejected usage.
 
 **Relevant code:** `packages/core/src/boot/contracts.ts`,
 `packages/core/src/boot/boot.ts`, `packages/core/src/cli/sync.ts`,
@@ -175,6 +175,9 @@ as focused implementation PRs after agreement on this proposal.
 
 ## Validation status
 
-This proposal is based on source inspection. No runtime fixes are implemented and
-no application tests have been run for this proposal. Unchecked acceptance criteria
-represent future implementation work.
+Runtime fixes and Vitest regression tests now cover the acceptance criteria above.
+CI runs real MongoDB and Redis integration checks and TypeScript contract fixtures.
+Inspection deliberately retains infrastructure initialization when factories require
+it; a completely offline declaration pipeline remains a later design step.
+Shutdown bounds waiting but cannot cancel arbitrary application JavaScript; see
+`packages/core/MIGRATING.md` for the contract and migration steps.

@@ -59,16 +59,16 @@ declare module "@tulipes/core/env" {
 
 declare module "@tulipes/core/config" {
   interface GlobalConfig {
-    core?: Awaited<
+    "core"?: Awaited<
       ReturnType<(typeof import("./../modules/core/module.config.js"))["default"]>
     >;
-    auth?: Awaited<
+    "auth"?: Awaited<
       ReturnType<(typeof import("./../modules/auth/module.config.js"))["default"]>
     >;
-    users?: Awaited<
+    "users"?: Awaited<
       ReturnType<(typeof import("./../modules/users/module.config.js"))["default"]>
     >;
-    hello?: Awaited<
+    "hello"?: Awaited<
       ReturnType<(typeof import("./../modules/hello/module.config.js"))["default"]>
     >;
   }

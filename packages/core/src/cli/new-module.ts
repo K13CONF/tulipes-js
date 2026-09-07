@@ -95,14 +95,14 @@ function renderModule(
     ["meta.variables.json", json({ variables: [] })],
 
     ["module.config.ts", [
-      `import type { Ctx } from "@tulipes/core/boot";`,
+      `import type { ConfigCtx, Ctx } from "@tulipes/core/boot";`,
       ``,
       `/**`,
       ` * Runs in boot phase 6. Whatever this returns is stored at`,
       ` * \`config.${name}\` and typed by \`yarn sync\`, so other modules read it`,
       ` * without importing anything from here.`,
       ` */`,
-      `export default function ${fn}Config(_ctx: Ctx) {`,
+      `export default function ${fn}Config(_ctx: ConfigCtx) {`,
       `  return {};`,
       `}`,
       ``,
@@ -182,11 +182,11 @@ function renderModule(
 
     [`routes/${name}.routes.ts`, [
       `import { Router } from "express";`,
-      `import type { Ctx } from "@tulipes/core/boot";`,
+      `import type { BackendCtx } from "@tulipes/core/boot";`,
       ``,
       `import { ${Model}Controller } from "../controllers/${name}.controllers.js";`,
       ``,
-      `export default function ${fn}Routes(ctx: Ctx): Router {`,
+      `export default function ${fn}Routes(ctx: BackendCtx): Router {`,
       `  const { rai } = ctx;`,
       `  const router = Router();`,
       `  const ${fn} = new ${Model}Controller(ctx);`,
@@ -236,7 +236,7 @@ function renderModule(
     ].join("\n")],
 
     [`bootstrap/${name}.bootstrap.ts`, [
-      `import type { Ctx } from "@tulipes/core/boot";`,
+      `import type { DatabaseCtx } from "@tulipes/core/boot";`,
       ``,
       `/**`,
       ` * Runs after models are registered and before the process serves —`,
@@ -245,7 +245,7 @@ function renderModule(
       ` * MUST be idempotent: it runs on every boot of every process. Upsert,`,
       ` * never blind-insert.`,
       ` */`,
-      `export default async function ${fn}Bootstrap(_ctx: Ctx): Promise<void> {}`,
+      `export default async function ${fn}Bootstrap(_ctx: DatabaseCtx): Promise<void> {}`,
       ``,
     ].join("\n")],
 
