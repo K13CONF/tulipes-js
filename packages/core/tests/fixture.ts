@@ -1,10 +1,11 @@
 import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 import { boot, type BootHandle, type BootOptions } from "../src/boot/boot.js";
 
 export async function fixture(files: Record<string, string> = {}) {
+  vi.stubEnv("PORT", "0");
   const rootDir = await mkdtemp(join(tmpdir(), "tulipes-test-"));
   const handles: BootHandle[] = [];
   await symlink(resolve("node_modules"), join(rootDir, "node_modules"), "dir");

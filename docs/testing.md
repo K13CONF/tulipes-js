@@ -21,7 +21,9 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/3 yarn test
 ```
 
 CI provides both services and runs the whole suite. Do not point these URLs at
-application data. Fixture directories use temporary storage; queue names are
+application data. Tests override ambient `MONGO_URI`, `REDIS_URL`, and `PORT`
+so an inherited application environment cannot redirect their connections.
+Fixture directories use temporary storage; queue names are
 unique per test and the worker test removes its own queue. Tests close resources
 in cleanup paths, including when an assertion fails.
 

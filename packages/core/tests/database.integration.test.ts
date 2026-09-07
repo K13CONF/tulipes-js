@@ -1,9 +1,11 @@
 import mongoose from "mongoose";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { fixture } from "./fixture.js";
 
 const mongo = process.env.TEST_MONGO_URI;
 const integration = test.skipIf(!mongo);
+
+beforeEach(() => { if (mongo) vi.stubEnv("MONGO_URI", mongo); });
 
 afterEach(async () => {
   // Also release connections if a regression causes boot to leak one.
