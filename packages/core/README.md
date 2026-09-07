@@ -297,8 +297,8 @@ call site without core knowing anything about your models.
     worker           one BullMQ worker per registered processor
     script           start nothing; the caller owns the process
 10  onReady          hooks in load order → startup banner
-    shutdown         SIGTERM → onShutdown in REVERSE order → sockets →
-                     http → queues → redis → mongo
+    shutdown         SIGTERM → stop/drain http + sockets + workers →
+                     onShutdown in REVERSE order → queues → redis → mongo
 ```
 
 Each phase crashes with its own aggregate report before the next begins.
@@ -496,9 +496,23 @@ language:
   "meta": {} }
 ```
 
-Generation boots the app **without listening**, so it works while the app
-is running and describes the router actually mounted rather than a
-parser's guess of it.
+Generation uses backend **inspection**: it mounts routes without bootstrap tasks,
+Socket.IO setup, listening or readiness hooks. It can still connect Mongo/Redis
+because route factories may require those services. Imports and factories retain
+their own side effects; inspection is not a sandbox.
+
+Use `ctx.routes.mount(parent, "/api", childRouter)` for nested routers so the
+registry records the full prefix. Each supported HTTP method needs exactly one
+`rai()` as its first handler. Middleware remains trusted application code and
+can respond before routes. Unsupported path patterns fail with migration guidance.
+
+Declare `status: 201` (or another 2xx code) in the RAI when a route creates or
+queues work. `res.respond` uses that default and OpenAPI describes it. An explicit
+`res.respond({ status })` still overrides the default. Custom access checkers are
+reported as dynamic policies in generated documents.
+
+For lifecycle timing changes and the more precise `ConfigCtx`, `BackendCtx` and
+`DatabaseCtx` contracts, see [the migration guide](./MIGRATING.md).
 
 ## Versioning
 

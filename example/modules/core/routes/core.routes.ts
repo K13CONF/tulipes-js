@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Ctx } from "@tulipes/core/boot";
+import type { BackendCtx } from "@tulipes/core/boot";
 
 import { appCache } from "../helpers/cache/index.js";
 
@@ -9,7 +9,7 @@ import { appCache } from "../helpers/cache/index.js";
  * ahead of everything, security's stack included. Request ids stamped here
  * are what security's pino logger picks up as its reqId.
  */
-export default function coreRoutes({ app, Environment }: Ctx): void {
+export default function coreRoutes({ app, Environment }: BackendCtx): void {
   const cache = appCache(Environment); // redis-backed here; memory without REDIS_URL
 
   app!.use(async (_req, res, next) => {

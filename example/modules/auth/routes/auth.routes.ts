@@ -1,6 +1,6 @@
 import { Router } from "express";
 import passport from "passport";
-import type { Ctx } from "@tulipes/core/boot";
+import type { BackendCtx } from "@tulipes/core/boot";
 
 import { AuthController } from "../controllers/auth.controllers.js";
 import { authenticate, configurePassport } from "../helpers/passport.js";
@@ -26,12 +26,12 @@ import {
  * is reachable because `guest` holds "auth:login" in module.acl.ts — and
  * core refuses to boot if any route forgets to declare one.
  */
-export default function authRoutes(ctx: Ctx): Router {
+export default function authRoutes(ctx: BackendCtx): Router {
   const { rai } = ctx;
   configurePassport(ctx);
 
-  ctx.app!.use(passport.initialize());
-  ctx.app!.use(authenticate());
+  ctx.app.use(passport.initialize());
+  ctx.app.use(authenticate());
 
   const router = Router();
   const auth = new AuthController(ctx);
@@ -41,6 +41,7 @@ export default function authRoutes(ctx: Ctx): Router {
     `${base}/register`,
     rai({
       id: "auth:register",
+      status: 201,
       name: "Register",
       description: "Create an account and its credential",
       body: registration,

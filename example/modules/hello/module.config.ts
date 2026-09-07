@@ -1,11 +1,11 @@
-import type { Ctx } from "@tulipes/core/boot";
+import type { ConfigCtx, Ctx } from "@tulipes/core/boot";
 
 /**
  * Runs in boot phase 6. Whatever this returns is stored at
  * `config.hello` and typed by `tulipes sync`, so every other module
  * reads it without importing anything from here.
  */
-export default function helloConfig({ Environment }: Ctx) {
+export default function helloConfig({ Environment }: ConfigCtx) {
   return {
     greeting: Environment.get("HELLO_GREETING"),
   };

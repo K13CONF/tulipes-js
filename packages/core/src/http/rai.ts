@@ -1,4 +1,4 @@
-import type { Request, RequestHandler, Response } from "express";
+import type { Express, Router, Request, RequestHandler, Response } from "express";
 
 import { HttpError, ValidationError, type FieldIssue } from "./error-handler.js";
 import { codeOfIssue, fieldOf, type RouteSchemas, type ValidatableSchema } from "./schema.js";
@@ -21,6 +21,8 @@ import type { Auth } from "./index.js";
  *   }
  */
 export interface RouteInfo extends RouteSchemas {
+  /** Default success HTTP status for res.respond and generated documentation. */
+  status?: number;
   /** Resource Access Identifier, e.g. "users:read". Also the permission. */
   id: string;
   /** Human label, for generated documentation. */
@@ -75,6 +77,8 @@ declare global {
 }
 
 /** Marks a handler as a route declaration. Symbol.for so it survives duplicate module instances. */
+export const MOUNT_PATH = Symbol.for("tulipes.mount-path");
+
 export const RAI_TAG = Symbol.for("tulipes.rai");
 
 export interface RaiTag {
@@ -100,6 +104,18 @@ export class RouteRegistry {
   currentModule = "(app)";
   #checker: AccessChecker | undefined;
   #records: RouteRecord[] = [];
+
+  /** Mount a router with an explicit literal prefix, preserved for inspection. */
+  mount(parent: Express | Router, path: string, router: Router): void {
+    if (path !== "" && !/^\/[a-zA-Z0-9_.~%/-]*$/.test(path)) {
+      throw new Error(`unsupported router mount "${path}" — use a literal path`);
+    }
+    (parent as Router).use(path || "/", router);
+    const stack = "router" in parent
+      ? (parent.router as { stack: object[] }).stack
+      : (parent as Router & { stack: object[] }).stack;
+    Object.defineProperty(stack.at(-1)!, MOUNT_PATH, { value: path.replace(/\/$/, "") });
+  }
 
   /** Override the default role-versus-ACL check. */
   setAccessChecker(checker: AccessChecker): void {

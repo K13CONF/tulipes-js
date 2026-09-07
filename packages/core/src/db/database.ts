@@ -2,7 +2,7 @@ import { createConnection, Schema, type Connection } from "mongoose";
 
 import { BootReport } from "../errors/boot-error.js";
 import { importFile } from "../boot/import-file.js";
-import type { Ctx } from "../boot/contracts.js";
+import type { Ctx, DatabaseCtx } from "../boot/contracts.js";
 import type { ModuleFiles } from "../modules/explorer.js";
 import { ModelStore } from "./model-store.js";
 
@@ -18,7 +18,7 @@ export interface ModelDef {
 }
 
 /** Default export of `bootstrap/*.bootstrap.ts` — post-DB, pre-server init. */
-export type BootstrapFn = (ctx: Ctx) => void | Promise<void>;
+export type BootstrapFn = (ctx: DatabaseCtx) => void | Promise<void>;
 
 /** Well-known infra variable, declared by the app's sys core module. */
 const MONGO_URI = "MONGO_URI";
@@ -38,6 +38,8 @@ export interface InitDatabaseOptions {
    * and running them on every `ls`-style script is wasted writes.
    */
   runBootstrap?: boolean;
+  /** Register ownership before connecting or compiling models can fail. */
+  onConnection?: (connection: Connection) => void;
 }
 
 export async function initDatabase(
@@ -65,9 +67,11 @@ export async function initDatabase(
   try {
     // Fail fast: default server selection waits 30s before reporting an
     // unreachable database — far too long for a boot-time verdict.
-    connection = await createConnection(uri, {
+    connection = createConnection(uri, {
       serverSelectionTimeoutMS: 5_000,
-    }).asPromise();
+    });
+    options.onConnection?.(connection);
+    await connection.asPromise();
   } catch (error) {
     report.add({
       scope: "boot",
@@ -154,7 +158,7 @@ async function runBootstrapTasks(
       }
 
       try {
-        await (exported.default as BootstrapFn)(ctx);
+        await (exported.default as BootstrapFn)(ctx as DatabaseCtx);
       } catch (error) {
         report.add({
           scope: "boot",

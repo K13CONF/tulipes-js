@@ -54,11 +54,13 @@ export class SocketManager {
   }
 
   /**
-   * Disconnects every client. Deliberately NOT io.close() — that would also
-   * close the attached http server, whose lifecycle belongs to boot.
+   * Close namespace clients and the underlying Engine.IO transports.
+   * This also closes HTTP; boot starts and awaits HTTP draining alongside it.
    */
-  close(): void {
-    this.#io.disconnectSockets(true);
+  close(): Promise<void> {
+    return new Promise((resolve) => {
+      this.#io.close(() => resolve());
+    });
   }
 }
 

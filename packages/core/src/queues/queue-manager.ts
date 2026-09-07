@@ -128,11 +128,28 @@ export class QueueManager {
     return this.#workers.length;
   }
 
+  /** Stop consumers and finish active jobs while producers remain available. */
+  async drain(): Promise<void> {
+    const results = await Promise.allSettled(this.#workers.map((worker) => worker.close()));
+    throwFailures(results);
+  }
+
+  /** Emergency connection teardown after the graceful shutdown deadline. */
+  disconnect(): void {
+    for (const worker of this.#workers) void worker.disconnect().catch(() => {});
+    for (const connection of this.#connections) connection.disconnect();
+  }
+
   /** Drain order: stop consuming, then producers, then raw connections. */
   async close(): Promise<void> {
-    await Promise.all(this.#workers.map((worker) => worker.close()));
-    await Promise.all([...this.#queues.values()].map(({ queue }) => queue.close()));
-    await Promise.all(this.#connections.map((connection) => connection.quit().catch(() => {})));
+    const results = await Promise.allSettled([this.drain()]);
+    results.push(...await Promise.allSettled(
+      [...this.#queues.values()].map(({ queue }) => queue.close()),
+    ));
+    results.push(...await Promise.allSettled(this.#connections.map(async (connection) => {
+      try { await connection.quit(); } finally { connection.disconnect(); }
+    })));
+    throwFailures(results);
   }
 }
 
@@ -174,4 +191,10 @@ export class QueueRegistry {
   #issue(message: string): void {
     this.#report.add({ scope: "boot", module: this.#module, message });
   }
+}
+
+function throwFailures(results: PromiseSettledResult<unknown>[]): void {
+  const errors = results.flatMap(result => result.status === "rejected" ? [result.reason] : []);
+  if (errors.length) throw new AggregateError(errors,
+    `Queue cleanup failed — ${errors.map(error => error instanceof Error ? error.message : String(error)).join("; ")}`);
 }

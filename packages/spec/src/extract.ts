@@ -7,6 +7,9 @@ import type { RouteRecord, ValidatableSchema } from "@tulipes/core/http";
  * describe a route that is not actually mounted, nor miss one that is.
  */
 export interface SpecRoute {
+  status?: number;
+  /** Static ACL grants cannot describe a custom checker. */
+  authorization?: "acl" | "dynamic";
   id: string;
   method: string;
   /** As express declared it: `/users/:email`. */
@@ -50,12 +53,14 @@ export function extract(ctx: Ctx): SpecSource {
   };
 
   const routes: SpecRoute[] = [...ctx.routes.all()]
-    .map((record: RouteRecord) => {
+    .map((record: RouteRecord): SpecRoute => {
       const { info } = record;
-      const roles = rolesFor(info.id);
+      const roles = ctx.routes.checker ? [] : rolesFor(info.id);
 
       return {
         id: info.id,
+        authorization: ctx.routes.checker ? "dynamic" : "acl",
+        ...(info.status !== undefined && { status: info.status }),
         method: record.method.toUpperCase(),
         path: record.path,
         module: record.module,

@@ -11,6 +11,54 @@ what makes it work under nvm.
 
 ---
 
+## Reliability contracts (unreleased)
+
+These changes tighten route registration and alter shutdown timing. Release them
+in the next minor version; existing 0.7 applications should follow these steps.
+
+1. Put exactly one `rai()` first in each endpoint's method chain. For a chained
+   route, give GET and POST separate declarations with distinct IDs. Replace
+   `route.all()` with explicit supported HTTP methods. Literal paths and named
+   `:parameters` are supported; regex, array, optional and wildcard paths now fail
+   boot rather than producing an incomplete specification.
+2. Return an unmounted Router from a routes factory as before. When mounting a
+   nested router yourself, replace `parent.use('/prefix', router)` with
+   `ctx.routes.mount(parent, '/prefix', router)`. Prefixes must be literal paths.
+   The helper mounts the router and records its prefix. Ordinary middleware still
+   uses `.use()` and remains trusted application code; it can terminate requests
+   before an endpoint's authorization executes.
+3. Dispose application resources in `onShutdown`. It now runs after HTTP, socket
+   and queue consumers drain, in reverse module order. Queues remain available
+   for producing jobs until hooks complete; Mongo closes last. Hooks can also run
+   during failed boot, so tolerate resources that were never initialized. Avoid
+   waiting for a queued job inside a shutdown hook: local consumers have stopped.
+4. `shutdown()` is idempotent and removes its signal handlers. The default graceful
+   cleanup budget is 10 seconds across the operation; configure `shutdownTimeoutMs`
+   in `boot()` if needed. A timeout rejects shutdown and later cleanup is attempted.
+   JavaScript cannot cancel arbitrary hook/job code or a synchronous infinite loop;
+   a process supervisor remains responsible for final termination. A failed boot
+   preserves its original error, including when cleanup also fails.
+5. Tooling should use `boot({ rootDir, mode: 'backend', inspect: true })`.
+   `tulipes routes` and `tulipes spec` use it automatically. It skips bootstrap tasks,
+   socket setup, listening and readiness hooks. Config factories, route factories,
+   imports, queue registration, and applicable Mongo/Redis connections still run;
+   factories may require them. Inspection is not a sandbox for arbitrary module
+   side effects. `listen: false` alone retains its existing bootstrap behavior.
+6. Use `ConfigCtx` in configuration factories, `BackendCtx` in routes factories,
+   and `DatabaseCtx` in bootstrap tasks. `RuntimeCtx` describes the post-ACL phase.
+   Existing `Ctx` remains available for compatibility and lifecycle hooks during
+   partial startup. A backend can have no Mongo or queues: `requireModels(ctx)` and
+   `requireQueues(ctx)` check those capabilities and return a non-optional service.
+7. Declare non-200 success responses in the RAI, for example
+   `rai({ id: 'users:create', status: 201 })`. `res.respond({ data })` uses this
+   default, and OpenAPI documents it. An explicit response status still overrides
+   the default; keep the declaration accurate for handlers that override it.
+   Custom access checkers are reported as dynamic, with warnings instead of guessed
+   credentials or roles. Configure authorization manually in the generated Postman
+   request for these routes.
+8. Run `tulipes sync` to regenerate quoted config keys. Kebab-case module names now
+   produce valid TypeScript declarations.
+
 ## Adopting the settings module (0.7)
 
 The settings module is an infrastructure console reachable only by

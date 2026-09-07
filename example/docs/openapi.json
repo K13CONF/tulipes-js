@@ -20,6 +20,9 @@
       "name": "sessions"
     },
     {
+      "name": "settings"
+    },
+    {
       "name": "users"
     }
   ],
@@ -35,8 +38,10 @@
         "x-tulipes-permission": "auth:login",
         "x-tulipes-roles": [
           "admin",
-          "guest"
+          "guest",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "requestBody": {
           "required": true,
           "content": {
@@ -144,8 +149,10 @@
         "x-tulipes-permission": "auth:logout",
         "x-tulipes-roles": [
           "admin",
+          "sysadmin",
           "user"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [
           {
             "bearerAuth": []
@@ -239,8 +246,10 @@
         "x-tulipes-permission": "auth:me",
         "x-tulipes-roles": [
           "admin",
+          "sysadmin",
           "user"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [
           {
             "bearerAuth": []
@@ -334,8 +343,10 @@
         "x-tulipes-permission": "auth:password",
         "x-tulipes-roles": [
           "admin",
+          "sysadmin",
           "user"
         ],
+        "x-tulipes-authorization": "acl",
         "requestBody": {
           "required": true,
           "content": {
@@ -473,8 +484,10 @@
         "x-tulipes-permission": "auth:refresh",
         "x-tulipes-roles": [
           "admin",
-          "guest"
+          "guest",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "requestBody": {
           "required": true,
           "content": {
@@ -576,8 +589,10 @@
         "x-tulipes-permission": "auth:register",
         "x-tulipes-roles": [
           "admin",
-          "guest"
+          "guest",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "requestBody": {
           "required": true,
           "content": {
@@ -605,7 +620,7 @@
         },
         "security": [],
         "responses": {
-          "200": {
+          "201": {
             "description": "Success",
             "content": {
               "application/json": {
@@ -667,8 +682,10 @@
         "x-tulipes-permission": "hello:list-greetings",
         "x-tulipes-roles": [
           "admin",
+          "sysadmin",
           "user"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [
           {
             "bearerAuth": []
@@ -762,8 +779,10 @@
         "x-tulipes-permission": "hello:use-greeting",
         "x-tulipes-roles": [
           "admin",
+          "sysadmin",
           "user"
         ],
+        "x-tulipes-authorization": "acl",
         "parameters": [
           {
             "name": "name",
@@ -780,7 +799,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "description": "Success",
             "content": {
               "application/json": {
@@ -867,8 +886,10 @@
         "x-tulipes-permission": "hello:greet",
         "x-tulipes-roles": [
           "admin",
-          "guest"
+          "guest",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [],
         "responses": {
           "200": {
@@ -907,8 +928,10 @@
         "x-tulipes-permission": "hello:greet-name",
         "x-tulipes-roles": [
           "admin",
-          "guest"
+          "guest",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "parameters": [
           {
             "name": "name",
@@ -957,8 +980,10 @@
         "x-tulipes-permission": "hello:demo-missing",
         "x-tulipes-roles": [
           "admin",
-          "guest"
+          "guest",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [],
         "responses": {
           "200": {
@@ -998,8 +1023,10 @@
         "x-tulipes-permission": "hello:read",
         "x-tulipes-roles": [
           "admin",
+          "sysadmin",
           "user"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [
           {
             "bearerAuth": []
@@ -1093,8 +1120,10 @@
         "x-tulipes-permission": "auth:sessions",
         "x-tulipes-roles": [
           "admin",
+          "sysadmin",
           "user"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [
           {
             "bearerAuth": []
@@ -1188,8 +1217,10 @@
         "x-tulipes-permission": "auth:session-end",
         "x-tulipes-roles": [
           "admin",
+          "sysadmin",
           "user"
         ],
+        "x-tulipes-authorization": "acl",
         "parameters": [
           {
             "name": "sid",
@@ -1309,6 +1340,988 @@
         }
       }
     },
+    "/api/v1/settings/i18n/{module}/{locale}": {
+      "get": {
+        "operationId": "settings:i18n-read",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Read a module's translations",
+        "x-tulipes-permission": "settings:i18n-read",
+        "x-tulipes-roles": [
+          "sysadmin"
+        ],
+        "x-tulipes-authorization": "acl",
+        "parameters": [
+          {
+            "name": "module",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*$"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z]{2}(-[A-Za-z0-9]+)?$"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": true
+                        },
+                        "data": {}
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "settings:i18n-write",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Replace a module's translations",
+        "description": "New keys are accepted — filling the recorded gaps is the point",
+        "x-tulipes-permission": "settings:i18n-write",
+        "x-tulipes-roles": [
+          "sysadmin"
+        ],
+        "x-tulipes-authorization": "acl",
+        "parameters": [
+          {
+            "name": "module",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*$"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z]{2}(-[A-Za-z0-9]+)?$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "translations": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "translations"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": true
+                        },
+                        "data": {}
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/logs/stream": {
+      "get": {
+        "operationId": "settings:logs",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Stream logs",
+        "description": "Server-Sent Events over the log files — backend or worker",
+        "x-tulipes-permission": "settings:logs",
+        "x-tulipes-roles": [
+          "sysadmin"
+        ],
+        "x-tulipes-authorization": "acl",
+        "parameters": [
+          {
+            "name": "process",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "backend",
+                "worker"
+              ]
+            }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "trace",
+                "debug",
+                "info",
+                "warn",
+                "error",
+                "fatal"
+              ]
+            }
+          },
+          {
+            "name": "tail",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": true
+                        },
+                        "data": {}
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/modules": {
+      "get": {
+        "operationId": "settings:read",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Describe every module",
+        "description": "Manifest, declared variables with their full spec and resolved source, config, i18n and routes",
+        "x-tulipes-permission": "settings:read",
+        "x-tulipes-roles": [
+          "sysadmin"
+        ],
+        "x-tulipes-authorization": "acl",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": true
+                        },
+                        "data": {}
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/reboot": {
+      "post": {
+        "operationId": "settings:reboot",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Restart the app",
+        "description": "Applies written values. Requires PM2; 503 when unsupervised",
+        "x-tulipes-permission": "settings:reboot",
+        "x-tulipes-roles": [
+          "sysadmin"
+        ],
+        "x-tulipes-authorization": "acl",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "targets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": true
+                        },
+                        "data": {}
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/variables/{name}": {
+      "get": {
+        "operationId": "settings:variable-read",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Read one variable",
+        "description": "Add ?reveal=true to return a secret's value — audited",
+        "x-tulipes-permission": "settings:variable-read",
+        "x-tulipes-roles": [
+          "sysadmin"
+        ],
+        "x-tulipes-authorization": "acl",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          },
+          {
+            "name": "reveal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": true
+                        },
+                        "data": {}
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "settings:variable-write",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Set a variable",
+        "description": "Writes .envs/.env.<APP_ENV>; takes effect on the next boot",
+        "x-tulipes-permission": "settings:variable-write",
+        "x-tulipes-roles": [
+          "sysadmin"
+        ],
+        "x-tulipes-authorization": "acl",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": true
+                        },
+                        "data": {}
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/users": {
       "get": {
         "operationId": "users:read",
@@ -1320,8 +2333,10 @@
         "x-tulipes-permission": "users:read",
         "x-tulipes-roles": [
           "admin",
+          "sysadmin",
           "user"
         ],
+        "x-tulipes-authorization": "acl",
         "parameters": [
           {
             "name": "page",
@@ -1476,8 +2491,10 @@
         "description": "Adds the account and queues its welcome email",
         "x-tulipes-permission": "users:create",
         "x-tulipes-roles": [
-          "admin"
+          "admin",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "requestBody": {
           "required": true,
           "content": {
@@ -1504,7 +2521,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "201": {
             "description": "Success",
             "content": {
               "application/json": {
@@ -1615,8 +2632,10 @@
         "description": "Flags the account; ordinary queries stop returning it",
         "x-tulipes-permission": "users:delete",
         "x-tulipes-roles": [
-          "admin"
+          "admin",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "parameters": [
           {
             "name": "email",
@@ -1746,8 +2765,10 @@
         "x-tulipes-permission": "users:demo-boom",
         "x-tulipes-roles": [
           "admin",
-          "guest"
+          "guest",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [],
         "responses": {
           "200": {
@@ -1785,8 +2806,10 @@
         "summary": "List soft-deleted users",
         "x-tulipes-permission": "users:read-deleted",
         "x-tulipes-roles": [
-          "admin"
+          "admin",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [
           {
             "bearerAuth": []
@@ -1879,8 +2902,10 @@
         "x-tulipes-permission": "users:demo-missing",
         "x-tulipes-roles": [
           "admin",
-          "guest"
+          "guest",
+          "sysadmin"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [],
         "responses": {
           "200": {
@@ -1920,8 +2945,10 @@
         "x-tulipes-roles": [
           "admin",
           "guest",
+          "sysadmin",
           "user"
         ],
+        "x-tulipes-authorization": "acl",
         "security": [],
         "responses": {
           "200": {

@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { z } from "zod/v4";
-import type { Ctx } from "@tulipes/core/boot";
+import type { BackendCtx } from "@tulipes/core/boot";
 
 import { UsersController } from "../controllers/users.controllers.js";
 import { createBody, emailParam, listQuery, userShape } from "../schemas.js";
 
-export default function usersRoutes(ctx: Ctx): Router {
+export default function usersRoutes(ctx: BackendCtx): Router {
   const { rai } = ctx;
   const router = Router();
   const users = new UsersController(ctx);
@@ -51,6 +51,7 @@ export default function usersRoutes(ctx: Ctx): Router {
     "/users",
     rai({
       id: "users:create",
+      status: 201,
       name: "Create a user",
       description: "Adds the account and queues its welcome email",
       body: createBody,
