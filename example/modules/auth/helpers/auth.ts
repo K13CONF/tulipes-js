@@ -38,7 +38,8 @@ export { ANONYMOUS as GUEST };
  * that runs BEFORE any rai() — middleware in another sys module.
  */
 export function auth(req: Request): Auth {
-  return req.auth ?? ANONYMOUS;
+  if (!req.auth || req.auth === ANONYMOUS) req.auth = { ...ANONYMOUS };
+  return req.auth;
 }
 
 /** The signed-in user, or undefined for a guest. Saves an `if` at call sites. */

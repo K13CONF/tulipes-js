@@ -18,9 +18,7 @@ export class Cleanup {
       ]);
     } catch (error) {
       this.errors.push(new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`, { cause: error }));
-      try { await force?.(); } catch (forceError) {
-        this.errors.push(new Error(`${name} forced cleanup failed`, { cause: forceError }));
-      }
+      if (force) await this.run(`${name} forced cleanup`, force);
     } finally {
       clearTimeout(timer);
     }

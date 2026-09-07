@@ -55,3 +55,32 @@ integration("inspection mounts routes without running bootstrap tasks", async ()
   expect(handle.server?.listening).toBe(false);
   await expect(access(app.rootDir + "/seeded")).rejects.toThrow();
 });
+
+integration("shutdown bounds forced database cleanup when the driver does not settle", async () => {
+  const app = await fixture({
+    "modules/probe/meta.variables.json": JSON.stringify({ variables: [
+      { name: "MONGO_URI", type: "url", default: mongo, description: "Test database" },
+    ] }),
+  });
+  const handle = await app.boot({ mode: "script", shutdownTimeoutMs: 50 });
+  const connection = handle.connection!;
+  const close = vi.spyOn(connection, "close").mockRejectedValue(new Error("driver close failed"));
+  let releaseForce: () => void = () => {};
+  const destroy = vi.spyOn(connection, "destroy").mockImplementation(() => new Promise<void>(resolve => {
+    releaseForce = resolve;
+  }));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const stopping = handle.shutdown();
+    const outcome = Promise.race([stopping, new Promise(resolve => {
+      timer = setTimeout(() => resolve("shutdown still pending"), 500);
+    })]);
+    await expect(outcome).rejects.toThrow(/database forced cleanup.*timed out/);
+  } finally {
+    clearTimeout(timer);
+    releaseForce();
+    close.mockRestore();
+    destroy.mockRestore();
+    await connection.destroy(true);
+  }
+});

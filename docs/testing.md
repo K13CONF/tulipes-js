@@ -34,6 +34,11 @@ at one of these boundaries, followed by the smallest implementation that passes 
 Prefer unit tests for isolated behavior and integration tests when the failure
 depends on resource ownership or the request execution chain.
 
+Authorization regressions include async decisions, invalid decision types, and
+guest state shared across requests. Generated-app checks exercise both the auth
+helper and Passport middleware before RAI. Route tests cover duplicate URL
+templates, and database tests simulate a driver that never settles forced cleanup.
+
 The CI scaffold check compares generated modules with the reference example.
 When changing a generated contract, update both `cli/init.ts` (and `new-module.ts`
 where applicable) and the example module. Keep existing agent guides in sync if

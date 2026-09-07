@@ -102,3 +102,17 @@ test("rejects recursive router mounts instead of looping during inspection", () 
   scanRoutes(app, report);
   expect(() => report.throwIfAny("routes")).toThrow(/recursive router/);
 });
+
+test.each([
+  { first: "/items", second: "/items" },
+  { first: "/items/:id", second: "/items/:name" },
+])("rejects ambiguous endpoint URLs $first and $second even with distinct IDs", ({ first, second }) => {
+  const app = express(), router = express.Router(), registry = new RouteRegistry();
+  const rai = createRai(registry, () => true);
+  app.get("/api" + first, rai({ id: "items:first" }), respond);
+  router.get(second, rai({ id: "items:second" }), respond);
+  registry.mount(app, "/api", router);
+  const report = new BootReport();
+  scanRoutes(app, report);
+  expect(() => report.throwIfAny("routes")).toThrow(/GET.*already declared.*items:first/);
+});

@@ -277,6 +277,11 @@ role through `req.auth.user`. An app whose roles do not live on the user —
 a claims service, a join table — replaces the decision itself with
 `ctx.routes.setAccessChecker()` rather than faking a user.
 
+Custom checkers return a boolean or `Promise<boolean>`. Core waits for the result
+before validation and endpoint handlers; only `true` grants access. A rejected
+policy reaches the normal error handler. Each request receives its own guest
+auth state, so changing one request cannot identify another caller.
+
 `AuthUser` and `AuthSession` are empty interfaces in core, filled in by the
 app through declaration merging, so `req.auth.user.email` is typed at every
 call site without core knowing anything about your models.
@@ -505,6 +510,8 @@ Use `ctx.routes.mount(parent, "/api", childRouter)` for nested routers so the
 registry records the full prefix. Each supported HTTP method needs exactly one
 `rai()` as its first handler. Middleware remains trusted application code and
 can respond before routes. Unsupported path patterns fail with migration guidance.
+Each method/URL template has one declaration, including routes that differ only
+in parameter names (`/items/:id` and `/items/:name`).
 
 Declare `status: 201` (or another 2xx code) in the RAI when a route creates or
 queues work. `res.respond` uses that default and OpenAPI describes it. An explicit
