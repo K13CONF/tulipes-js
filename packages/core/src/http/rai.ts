@@ -96,8 +96,9 @@ export interface RouteRecord extends RaiTag {
  * Decides whether the caller may perform a RAI. Replaceable for policies
  * the ACL cannot express — ownership, tenancy, time windows — and for apps
  * whose roles do not live on the user document.
+ * Async decisions are awaited; only an explicit true grants access.
  */
-export type AccessChecker = (req: Request, info: RouteInfo) => boolean;
+export type AccessChecker = (req: Request, info: RouteInfo) => boolean | Promise<boolean>;
 
 export class RouteRegistry {
   /** Set while a module's routes file runs, so declarations attribute to it. */
@@ -162,20 +163,20 @@ export function createRai(
   return (info) => {
     const module = registry.currentModule;
 
-    const handler: RequestHandler = (req, res, next) => {
+    const handler: RequestHandler = async (req, res, next) => {
       req.rai = info;
       bind?.(req, res, module);
 
-      // An app with no auth module still gets a well-formed req.auth, so a
-      // handler never has to ask whether the field is there.
-      req.auth ??= ANONYMOUS;
+      // Guest state belongs to this request, including when middleware assigns
+      // the exported fallback. Mutating it must not identify another caller.
+      if (!req.auth || req.auth === ANONYMOUS) req.auth = { ...ANONYMOUS };
 
       const role = roleOf(req);
       const allowed = registry.checker
-        ? registry.checker(req, info)
+        ? await registry.checker(req, info)
         : can(role, info.id);
 
-      if (!allowed) {
+      if (allowed !== true) {
         // 401 says "sign in and this may work"; 403 says it will not. A
         // client can act on the difference, so they are not merged.
         //

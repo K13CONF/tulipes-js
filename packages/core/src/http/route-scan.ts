@@ -28,6 +28,7 @@ const tagOf = (entry: Handler | undefined): RaiTag | undefined =>
 export function scanRoutes(app: Express, report: BootReport): RouteRecord[] {
   const records: RouteRecord[] = [];
   const seen = new Map<string, RouteRecord>();
+  const endpoints = new Map<string, RouteRecord>();
 
   for (const { layer, prefix } of walk(app, report)) {
     const route = layer.route!;
@@ -65,7 +66,17 @@ export function scanRoutes(app: Express, report: BootReport): RouteRecord[] {
           message: `rai id "${tag.info.id}" is already declared by ${clash.method} ${clash.path} (${clash.module})` });
         continue;
       }
+      // Renaming a parameter does not create a distinct URL template. Keeping
+      // one declaration avoids shadowed handlers and overwritten spec operations.
+      const endpoint = `${method} ${path.replace(/:[a-zA-Z_]\w*/g, ":param")}`;
+      const existing = endpoints.get(endpoint);
+      if (existing) {
+        report.add({ scope: "routes", module: tag.module,
+          message: `${method} ${path} is already declared by rai "${existing.info.id}" (${existing.module}) — use one declaration per method and URL template` });
+        continue;
+      }
       seen.set(tag.info.id, record);
+      endpoints.set(endpoint, record);
       records.push(record);
     }
   }

@@ -21,6 +21,8 @@ in the next minor version; existing 0.7 applications should follow these steps.
    `route.all()` with explicit supported HTTP methods. Literal paths and named
    `:parameters` are supported; regex, array, optional and wildcard paths now fail
    boot rather than producing an incomplete specification.
+   Keep one declaration per method and URL template: `/items/:id` and
+   `/items/:name` count as the same template even with different RAI IDs.
 2. Return an unmounted Router from a routes factory as before. When mounting a
    nested router yourself, replace `parent.use('/prefix', router)` with
    `ctx.routes.mount(parent, '/prefix', router)`. Prefixes must be literal paths.
@@ -34,7 +36,8 @@ in the next minor version; existing 0.7 applications should follow these steps.
    waiting for a queued job inside a shutdown hook: local consumers have stopped.
 4. `shutdown()` is idempotent and removes its signal handlers. The default graceful
    cleanup budget is 10 seconds across the operation; configure `shutdownTimeoutMs`
-   in `boot()` if needed. A timeout rejects shutdown and later cleanup is attempted.
+   in `boot()` if needed. It also bounds waiting for forced cleanup. A timeout
+   rejects shutdown and later cleanup is attempted.
    JavaScript cannot cancel arbitrary hook/job code or a synchronous infinite loop;
    a process supervisor remains responsible for final termination. A failed boot
    preserves its original error, including when cleanup also fails.
@@ -58,6 +61,15 @@ in the next minor version; existing 0.7 applications should follow these steps.
    request for these routes.
 8. Run `tulipes sync` to regenerate quoted config keys. Kebab-case module names now
    produce valid TypeScript declarations.
+9. Custom access checkers may return a boolean or `Promise<boolean>`. Core awaits
+   the result before validation or the endpoint handler; only `true` grants access.
+   Rejected policies reach the normal error handler. Update JavaScript checkers
+   that returned truthy strings or objects to return explicit booleans.
+10. Guest auth state now belongs to each request. Refresh the scaffold's
+    `modules/auth/helpers/auth.ts` and `passport.ts`, or change shared fallback
+    assignments to copies (`req.auth = resolved || { ...GUEST }`). Before RAI,
+    `auth(req)` now stores a request-local fallback. Do not mutate the exported
+    `ANONYMOUS`/`GUEST` value itself.
 
 ## Adopting the settings module (0.7)
 

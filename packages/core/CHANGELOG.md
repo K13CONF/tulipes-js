@@ -29,6 +29,13 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 - Kebab-case module names no longer produce invalid generated configuration types.
 - Queue-close failures no longer skip Redis teardown.
+- Async access checks are awaited before validation and endpoint handlers; only
+  boolean `true` grants access, and policy errors use the normal error handler.
+- Guest authentication state is isolated per request in core, the reference app,
+  and generated auth helpers.
+- Duplicate method/URL templates fail route scanning even with different RAI IDs
+  or parameter names, preventing ambiguous handlers and overwritten specifications.
+- Forced database cleanup obeys the same shutdown deadline as graceful cleanup.
 
 ### Tests
 

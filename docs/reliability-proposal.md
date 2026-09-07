@@ -181,3 +181,9 @@ Inspection deliberately retains infrastructure initialization when factories req
 it; a completely offline declaration pipeline remains a later design step.
 Shutdown bounds waiting but cannot cancel arbitrary application JavaScript; see
 `packages/core/MIGRATING.md` for the contract and migration steps.
+
+The follow-up reliability pass adds regressions for awaited access-checker
+decisions, request-local guest authentication (including the generated helpers),
+duplicate method/URL templates, and a driver that never settles forced cleanup.
+The full suite now contains 59 passing tests. Reference and freshly packed apps
+also pass 44 HTTP checks covering authentication and queued database updates.

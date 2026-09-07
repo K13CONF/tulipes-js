@@ -1,6 +1,6 @@
 import express from "express";
 import { expect, test } from "vitest";
-import { createRai, RouteRegistry } from "../src/http/rai.js";
+import { ANONYMOUS, createRai, RouteRegistry } from "../src/http/rai.js";
 import { bindRespond } from "../src/http/respond.js";
 
 async function request(app: express.Express, path: string) {
@@ -59,4 +59,72 @@ test.each([
   app.get("/items", rai({ id: "items:read" }), (_req, res) => { res.respond({ data: [] }); });
   app.use(errorHandler("production"));
   expect((await request(app, "/items")).status).toBe(status);
+});
+
+test.each(["/items", "/items?required=present"])("waits for asynchronous access denial before validating or responding to %s", async (path) => {
+  const { z } = await import("zod");
+  const { errorHandler } = await import("../src/http/error-handler.js");
+  const app = express(), registry = new RouteRegistry();
+  registry.setAccessChecker(async () => false);
+  const rai = createRai(registry, () => true, (req, res) => bindRespond(req, res, {}));
+  app.get("/items", rai({ id: "items:read", query: z.object({ required: z.string() }) }),
+    (_req, res) => { res.respond({ data: "private" }); });
+  app.use(errorHandler("production"));
+  expect(await request(app, path)).toMatchObject({
+    status: 401, body: { success: false, data: null, errors: [{ code: "UNAUTHENTICATED" }] },
+  });
+});
+
+test.each([
+  { decision: "allow", status: 200 },
+  { decision: "error", status: 500 },
+])("handles an asynchronous access check that returns $decision", async ({ decision, status }) => {
+  const { errorHandler } = await import("../src/http/error-handler.js");
+  const app = express(), registry = new RouteRegistry();
+  registry.setAccessChecker(async () => {
+    if (decision === "error") throw new Error("policy unavailable");
+    return true;
+  });
+  const rai = createRai(registry, () => false, (req, res) => bindRespond(req, res, {}));
+  app.get("/items", rai({ id: "items:read" }), (_req, res) => { res.respond({ data: "private" }); });
+  app.use(errorHandler("production"));
+  expect(await request(app, "/items")).toMatchObject({
+    status, body: { data: decision === "allow" ? "private" : null },
+  });
+});
+
+test.each([false, true])("isolates anonymous authentication with a middleware guest fallback: %s", async (middleware) => {
+  const { errorHandler } = await import("../src/http/error-handler.js");
+  const app = express();
+  if (middleware) app.use((req, _res, next) => { req.auth = ANONYMOUS; next(); });
+  const rai = createRai(new RouteRegistry(), (role, id) => id === "auth:login" || role === "admin",
+    (req, res) => bindRespond(req, res, {}));
+  let restoreAuth = () => {};
+  app.get("/login", rai({ id: "auth:login" }), (req, res) => {
+    const original = { ...req.auth };
+    restoreAuth = () => { Object.assign(req.auth, original); };
+    req.auth.isAuthenticated = true;
+    req.auth.user = { role: "admin" };
+    res.respond({ data: "signed in" });
+  });
+  app.get("/private", rai({ id: "items:read" }), (_req, res) => { res.respond({ data: "private" }); });
+  app.use(errorHandler("production"));
+  try {
+    expect((await request(app, "/login")).status).toBe(200);
+    expect(await request(app, "/private")).toMatchObject({
+      status: 401, body: { success: false, data: null },
+    });
+  } finally { restoreAuth(); }
+});
+
+test.each(["false", 1, {}])("denies a custom checker result that is not a boolean: %j", async (decision) => {
+  const { errorHandler } = await import("../src/http/error-handler.js");
+  const app = express(), registry = new RouteRegistry();
+  // JavaScript modules can return invalid decisions despite the TypeScript contract.
+  // @ts-expect-error Only boolean decisions are permitted.
+  registry.setAccessChecker(async () => decision);
+  const rai = createRai(registry, () => false, (req, res) => bindRespond(req, res, {}));
+  app.get("/items", rai({ id: "items:read" }), (_req, res) => { res.respond({ data: "private" }); });
+  app.use(errorHandler("production"));
+  expect(await request(app, "/items")).toMatchObject({ status: 401, body: { data: null } });
 });
