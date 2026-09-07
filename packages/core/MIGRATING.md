@@ -11,10 +11,11 @@ what makes it work under nvm.
 
 ---
 
-## Reliability contracts (unreleased)
+## Reliability contracts (0.8)
 
-These changes tighten route registration and alter shutdown timing. Release them
-in the next minor version; existing 0.7 applications should follow these steps.
+Version 0.8 tightens route registration and alters shutdown timing. Existing 0.7
+applications should follow these steps. Upgrade `@tulipes/spec` to 0.2 alongside
+core; the generator's peer dependency now requires core `^0.8.0`.
 
 1. Put exactly one `rai()` first in each endpoint's method chain. For a chained
    route, give GET and POST separate declarations with distinct IDs. Replace

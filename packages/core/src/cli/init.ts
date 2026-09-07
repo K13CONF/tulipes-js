@@ -95,7 +95,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
   const core = `^${coreVersion}`;
   // The generator ships its own version line; it only has to be recent
   // enough to understand the RouteInfo schemas this core declares.
-  const specVersion = "^0.1.0";
+  const specVersion = "^0.2.0";
 
   const files: [string, string][] = [
     ["package.json", json({

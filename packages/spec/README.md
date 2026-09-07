@@ -10,6 +10,10 @@ Generates an **OpenAPI 3.1 document** and a **Postman collection** from a
 [Tulipes](https://www.npmjs.com/package/@tulipes/core) app's declared
 routes.
 
+Version 0.2 requires `@tulipes/core@^0.8.0`. See the core
+[migration guide](https://github.com/kemora13conf/bp-backend-express/blob/v0.8.0/packages/core/MIGRATING.md#reliability-contracts-08)
+when upgrading from an earlier release.
+
 The source is the RAI registry of a *booted* app — not parsed source — so a
 generated document describes exactly the router that is mounted. It cannot
 invent an endpoint, and it cannot miss one.
@@ -37,6 +41,7 @@ Everything except the request shapes is already declared:
 | tag / folder | `rai({ folder })`, defaulting to the declaring module |
 | security, `x-tulipes-roles` | the ACL — which roles hold that permission |
 | response envelope | the framework's one response shape |
+| success status | `rai({ status })`, defaulting to 200; 204 has no JSON body |
 | request/response schemas | `rai({ params, query, body, returns })` |
 
 Schemas are zod, declared on the route and **validated at runtime by the
@@ -87,15 +92,26 @@ The CLI is a thin wrapper; the pieces are exported:
 import { extract, toOpenApi, toPostman } from "@tulipes/spec";
 import { boot } from "@tulipes/core/boot";
 
-const handle = await boot({ rootDir, mode: "backend", listen: false });
-const source = extract(handle.ctx);
-
-const { document, warnings } = await toOpenApi(source, {
-  servers: ["https://api.example.com"],
-});
+const handle = await boot({ rootDir, mode: "backend", inspect: true, handleSignals: false });
+try {
+  const source = extract(handle.ctx);
+  const { document, warnings } = await toOpenApi(source, {
+    servers: ["https://api.example.com"],
+  });
+  // Write the document and report warnings here.
+} finally {
+  await handle.shutdown();
+}
 ```
 
-`listen: false` is what lets this run while the app is already serving.
+Inspection skips bootstrap, sockets, listening and readiness hooks, so it can run
+while the app is serving. Imports, config/route factories and applicable database
+and queue connections still run. Always release them with `shutdown()`.
+
+Custom access checkers produce dynamic authorization metadata and warnings;
+the generator cannot infer their roles or credentials. Configure authorization
+manually for these Postman requests; they do not inherit the collection's bearer
+token. OpenAPI omits a static security requirement for these operations.
 
 ## Options
 

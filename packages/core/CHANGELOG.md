@@ -11,6 +11,8 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-07
+
 ### Changed
 
 - Route scanning validates each HTTP method's first handler and rejects unsupported
@@ -43,7 +45,10 @@ While the major version is `0`, a minor bump may carry breaking changes —
   service-backed CI checks cover the reliability contracts. See
   [testing instructions](../../docs/testing.md) in the repository.
 
-See [migration steps](./MIGRATING.md#reliability-contracts-unreleased) before upgrading.
+Released alongside `@tulipes/spec@0.2.0`, which requires core `^0.8.0` and is
+included in new CLI scaffolds.
+
+See [migration steps](./MIGRATING.md#reliability-contracts-08) before upgrading.
 
 ## [0.7.1] — 2026-09-06
 
@@ -296,7 +301,9 @@ generated types, ACL, the model store, queues, sockets, the three process
 modes (`backend`, `worker`, `script`), the startup banner, and the CLI —
 `init`, `dev`, `sync`, `env:check`, `new module`, `update`.
 
-[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.1...v0.8.0
+[0.7.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.2...v0.6.0
