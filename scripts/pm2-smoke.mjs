@@ -7,6 +7,7 @@ import config from './ecosystem.config.cjs';
 import { spawnSync } from 'node:child_process';
 
 const call = (method, ...args) => new Promise((resolve, reject) => pm2[method](...args, (error, value) => error ? reject(error) : resolve(value)));
+const disconnect = () => new Promise(resolve => pm2.disconnect(() => resolve()));
 const reserve = createServer();
 await new Promise(resolve => reserve.listen(0, '127.0.0.1', resolve));
 const port = reserve.address().port;
@@ -28,7 +29,7 @@ try {
   const before = await call('list');
   assert.equal(before.length, 2);
   assert.ok(before.every(process => process.pid > 0));
-  await call('disconnect');
+  await disconnect();
   // Exercise the application's helper in its own process, as an admin script
   // would use it; the inspection client must not share its PM2 connection.
   const helper = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
@@ -45,7 +46,13 @@ try {
   const after = await call('list');
   assert.ok(after.every(process => process.pid > 0 && process.pid !== before.find(old => old.name === process.name).pid));
 } finally {
-  await call('disconnect');
+  await disconnect();
   try { await call('connect'); await call('delete', 'all'); await call('killDaemon'); }
-  finally { await call('disconnect'); }
+  finally { await disconnect(); }
 }
+// PM2 can retain client bookkeeping after killing its daemon. Verify daemon
+// removal before ending this one-shot checker; app shutdown is checked above.
+const { existsSync } = await import('node:fs');
+const { join } = await import('node:path');
+assert.equal(existsSync(join(process.env.PM2_HOME, 'pm2.pid')), false);
+process.exit(0);
