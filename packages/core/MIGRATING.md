@@ -11,7 +11,7 @@ what makes it work under nvm.
 
 ---
 
-## Next minor (unreleased): minimal default and Node 24
+## 0.9 release candidate: minimal default and Node 24
 
 `init` now creates a minimal, infrastructure-free API. To generate the previous
 full application, pass `--preset production`. Existing applications are unchanged
@@ -27,7 +27,9 @@ Generated tests require dedicated test MongoDB and Redis URLs for production;
 the minimal tests have no service requirements.
 
 This release does not extract provider dependencies or add general offline
-inspection. Both packages need new version numbers before publication.
+inspection. The candidate versions are core 0.9.0-rc.1 and spec 0.3.0-rc.1, published under
+`next`. Install the candidate CLI with `npm install -g @tulipes/core@next`;
+generated apps select compatible candidate dependencies automatically.
 
 ## Reliability contracts (0.8)
 

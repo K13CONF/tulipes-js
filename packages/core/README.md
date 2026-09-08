@@ -34,7 +34,7 @@ Requires Node 24.x and Corepack. Tulipes is experimental; see the
 [compatibility policy](../../docs/support.md).
 
 ```sh
-npm install -g @tulipes/core
+npm install -g @tulipes/core@next
 tulipes init my-api
 cd my-api
 corepack enable
