@@ -8,6 +8,16 @@ process with a report rather than degrading quietly.
 Writing plain Express here will fight the framework. Read the rule that
 applies before you write code.
 
+## Preset scope
+
+Read the installed modules and package scripts before applying integration examples.
+The minimal preset has core, security and hello only. Auth, users, settings,
+MongoDB, Redis, queues, sockets, shared logger/cache helpers and PM2 examples
+below apply when those modules are installed (the production preset). Minimal
+requests use the framework guest identity. Grant permissions to roles the app
+actually defines. Use the generated Vitest suite for changes; production tests
+require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
+
 ## Non-negotiable rules
 
 1. **Never read `process.env` directly.** Every configuration value is
@@ -48,9 +58,9 @@ applies before you write code.
     resolved before any feature route and never undefined inside one. Never
     re-parse the Authorization header or trust a claim from a token.
     → skill `tulipes-permissions`
-11. **Secrets never go on the User model.** Passwords and keys belong in
+11. **When auth is installed, secrets never go on the User model.** Passwords and keys belong in
     the auth module's `Credential` model, which is `select: false`.
-12. **A new feature module's namespace goes in BOTH the `admin` and
+12. **When auth is installed, a new feature module's namespace goes in BOTH the `admin` and
     `sysadmin` grants** in `modules/auth/module.acl.ts`. Neither role holds
     `*` — a wildcard would reach `settings:*` and make the sysadmin
     boundary a label rather than a rule. → skill `tulipes-settings`

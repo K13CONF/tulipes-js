@@ -11,6 +11,24 @@ what makes it work under nvm.
 
 ---
 
+## Next minor (unreleased): minimal default and Node 24
+
+`init` now creates a minimal, infrastructure-free API. To generate the previous
+full application, pass `--preset production`. Existing applications are unchanged
+by this CLI default. `--minimal` and `--preset minimal` are equivalent; unknown
+or conflicting options fail before files are written.
+
+Both packages declare Node >=24.0.0 <25. Existing generated apps must manually
+copy the auth deployment guard from the reference/template and update their
+production PM2 dependency to ^7.0.4. Stage this process-manager upgrade and test
+start/restart/shutdown before updating the server daemon. Configure unique JWT
+keys and replace default admin credentials before staging/production boot.
+Generated tests require dedicated test MongoDB and Redis URLs for production;
+the minimal tests have no service requirements.
+
+This release does not extract provider dependencies or add general offline
+inspection. Both packages need new version numbers before publication.
+
 ## Reliability contracts (0.8)
 
 Version 0.8 tightens route registration and alters shutdown timing. Existing 0.7

@@ -25,3 +25,5 @@ logs/
 # Vitest artifacts
 .vitest/
 coverage/
+reports/
+.artifacts/

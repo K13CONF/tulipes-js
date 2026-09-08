@@ -30,30 +30,33 @@ TulipesBootError: Boot aborted during "environment" — 3 issue(s):
 
 ## Quick start
 
+Requires Node 24.x and Corepack. Tulipes is experimental; see the
+[compatibility policy](../../docs/support.md).
+
 ```sh
 npm install -g @tulipes/core
-tulipes init my-api && cd my-api
-
-corepack enable      # once per machine — activates the pinned yarn 4
+tulipes init my-api
+cd my-api
+corepack enable
 yarn install
-yarn dev             # → http://localhost:3000/api/v1/hello
+yarn sync
+yarn typecheck
+yarn check
+yarn test
+yarn spec
+yarn dev
 ```
 
-You get a running API with three modules, a queue worker, websockets, PM2
-process definitions, nginx templates and agent instructions. It expects
-MongoDB and Redis; both are declared in the generated environment contract.
+Open http://localhost:3000/api/v1/hello or http://localhost:3000/health.
+The default minimal preset contains core, security middleware and a hello
+module with tests. It requires no MongoDB, Redis or credentials. `--minimal`
+and `--preset minimal` select the same starter.
 
-```
-  ▲ my-api  development · backend mode
-
-  ➜  Server     http://localhost:3000  ● listening
-  ➜  Database   mongodb://127.0.0.1:27017/my-api  ● connected
-  ➜  Queues     1 (hello.count-greeting)  ·  1 processor(s) registered
-  ➜  Sockets    /hello
-  ➜  Modules    3 (core*, security*, hello)  ·  * sys tier
-  ➜  Roles      2 (admin, user)
-  ➜  Runtime    Node v24.14.0  ·  PID 43054  ·  ready in 61ms
-```
+For authentication, users, settings, database/queues, sockets and deployment
+examples, use `tulipes init my-api --preset production`. That preset requires
+MongoDB and Redis. Its generated README explains environment setup and tests.
+Core still installs infrastructure libraries in both presets; provider package
+extraction is planned separately.
 
 ## Why
 
@@ -390,11 +393,12 @@ only in development.
 
 | Command | What it does |
 |---|---|
-| `tulipes init [dir]` | scaffold a new application |
+| `tulipes init [dir] [--minimal \| --preset minimal \| --preset production]` | scaffold an application; no services |
 | `tulipes dev [entry]` | regenerate types, then run under tsx watch |
 | `tulipes sync` | regenerate `types/config.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting — a CI gate |
-| `tulipes routes` | list every endpoint with its RAI and the roles that reach it |
+| `tulipes routes` | inspect endpoints and roles; connects configured infrastructure |
+| `tulipes spec [--openapi file] [--postman file] [--url base]` | generate specs; connects configured infrastructure |
 | `tulipes new module <name>` | scaffold a module with every contract |
 | `tulipes update` | upgrade the global CLI and, inside an app, the app itself |
 | `tulipes -v` | print the CLI version, and the app's when they differ |
@@ -405,7 +409,15 @@ declare it themselves. It reinstalls the CLI into the prefix it already lives
 in, which is what makes it work under nvm, where a plain `npm install -g` may
 target a different Node version than the one holding your binary.
 
-## What `tulipes init` gives you
+`init`, `sync`, `env:check`, `new module`, version and update commands do not
+connect application infrastructure (`update` uses the package registry). `dev`
+boots the application and requires its declared services. `routes` and `spec`
+use inspection: the minimal starter needs no services, but the production
+starter still connects MongoDB/Redis. Inspection skips bootstrap, sockets,
+listening and readiness; config/route factories and shutdown hooks still run.
+A general-purpose `--offline` mode is not implemented.
+
+## What `tulipes init --preset production` gives you
 
 The framework is the engine; the scaffold is a complete application you own and
 edit:
