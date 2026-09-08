@@ -56,7 +56,7 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
     mode: "backend",
     handleSignals: false,
     // No port: this must work while the app is already running.
-    listen: false,
+    inspect: true,
   });
 
   try {

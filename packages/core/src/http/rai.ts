@@ -1,4 +1,4 @@
-import type { Request, RequestHandler, Response } from "express";
+import type { Express, Router, Request, RequestHandler, Response } from "express";
 
 import { HttpError, ValidationError, type FieldIssue } from "./error-handler.js";
 import { codeOfIssue, fieldOf, type RouteSchemas, type ValidatableSchema } from "./schema.js";
@@ -21,6 +21,8 @@ import type { Auth } from "./index.js";
  *   }
  */
 export interface RouteInfo extends RouteSchemas {
+  /** Default success HTTP status for res.respond and generated documentation. */
+  status?: number;
   /** Resource Access Identifier, e.g. "users:read". Also the permission. */
   id: string;
   /** Human label, for generated documentation. */
@@ -75,6 +77,8 @@ declare global {
 }
 
 /** Marks a handler as a route declaration. Symbol.for so it survives duplicate module instances. */
+export const MOUNT_PATH = Symbol.for("tulipes.mount-path");
+
 export const RAI_TAG = Symbol.for("tulipes.rai");
 
 export interface RaiTag {
@@ -92,14 +96,27 @@ export interface RouteRecord extends RaiTag {
  * Decides whether the caller may perform a RAI. Replaceable for policies
  * the ACL cannot express — ownership, tenancy, time windows — and for apps
  * whose roles do not live on the user document.
+ * Async decisions are awaited; only an explicit true grants access.
  */
-export type AccessChecker = (req: Request, info: RouteInfo) => boolean;
+export type AccessChecker = (req: Request, info: RouteInfo) => boolean | Promise<boolean>;
 
 export class RouteRegistry {
   /** Set while a module's routes file runs, so declarations attribute to it. */
   currentModule = "(app)";
   #checker: AccessChecker | undefined;
   #records: RouteRecord[] = [];
+
+  /** Mount a router with an explicit literal prefix, preserved for inspection. */
+  mount(parent: Express | Router, path: string, router: Router): void {
+    if (path !== "" && !/^\/[a-zA-Z0-9_.~%/-]*$/.test(path)) {
+      throw new Error(`unsupported router mount "${path}" — use a literal path`);
+    }
+    (parent as Router).use(path || "/", router);
+    const stack = "router" in parent
+      ? (parent.router as { stack: object[] }).stack
+      : (parent as Router & { stack: object[] }).stack;
+    Object.defineProperty(stack.at(-1)!, MOUNT_PATH, { value: path.replace(/\/$/, "") });
+  }
 
   /** Override the default role-versus-ACL check. */
   setAccessChecker(checker: AccessChecker): void {
@@ -146,20 +163,20 @@ export function createRai(
   return (info) => {
     const module = registry.currentModule;
 
-    const handler: RequestHandler = (req, res, next) => {
+    const handler: RequestHandler = async (req, res, next) => {
       req.rai = info;
       bind?.(req, res, module);
 
-      // An app with no auth module still gets a well-formed req.auth, so a
-      // handler never has to ask whether the field is there.
-      req.auth ??= ANONYMOUS;
+      // Guest state belongs to this request, including when middleware assigns
+      // the exported fallback. Mutating it must not identify another caller.
+      if (!req.auth || req.auth === ANONYMOUS) req.auth = { ...ANONYMOUS };
 
       const role = roleOf(req);
       const allowed = registry.checker
-        ? registry.checker(req, info)
+        ? await registry.checker(req, info)
         : can(role, info.id);
 
-      if (!allowed) {
+      if (allowed !== true) {
         // 401 says "sign in and this may work"; 403 says it will not. A
         // client can act on the difference, so they are not merged.
         //

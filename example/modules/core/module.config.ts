@@ -1,4 +1,4 @@
-import type { Ctx } from "@tulipes/core/boot";
+import type { ConfigCtx } from "@tulipes/core/boot";
 
 import { closeCache } from "./helpers/cache/index.js";
 import { registerBasePlugins } from "./helpers/mongoose/index.js";
@@ -12,7 +12,7 @@ import { registerBasePlugins } from "./helpers/mongoose/index.js";
  */
 registerBasePlugins();
 
-export default function coreConfig(_ctx: Ctx) {
+export default function coreConfig(_ctx: ConfigCtx) {
   return {};
 }
 

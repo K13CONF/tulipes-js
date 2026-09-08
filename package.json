@@ -10,11 +10,17 @@
   ],
   "scripts": {
     "example": "yarn workspace @tulipes-example/app dev",
-    "typecheck": "yarn workspaces foreach -A --no-private run typecheck"
+    "typecheck": "yarn workspaces foreach -A --no-private run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:types": "tsc -p tsconfig.tests.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "^24.2.0",
+    "socket.io-client": "^4.8.3",
     "tsx": "^4.19.2",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
   }
 }

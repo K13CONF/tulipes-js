@@ -1,10 +1,10 @@
 import { Router } from "express";
-import type { Ctx } from "@tulipes/core/boot";
+import type { BackendCtx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 
 import { HelloController } from "../controllers/hello.controllers.js";
 
-export default function helloRoutes(ctx: Ctx): Router {
+export default function helloRoutes(ctx: BackendCtx): Router {
   const { rai } = ctx;
   const router = Router();
   const hello = new HelloController(ctx);

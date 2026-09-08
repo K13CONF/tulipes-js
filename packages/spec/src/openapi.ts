@@ -57,6 +57,9 @@ export async function toOpenApi(
 }
 
 async function operation(route: SpecRoute, warnings: string[]): Promise<Record<string, unknown>> {
+  if (route.authorization === "dynamic") {
+    warnings.push(`${route.id}: custom access checker; authorization cannot be described statically`);
+  }
   const collect = (warning?: string): void => {
     if (warning) warnings.push(warning);
   };
@@ -83,6 +86,7 @@ async function operation(route: SpecRoute, warnings: string[]): Promise<Record<s
     // reader of the document genuinely needs.
     "x-tulipes-permission": route.id,
     "x-tulipes-roles": route.roles,
+    "x-tulipes-authorization": route.authorization ?? "acl",
     ...(parameters.length > 0 && { parameters }),
     ...(body.schema && {
       requestBody: {
@@ -92,7 +96,7 @@ async function operation(route: SpecRoute, warnings: string[]): Promise<Record<s
     }),
     // A public route needs no credential; every other one does. An empty
     // array on `security` is OpenAPI's way of saying "optional".
-    security: route.public ? [] : [{ bearerAuth: [] }],
+    ...(route.authorization !== "dynamic" && { security: route.public ? [] : [{ bearerAuth: [] }] }),
     responses: responses(route, returns.schema),
   };
 }
@@ -165,7 +169,7 @@ function responses(route: SpecRoute, returns: JsonSchema | undefined): Record<st
   });
 
   return {
-    "200": success,
+    [String(route.status ?? 200)]: route.status === 204 ? { description: "Success" } : success,
     ...(hasValidation(route) && { "422": failure("Validation failed") }),
     ...(!route.public && {
       "401": failure("Authentication required"),

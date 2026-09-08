@@ -1,3 +1,4 @@
+import { Cleanup } from "./cleanup.js";
 import { createServer, type Server } from "node:http";
 import type { Connection } from "mongoose";
 import { join } from "node:path";
@@ -21,7 +22,7 @@ import { scanRoutes } from "../http/route-scan.js";
 import { loadAppConfigSeed } from "./app-files.js";
 import { printStartupBanner } from "./banner.js";
 import { importFile } from "./import-file.js";
-import type { Ctx, ModuleLifecycle, RoutesFn } from "./contracts.js";
+import type { BackendCtx, Ctx, ModuleLifecycle, RoutesFn } from "./contracts.js";
 
 /**
  * "script" is a one-shot mode: it runs every shared phase — environment,
@@ -48,6 +49,10 @@ export interface BootOptions {
    * that is already running — `tulipes routes` is the reason it exists.
    */
   listen?: boolean;
+  /** Total graceful cleanup deadline, including hooks. Defaults to 10 seconds. */
+  shutdownTimeoutMs?: number;
+  /** Mount routes for tooling; skip bootstrap, sockets, listening and readiness. */
+  inspect?: boolean;
 }
 
 export interface BootHandle {
@@ -70,7 +75,12 @@ export interface BootHandle {
  */
 export async function boot(options: BootOptions): Promise<BootHandle> {
   const bootStartedAt = Date.now();
+  const shutdownTimeoutMs = options.shutdownTimeoutMs ?? 10_000;
+  if (!Number.isFinite(shutdownTimeoutMs) || shutdownTimeoutMs <= 0) {
+    throw new Error("shutdownTimeoutMs must be a positive finite number");
+  }
   const mode = resolveMode(options.mode);
+  if (options.inspect && mode !== "backend") throw new Error("inspection requires backend mode");
 
   // Phases 1–3 — Environment engine (crashes internally on bad env)
   const env = Environment.load({
@@ -115,101 +125,117 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     t: (namespace, locale) => i18n.t(namespace, locale),
     i18n: i18n.instance,
   };
-  const configReport = new BootReport();
-  await loadAppConfigSeed(options.rootDir, ctx, configReport);
-  const lifecycles = await buildGlobalConfig(explored, ctx, configReport);
-  configReport.throwIfAny("config");
-
-  // Phase 6b — translations. After config, because the locales an app ships
-  // are app policy read from config.i18n; before everything that might want
-  // to say something to a user.
-  const i18nReport = new BootReport();
-  await i18n.load(
-    explored,
-    I18n.readSettings(ctx.config.i18n, i18nReport),
-    env.appEnv,
-    i18nReport,
-  );
-  i18nReport.throwIfAny("i18n");
-
-  // Phase 7 — ACL merge
-  const aclReport = new BootReport();
-  ctx.acl = await loadAcl(explored, aclReport);
-  aclReport.throwIfAny("acl");
-
-  // Phase 8 — DB + models + bootstrap
-  const dbReport = new BootReport();
-  const connection = await initDatabase(explored, ctx, dbReport, {
-    runBootstrap: mode !== "script",
-  });
-  dbReport.throwIfAny("database");
-
-  // Phase 9 — mode fork
+  let lifecycles: ModuleLifecycle[] = [];
+  let shutdownPromise: Promise<void> | undefined;
+  const signalHandlers = new Map<NodeJS.Signals, () => void>();
   const handle: BootHandle = {
-    mode,
-    env,
-    ctx,
-    i18n,
-    connection,
-    shutdown: () => shutdown(handle, lifecycles),
+    mode, env, ctx, i18n,
+    shutdown: () => {
+      if (!shutdownPromise) {
+        for (const [signal, handler] of signalHandlers) process.removeListener(signal, handler);
+        shutdownPromise = shutdown(handle, lifecycles, shutdownTimeoutMs);
+      }
+      return shutdownPromise;
+    },
   };
+  try {
+    const configReport = new BootReport();
+    await loadAppConfigSeed(options.rootDir, ctx, configReport);
+    lifecycles = await buildGlobalConfig(explored, ctx, configReport);
+    configReport.throwIfAny("config");
 
-  // Phase 9 — queues register in both modes (producers everywhere; the
-  // worker branch additionally starts consuming below).
-  const queueReport = new BootReport();
-  await initQueues(explored, ctx, queueReport);
-  queueReport.throwIfAny("queues");
+    // Phase 6b — translations. After config, because the locales an app ships
+    // are app policy read from config.i18n; before everything that might want
+    // to say something to a user.
+    const i18nReport = new BootReport();
+    await i18n.load(
+      explored,
+      I18n.readSettings(ctx.config.i18n, i18nReport),
+      env.appEnv,
+      i18nReport,
+    );
+    i18nReport.throwIfAny("i18n");
 
-  if (mode === "backend") {
-    await startBackend(handle, explored, options.listen !== false);
-  } else if (mode === "worker") {
-    const workerReport = new BootReport();
-    const started = ctx.queues?.startWorkers(workerReport) ?? 0;
-    workerReport.throwIfAny("workers");
-    // BullMQ workers hold the event loop open; a worker with nothing to
-    // consume is a misconfigured deployment, not a valid idle state.
-    if (started === 0) {
-      throw new Error(
-        "worker mode started with zero processors — no module registered queue work",
-      );
+    // Phase 7 — ACL merge
+    const aclReport = new BootReport();
+    ctx.acl = await loadAcl(explored, aclReport);
+    aclReport.throwIfAny("acl");
+
+    // Phase 8 — DB + models + bootstrap
+    const dbReport = new BootReport();
+    await initDatabase(explored, ctx, dbReport, {
+      runBootstrap: mode !== "script" && !options.inspect,
+      onConnection: connection => { handle.connection = connection; },
+    });
+    dbReport.throwIfAny("database");
+
+    // Phase 9 — queues register in both modes (producers everywhere; the
+    // worker branch additionally starts consuming below).
+    const queueReport = new BootReport();
+    await initQueues(explored, ctx, queueReport);
+    queueReport.throwIfAny("queues");
+
+    if (mode === "backend") {
+      await startBackend(handle, explored, options.listen !== false && !options.inspect, options.inspect);
+    } else if (mode === "worker") {
+      const workerReport = new BootReport();
+      const started = ctx.queues?.startWorkers(workerReport) ?? 0;
+      workerReport.throwIfAny("workers");
+      // BullMQ workers hold the event loop open; a worker with nothing to
+      // consume is a misconfigured deployment, not a valid idle state.
+      if (started === 0) {
+        throw new Error(
+          "worker mode started with zero processors — no module registered queue work",
+        );
+      }
     }
-  }
-  // "script" starts nothing: the caller owns what happens next, and owns
-  // calling handle.shutdown() when it is done.
+    // "script" starts nothing: the caller owns what happens next, and owns
+    // calling handle.shutdown() when it is done.
 
-  // Phase 12 — onReady, load order. Scripts skip it: those hooks announce a
-  // process that is up and serving, which a script never is.
-  if (mode !== "script" && options.listen !== false) {
-    for (const { module, onReady } of lifecycles) {
-      try {
-        await onReady?.(ctx);
-      } catch (error) {
-        // Late-phase hook failures must still take the process down cleanly:
-        // a half-ready app serving traffic is worse than no app.
-        await handle.shutdown();
-        throw new Error(`onReady hook of "${module}" failed: ${(error as Error).message}`);
+    // Phase 12 — onReady, load order. Scripts skip it: those hooks announce a
+    // process that is up and serving, which a script never is.
+    if (mode !== "script" && options.listen !== false && !options.inspect) {
+      for (const { module, onReady } of lifecycles) {
+        try {
+          await onReady?.(ctx);
+        } catch (error) {
+          // Late-phase hook failures must still take the process down cleanly:
+          // a half-ready app serving traffic is worse than no app.
+          throw new Error(`onReady hook of "${module}" failed: ${(error as Error).message}`, { cause: error });
+        }
+      }
+
+      printStartupBanner(handle, order, Date.now() - bootStartedAt);
+    }
+
+    if (options.handleSignals !== false) {
+      for (const signal of ["SIGINT", "SIGTERM"] as const) {
+        const handler = () => {
+          console.log(`\n[tulipes] ${signal} — shutting down`);
+          handle.shutdown().then(
+            () => process.exit(0),
+            (error) => {
+              console.error("[tulipes] shutdown failed:", error);
+              process.exit(1);
+            },
+          );
+        };
+        signalHandlers.set(signal, handler);
+        process.once(signal, handler);
       }
     }
 
-    printStartupBanner(handle, order, Date.now() - bootStartedAt);
-  }
-
-  if (options.handleSignals !== false) {
-    for (const signal of ["SIGINT", "SIGTERM"] as const) {
-      process.once(signal, () => {
-        console.log(`\n[tulipes] ${signal} — shutting down`);
-        handle.shutdown().then(
-          () => process.exit(0),
-          (error) => {
-            console.error("[tulipes] shutdown failed:", error);
-            process.exit(1);
-          },
-        );
-      });
+    return handle;
+  } catch (error) {
+    try {
+      await handle.shutdown();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError],
+        `Boot failed: ${error instanceof Error ? error.message : String(error)}; cleanup also failed`,
+        { cause: error });
     }
+    throw error;
   }
-
-  return handle;
 }
 
 function resolveMode(override: ProcessMode | undefined): ProcessMode {
@@ -247,6 +273,7 @@ async function startBackend(
   handle: BootHandle,
   explored: readonly ModuleFiles[],
   listen = true,
+  inspect = false,
 ): Promise<void> {
   const app = express();
   handle.app = app;
@@ -271,18 +298,17 @@ async function startBackend(
         // Declarations happen synchronously inside this call, so recording
         // the module here is enough to attribute every one of them.
         handle.ctx.routes.currentModule = module.name;
-        const router = await (exported.default as RoutesFn)(handle.ctx);
+        const router = await (exported.default as RoutesFn)(handle.ctx as BackendCtx);
         handle.ctx.routes.currentModule = "(app)";
         // Mounting the return value is optional sugar — a routes fn may
         // have attached handlers to ctx.app directly instead. Routers are
         // callables in express, so a function return is a mountable.
-        if (typeof router === "function") app.use(router);
+        if (typeof router === "function") handle.ctx.routes.mount(app, "", router);
       } catch (error) {
-        report.add({
-          scope: "boot",
-          module: module.name,
-          message: `routes function threw: ${(error as Error).message}`,
-        });
+        report.add({ scope: "boot", module: module.name,
+          message: `routes function threw: ${(error as Error).message}` });
+      } finally {
+        handle.ctx.routes.currentModule = "(app)";
       }
     }
   }
@@ -307,7 +333,7 @@ async function startBackend(
   // Phase 11b — sockets attach before listen() so no client can connect
   // to a namespace that isn't wired yet.
   const socketReport = new BootReport();
-  await initSockets(explored, handle.ctx, server, socketReport);
+  if (!inspect) await initSockets(explored, handle.ctx, server, socketReport);
   socketReport.throwIfAny("sockets");
 
   if (!listen) return;
@@ -318,38 +344,29 @@ async function startBackend(
   });
 }
 
-/** Reverse load order, every hook attempted even if an earlier one throws. */
+/** Stop new work, drain active work, dispose modules, then infrastructure. */
 async function shutdown(
   handle: BootHandle,
   lifecycles: readonly ModuleLifecycle[],
+  timeoutMs: number,
 ): Promise<void> {
-  const failures: string[] = [];
+  const cleanup = new Cleanup(timeoutMs);
+  await Promise.all([
+    cleanup.run("http", async () => {
+      if (handle.server?.listening) {
+        await new Promise<void>((resolve, reject) => {
+          handle.server!.close(error => error ? reject(error) : resolve());
+        });
+      }
+    }, () => handle.server?.closeAllConnections()),
+    cleanup.run("sockets", () => handle.ctx.sockets?.close()),
+    cleanup.run("workers", () => handle.ctx.queues?.drain()),
+  ]);
 
   for (const { module, onShutdown } of [...lifecycles].reverse()) {
-    try {
-      await onShutdown?.(handle.ctx);
-    } catch (error) {
-      failures.push(`${module}: ${(error as Error).message}`);
-    }
+    await cleanup.run(`${module} onShutdown`, () => onShutdown?.(handle.ctx));
   }
-
-  // Kick socket clients first so the http server's close() isn't held open
-  // by long-lived websocket connections.
-  handle.ctx.sockets?.close();
-
-  if (handle.server?.listening) {
-    await new Promise<void>((resolve, reject) => {
-      handle.server!.close((error) => (error ? reject(error) : resolve()));
-    });
-  }
-
-  // Queues drain after http stops (no new producers), workers finish their
-  // in-flight jobs inside close(). DB goes down last — hooks, requests and
-  // jobs may all need it right up to this point.
-  await handle.ctx.queues?.close();
-  await handle.connection?.close();
-
-  if (failures.length > 0) {
-    throw new Error(`onShutdown hook(s) failed — ${failures.join("; ")}`);
-  }
+  await cleanup.run("queues", () => handle.ctx.queues?.close(), () => handle.ctx.queues?.disconnect());
+  await cleanup.run("database", () => handle.connection?.close(), () => handle.connection?.destroy(true));
+  cleanup.finish();
 }

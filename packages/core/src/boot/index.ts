@@ -2,8 +2,14 @@ export { boot, processModes, type BootHandle, type BootOptions, type ProcessMode
 export type { AppConfigFn } from "./app-files.js";
 export type {
   Ctx,
+  ConfigCtx,
+  RuntimeCtx,
+  BackendCtx,
+  DatabaseCtx,
   LifecycleHook,
   ModuleConfigFn,
   ModuleLifecycle,
   RoutesFn,
 } from "./contracts.js";
+
+export { requireModels, requireQueues } from "./contracts.js";

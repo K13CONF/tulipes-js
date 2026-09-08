@@ -71,7 +71,7 @@ export interface Ctx {
  * module can read the namespaces of everything it `dependsOn`.
  */
 export type ModuleConfigFn = (
-  ctx: Ctx,
+  ctx: ConfigCtx,
 ) => Record<string, unknown> | void | Promise<Record<string, unknown> | void>;
 
 export type LifecycleHook = (ctx: Ctx) => void | Promise<void>;
@@ -92,4 +92,36 @@ export interface ModuleLifecycle {
  * directly on `ctx.app`, or return a Router for core to `app.use()` —
  * returning one is the recommended style.
  */
-export type RoutesFn = (ctx: Ctx) => Router | void | Promise<Router | void>;
+export type RoutesFn = (ctx: BackendCtx) => Router | void | Promise<Router | void>;
+
+/** Configuration runs before ACL, database, queues or Express exist. */
+export type ConfigCtx = Pick<Ctx,
+  "mode" | "Environment" | "modules" | "config" | "rai" | "routes" | "t" | "i18n"
+>;
+
+/** Runtime infrastructure is optional, even after its initialization phase. */
+export interface RuntimeCtx extends Ctx {
+  acl: Acl;
+}
+
+/** Context passed to route factories in the backend branch. */
+export interface BackendCtx extends RuntimeCtx {
+  mode: "backend";
+  app: Express;
+}
+
+/** Bootstrap tasks only run with a registered model store. */
+export interface DatabaseCtx extends RuntimeCtx {
+  models: ModelStore;
+}
+
+/** Explicit capability checks for applications that require infrastructure. */
+export function requireModels(ctx: Pick<Ctx, "models">): ModelStore {
+  if (!ctx.models) throw new Error("This module requires a database model store");
+  return ctx.models;
+}
+
+export function requireQueues(ctx: Pick<Ctx, "queues">): QueueManager {
+  if (!ctx.queues) throw new Error("This module requires a queue manager");
+  return ctx.queues;
+}
