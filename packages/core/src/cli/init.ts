@@ -1,3 +1,4 @@
+import { renderMinimalProject, starterTests } from "./minimal.js";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
@@ -16,7 +17,9 @@ import { coreVersion, packageRoot } from "./package-info.js";
  * queues cannot work without them, and the boot refuses rather than
  * degrading quietly.
  */
-export async function runInit(rootDir: string, target?: string): Promise<void> {
+export type InitPreset = "minimal" | "production";
+
+export async function runInit(rootDir: string, target?: string, preset: InitPreset = "minimal"): Promise<void> {
   const dir = resolve(rootDir, target ?? ".");
   const name = sanitizeName(basename(dir));
 
@@ -27,7 +30,7 @@ export async function runInit(rootDir: string, target?: string): Promise<void> {
   }
 
   const version = coreVersion();
-  const files = renderProject(name, version);
+  const files = preset === "minimal" ? renderMinimalProject(name, version) : renderProject(name, version);
 
   for (const [relPath, content] of files) {
     const filePath = join(dir, relPath);
@@ -47,11 +50,11 @@ export async function runInit(rootDir: string, target?: string): Promise<void> {
     "  yarn install",
     "  yarn dev",
     "",
-    "  → http://localhost:3000/hello",
+    "  → http://localhost:3000/api/v1/hello",
     "",
-    "Needs mongo and redis running — see MONGO_URI / REDIS_URL in",
-    ".envs/.env.development. Run `yarn worker` in a second terminal to",
-    "consume queued jobs.",
+    preset === "production" ? "Needs mongo and redis running — see MONGO_URI / REDIS_URL in" : "No MongoDB or Redis required. Health: http://localhost:3000/health",
+    preset === "production" ? ".envs/.env.development. Run `yarn worker` in a second terminal to" : undefined,
+    preset === "production" ? "consume queued jobs." : undefined,
   ].filter((line) => line !== undefined).join("\n"));
 }
 
@@ -105,9 +108,12 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       // Pins yarn 4 through corepack; without it a global classic yarn
       // would handle the workspaces and produce a v1 lockfile.
       packageManager: "yarn@4.18.0",
+      engines: { node: ">=24.0.0 <25" },
       workspaces: ["modules/*"],
       scripts: {
         dev: "tulipes dev",
+        start: "tsx app.ts",
+        test: "vitest run",
         worker: "tsx worker.ts",
         sync: "tulipes sync",
         check: "tulipes env:check",
@@ -136,11 +142,16 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         // Only needed to generate documents, never to run the app.
         "@tulipes/spec": specVersion,
         // Local convenience: servers usually install pm2 globally instead.
-        pm2: "^6",
+        pm2: "^7.0.4",
         tsx: "^4",
         typescript: "^7",
+        vitest: "^5.0.0",
+        vite: "^8.2.2",
       },
     })],
+
+    ["tests/app.test.ts", starterTests(true)],
+    ["vitest.config.ts", "import { defineConfig } from \"vitest/config\";\n\nexport default defineConfig({ test: { include: [\"tests/**/*.test.ts\"], execArgv: [\"--import\", \"tsx\"] } });\n"],
 
     ["tsconfig.json", json({
       compilerOptions: {
@@ -155,7 +166,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         forceConsistentCasingInFileNames: true,
         noEmit: true,
       },
-      include: ["app.ts", "worker.ts", "types", "modules", "config", "scripts"],
+      include: ["app.ts", "worker.ts", "types", "modules", "config", "scripts", "tests"],
     })],
 
     ["ecosystem.config.cjs", [
@@ -877,6 +888,23 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `import type { ConfigCtx } from "@tulipes/core/boot";`,
       ``,
       `export default function authConfig({ Environment }: ConfigCtx) {`,
+      `  if (Environment.appEnv === "production" || Environment.appEnv === "staging") {`,
+      `    const invalid: string[] = [];`,
+      `    const defaults = [`,
+      `      ["JWT_ACCESS_SECRET", "dev-only-access-secret-change-me"],`,
+      `      ["JWT_REFRESH_SECRET", "dev-only-refresh-secret-change-me"],`,
+      `      ["AUTH_ADMIN_PASSWORD", "dev-admin-password"],`,
+      `      ["AUTH_ADMIN_EMAIL", "admin@example.com"],`,
+      `    ] as const;`,
+      `    for (const [name, developmentValue] of defaults) {`,
+      `      const value = String(Environment.get(name)).trim();`,
+      `      if (!value || value === developmentValue) invalid.push(name);`,
+      `    }`,
+      `    if (Environment.get("JWT_ACCESS_SECRET") === Environment.get("JWT_REFRESH_SECRET")) {`,
+      `      invalid.push("JWT_ACCESS_SECRET / JWT_REFRESH_SECRET (use distinct keys)");`,
+      `    }`,
+      `    if (invalid.length) throw new Error("Unsafe production credentials: configure " + invalid.join(", "));`,
+      `  }`,
       `  return {`,
       `    accessTtl: Environment.get("JWT_ACCESS_TTL"),`,
       `    refreshTtl: Environment.get("JWT_REFRESH_TTL"),`,
@@ -4782,14 +4810,14 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
     ["README.md", [
       `# ${name}`,
       ``,
-      `A [Tulipes](https://www.npmjs.com/package/@tulipes/core) application.`,
+      `A production-preset [Tulipes](https://www.npmjs.com/package/@tulipes/core) application. Requires Node 24.x.`,
       ``,
       `## Run`,
       ``,
       "```sh",
       `corepack enable   # once per machine — activates the pinned yarn 4`,
       `yarn install`,
-      `yarn dev          # boot the backend process → http://localhost:3000/hello`,
+      `yarn dev          # boot the backend process → http://localhost:3000/api/v1/hello`,
       "```",
       ``,
       `Needs mongo and redis running — see \`MONGO_URI\` and \`REDIS_URL\` in`,
@@ -4807,6 +4835,15 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       `cp .env.example .envs/.env.development`,
       `yarn check                             # validate it without booting`,
       "```",
+      ``,
+      `## Verify`,
+      ``,
+      `Run \`yarn sync\`, \`yarn typecheck\` and \`yarn check\`. Tests need dedicated`,
+      `services: \`TEST_MONGO_URI=mongodb://127.0.0.1:27017/tulipes_tests TEST_REDIS_URL=redis://127.0.0.1:6379/3 yarn test\`.`,
+      `Use test-only data: the suite creates users and sessions. \`yarn spec\` writes`,
+      `OpenAPI/Postman documents and still connects configured MongoDB/Redis.`,
+      `Staging/production boot rejects development credentials and equal JWT keys.`,
+      `Auth, settings and deployment examples are application policy you own.`,
       ``,
       `## The hello module`,
       ``,

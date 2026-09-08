@@ -11,6 +11,7 @@
     "types",
     "modules",
     "config",
-    "scripts"
+    "scripts",
+    "tests"
   ]
 }

@@ -205,3 +205,16 @@ const t = ctx.t("users", job.data.locale);   // modules/users/queues/users.queue
 | `tulipes env:check` | validate env without booting — CI gate |
 | `tulipes new module <name>` | scaffold a module |
 | `yarn typecheck` | typecheck app against the generated types |
+
+## Tests and specification generation
+
+Requires Node 24.x. This is the production preset; use dedicated services:
+
+```sh
+TEST_MONGO_URI=mongodb://127.0.0.1:27017/tulipes_tests \
+TEST_REDIS_URL=redis://127.0.0.1:6379/3 yarn test
+```
+
+Tests create users and sessions. `yarn spec` also connects configured MongoDB and
+Redis. Stage/production boot requires distinct JWT keys and nondefault admin
+credentials. See [security boundaries](../docs/security-model.md).

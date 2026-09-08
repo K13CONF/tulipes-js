@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Default minimal starter, explicit production preset and generated Vitest suites.
+- Production/staging credential guard and retained concurrent refresh/logout checks.
+- PM2 7.0.4 production starter and actual supervision/restart verification.
+- MIT license, package metadata, Node 24 support and contribution/security policies.
+- Coverage floors, separate dependency audits and exact-archive CI/release gates.
+
+See MIGRATING.md for the new default, runtime range and manual template upgrades.
+
+
 All notable changes to `@tulipes/core`.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

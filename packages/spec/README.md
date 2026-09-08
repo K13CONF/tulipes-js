@@ -10,6 +10,10 @@ Generates an **OpenAPI 3.1 document** and a **Postman collection** from a
 [Tulipes](https://www.npmjs.com/package/@tulipes/core) app's declared
 routes.
 
+Requires Node 24.x. Inspection connects infrastructure declared by the app:
+the minimal starter needs no services; the production starter needs MongoDB
+and Redis. There is no general offline mode yet.
+
 Version 0.2 requires `@tulipes/core@^0.8.0`. See the core
 [migration guide](https://github.com/kemora13conf/bp-backend-express/blob/v0.8.0/packages/core/MIGRATING.md#reliability-contracts-08)
 when upgrading from an earlier release.

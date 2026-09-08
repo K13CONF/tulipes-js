@@ -13,14 +13,19 @@
     "typecheck": "yarn workspaces foreach -A --no-private run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:types": "tsc -p tsconfig.tests.json --noEmit"
+    "test:types": "tsc -p tsconfig.tests.json --noEmit",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@types/node": "^24.2.0",
+    "@vitest/coverage-v8": "^5.0.0",
     "socket.io-client": "^4.8.3",
     "tsx": "^4.19.2",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=24.0.0 <25"
   }
 }
