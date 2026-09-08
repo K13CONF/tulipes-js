@@ -4,7 +4,7 @@ import { appBoot, registerTypeScript } from "./app-core.js";
  * `tulipes routes` — every endpoint the app declares, with the roles that
  * can reach it.
  *
- * Boots in script mode, which is the point: the list comes from the
+ * Uses backend inspection, with startup tasks and listening disabled: the list comes from the
  * running app rather than from parsing source, so it cannot disagree with
  * what actually serves traffic. It is also the substrate a spec generator
  * plugs into later.
@@ -24,7 +24,7 @@ export async function runRoutes(rootDir: string): Promise<void> {
     mode: "backend",
     handleSignals: false,
     // No port: this must work while the app is already running.
-    listen: false,
+    inspect: true,
   });
 
   try {
@@ -39,6 +39,7 @@ export async function runRoutes(rootDir: string): Promise<void> {
 
     const grants = handle.ctx.acl!.describe();
     const rolesFor = (id: string): string => {
+      if (handle.ctx.routes.checker) return "dynamic (custom access checker)";
       const roles = grants
         .filter(({ resource }) => resource === id || resource === "*" || resource === `${id.split(":")[0]}:*`)
         .map(({ role }) => role);

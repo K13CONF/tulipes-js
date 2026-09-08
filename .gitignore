@@ -21,3 +21,7 @@ logs/
 !.yarn/plugins
 !.yarn/releases
 .pnp.*
+
+# Vitest artifacts
+.vitest/
+coverage/

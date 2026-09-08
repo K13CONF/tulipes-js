@@ -88,13 +88,16 @@ async function request(
   ]);
   [query, body, params].forEach((r) => r.warning && warnings.push(r.warning));
 
+  const dynamic = route.authorization === "dynamic";
+  if (dynamic) warnings.push(`${route.id}: custom access checker; configure authorization manually`);
+  const description = [route.description, dynamic ? "Authorization uses a custom checker. Configure credentials manually." : undefined].filter(Boolean).join("\n\n");
   const path = toPostmanPath(route.path).replace(/^\//, "").split("/");
 
   return {
     name: route.name ?? route.id,
     request: {
       method: route.method,
-      ...(route.description && { description: route.description }),
+      ...(description && { description }),
       header: [
         ...(body.schema ? [{ key: "Content-Type", value: "application/json" }] : []),
         // Present but disabled: a reviewer can flip it on to check a
@@ -119,7 +122,7 @@ async function request(
       }),
       // A public route must not send the collection's bearer token: it
       // would mask the very thing a reviewer is checking.
-      ...(route.public && { auth: { type: "noauth" } }),
+      ...((route.public || dynamic) && { auth: { type: "noauth" } }),
     },
     event: isLogin ? [captureTokens()] : [],
   };

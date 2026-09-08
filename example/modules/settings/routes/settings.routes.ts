@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Ctx } from "@tulipes/core/boot";
+import type { BackendCtx } from "@tulipes/core/boot";
 
 import { SettingsController } from "../controllers/settings.controllers.js";
 import {
@@ -16,7 +16,7 @@ import {
  * The infrastructure console. Every id is `settings:*`, granted only to
  * `sysadmin` — see module.acl.ts.
  */
-export default function settingsRoutes(ctx: Ctx): Router {
+export default function settingsRoutes(ctx: BackendCtx): Router {
   const { rai } = ctx;
   const router = Router();
   const settings = new SettingsController(ctx);

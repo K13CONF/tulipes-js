@@ -1,4 +1,4 @@
-import type { Ctx } from "@tulipes/core/boot";
+import type { DatabaseCtx } from "@tulipes/core/boot";
 
 /**
  * Runs after models are registered and before the server accepts
@@ -7,8 +7,8 @@ import type { Ctx } from "@tulipes/core/boot";
  * MUST be idempotent: it runs on every boot of every process, backend and
  * worker alike. Upsert; never blind-insert.
  */
-export default async function seedGreetings({ models }: Ctx): Promise<void> {
-  const Greeting = models!.get("Greeting");
+export default async function seedGreetings({ models }: DatabaseCtx): Promise<void> {
+  const Greeting = models.get("Greeting");
 
   try {
     await Greeting.updateOne(

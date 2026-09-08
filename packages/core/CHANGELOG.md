@@ -11,6 +11,45 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-07
+
+### Changed
+
+- Route scanning validates each HTTP method's first handler and rejects unsupported
+  paths and ambiguous declarations. `ctx.routes.mount()` preserves nested prefixes.
+- Shutdown drains active work before module hooks, shares one operation across
+  repeated calls, removes signal listeners, and attempts all cleanup within a
+  configurable graceful deadline. Failed boot releases acquired infrastructure.
+- CLI route/spec inspection skips bootstrap, sockets, listeners and readiness hooks.
+- `ConfigCtx`, `RuntimeCtx`, `BackendCtx`, `DatabaseCtx`, `requireModels` and
+  `requireQueues` express phase and capability contracts. Scaffold and example use
+  the more precise types.
+- RAI `status` drives the default response status and generated OpenAPI success
+  response. Custom authorization policies are reported as dynamic.
+
+### Fixed
+
+- Kebab-case module names no longer produce invalid generated configuration types.
+- Queue-close failures no longer skip Redis teardown.
+- Async access checks are awaited before validation and endpoint handlers; only
+  boolean `true` grants access, and policy errors use the normal error handler.
+- Guest authentication state is isolated per request in core, the reference app,
+  and generated auth helpers.
+- Duplicate method/URL templates fail route scanning even with different RAI IDs
+  or parameter names, preventing ambiguous handlers and overwritten specifications.
+- Forced database cleanup obeys the same shutdown deadline as graceful cleanup.
+
+### Tests
+
+- Vitest unit and integration suites, TypeScript contract checks, and Mongo/Redis
+  service-backed CI checks cover the reliability contracts. See
+  [testing instructions](../../docs/testing.md) in the repository.
+
+Released alongside `@tulipes/spec@0.2.0`, which requires core `^0.8.0` and is
+included in new CLI scaffolds.
+
+See [migration steps](./MIGRATING.md#reliability-contracts-08) before upgrading.
+
 ## [0.7.1] — 2026-09-06
 
 ### Changed
@@ -262,7 +301,9 @@ generated types, ACL, the model store, queues, sockets, the three process
 modes (`backend`, `worker`, `script`), the startup banner, and the CLI —
 `init`, `dev`, `sync`, `env:check`, `new module`, `update`.
 
-[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.1...v0.8.0
+[0.7.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.5.2...v0.6.0

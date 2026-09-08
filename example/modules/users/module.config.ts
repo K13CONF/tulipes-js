@@ -1,8 +1,8 @@
-import type { Ctx } from "@tulipes/core/boot";
+import type { ConfigCtx, Ctx } from "@tulipes/core/boot";
 
 import { moduleLogger } from "@app/core";
 
-export default function usersConfig({ Environment }: Ctx) {
+export default function usersConfig({ Environment }: ConfigCtx) {
   // Types flow from the generated config.d.ts — no annotations needed.
   return {
     maxSessions: Environment.get("USERS_MAX_SESSIONS"),

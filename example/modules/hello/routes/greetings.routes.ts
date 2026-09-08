@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Ctx } from "@tulipes/core/boot";
+import type { BackendCtx } from "@tulipes/core/boot";
 
 import { GreetingsController } from "../controllers/greetings.controllers.js";
 
@@ -7,7 +7,7 @@ import { GreetingsController } from "../controllers/greetings.controllers.js";
  * A module may ship several routes files; each is discovered and mounted
  * independently. This one shows the database and the queue.
  */
-export default function greetingsRoutes(ctx: Ctx): Router {
+export default function greetingsRoutes(ctx: BackendCtx): Router {
   const { rai } = ctx;
   const router = Router();
   const greetings = new GreetingsController(ctx);
@@ -27,6 +27,7 @@ export default function greetingsRoutes(ctx: Ctx): Router {
     `${base}/greetings/:name/use`,
     rai({
       id: "hello:use-greeting",
+      status: 202,
       name: "Use a greeting",
       description: "Queues a job that counts the use",
     }),

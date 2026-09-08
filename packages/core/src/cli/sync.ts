@@ -69,7 +69,7 @@ function renderDts(
       // Optional on purpose: a namespace only exists once phase 6 has run
       // its factory, and an empty config seed must stay assignable.
       return [
-        `    ${files.module.name}?: Awaited<`,
+        `    ${JSON.stringify(files.module.name)}?: Awaited<`,
         `      ReturnType<(typeof import("${specifier}"))["default"]>`,
         `    >;`,
       ];

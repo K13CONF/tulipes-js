@@ -1,6 +1,6 @@
-import type { Ctx } from "@tulipes/core/boot";
+import type { ConfigCtx } from "@tulipes/core/boot";
 
-export default function authConfig({ Environment }: Ctx) {
+export default function authConfig({ Environment }: ConfigCtx) {
   return {
     accessTtl: Environment.get("JWT_ACCESS_TTL"),
     refreshTtl: Environment.get("JWT_REFRESH_TTL"),

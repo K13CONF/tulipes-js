@@ -2,7 +2,7 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
-import type { Ctx } from "@tulipes/core/boot";
+import type { BackendCtx } from "@tulipes/core/boot";
 
 import { corsOptions, helmetOptions } from "../helpers/hardening.js";
 import { logger } from "@app/core";
@@ -18,7 +18,7 @@ import { logger } from "@app/core";
  *   pino    — logs the request once the two above have had their say
  *   json    — parsing last, so a rejected origin never reaches the parser
  */
-export default function securityRoutes(ctx: Ctx): void {
+export default function securityRoutes(ctx: BackendCtx): void {
   const { app, Environment, config, mode } = ctx
 
   app!.use(helmet(helmetOptions(Environment)));

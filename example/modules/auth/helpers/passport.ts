@@ -123,7 +123,7 @@ function touchInterval(ctx: Ctx): number {
 export function authenticate(): import("express").RequestHandler {
   return (req, res, next) => {
     passport.authenticate("jwt", { session: false }, (_err: unknown, resolved: Auth | false) => {
-      req.auth = resolved || GUEST;
+      req.auth = resolved || { ...GUEST };
       next();
     })(req, res, next);
   };

@@ -1,4 +1,4 @@
-import type { Ctx } from "@tulipes/core/boot";
+import type { DatabaseCtx } from "@tulipes/core/boot";
 
 import { setPassword } from "../helpers/passwords.js";
 import type { UserDoc } from "../helpers/documents.js";
@@ -12,9 +12,9 @@ import type { UserDoc } from "../helpers/documents.js";
  * importing the users module: auth is sys-tier and users is app-tier, and
  * a sys module may not depend on an app module.
  */
-export default async function seedAdmin(ctx: Ctx): Promise<void> {
+export default async function seedAdmin(ctx: DatabaseCtx): Promise<void> {
   const email = String(ctx.Environment.get("AUTH_ADMIN_EMAIL")).toLowerCase();
-  const User = ctx.models!.get<UserDoc>("User");
+  const User = ctx.models.get<UserDoc>("User");
 
   let user: Pick<UserDoc, "_id"> | null = await User.findOne({ email }).lean();
 
@@ -31,7 +31,7 @@ export default async function seedAdmin(ctx: Ctx): Promise<void> {
 
   // Only set the password when there is no credential yet, so a rotated
   // admin password is not silently reset to the seed value on next boot.
-  const existing = await ctx.models!
+  const existing = await ctx.models
     .get("Credential")
     .countDocuments({ user: user!._id })
     .limit(1);

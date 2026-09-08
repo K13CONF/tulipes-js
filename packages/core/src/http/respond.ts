@@ -43,7 +43,7 @@ export function bindRespond(req: Request, res: Response, bounds: PaginationBound
 
   res.respond = function respond<T>(options: RespondOptions<T>): Response {
     const body: Envelope<T> = envelope(options, buildMeta(options.meta, req.page));
-    const status = options.status ?? (body.success ? 200 : 400);
+    const status = options.status ?? (body.success ? (req.rai?.status ?? 200) : 400);
 
     respondedTo.add(res);
     return this.status(status).json(body);
