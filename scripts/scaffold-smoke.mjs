@@ -28,7 +28,9 @@ try {
   mkdirSync(cliRoot);
   writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions }));
   writeFileSync(join(cliRoot, '.yarnrc.yml'), 'nodeLinker: node-modules\n');
-  run('yarn', ['install'], cliRoot);
+  // Fresh generated projects intentionally create their first lockfile, even
+  // when the outer runner sets CI=true. Repository installs stay immutable.
+  run('yarn', ['install'], cliRoot, { ...process.env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
   const bin = join(cliRoot, 'node_modules/@tulipes/core/dist/cli/bin.js');
   const app = join(workspace, 'app');
   run(process.execPath, [bin, 'init', app, '--preset', preset], workspace);
@@ -47,7 +49,7 @@ try {
   } else {
     for (const name of ['MONGO_URI', 'REDIS_URL', 'TEST_MONGO_URI', 'TEST_REDIS_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'AUTH_ADMIN_EMAIL', 'AUTH_ADMIN_PASSWORD']) delete env[name];
   }
-  run('yarn', ['install'], app, env);
+  run('yarn', ['install'], app, { ...env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
   run(process.execPath, [join(scripts, 'audit.mjs'), join(logs, 'dependencies.jsonl')], app, env);
   for (const script of ['sync', 'typecheck', 'check', 'test', 'spec']) run('yarn', [script], app, env);
   const spec = JSON.parse(readFileSync(join(app, 'docs/openapi.json'), 'utf8'));
