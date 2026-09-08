@@ -622,7 +622,7 @@ __metadata:
     typescript: "npm:^7.0.2"
     zod: "npm:^3.25"
   peerDependencies:
-    "@tulipes/core": ^0.8.0
+    "@tulipes/core": ^0.8.0 || ^0.9.0-rc.1
     zod: ^3.25 || ^4
   peerDependenciesMeta:
     zod:
