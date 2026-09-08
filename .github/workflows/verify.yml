@@ -21,7 +21,7 @@ jobs:
         image: redis:7
         ports: ['6379:6379']
         options: >-
-          --health-cmd 'redis-cli ping'
+          --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       TEST_MONGO_URI: mongodb://127.0.0.1:27017/tulipes_tests
@@ -109,7 +109,7 @@ jobs:
         image: redis:7
         ports: ['6379:6379']
         options: >-
-          --health-cmd 'redis-cli ping'
+          --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       TEST_MONGO_URI: mongodb://127.0.0.1:27017/tulipes_smoke
