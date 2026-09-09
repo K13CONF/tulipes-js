@@ -10,7 +10,12 @@ Generates an **OpenAPI 3.1 document** and a **Postman collection** from a
 [Tulipes](https://www.npmjs.com/package/@tulipes/core) app's declared
 routes.
 
-Version 0.2 requires `@tulipes/core@^0.8.0`. See the core
+Requires Node 24.x. Inspection connects infrastructure declared by the app:
+the minimal starter needs no services; the production starter needs MongoDB
+and Redis. There is no general offline mode yet.
+
+Version 0.3.0-rc.1 supports core `^0.8.0 || ^0.9.0-rc.1`. Install the candidate
+with `yarn add -D @tulipes/spec@next`. See the core
 [migration guide](https://github.com/kemora13conf/bp-backend-express/blob/v0.8.0/packages/core/MIGRATING.md#reliability-contracts-08)
 when upgrading from an earlier release.
 
@@ -19,7 +24,7 @@ generated document describes exactly the router that is mounted. It cannot
 invent an endpoint, and it cannot miss one.
 
 ```sh
-yarn add -D @tulipes/spec
+yarn add -D @tulipes/spec@next
 yarn tulipes spec --openapi docs/openapi.json --postman docs/collection.json
 ```
 

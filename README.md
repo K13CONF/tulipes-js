@@ -33,19 +33,20 @@ yarn example             # boot the reference app (needs MongoDB and Redis)
 ```
 
 The example is not a demo kept alive by hand: CI scaffolds a fresh app with
-`tulipes init` and diffs its `modules/` against `example/modules/`, so the
+`tulipes init --preset production` and diffs its `modules/` against `example/modules/`, so the
 two cannot drift.
 
-## Releasing
+## Quality and support
 
-Bump `packages/core/package.json`, then push a matching tag:
+Default `tulipes init my-api` creates a minimal API without MongoDB or Redis.
+Use `--preset production` for the full reference application. Node 24.x is the
+supported runtime. Both presets include Vitest tests.
 
-```sh
-git tag v0.7.1 && git push origin v0.7.1
-```
-
-The publish workflow refuses a tag that disagrees with the package version,
-and publishes `@tulipes/spec` only when its own version has moved.
+See [Testing](docs/testing.md), [Contributing](CONTRIBUTING.md),
+[Security](SECURITY.md), [Support](docs/support.md) and
+[Releasing](docs/releasing.md). Publication requires the complete reusable CI
+workflow and installs/tests the exact archives that will be uploaded to npm.
+The repository remains private, so source, issues and CI require access.
 
 ---
 

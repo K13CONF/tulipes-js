@@ -1,4 +1,4 @@
-import { runInit } from "./init.js";
+import { runInit, type InitPreset } from "./init.js";
 import { runSync } from "./sync.js";
 import { runEnvCheck } from "./env-check.js";
 import { runNewModule } from "./new-module.js";
@@ -16,7 +16,8 @@ import { appCoreVersion, coreVersion } from "./package-info.js";
 const HELP = `tulipes — module-based express framework
 
 Usage:
-  tulipes init [dir]           scaffold a new application (needs mongo + redis)
+  tulipes init [dir]           scaffold a minimal API (no mongo/redis)
+                                 --minimal | --preset minimal | --preset production
   tulipes dev [entry]          run with tsx in watch mode (default entry: app.ts), sync first
   tulipes sync                 regenerate types/config.d.ts and .env.example
   tulipes env:check            validate env against every meta.variables.json (CI-friendly)
@@ -25,6 +26,7 @@ Usage:
                                  --openapi <file>  --postman <file>  --url <base>
   tulipes new module <name>    scaffold a module under ./modules
   tulipes update               upgrade the global cli and, inside an app, the app itself
+  routes/spec inspect configured infrastructure; minimal apps need no services.
   tulipes -v                   print the cli version (and the app's, when they differ)
 `;
 
@@ -33,8 +35,16 @@ export async function main(argv: readonly string[]): Promise<void> {
   const rootDir = process.cwd();
 
   switch (command) {
-    case "init":
-      return runInit(rootDir, rest[0]);
+    case "init": {
+      try {
+        const { target, preset } = initArguments(rest);
+        return await runInit(rootDir, target, preset);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 2;
+        return;
+      }
+    }
     case "sync":
       return runSync(rootDir);
     case "env:check":
@@ -86,4 +96,24 @@ function flag(argv: readonly string[], name: string): string | undefined {
   if (index === -1) return undefined;
   const value = argv[index + 1];
   return value && !value.startsWith("--") ? value : undefined;
+}
+
+/** Validate the complete init invocation before creating any files. */
+function initArguments(args: readonly string[]): { target?: string; preset: InitPreset } {
+  let target: string | undefined;
+  let preset: InitPreset | undefined;
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    if (arg === "--minimal" || arg === "--preset") {
+      const value = arg === "--minimal" ? "minimal" : args[++index];
+      if (value !== "minimal" && value !== "production") throw new Error("--preset requires minimal or production");
+      if (preset && preset !== value) throw new Error("Conflicting init presets");
+      preset = value;
+    } else if (arg.startsWith("-")) {
+      throw new Error(`Unknown init option: ${arg}`);
+    } else if (target !== undefined) {
+      throw new Error("init accepts only one target directory");
+    } else target = arg;
+  }
+  return { target, preset: preset ?? "minimal" };
 }
