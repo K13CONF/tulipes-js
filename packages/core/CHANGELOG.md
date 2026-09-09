@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Add `defineRoutes()`, deferred runtime callback binding and `inspectRoutes()` for native router inspection.
+- Add explicit `routes/spec --offline` and `--runtime`, with strict option parsing.
+- Keep both starters on native routers, shared prefixes and offline spec scripts.
+- Support named mount parameters while preserving middleware, param callbacks and error-handler arity.
+- Verify runtime route/schema parity and deterministic packed spec generation with
+  service connections denied; retain legacy runtime inspection.
+
+
 All notable changes to `@tulipes/core`.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

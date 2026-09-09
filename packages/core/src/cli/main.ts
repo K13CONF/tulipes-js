@@ -24,9 +24,11 @@ Usage:
   tulipes routes               list every declared endpoint, with the roles that reach it
   tulipes spec [options]       write an OpenAPI document / Postman collection (needs @tulipes/spec)
                                  --openapi <file>  --postman <file>  --url <base>
+                                 routes/spec: --offline | --runtime
   tulipes new module <name>    scaffold a module under ./modules
   tulipes update               upgrade the global cli and, inside an app, the app itself
-  routes/spec inspect configured infrastructure; minimal apps need no services.
+  --offline loads shared declarations without services or runtime secrets.
+  routes/spec default to --runtime for legacy applications.
   tulipes -v                   print the cli version (and the app's, when they differ)
 `;
 
@@ -50,13 +52,16 @@ export async function main(argv: readonly string[]): Promise<void> {
     case "env:check":
       return runEnvCheck(rootDir);
     case "routes":
-      return runRoutes(rootDir);
-    case "spec":
-      return runSpec(rootDir, {
-        ...(flag(rest, "--openapi") && { openapi: flag(rest, "--openapi")! }),
-        ...(flag(rest, "--postman") && { postman: flag(rest, "--postman")! }),
-        ...(flag(rest, "--url") && { url: flag(rest, "--url")! }),
-      });
+    case "spec": {
+      try {
+        const options = inspectionArguments(rest, command);
+        return command === "routes" ? await runRoutes(rootDir, options.offline) : await runSpec(rootDir, options);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 2;
+        return;
+      }
+    }
     case "update":
       return runUpdate(rootDir);
     case "new":
@@ -90,12 +95,23 @@ export async function main(argv: readonly string[]): Promise<void> {
   }
 }
 
-/** `--name value` → value. Absent, or missing its value, reads as unset. */
-function flag(argv: readonly string[], name: string): string | undefined {
-  const index = argv.indexOf(name);
-  if (index === -1) return undefined;
-  const value = argv[index + 1];
-  return value && !value.startsWith("--") ? value : undefined;
+function inspectionArguments(args: readonly string[], command: "routes" | "spec") {
+  const options: { offline?: boolean; openapi?: string; postman?: string; url?: string } = {};
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    if (arg === "--offline" || arg === "--runtime") {
+      const offline = arg === "--offline";
+      if (options.offline !== undefined && options.offline !== offline) throw new Error("Conflicting inspection modes");
+      options.offline = offline;
+    } else if (command === "spec" && (arg === "--openapi" || arg === "--postman" || arg === "--url")) {
+      const value = args[++index];
+      if (!value || value.startsWith("-")) throw new Error(`${arg} requires a value`);
+      const key = arg.slice(2) as "openapi" | "postman" | "url";
+      if (options[key]) throw new Error(`Duplicate option: ${arg}`);
+      options[key] = value;
+    } else throw new Error(`Unknown ${command} option: ${arg}`);
+  }
+  return options;
 }
 
 /** Validate the complete init invocation before creating any files. */

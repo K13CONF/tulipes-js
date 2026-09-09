@@ -2,7 +2,8 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { z } from "zod/v4";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { boot, type BootHandle } from "@tulipes/core/boot";
+import { boot, inspectRoutes, type BootHandle } from "@tulipes/core/boot";
+import { extract, toOpenApi, toPostman } from "@tulipes/spec";
 
 let handle: BootHandle;
 let base: string;
@@ -36,6 +37,14 @@ test("unknown endpoints return the error envelope", async () => {
   const response = await fetch(base + "/not-a-route");
   expect(response.status).toBe(404);
   expect(await response.json()).toMatchObject({ success: false, data: null });
+});
+
+test("offline declarations describe the mounted runtime routes and schemas", async () => {
+  const context = await inspectRoutes({ rootDir: fileURLToPath(new URL("../", import.meta.url)) });
+  const offline = { ...extract(context), app: { name: "parity" } };
+  const runtime = { ...extract(handle.ctx), app: { name: "parity" } };
+  expect(await toOpenApi(offline)).toEqual(await toOpenApi(runtime));
+  expect(await toPostman(offline)).toEqual(await toPostman(runtime));
 });
 
 const tokens = z.object({ data: z.object({ access_token: z.string(), refresh_token: z.string() }) });

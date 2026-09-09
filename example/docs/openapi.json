@@ -1,12 +1,12 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "tulipes-example",
+    "title": "@tulipes-example/app",
     "version": "0.0.0"
   },
   "servers": [
     {
-      "url": "http://localhost:4000"
+      "url": "http://localhost:3000"
     }
   ],
   "tags": [
@@ -2322,7 +2322,7 @@
         }
       }
     },
-    "/users": {
+    "/users/": {
       "get": {
         "operationId": "users:read",
         "tags": [

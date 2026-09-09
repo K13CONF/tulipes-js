@@ -9,7 +9,7 @@
     "check": "tulipes env:check",
     "typecheck": "tsc --noEmit",
     "script": "tsx",
-    "spec": "tulipes spec --openapi docs/openapi.json --postman docs/collection.json",
+    "spec": "tulipes spec --offline --openapi docs/openapi.json --postman docs/collection.json",
     "test": "vitest run",
     "start": "tsx app.ts"
   },

@@ -1,31 +1,14 @@
-import { appBoot, registerTypeScript } from "./app-core.js";
+import { inspectApp } from "./inspection.js";
 
 /**
  * `tulipes routes` — every endpoint the app declares, with the roles that
  * can reach it.
  *
- * Uses backend inspection, with startup tasks and listening disabled: the list comes from the
- * running app rather than from parsing source, so it cannot disagree with
- * what actually serves traffic. It is also the substrate a spec generator
- * plugs into later.
+ * Reads shared declarations offline, or uses backend inspection for legacy
+ * applications. Both paths use the same route scan and ACL metadata.
  */
-export async function runRoutes(rootDir: string): Promise<void> {
-  await registerTypeScript();
-
-  // The APP's boot, not this CLI's — see appBoot. A globally installed
-  // CLI booting through its own copy gives the app two mongooses, and
-  // every model fails its instanceof check.
-  const boot = await appBoot(rootDir);
-
-  // Routes are mounted by the backend branch, so this needs that branch —
-  // but it must not listen. handleSignals stays off; we shut down below.
-  const handle = await boot({
-    rootDir,
-    mode: "backend",
-    handleSignals: false,
-    // No port: this must work while the app is already running.
-    inspect: true,
-  });
+export async function runRoutes(rootDir: string, offline = false): Promise<void> {
+  const handle = await inspectApp(rootDir, offline);
 
   try {
     const records = [...handle.ctx.routes.all()].sort((a, b) =>

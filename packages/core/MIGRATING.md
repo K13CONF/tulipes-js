@@ -11,6 +11,29 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — offline inspection with native routers
+
+Both new presets retain `routes/*.routes.ts` and native Express Router composition.
+Wrap offline-compatible factories in `defineRoutes()` from `@tulipes/core/http`,
+and set `tulipes.offline: true` in each module's package.json. Use
+`runtime(async ctx => new Controller(ctx))` to acquire controllers once per boot;
+its returned binder selects handlers, middleware, param callbacks or error handlers.
+Keep service-dependent imports inside that acquisition function. Pure callbacks
+can be registered directly. No separate endpoint array or empty declaration file
+is needed.
+
+`routes.mount(parent, prefix, router)` records shared prefixes, including named
+parameters. `router.use`, `router.param`, `router.route` and `mergeParams` retain
+Express semantics. Param callbacks run before endpoint RAI checks. Existing
+RoutesFn factories remain supported with `--runtime`; both new starters select
+`--offline` in their spec scripts. Declaration imports are trusted JavaScript.
+
+The production prefix lives in `config/routes.ts`. Offline document metadata uses
+package.json, with `http://localhost:3000` as the default URL; use `--url` for a
+deployment. Register custom access checkers in the router factory so both scans
+observe them. See [offline inspection](../../docs/offline-inspection.md) for the
+full interface, guarantees and migration examples.
+
 ## 0.9 release candidate: minimal default and Node 24
 
 `init` now creates a minimal, infrastructure-free API. To generate the previous

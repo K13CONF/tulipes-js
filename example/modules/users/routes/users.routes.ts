@@ -1,21 +1,16 @@
 import { Router } from "express";
+import { defineRoutes } from "@tulipes/core/http";
 import { z } from "zod/v4";
-import type { BackendCtx } from "@tulipes/core/boot";
-
-import { UsersController } from "../controllers/users.controllers.js";
 import { createBody, emailParam, listQuery, userShape } from "../schemas.js";
 
-export default function usersRoutes(ctx: BackendCtx): Router {
-  const { rai } = ctx;
+export default defineRoutes(({ app, rai, routes, runtime }) => {
   const router = Router();
-  const users = new UsersController(ctx);
+  const users = runtime(async ctx => {
+    const { UsersController } = await import("../controllers/users.controllers.js");
+    return new UsersController(ctx);
+  });
 
-  // Every route declares a RAI. The id gates the route and documents it,
-  // and core refuses to boot when one is missing — so a forgotten guard is
-  // a failed deploy rather than a silently public endpoint.
-  router.get(
-    "/users",
-    rai({
+  router.get("/", rai({
       id: "users:read",
       name: "List users",
       description: "Page through accounts, clamped by the shared bounds",
@@ -23,68 +18,42 @@ export default function usersRoutes(ctx: BackendCtx): Router {
       // declaration, so the spec cannot drift from what is enforced.
       query: listQuery,
       returns: z.array(userShape),
-    }),
-    users.list(),
-  );
+    }), users(value => value.list()));
 
-  router.delete(
-    "/users/:email",
-    rai({
+  router.delete("/:email", rai({
       id: "users:delete",
       name: "Soft-delete a user",
       description: "Flags the account; ordinary queries stop returning it",
       params: emailParam,
-    }),
-    users.softDelete(),
-  );
+    }), users(value => value.softDelete()));
 
-  router.get(
-    "/users/deleted",
-    rai({
+  router.get("/deleted", rai({
       id: "users:read-deleted",
       name: "List soft-deleted users",
-    }),
-    users.listDeleted(),
-  );
+    }), users(value => value.listDeleted()));
 
-  router.post(
-    "/users",
-    rai({
+  router.post("/", rai({
       id: "users:create",
       status: 201,
       name: "Create a user",
       description: "Adds the account and queues its welcome email",
       body: createBody,
-    }),
-    users.create(),
-  );
+    }), users(value => value.create()));
 
-  router.get(
-    "/users/ping",
-    rai({
+  router.get("/ping", rai({
       id: "users:ping",
       name: "Users module status",
-    }),
-    users.ping(),
-  );
+    }), users(value => value.ping()));
 
-  router.get(
-    "/users/missing",
-    rai({
+  router.get("/missing", rai({
       id: "users:demo-missing",
       name: "HttpError demo",
-    }),
-    users.demoMissing(),
-  );
+    }), users(value => value.demoMissing()));
 
-  router.get(
-    "/users/boom",
-    rai({
+  router.get("/boom", rai({
       id: "users:demo-boom",
       name: "Unhandled error demo",
-    }),
-    users.demoBoom(),
-  );
+    }), users(value => value.demoBoom()));
 
-  return router;
-}
+  routes.mount(app, "/users", router);
+});

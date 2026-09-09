@@ -19,10 +19,10 @@ import { createRai, RouteRegistry } from "../http/rai.js";
 import { bindRespond, warnOnRawResponse } from "../http/respond.js";
 import { I18n } from "../i18n/i18n.js";
 import { scanRoutes } from "../http/route-scan.js";
+import { loadRoutes } from "./load-routes.js";
 import { loadAppConfigSeed } from "./app-files.js";
 import { printStartupBanner } from "./banner.js";
-import { importFile } from "./import-file.js";
-import type { BackendCtx, Ctx, ModuleLifecycle, RoutesFn } from "./contracts.js";
+import type { BackendCtx, Ctx, ModuleLifecycle } from "./contracts.js";
 
 /**
  * "script" is a one-shot mode: it runs every shared phase — environment,
@@ -280,38 +280,10 @@ async function startBackend(
   handle.ctx.app = app;
 
   const report = new BootReport();
-  for (const { module, routeFiles } of explored) {
-    for (const file of routeFiles) {
-      const exported = await importFile<{ default?: unknown }>(
-        file, "boot", module.name, report,
-      );
-      if (!exported) continue;
-      if (typeof exported.default !== "function") {
-        report.add({
-          scope: "boot",
-          module: module.name,
-          message: `${file} must default-export a routes function`,
-        });
-        continue;
-      }
-      try {
-        // Declarations happen synchronously inside this call, so recording
-        // the module here is enough to attribute every one of them.
-        handle.ctx.routes.currentModule = module.name;
-        const router = await (exported.default as RoutesFn)(handle.ctx as BackendCtx);
-        handle.ctx.routes.currentModule = "(app)";
-        // Mounting the return value is optional sugar — a routes fn may
-        // have attached handlers to ctx.app directly instead. Routers are
-        // callables in express, so a function return is a mountable.
-        if (typeof router === "function") handle.ctx.routes.mount(app, "", router);
-      } catch (error) {
-        report.add({ scope: "boot", module: module.name,
-          message: `routes function threw: ${(error as Error).message}` });
-      } finally {
-        handle.ctx.routes.currentModule = "(app)";
-      }
-    }
+  if (explored.every(files => files.module.offline) && handle.ctx.routes.checker) {
+    report.add({ scope: "routes", message: "offline modules must install custom access checkers inside defineRoutes, not runtime config" });
   }
+  await loadRoutes(app, explored, handle.ctx.routes, handle.ctx.rai, report, handle.ctx as BackendCtx);
 
   app.use(notFoundHandler());
   app.use(errorHandler(handle.env.appEnv));

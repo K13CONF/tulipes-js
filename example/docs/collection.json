@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "tulipes-example",
+    "name": "@tulipes-example/app",
     "description": "Generated from the app's declared routes. Sign in with the auth request and every other request is authenticated automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -820,12 +820,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/users",
+              "raw": "{{baseUrl}}/users/",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "users"
+                "users",
+                ""
               ],
               "query": [
                 {
@@ -860,12 +861,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/users",
+              "raw": "{{baseUrl}}/users/",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "users"
+                "users",
+                ""
               ]
             },
             "body": {
@@ -1032,7 +1034,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:4000",
+      "value": "http://localhost:3000",
       "type": "string"
     },
     {

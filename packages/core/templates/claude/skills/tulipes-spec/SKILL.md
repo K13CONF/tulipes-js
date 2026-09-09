@@ -5,7 +5,7 @@ description: Use when validating request input in a Tulipes app, adding a zod sc
 
 # Schemas, validation and generated specs
 
-A route's schemas are declared once, in its `rai()`, and used twice: the
+A route's schemas are declared once, in its `rai()` call, and used twice: the
 framework validates the request against them, and `tulipes spec` describes
 them. That is the whole point — documentation cannot claim a shape the
 endpoint would reject.
@@ -13,16 +13,13 @@ endpoint would reject.
 ```ts
 import { z } from "zod/v4";           // v4, not the classic import
 
-router.post(
-  `${base}/users`,
-  rai({
-    id: "users:create",
-    name: "Create a user",
-    body: z.object({ email: z.email("emailInvalid") }),
-    returns: z.object({ id: z.string(), email: z.string() }),
-  }),
-  users.create(),
-);
+router.post("/users", rai({
+  id: "users:create",
+  name: "Create a user",
+  body: z.object({ email: z.email("emailInvalid") }),
+  returns: z.object({ id: z.string(), email: z.string() }),
+}), users(value => value.create())); // users is a runtime() binder
+
 ```
 
 `params`, `query` and `body` are validated. `returns` never is — a handler
@@ -73,13 +70,17 @@ rai({ id: "auth:sessions", name: "List sessions", folder: "sessions" })
 ## Generating
 
 ```sh
-yarn spec     # tulipes spec --openapi docs/openapi.json --postman docs/collection.json
+yarn spec     # tulipes spec --offline --openapi docs/openapi.json --postman docs/collection.json
 ```
 
-It boots the app **without listening**, so it works while the app is
-running and describes the router actually mounted — never a parser's guess.
-`--url` sets the base URL both documents advertise; it defaults to the
-app's own `PORT` / `PUBLIC_DOMAIN`.
+Offline generation builds native router factories wrapped in defineRoutes().
+Every module opts in with tulipes.offline: true; no extra declaration file is
+required. Keep schema imports pure and acquire services/controllers through
+runtime(). Use --runtime for factories requiring live configuration.
+--url sets the advertised base URL. Offline defaults to http://localhost:3000
+and package.json title/version; runtime uses PORT/PUBLIC_DOMAIN and config.app.
+Install custom access checkers inside defineRoutes using routes.setAccessChecker;
+offline tooling sees the checker and makes no static role/public-access claim.
 
 The generator lives in `@tulipes/spec`, a dev dependency. Core does not
 depend on it, so an app that never generates a spec never installs it.
