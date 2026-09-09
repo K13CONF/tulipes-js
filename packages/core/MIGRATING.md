@@ -20,14 +20,16 @@ or conflicting options fail before files are written.
 
 Both packages declare Node >=24.0.0 <25. Existing generated apps must manually
 copy the auth deployment guard from the reference/template and update their
-production PM2 dependency to ^7.0.4. Stage this process-manager upgrade and test
+production PM2 dependency to ^7.0.4. Add the Yarn resolution
+`"pm2/js-yaml": "4.3.2"` in the application root manifest to patch PM2's
+pinned dependency until upstream ships the fix. Stage this process-manager upgrade and test
 start/restart/shutdown before updating the server daemon. Configure unique JWT
 keys and replace default admin credentials before staging/production boot.
 Generated tests require dedicated test MongoDB and Redis URLs for production;
 the minimal tests have no service requirements.
 
 This release does not extract provider dependencies or add general offline
-inspection. The candidate versions are core 0.9.0-rc.1 and spec 0.3.0-rc.1, published under
+inspection. The candidate versions are core 0.9.0-rc.2 and spec 0.3.0-rc.2, published under
 `next`. Install the candidate CLI with `npm install -g @tulipes/core@next`;
 generated apps select compatible candidate dependencies automatically.
 

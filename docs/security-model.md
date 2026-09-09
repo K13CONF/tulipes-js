@@ -55,3 +55,12 @@ configuration; the release gate still requires a patched dependency. See
 CI retains separate workspace/runtime and complete starter audits. Lower severity
 findings and deprecation notices remain visible; this is a dated inventory,
 not a permanent claim that dependencies are vulnerability-free.
+
+## Release audit follow-up, 2026-09-09
+
+The rc.1 publication gate found a newly listed high-severity advisory affecting
+js-yaml 4.3.1. npm publication was blocked. rc.2 pins PM2's transitive js-yaml
+to 4.3.2 through a targeted Yarn resolution in the repository root and generated
+production app. Packed checks preserve this resolution and still exercise PM2
+start/restart. Remove the override once PM2 declares a patched version upstream.
+[GHSA-2883-xcg3-v3hh](https://github.com/advisories/GHSA-2883-xcg3-v3hh).
