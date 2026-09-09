@@ -1,9 +1,6 @@
 import { Router } from "express";
-import passport from "passport";
-import type { BackendCtx } from "@tulipes/core/boot";
-
-import { AuthController } from "../controllers/auth.controllers.js";
-import { authenticate, configurePassport } from "../helpers/passport.js";
+import { defineRoutes } from "@tulipes/core/http";
+import { apiPrefix } from "../../../config/routes.js";
 import {
   credentials,
   newPassword,
@@ -13,89 +10,55 @@ import {
   tokenPair,
 } from "../schemas.js";
 
-/**
- * Auth is a sys-tier module, so this runs before every feature router.
- * It does two things:
- *
- *   1. mounts the global caller resolver on ctx.app — every request
- *      downstream carries a `req.auth` of `{ isAuthenticated, user,
- *      session }`, the guest value when unauthenticated
- *   2. returns its own endpoints as a Router, like any other module
- *
- * Every route declares a RAI. The id is also the ACL permission, so login
- * is reachable because `guest` holds "auth:login" in module.acl.ts — and
- * core refuses to boot if any route forgets to declare one.
- */
-export default function authRoutes(ctx: BackendCtx): Router {
-  const { rai } = ctx;
-  configurePassport(ctx);
-
-  ctx.app.use(passport.initialize());
-  ctx.app.use(authenticate());
-
+export default defineRoutes(({ app, rai, routes, runtime }) => {
   const router = Router();
-  const auth = new AuthController(ctx);
-  const base = `${String(ctx.config.api?.prefix ?? "")}/auth`;
+  const auth = runtime(async ctx => {
+    const { AuthController } = await import("../controllers/auth.controllers.js");
+    const { authenticate, configurePassport } = await import("../helpers/passport.js");
+    const { default: passport } = await import("passport");
+    configurePassport(ctx);
+    return { controller: new AuthController(ctx), initialize: passport.initialize(), authenticate: authenticate() };
+  });
+  app.use(auth(value => value.initialize));
+  app.use(auth(value => value.authenticate));
 
-  router.post(
-    `${base}/register`,
-    rai({
+  router.post("/register", rai({
       id: "auth:register",
       status: 201,
       name: "Register",
       description: "Create an account and its credential",
       body: registration,
-    }),
-    auth.register(),
-  );
+    }), auth(value => value.controller.register()));
 
-  router.post(
-    `${base}/login`,
-    rai({
+  router.post("/login", rai({
       id: "auth:login",
       name: "Log in",
       description: "Exchange email and password for a token pair",
       body: credentials,
       returns: tokenPair,
-    }),
-    auth.login(),
-  );
+    }), auth(value => value.controller.login()));
 
-  router.post(
-    `${base}/refresh`,
-    rai({
+  router.post("/refresh", rai({
       id: "auth:refresh",
       name: "Refresh tokens",
       description: "Rotate a refresh token for a new pair",
       body: refreshBody,
       returns: tokenPair,
-    }),
-    auth.refresh(),
-  );
+    }), auth(value => value.controller.refresh()));
 
-  router.post(
-    `${base}/logout`,
-    rai({
+  router.post("/logout", rai({
       id: "auth:logout",
       name: "Log out",
       description: "Revoke this session immediately",
-    }),
-    auth.logout(),
-  );
+    }), auth(value => value.controller.logout()));
 
-  router.get(
-    `${base}/me`,
-    rai({
+  router.get("/me", rai({
       id: "auth:me",
       name: "Who am I",
       description: "The caller and the session behind this request",
-    }),
-    auth.me(),
-  );
+    }), auth(value => value.controller.me()));
 
-  router.get(
-    `${base}/sessions`,
-    rai({
+  router.get("/sessions", rai({
       id: "auth:sessions",
       name: "List sessions",
       description: "Every device this account is signed in on",
@@ -103,32 +66,22 @@ export default function authRoutes(ctx: BackendCtx): Router {
       // signing in — `folder` puts them under their own heading in the
       // generated collection and spec.
       folder: "sessions",
-    }),
-    auth.sessions(),
-  );
+    }), auth(value => value.controller.sessions()));
 
-  router.delete(
-    `${base}/sessions/:sid`,
-    rai({
+  router.delete("/sessions/:sid", rai({
       id: "auth:session-end",
       name: "End a session",
       description: "Sign one other device out",
       folder: "sessions",
       params: sidParam,
-    }),
-    auth.revokeSession(),
-  );
+    }), auth(value => value.controller.revokeSession()));
 
-  router.post(
-    `${base}/password`,
-    rai({
+  router.post("/password", rai({
       id: "auth:password",
       name: "Change password",
       description: "Set a new password and end every other session",
       body: newPassword,
-    }),
-    auth.changePassword(),
-  );
+    }), auth(value => value.controller.changePassword()));
 
-  return router;
-}
+  routes.mount(app, `${apiPrefix}/auth`, router);
+});

@@ -60,6 +60,7 @@ jobs:
           diff -r -x package.json "$RUNNER_TEMP/scaffold/modules" example/modules
           diff "$RUNNER_TEMP/scaffold/tests/app.test.ts" example/tests/app.test.ts
           diff "$RUNNER_TEMP/scaffold/vitest.config.ts" example/vitest.config.ts
+          diff "$RUNNER_TEMP/scaffold/config/routes.ts" example/config/routes.ts
       - uses: actions/upload-artifact@v4
         with:
           name: release-packages
@@ -94,6 +95,26 @@ jobs:
         if: always()
         with:
           name: minimal-smoke-${{ matrix.os }}
+          path: reports/
+  offline:
+    needs: pack
+    runs-on: ubuntu-latest
+    # The production preset must also generate specs without services or secrets.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-packages
+          path: .artifacts
+      - run: node scripts/scaffold-smoke.mjs .artifacts production --offline-only
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-offline-smoke
           path: reports/
   production:
     needs: pack

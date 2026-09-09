@@ -115,18 +115,19 @@ modules/users/
 ├── meta.variables.json     every env variable this module needs (validated at boot)
 ├── module.config.ts        default-export: config factory; optional onReady/onShutdown
 ├── module.acl.ts           permission grants for this module's resources
-├── routes/*.routes.ts      default-export (ctx) => Router
+├── routes/*.routes.ts      native routers wrapped in defineRoutes
 ├── models/*.model.ts       default-export { name, schema }
 ├── bootstrap/*.bootstrap.ts  post-DB, pre-server tasks (indexes, seeds)
 ├── queues/*.queues.ts      default-export (ctx, queues) => define + process
 ├── sockets/*.sockets.ts    default-export (ctx, sockets) => claim namespaces
 ├── i18n/<locale>.json      this module's strings — the module is the namespace
-└── controllers/            convention only — routes import them directly
+└── controllers/            convention only — handler factories import them lazily
 ```
 
 Modules load in order: tier `sys` first, then `priority` (lower first), then
 `dependsOn` topological order. Every file above is optional except
-package.json.
+package.json. For offline inspection, each module sets tulipes.offline: true
+and wraps every route factory in defineRoutes.
 
 ## Boot order (what runs when)
 
@@ -218,3 +219,12 @@ TEST_REDIS_URL=redis://127.0.0.1:6379/3 yarn test
 Tests create users and sessions. `yarn spec` also connects configured MongoDB and
 Redis. Stage/production boot requires distinct JWT keys and nondefault admin
 credentials. See [security boundaries](../docs/security-model.md).
+
+## Offline route inspection
+
+`yarn spec` builds the same native routers without MongoDB, Redis or runtime
+secrets. `yarn tulipes routes --offline` lists them. Route files use defineRoutes
+and acquire controllers once through runtime(). Prefixes are mounted once per
+group using routes.mount; router.use and router.param keep their normal scopes.
+The shared prefix is in config/routes.ts. Legacy factories can use --runtime.
+See the [offline inspection guide](../docs/offline-inspection.md).

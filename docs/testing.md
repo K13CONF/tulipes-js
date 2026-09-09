@@ -69,3 +69,19 @@ Temporary directories and process handles are cleaned up after checks.
 The production starter's own suite exercises concurrent refresh and logout via
 HTTP. The reference test is identical to generated code. Use test-only databases;
 application data must never be supplied to this suite.
+
+## Offline inspection
+
+`yarn test packages/core/tests/inspection.test.ts` exercises offline loading and
+runtime route/schema parity. It includes the production starter with connections
+denied and secrets absent. Its runtime HTTP assertions need local port access.
+Both starter app suites retain the same parity assertion against a real boot.
+
+```sh
+node scripts/scaffold-smoke.mjs .artifacts production --offline-only
+```
+
+This installs and typechecks a packed production starter, then generates specs in
+two independent processes with socket connections denied, invalid service URLs
+and empty runtime secrets. It requires package-registry access for installation
+and audit, but no application services. CI runs it in a separate service-free job.

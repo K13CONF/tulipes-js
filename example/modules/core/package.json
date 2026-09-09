@@ -5,7 +5,8 @@
   "type": "module",
   "tulipes": {
     "tier": "sys",
-    "priority": 0
+    "priority": 0,
+    "offline": true
   },
   "dependencies": {
     "@tulipes/core": "workspace:*",

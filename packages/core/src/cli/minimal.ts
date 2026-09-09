@@ -6,7 +6,8 @@ export function starterTests(production: boolean): string {
 import { fileURLToPath } from "node:url";
 ${production ? 'import { z } from "zod/v4";' : ''}
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { boot, type BootHandle } from "@tulipes/core/boot";
+import { boot, inspectRoutes, type BootHandle } from "@tulipes/core/boot";
+import { extract, toOpenApi, toPostman } from "@tulipes/spec";
 
 let handle: BootHandle;
 let base: string;
@@ -40,6 +41,14 @@ test("unknown endpoints return the error envelope", async () => {
   const response = await fetch(base + "/not-a-route");
   expect(response.status).toBe(404);
   expect(await response.json()).toMatchObject({ success: false, data: null });
+});
+
+test("offline declarations describe the mounted runtime routes and schemas", async () => {
+  const context = await inspectRoutes({ rootDir: fileURLToPath(new URL("../", import.meta.url)) });
+  const offline = { ...extract(context), app: { name: "parity" } };
+  const runtime = { ...extract(handle.ctx), app: { name: "parity" } };
+  expect(await toOpenApi(offline)).toEqual(await toOpenApi(runtime));
+  expect(await toPostman(offline)).toEqual(await toPostman(runtime));
 });
 ${production ? `
 const tokens = z.object({ data: z.object({ access_token: z.string(), refresh_token: z.string() }) });
@@ -75,7 +84,7 @@ export function renderMinimalProject(name: string, coreVersion: string): [string
   const core = `^${coreVersion}`;
   const manifest = (module: string, priority?: number, dependencies: Record<string, string> = {}) => json({
     name: `@${name}/${module}`, private: true, type: "module", version: "0.0.0",
-    tulipes: priority === undefined ? {} : { tier: "sys", priority },
+    tulipes: { offline: true, ...(priority === undefined ? {} : { tier: "sys", priority }) },
     dependencies: { "@tulipes/core": core, ...dependencies },
   });
   return [
@@ -83,7 +92,7 @@ export function renderMinimalProject(name: string, coreVersion: string): [string
       name, private: true, type: "module", packageManager: "yarn@4.18.0", engines: { node: ">=24.0.0 <25" },
       workspaces: ["modules/*"],
       scripts: { dev: "tulipes dev", start: "tsx app.ts", sync: "tulipes sync", check: "tulipes env:check",
-        typecheck: "tsc --noEmit", test: "vitest run", spec: "tulipes spec --openapi docs/openapi.json --postman docs/collection.json" },
+        typecheck: "tsc --noEmit", test: "vitest run", spec: "tulipes spec --offline --openapi docs/openapi.json --postman docs/collection.json" },
       dependencies: { "@tulipes/core": core, express: "^5", zod: "^3.25" },
       devDependencies: { "@tulipes/spec": "^0.3.0-rc.2", "@types/express": "^5", "@types/node": "^24", tsx: "^4", typescript: "^7", vitest: "^5.0.0", vite: "^8.2.2" },
     })],
@@ -101,25 +110,15 @@ export default function permissions(acl: AclBuilder) {
   acl.defineRole("guest").allow("guest", "core:health");
 }
 `],
-    ["modules/hello/routes/health.routes.ts", `import { Router } from "express";
-import type { BackendCtx } from "@tulipes/core/boot";
-export default function health({ rai }: BackendCtx) {
-  const router = Router();
-  router.get("/health", rai({ id: "core:health", name: "Health" }), (_req, res) => {
-    res.respond({ data: { status: "ok" } });
-  });
-  return router;
-}
-`],
     ["modules/security/package.json", manifest("security", 10, { express: "^5", helmet: "^8" })],
     ["modules/security/routes/security.routes.ts", `import express from "express";
 import helmet from "helmet";
-import type { BackendCtx } from "@tulipes/core/boot";
-export default function security({ app }: BackendCtx): void {
+import { defineRoutes } from "@tulipes/core/http";
+export default defineRoutes(({ app }) => {
   app.disable("x-powered-by");
   app.use(helmet());
   app.use(express.json({ limit: "100kb" }));
-}
+});
 `],
     ["modules/hello/package.json", manifest("hello", undefined, { express: "^5", zod: "^3.25" })],
     ["modules/hello/module.acl.ts", `import type { AclBuilder } from "@tulipes/core/acl";
@@ -128,14 +127,24 @@ export default function permissions(acl: AclBuilder) { acl.allow("guest", "hello
     ["modules/hello/i18n/en.json", json({ greeting: "Hello" })],
     ["modules/hello/routes/hello.routes.ts", `import { Router } from "express";
 import { z } from "zod/v4";
-import type { BackendCtx } from "@tulipes/core/boot";
-export default function hello({ rai }: BackendCtx) {
+import { defineRoutes } from "@tulipes/core/http";
+export default defineRoutes(({ app, rai, routes }) => {
   const router = Router();
-  router.get("/api/v1/hello", rai({ id: "hello:read", name: "Hello", returns: z.object({ message: z.string() }) }), (req, res) => {
+  router.get("/hello", rai({ id: "hello:read", name: "Hello", returns: z.object({ message: z.string() }) }), (req, res) => {
     res.respond({ data: { message: req.t("greeting") } });
   });
+  routes.mount(app, "/api/v1", router);
+});
+`],
+    ["modules/hello/routes/health.routes.ts", `import { Router } from "express";
+import { defineRoutes } from "@tulipes/core/http";
+export default defineRoutes(({ rai }) => {
+  const router = Router();
+  router.get("/health", rai({ id: "core:health", name: "Health" }), (_req, res) => {
+    res.respond({ data: { status: "ok" } });
+  });
   return router;
-}
+});
 `],
     ["README.md", `# ${name}\n\nMinimal Tulipes API. Requires Node 24.x and Corepack; no MongoDB, Redis or credentials.\n\n\`\`\`sh\ncorepack enable\nyarn install\nyarn sync\nyarn typecheck\nyarn check\nyarn test\nyarn spec\nyarn dev\n\`\`\`\n\nOpen http://localhost:3000/api/v1/hello or http://localhost:3000/health.\n\nRoutes declare a RAI and use res.respond. Middleware belongs to sys modules.\nCore still installs optional infrastructure libraries, but this app opens no infrastructure connections.\nThe production preset adds auth, users, settings, queues and deployment examples:\n\n\`tulipes init another-api --preset production\`\n`],
   ];

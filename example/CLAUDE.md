@@ -42,7 +42,8 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    `throw new HttpError(404, "notFound")`, where the message is an i18n
    key and the code derives from it. Never hand-roll an error shape.
    → skill `tulipes-response`
-7. **Every route declares a RAI**: `rai({ id: "x:read" })` from `ctx`.
+7. **Every route declares a RAI**: put `rai({ id: "x:read" })` first in
+   each endpoint handler chain, including routes inside `defineRoutes()`.
    The id is also the ACL permission, and core refuses to boot if a route
    is missing one. Public is `acl.allow("guest", "x:read")`, never a
    missing check. → skill `tulipes-endpoint`
@@ -69,6 +70,10 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
     workspace boundary is what keeps modules independent, and a package
     name makes the dependency visible in package.json — declare it there
     and in `dependsOn`.
+
+For endpoint changes, read `tulipes-endpoint`: native routers live in
+`routes/*.routes.ts`. Use `defineRoutes()` and `runtime()` for offline inspection;
+keep shared middleware and param callbacks beside their endpoints.
 
 ## Where things go
 

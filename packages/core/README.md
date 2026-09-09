@@ -94,8 +94,8 @@ modules/billing/
 ├── meta.variables.json       this module's environment contract
 ├── module.config.ts          config factory + onReady / onShutdown
 ├── module.acl.ts             permission grants
-├── routes/*.routes.ts        (ctx) => Router
-├── controllers/              the work; routes import it directly
+├── routes/*.routes.ts        native Router factories, optionally wrapped in defineRoutes
+├── controllers/              the work; handler factories import it lazily
 ├── helpers/                  pure logic, no framework
 ├── i18n/<locale>.json        this module's strings — the module is the namespace
 ├── models/*.model.ts         { name, schema } — a declaration, not a registration
@@ -397,8 +397,8 @@ only in development.
 | `tulipes dev [entry]` | regenerate types, then run under tsx watch |
 | `tulipes sync` | regenerate `types/config.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting — a CI gate |
-| `tulipes routes` | inspect endpoints and roles; connects configured infrastructure |
-| `tulipes spec [--openapi file] [--postman file] [--url base]` | generate specs; connects configured infrastructure |
+| `tulipes routes [--offline \| --runtime]` | inspect shared declarations offline or runtime endpoints |
+| `tulipes spec [--offline \| --runtime] [--openapi file] [--postman file] [--url base]` | generate specs from the selected inspection mode |
 | `tulipes new module <name>` | scaffold a module with every contract |
 | `tulipes update` | upgrade the global CLI and, inside an app, the app itself |
 | `tulipes -v` | print the CLI version, and the app's when they differ |
@@ -412,10 +412,12 @@ target a different Node version than the one holding your binary.
 `init`, `sync`, `env:check`, `new module`, version and update commands do not
 connect application infrastructure (`update` uses the package registry). `dev`
 boots the application and requires its declared services. `routes` and `spec`
-use inspection: the minimal starter needs no services, but the production
-starter still connects MongoDB/Redis. Inspection skips bootstrap, sockets,
-listening and readiness; config/route factories and shutdown hooks still run.
-A general-purpose `--offline` mode is not implemented.
+default to runtime inspection, which connects configured infrastructure and runs
+config/route factories and shutdown hooks, while skipping bootstrap, sockets,
+listening and readiness. `--offline` builds opted-in native routers and loads ACL
+without services, runtime config or secrets. Both new presets use it in `yarn spec`.
+See [offline inspection](../../docs/offline-inspection.md) for migration and limits.
+This interface is unreleased; it requires core built from this checkout.
 
 ## What `tulipes init --preset production` gives you
 
@@ -513,10 +515,11 @@ language:
   "meta": {} }
 ```
 
-Generation uses backend **inspection**: it mounts routes without bootstrap tasks,
-Socket.IO setup, listening or readiness hooks. It can still connect Mongo/Redis
-because route factories may require those services. Imports and factories retain
-their own side effects; inspection is not a sandbox.
+`--offline` builds the same `defineRoutes()` router trees used at runtime,
+without acquiring callbacks registered through `runtime()` or connecting services. Use `--url` to set the deployment
+URL; offline defaults to `http://localhost:3000` and package.json title/version.
+The default `--runtime` path retains infrastructure-backed inspection for legacy
+factories. Declaration imports remain trusted JavaScript, not a sandbox.
 
 Use `ctx.routes.mount(parent, "/api", childRouter)` for nested routers so the
 registry records the full prefix. Each supported HTTP method needs exactly one

@@ -85,13 +85,14 @@ test("rejects an invalid declared success status", () => {
   expect(() => report.throwIfAny("routes")).toThrow(/status.*2xx/);
 });
 
-test("mounts literal prefixes with dots and rejects parameterized mount prefixes", () => {
+test("mounts prefixes with dots and named parameters while rejecting wildcards", () => {
   const app = express(), router = express.Router(), registry = new RouteRegistry();
   const rai = createRai(registry, () => true);
   router.get("/keys", rai({ id: "keys:read" }), respond);
   registry.mount(app, "/.well-known", router);
   expect(scanRoutes(app, new BootReport())[0]?.path).toBe("/.well-known/keys");
-  expect(() => registry.mount(app, "/:tenant", router)).toThrow(/literal path/);
+  expect(() => registry.mount(app, "/:tenant", router)).not.toThrow();
+  expect(() => registry.mount(app, "/*tenant", router)).toThrow(/literal path/);
 });
 
 test("rejects recursive router mounts instead of looping during inspection", () => {

@@ -38,7 +38,7 @@ export interface SpecSource {
 /** The role an unauthenticated caller has — see the framework's guest model. */
 const GUEST = "guest";
 
-export function extract(ctx: Ctx): SpecSource {
+export function extract(ctx: Pick<Ctx, "config" | "routes" | "acl">): SpecSource {
   const grants = ctx.acl?.describe() ?? [];
 
   // A grant reaches a permission directly, through its namespace wildcard,

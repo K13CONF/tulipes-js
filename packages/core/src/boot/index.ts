@@ -13,3 +13,4 @@ export type {
 } from "./contracts.js";
 
 export { requireModels, requireQueues } from "./contracts.js";
+export { inspectRoutes, type InspectionContext } from "./inspect.js";
