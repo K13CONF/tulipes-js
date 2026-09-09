@@ -36,7 +36,7 @@ try {
   run(process.execPath, [bin, 'init', app, '--preset', preset], workspace);
   const pkgFile = join(app, 'package.json');
   const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'));
-  pkg.resolutions = resolutions;
+  pkg.resolutions = { ...pkg.resolutions, ...resolutions };
   writeFileSync(pkgFile, JSON.stringify(pkg, null, 2));
   const env = { ...process.env, APP_ENV: 'test', PORT: '0', LOG_FILE: 'false', LOG_CONSOLE: 'false' };
   if (preset === 'production') {

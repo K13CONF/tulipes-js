@@ -98,7 +98,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
   const core = `^${coreVersion}`;
   // The generator ships its own version line; it only has to be recent
   // enough to understand the RouteInfo schemas this core declares.
-  const specVersion = "^0.3.0-rc.1";
+  const specVersion = "^0.3.0-rc.2";
 
   const files: [string, string][] = [
     ["package.json", json({
@@ -109,6 +109,8 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       // would handle the workspaces and produce a v1 lockfile.
       packageManager: "yarn@4.18.0",
       engines: { node: ">=24.0.0 <25" },
+      // Remove when PM2 ships a patched YAML dependency itself.
+      resolutions: { "pm2/js-yaml": "4.3.2" },
       workspaces: ["modules/*"],
       scripts: {
         dev: "tulipes dev",

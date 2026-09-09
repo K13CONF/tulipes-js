@@ -14,7 +14,7 @@ Requires Node 24.x. Inspection connects infrastructure declared by the app:
 the minimal starter needs no services; the production starter needs MongoDB
 and Redis. There is no general offline mode yet.
 
-Version 0.3.0-rc.1 supports core `^0.8.0 || ^0.9.0-rc.1`. Install the candidate
+Version 0.3.0-rc.2 supports core `^0.8.0 || ^0.9.0-rc.1`. Install the candidate
 with `yarn add -D @tulipes/spec@next`. See the core
 [migration guide](https://github.com/kemora13conf/bp-backend-express/blob/v0.8.0/packages/core/MIGRATING.md#reliability-contracts-08)
 when upgrading from an earlier release.
