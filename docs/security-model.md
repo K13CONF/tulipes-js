@@ -64,3 +64,27 @@ to 4.3.2 through a targeted Yarn resolution in the repository root and generated
 production app. Packed checks preserve this resolution and still exercise PM2
 start/restart. Remove the override once PM2 declares a patched version upstream.
 [GHSA-2883-xcg3-v3hh](https://github.com/advisories/GHSA-2883-xcg3-v3hh).
+
+## S08a — Administrative restart scope
+
+The reviewed helper previously selected every process in a PM2 daemon for an empty
+request and passed names to restart. On a shared daemon, that could affect another
+application, including one with the same process name. The corrected starter
+limits selection to processes whose canonical PM2 working directory equals the
+app root derived from the installed helper's location. The complete requested
+name set is validated before restarting anything; unknown/out-of-scope names
+return `INVALID_RESTART_TARGETS` (400), and an empty verified inventory returns
+`NO_APP_PROCESSES` (503). Calls use numeric PM2 IDs, so names such as `all` have no
+selector semantics. Repeated names do not duplicate restarts; cluster members are
+restarted individually. Both generated and reference helpers share this behavior.
+
+The application directory is the scope: processes deliberately sharing that exact
+directory belong to the same app for this policy. Configure PM2 `cwd` accordingly;
+missing, unavailable or different directory metadata never authorizes a restart.
+The daemon and local filesystem remain trusted operator controls. A PM2 environment
+marker permits attempting daemon access; it is not proof of application ownership.
+Sysadmin authorization still comes from the existing settings RAI/ACL.
+
+Self-restart remains last and may interrupt the HTTP response. Durable audit and
+response-before-restart coordination remain S08 follow-up work. This bounded fix
+does not complete the rest of the auth/settings review.

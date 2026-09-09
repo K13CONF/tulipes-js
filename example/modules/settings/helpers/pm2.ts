@@ -1,3 +1,7 @@
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { HttpError } from "@tulipes/core/http";
+
 /**
  * Restarting through PM2.
  *
@@ -15,19 +19,20 @@ export interface RestartOutcome {
 interface Pm2Process {
   name?: string;
   pm_id?: number;
+  pm2_env?: { pm_cwd?: string };
 }
 
 interface Pm2Api {
   connect(cb: (error?: Error) => void): void;
   list(cb: (error: Error | undefined, list: Pm2Process[]) => void): void;
-  restart(target: string, cb: (error?: Error) => void): void;
+  restart(target: number, cb: (error?: Error) => void): void;
   disconnect(): void;
 }
 
 /**
- * `PM2_HOME` (or the daemon's own env marker) is present only inside a
- * process PM2 started, which is a more honest test than "is pm2
- * installed" — a developer may well have it globally and not be using it.
+ * These markers allow a supervised process or an operator's maintenance script
+ * to attempt PM2 access. They do not establish process ownership: restart()
+ * independently checks the daemon's working-directory metadata.
  */
 export function isSupervised(): boolean {
   return Boolean(process.env.pm_id ?? process.env.PM2_HOME);
@@ -51,28 +56,42 @@ export async function restart(targets: readonly string[]): Promise<RestartOutcom
     return { supervised: false, restarted: [], reason: "pm2 is not installed" };
   }
 
-  await promisify(pm2.connect.bind(pm2));
-
   try {
+    await promisify(pm2.connect.bind(pm2));
     const running = await new Promise<Pm2Process[]>((resolve, reject) => {
       pm2.list((error, list) => (error ? reject(error) : resolve(list)));
     });
 
-    const names = running
-      .map((entry) => entry.name)
-      .filter((name): name is string => Boolean(name))
-      .filter((name) => targets.length === 0 || targets.includes(name));
-
-    // Restarting the process that is serving this request kills the
-    // response, so it goes last — the caller still gets its answer.
-    const self = process.env.name;
-    const ordered = [...names.filter((n) => n !== self), ...names.filter((n) => n === self)];
-
-    for (const name of ordered) {
-      await promisify((cb: (error?: Error) => void) => pm2.restart(name, cb));
+    // Derive scope from this installed helper, never the request or shell cwd.
+    const root = realpathSync(fileURLToPath(new URL("../../../", import.meta.url)));
+    const owned = running.filter((entry): entry is Pm2Process & { name: string; pm_id: number } => {
+      if (!entry.name || !Number.isInteger(entry.pm_id) || entry.pm_id! < 0 || !entry.pm2_env?.pm_cwd) return false;
+      try { return realpathSync(entry.pm2_env.pm_cwd) === root; }
+      catch { return false; }
+    });
+    const allowedNames = new Set(owned.map(entry => entry.name));
+    if (targets.some(name => !allowedNames.has(name))) {
+      throw new HttpError(400, "invalidRestartTargets", {
+        code: "INVALID_RESTART_TARGETS",
+        defaultMessage: "Every restart target must name a process belonging to this application",
+      });
+    }
+    if (!owned.length) {
+      throw new HttpError(503, "noAppProcesses", {
+        code: "NO_APP_PROCESSES", defaultMessage: "PM2 has no verified processes for this application",
+      });
+    }
+    const selected = owned.filter(entry => !targets.length || targets.includes(entry.name));
+    // Self goes last. Restarting this HTTP process can still interrupt its response.
+    const self = Number(process.env.pm_id);
+    const ordered = [...selected.filter(entry => entry.pm_id !== self), ...selected.filter(entry => entry.pm_id === self)];
+    for (const entry of ordered) {
+      // A name can also match another app or a PM2 selector such as "all".
+      // Only numeric IDs from the verified inventory may reach PM2.
+      await promisify((cb: (error?: Error) => void) => pm2.restart(entry.pm_id, cb));
     }
 
-    return { supervised: true, restarted: ordered };
+    return { supervised: true, restarted: [...new Set(ordered.map(entry => entry.name))] };
   } finally {
     pm2.disconnect();
   }

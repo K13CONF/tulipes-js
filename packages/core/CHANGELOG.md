@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Scope production settings restarts to the application directory, validate targets
+  before action, and use PM2 process IDs to isolate duplicate names.
+
 - Add `defineRoutes()`, deferred runtime callback binding and `inspectRoutes()` for native router inspection.
 - Add explicit `routes/spec --offline` and `--runtime`, with strict option parsing.
 - Keep both starters on native routers, shared prefixes and offline spec scripts.

@@ -11,6 +11,15 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — production settings restart scope
+
+Refresh the editable `modules/settings/helpers/pm2.ts` from the updated production
+starter. Reboot targets must belong to the installed application's canonical PM2
+working directory; an empty list selects only those processes. Mixed valid and
+invalid names now fail with 400 before any restart. A daemon without verified
+processes for this app returns 503. Keep PM2 `cwd` set to the application root.
+The helper restarts numeric IDs to avoid name collisions across applications.
+
 ## Unreleased — offline inspection with native routers
 
 Both new presets retain `routes/*.routes.ts` and native Express Router composition.
