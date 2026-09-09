@@ -7,5 +7,7 @@
   "invalidLocale": "Locale must look like \"en\" or \"en-GB\"",
   "valueRequired": "A value is required",
   "notSupervised": "Not running under PM2 — restart manually for changes to take effect",
-  "fileLoggingDisabled": "LOG_FILE is off — there are no log files to stream"
+  "fileLoggingDisabled": "LOG_FILE is off — there are no log files to stream",
+  "invalidRestartTargets": "Every restart target must name a process belonging to this application",
+  "noAppProcesses": "PM2 has no verified processes for this application"
 }

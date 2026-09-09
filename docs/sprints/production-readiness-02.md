@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | Pending | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -68,3 +68,37 @@ Before each change set, read this tracker and the relevant sprint acceptance
 criteria, and identify the owning item. Update its status with actual validation
 results. Commit each coherent, verified set before starting the next. Keep S08
 changes separate from S06–S07; provider extraction remains outside Sprint 02.
+
+## S08 change sets
+
+S06–S07 and the sprint/commit workflow were committed as `c0befdb`.
+
+### S08a — PM2 target scope
+
+The restart helper selected the entire PM2 inventory for an empty target list,
+and restarting by name could affect a different application with the same name.
+The correction derives the app root from the installed helper, matches canonical
+PM2 working directories exactly, validates all requested names before any restart,
+and restarts only verified numeric IDs. A failed connection also disconnects.
+Self is restarted last; delivering the HTTP response before self-restart remains
+an explicit follow-up rather than an implied guarantee of ordering.
+
+Locally verified on Node 24.14.0/macOS:
+
+- All 11 helper regressions passed after a red run with 10 failures. Cases cover
+  whole-request validation, foreign and duplicate names, cluster members, invalid
+  scope metadata, numeric IDs, self ordering and connection cleanup.
+- All 127 framework/spec tests and four production reference app tests passed
+  with temporary MongoDB and Redis and no skips. Coverage floors passed unchanged.
+- Package, example and test typechecks, builds and generated/reference parity
+  passed.
+- Packed production installation, generated tests/types, runtime/offline specs,
+  backend/shutdown and worker checks passed. The real PM2 daemon check verified
+  that both owned processes restarted while two unrelated processes retained their
+  PIDs, including one sharing the backend's name. Invalid target sets were rejected.
+- Evidence: ignored `reports/s08-pm2-{red,tests,integration,parity,artifacts,packed}.log`
+  and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
+
+Remaining S08 work: password-change/revocation timing, audit durability and filtering,
+proxy/IP/rate-limit policy, log/file constraints and streaming bounds, restart
+response delivery, and cookie/CSRF guidance. None is marked complete by this fix.

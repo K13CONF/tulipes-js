@@ -7,5 +7,7 @@
   "invalidLocale": "La langue doit ressembler à « en » ou « en-GB »",
   "valueRequired": "Une valeur est requise",
   "notSupervised": "Pas géré par PM2 — redémarrez manuellement pour appliquer les changements",
-  "fileLoggingDisabled": "LOG_FILE est désactivé — aucun fichier de log à diffuser"
+  "fileLoggingDisabled": "LOG_FILE est désactivé — aucun fichier de log à diffuser",
+  "invalidRestartTargets": "Chaque cible doit désigner un processus appartenant à cette application",
+  "noAppProcesses": "PM2 ne contient aucun processus vérifié pour cette application"
 }
