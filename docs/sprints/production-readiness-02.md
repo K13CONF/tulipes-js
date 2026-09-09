@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08b locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -71,7 +71,8 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 
 ## S08 change sets
 
-S06–S07 and the sprint/commit workflow were committed as `c0befdb`.
+S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
+committed as `01f3f72`.
 
 ### S08a — PM2 target scope
 
@@ -102,3 +103,40 @@ Locally verified on Node 24.14.0/macOS:
 Remaining S08 work: password-change/revocation timing, audit durability and filtering,
 proxy/IP/rate-limit policy, log/file constraints and streaming bounds, restart
 response delivery, and cookie/CSRF guidance. None is marked complete by this fix.
+
+### S08b — Session validity and revocation timing
+
+Session reads and refresh rotation previously accepted expired rows until MongoDB
+TTL cleanup and did not bind the session owner to the token subject. The helper now
+requires a matching user and a strictly future expiration. Refresh enforces these
+conditions in the same atomic update that consumes its current token ID; expired
+devices are also excluded from the session list. The generated starter mirrors the
+reference application and includes the same HTTP regressions.
+
+The new cases cover the exact expiration boundary with the row still present,
+session ownership mismatch, password change within one JWT second across two
+devices, and refresh racing with device revocation. The completed password change
+invalidates both old pairs while its replacement remains usable. A concurrent
+refresh may return 200 before revocation, but its pair cannot authenticate after
+the session deletion completes.
+
+Locally verified on Node 24.14.0/macOS:
+
+- The two validity regressions failed before the fix (five assertions) and passed
+  afterward. All eight reference app tests now pass.
+- All 127 framework/spec tests passed with temporary MongoDB and Redis, no skips;
+  coverage floors remained unchanged. Package, example and test typechecks passed.
+- Builds and generated/reference module, test and configuration parity passed.
+- The packed production app passed all eight generated tests, typechecks,
+  runtime/offline spec checks, backend/shutdown, worker and isolated PM2 checks.
+- Evidence: ignored `reports/s08b-{red,green,integration,types,parity,artifacts,packed}.log`
+  and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
+
+Remaining authentication work includes deterministic login/password-change races
+(an old-password verification may finish issuing a session after the change),
+concurrent password changes, and recovery from failures between credential, epoch
+and session writes. These tests do not establish atomicity across those writes or
+cancel requests already authenticated before revocation. Refresh-token reuse still
+rejects that token without revoking the surviving family; theft-response policy
+needs explicit review. Audit, proxy/rate limits, file/stream bounds, restart response
+delivery and cookie/CSRF guidance remain open under S08.

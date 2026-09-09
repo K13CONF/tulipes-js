@@ -11,6 +11,14 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — production session validity
+
+Refresh the editable `modules/auth/helpers/tokens.ts` and `passport.ts` from the
+updated starter. `loadSession` now requires the token subject as its third argument.
+Access and refresh reject expired sessions even before MongoDB TTL cleanup and
+require the stored session owner to match that subject. Session listings exclude
+expired rows. No schema migration or token-format change is needed.
+
 ## Unreleased — production settings restart scope
 
 Refresh the editable `modules/settings/helpers/pm2.ts` from the updated production
