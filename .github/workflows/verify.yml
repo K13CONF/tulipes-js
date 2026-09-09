@@ -1,0 +1,132 @@
+name: Verify packages
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['24.0.0', '24']
+    services:
+      mongo:
+        image: mongo:8
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      TEST_MONGO_URI: mongodb://127.0.0.1:27017/tulipes_tests
+      TEST_REDIS_URL: redis://127.0.0.1:6379/3
+      REQUIRE_INTEGRATION_TESTS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn test:types
+      - run: yarn test:coverage
+      - run: yarn workspace @tulipes-example/app sync && yarn workspace @tulipes-example/app typecheck
+      - run: diff packages/core/templates/CLAUDE.md example/CLAUDE.md && diff -r packages/core/templates/claude example/.claude
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-node-${{ matrix.node }}
+          path: coverage/
+  pack:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: node scripts/artifacts.mjs prepare .artifacts
+      - run: node scripts/audit.mjs reports/workspace-runtime.jsonl --environment production
+      - run: |
+          node packages/core/dist/cli/bin.js init "$RUNNER_TEMP/scaffold" --preset production > /dev/null
+          diff -r -x package.json "$RUNNER_TEMP/scaffold/modules" example/modules
+          diff "$RUNNER_TEMP/scaffold/tests/app.test.ts" example/tests/app.test.ts
+          diff "$RUNNER_TEMP/scaffold/vitest.config.ts" example/vitest.config.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-packages
+          path: .artifacts/
+          include-hidden-files: true
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workspace-audit
+          path: reports/
+  minimal:
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    # Deliberately no database/Redis services in this job.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-packages
+          path: .artifacts
+      - run: node scripts/scaffold-smoke.mjs .artifacts minimal
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: minimal-smoke-${{ matrix.os }}
+          path: reports/
+  production:
+    needs: pack
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:8
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      TEST_MONGO_URI: mongodb://127.0.0.1:27017/tulipes_smoke
+      TEST_REDIS_URL: redis://127.0.0.1:6379/4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-packages
+          path: .artifacts
+      - run: node scripts/scaffold-smoke.mjs .artifacts production
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-smoke
+          path: reports/

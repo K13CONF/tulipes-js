@@ -21,7 +21,7 @@ test("a generated kebab-case module produces valid TypeScript configuration decl
 
 test.each([false, true])("generated authentication isolates guests before rai, with Passport: %s", async (withPassport) => {
   const app = await fixture();
-  await runInit(app.rootDir, "generated");
+  await runInit(app.rootDir, "generated", "production");
   await app.write("generated/check-auth.ts", `
     import assert from 'node:assert/strict';
     import { once } from 'node:events';

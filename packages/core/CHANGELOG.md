@@ -11,6 +11,16 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.9.0-rc.1] — 2026-09-08
+
+- Default minimal starter, explicit production preset and generated Vitest suites.
+- Production/staging credential guard and retained concurrent refresh/logout checks.
+- PM2 7.0.4 production starter and actual supervision/restart verification.
+- MIT license, package metadata, Node 24 support and contribution/security policies.
+- Coverage floors, separate dependency audits and exact-archive CI/release gates.
+
+See MIGRATING.md for the new default, runtime range and manual template upgrades.
+
 ## [0.8.0] — 2026-09-07
 
 ### Changed
@@ -301,7 +311,8 @@ generated types, ACL, the model store, queues, sockets, the three process
 modes (`backend`, `worker`, `script`), the startup banner, and the CLI —
 `init`, `dev`, `sync`, `env:check`, `new module`, `update`.
 
-[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.1...HEAD
+[0.9.0-rc.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.8.0...v0.9.0-rc.1
 [0.8.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.6.1...v0.7.0

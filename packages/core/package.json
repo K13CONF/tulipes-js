@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/core",
-  "version": "0.8.0",
+  "version": "0.9.0-rc.1",
   "description": "Module-based Express framework: convention-driven boot pipeline, env contracts, ACL, queues, sockets and CLI",
   "type": "module",
   "bin": {
@@ -25,7 +25,8 @@
     "assets",
     "templates",
     "CHANGELOG.md",
-    "MIGRATING.md"
+    "MIGRATING.md",
+    "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -69,5 +70,27 @@
     "@types/express": "^5",
     "@types/node": "^24.2.0",
     "typescript": "^7.0.2"
-  }
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kemora13conf/bp-backend-express.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/kemora13conf/bp-backend-express/tree/master/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/kemora13conf/bp-backend-express/issues"
+  },
+  "keywords": [
+    "typescript",
+    "express",
+    "framework",
+    "api",
+    "modules",
+    "acl",
+    "tulipes"
+  ]
 }

@@ -43,3 +43,29 @@ The CI scaffold check compares generated modules with the reference example.
 When changing a generated contract, update both `cli/init.ts` (and `new-module.ts`
 where applicable) and the example module. Keep existing agent guides in sync if
 changing their instructions.
+
+## Coverage and packed installations
+
+Run `REQUIRE_INTEGRATION_TESTS=1 yarn test:coverage` with both TEST URLs set.
+Missing URLs fail CI immediately. Coverage is restricted to boot, ACL and env:
+the measured sprint baseline is 77% statements, 62% branches, 82% functions and
+79% lines (rounded down into enforced floors). These are regression floors,
+not completion targets; uncovered error paths remain work for later tests.
+
+```sh
+node scripts/artifacts.mjs prepare .artifacts
+node scripts/scaffold-smoke.mjs .artifacts minimal
+# With TEST_MONGO_URI and TEST_REDIS_URL set:
+node scripts/scaffold-smoke.mjs .artifacts production
+```
+
+Each smoke test installs the exact packed core and spec outside the monorepo,
+uses the installed compiled CLI, then installs and audits a fresh app. It runs
+the tutorial sync/typecheck/check/test/spec steps and boots the actual app.
+Production also tests worker shutdown, redacted 500s and PM2 start/restart in a
+dedicated PM2_HOME. Logs and dependency reports live in ignored `reports/`.
+Temporary directories and process handles are cleaned up after checks.
+
+The production starter's own suite exercises concurrent refresh and logout via
+HTTP. The reference test is identical to generated code. Use test-only databases;
+application data must never be supplied to this suite.
