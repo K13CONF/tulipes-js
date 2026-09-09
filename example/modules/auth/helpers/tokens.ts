@@ -106,7 +106,7 @@ export async function rotateSession(
   const { refreshJti, refreshExp, ...pair } = mint(ctx, claims.sub, sid);
 
   const session = await ctx.models!.get("Session").findOneAndUpdate(
-    { sid, refresh_jti: claims.jti },
+    { sid, user: claims.sub, refresh_jti: claims.jti, expires_at: { $gt: new Date() } },
     {
       refresh_jti: refreshJti,
       expires_at: new Date(refreshExp * 1000),
@@ -131,9 +131,9 @@ export function verify(
   }
 }
 
-/** The session behind a request, or null when the row is gone. */
-export async function loadSession(ctx: Ctx, sid: string): Promise<SessionDoc | null> {
-  return ctx.models!.get<SessionDoc>("Session").findOne({ sid });
+/** A live session owned by the token subject. TTL cleanup is not authorization. */
+export async function loadSession(ctx: Ctx, sid: string, userId: string): Promise<SessionDoc | null> {
+  return ctx.models!.get<SessionDoc>("Session").findOne({ sid, user: userId, expires_at: { $gt: new Date() } });
 }
 
 /**
@@ -177,9 +177,9 @@ export async function endAllSessions(ctx: Ctx, userId: string): Promise<void> {
   await ctx.models!.get("Session").deleteMany({ user: userId });
 }
 
-/** Everything the caller is signed in on, newest first. */
+/** Active devices, newest first, including when expired rows await TTL cleanup. */
 export async function listSessions(ctx: Ctx, userId: string): Promise<SessionDoc[]> {
-  return ctx.models!.get<SessionDoc>("Session").find({ user: userId }).sort({ created_at: -1 });
+  return ctx.models!.get<SessionDoc>("Session").find({ user: userId, expires_at: { $gt: new Date() } }).sort({ created_at: -1 });
 }
 
 /** Where a request came from, for the session row. */

@@ -88,3 +88,25 @@ Sysadmin authorization still comes from the existing settings RAI/ACL.
 Self-restart remains last and may interrupt the HTTP response. Durable audit and
 response-before-restart coordination remain S08 follow-up work. This bounded fix
 does not complete the rest of the auth/settings review.
+
+## S08b — Session validity and revocation timing
+
+Access authentication and refresh rotation require the session to belong to the
+signed token's subject and have an expiration strictly later than the application
+clock. Refresh checks ownership, expiration and the current refresh ID in one
+conditional update. An expired row cannot authorize either token while awaiting
+MongoDB TTL cleanup, and it is omitted from the active-device list.
+
+Retained HTTP tests cover expiry at the exact boundary with the row still stored,
+an inconsistent session owner, and a password change within one JWT second. After
+a completed password change, both devices' earlier access and refresh tokens fail;
+the replacement pair and new password work. A refresh racing with session deletion
+can return a pair before deletion, but that pair is unusable after revocation
+completes. Requests already authenticated are not canceled by deleting a session.
+
+The password update, token epoch and session deletion remain separate database
+writes. Login/password-change races, concurrent password changes and partial-write
+failure recovery remain open review items. In particular, the current flow does
+not bind password verification to subsequent session creation. Refresh replay is
+rejected without revoking the surviving token family; family-wide theft response
+remains an application-policy decision.

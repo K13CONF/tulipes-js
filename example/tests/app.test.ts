@@ -66,3 +66,98 @@ test("one concurrent refresh wins and logout revokes both token halves", async (
   }
   expect((await post("/api/v1/auth/refresh", { refresh_token: rotated.refresh_token })).status).toBe(401);
 });
+
+async function account() {
+  const credentials = { email: randomBytes(12).toString("hex") + "@example.test", password: randomBytes(24).toString("hex") };
+  const response = await post("/api/v1/auth/register", credentials);
+  expect(response.status).toBe(201);
+  const body = await response.json();
+  const { user } = z.object({ data: z.object({ user: z.object({ id: z.string() }) }) }).parse(body).data;
+  return { ...tokens.parse(body).data, ...credentials, userId: user.id };
+}
+
+async function get(path: string, token: string) {
+  return fetch(base + path, { headers: { authorization: "Bearer " + token } });
+}
+
+async function assertRejected(pair: { access_token: string; refresh_token: string }) {
+  expect((await get("/api/v1/auth/me", pair.access_token)).status).toBe(401);
+  expect((await post("/api/v1/auth/refresh", { refresh_token: pair.refresh_token })).status).toBe(401);
+}
+
+test("session expiry rejects access and refresh before TTL cleanup and hides the device", async () => {
+  const initial = await account();
+  const Session = handle.ctx.models!.get("Session");
+  // Keep the row in Mongo's future; advance only the app clock to the exact
+  // boundary so asynchronous TTL deletion cannot make this regression pass.
+  const expires = new Date(Date.now() + 120_000);
+  await Session.updateOne({ user: initial.userId }, { expires_at: expires });
+  const login = await post("/api/v1/auth/login", { email: initial.email, password: initial.password });
+  expect(login.status).toBe(200);
+  const other = tokens.parse(await login.json()).data;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(expires);
+  try {
+    const sessions = await get("/api/v1/auth/sessions", other.access_token);
+    expect(sessions.status).toBe(200);
+    expect.soft(z.object({ data: z.array(z.unknown()) }).parse(await sessions.json()).data).toHaveLength(1);
+    // Check both independently so a failed access assertion cannot hide refresh.
+    expect.soft((await get("/api/v1/auth/me", initial.access_token)).status).toBe(401);
+    expect.soft((await post("/api/v1/auth/refresh", { refresh_token: initial.refresh_token })).status).toBe(401);
+    expect(await Session.countDocuments({ user: initial.userId })).toBe(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a session reassigned to another account cannot authenticate or refresh its old tokens", async () => {
+  const initial = await account();
+  const other = await account();
+  await handle.ctx.models!.get("Session").updateOne({ user: initial.userId }, { user: other.userId });
+  expect.soft((await get("/api/v1/auth/me", initial.access_token)).status).toBe(401);
+  expect.soft((await post("/api/v1/auth/refresh", { refresh_token: initial.refresh_token })).status).toBe(401);
+  expect((await get("/api/v1/auth/me", other.access_token)).status).toBe(200);
+});
+
+test("password change in the same JWT second revokes both devices and keeps the replacement usable", async () => {
+  // Freeze only Date, leaving HTTP, Mongo and bcrypt timers operational.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(Math.floor(Date.now() / 1000) * 1000 + 100));
+  try {
+    const initial = await account();
+    const login = await post("/api/v1/auth/login", { email: initial.email, password: initial.password });
+    expect(login.status).toBe(200);
+    const other = tokens.parse(await login.json()).data;
+    vi.setSystemTime(new Date(Date.now() + 500));
+    const password = randomBytes(24).toString("hex");
+    const changed = await post("/api/v1/auth/password", { password }, initial.access_token);
+    expect(changed.status).toBe(200);
+    const replacement = tokens.parse(await changed.json()).data;
+    await assertRejected(initial);
+    await assertRejected(other);
+    expect((await get("/api/v1/auth/me", replacement.access_token)).status).toBe(200);
+    expect((await post("/api/v1/auth/refresh", { refresh_token: replacement.refresh_token })).status).toBe(200);
+    expect((await post("/api/v1/auth/login", { email: initial.email, password: initial.password })).status).toBe(401);
+    expect((await post("/api/v1/auth/login", { email: initial.email, password })).status).toBe(200);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("refresh racing with device revocation cannot leave a usable token pair", async () => {
+  const initial = await account();
+  const login = await post("/api/v1/auth/login", { email: initial.email, password: initial.password });
+  expect(login.status).toBe(200);
+  const other = tokens.parse(await login.json()).data;
+  const identity = await get("/api/v1/auth/me", other.access_token);
+  const { session } = z.object({ data: z.object({ session: z.object({ sid: z.string() }) }) }).parse(await identity.json()).data;
+  const [revoked, refreshed] = await Promise.all([
+    fetch(base + "/api/v1/auth/sessions/" + session.sid, { method: "DELETE", headers: { authorization: "Bearer " + initial.access_token } }),
+    post("/api/v1/auth/refresh", { refresh_token: other.refresh_token }),
+  ]);
+  expect(revoked.status).toBe(200);
+  expect([200, 401]).toContain(refreshed.status);
+  await assertRejected(other);
+  if (refreshed.status === 200) await assertRejected(tokens.parse(await refreshed.json()).data);
+  expect((await get("/api/v1/auth/me", initial.access_token)).status).toBe(200);
+});

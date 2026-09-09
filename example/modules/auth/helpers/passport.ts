@@ -66,7 +66,7 @@ export function configurePassport(ctx: Ctx): void {
           // The session row is the server-side half: deleting it signs the
           // device out even though the access token is still signed and
           // unexpired. A token whose session is gone is not a caller.
-          const session = await loadSession(ctx, claims.sid);
+          const session = await loadSession(ctx, claims.sid, claims.sub);
           if (!session) return done(null, false);
 
           const user = await ctx.models!.get<UserDoc>("User").findById(claims.sub);

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Require live, matching-owner sessions for production access authentication and
+  atomic refresh rotation; exclude expired devices from session listings.
+
 - Scope production settings restarts to the application directory, validate targets
   before action, and use PM2 process IDs to isolate duplicate names.
 
