@@ -16,7 +16,7 @@ currently claimed as supported. Node upgrades require expanding CI first.
 
 ## Pre-1.0 policy
 
-Candidate: core 0.9.0-rc.1 and spec 0.3.0-rc.1 are published under `next`.
+Candidate: core 0.9.0-rc.2 and spec 0.3.0-rc.2 are published under `next`.
 Candidate fixes target this pair; the stable support lines below remain in
 effect until 0.9.0 becomes stable.
 

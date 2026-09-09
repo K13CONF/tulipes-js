@@ -68,3 +68,11 @@ test("init preserves a nonempty target", async () => {
   expect(await readFile(app.rootDir + "/api/keep.txt", "utf8")).toBe("user content");
   await expect(access(app.rootDir + "/api/package.json")).rejects.toThrow();
 });
+
+test("production starter patches PM2's vulnerable pinned YAML dependency", async () => {
+  const app = await fixture();
+  const result = init(app.rootDir, ["api", "--preset", "production"]);
+  expect(result.status, result.stdout + result.stderr).toBe(0);
+  const pkg = JSON.parse(await readFile(app.rootDir + "/api/package.json", "utf8"));
+  expect(pkg.resolutions?.["pm2/js-yaml"]).toBe("4.3.2");
+});
