@@ -17,6 +17,7 @@
     "@app/core": "workspace:*",
     "@tulipes/core": "workspace:*",
     "express": "^5",
+    "mongoose": "^8",
     "zod": "^3.25"
   }
 }

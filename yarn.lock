@@ -72,6 +72,7 @@ __metadata:
     "@app/core": "workspace:*"
     "@tulipes/core": "workspace:*"
     express: "npm:^5"
+    mongoose: "npm:^8"
     zod: "npm:^3.25"
   languageName: unknown
   linkType: soft

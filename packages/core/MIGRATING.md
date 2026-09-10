@@ -11,6 +11,23 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — durable production settings audits
+
+Update the settings controller and audit helper together, add the generated
+`models/audit-event.model.ts`, and include settings' Mongoose dependency and new
+`auditUnavailable` translations. Deploy the model with the helper: settings
+actions return 503 if an audit insert cannot be acknowledged. Grant the deployment
+database identity the required insert access to `settings_audit_events` and include
+that collection in operational retention/backup planning.
+
+Custom callers now use `await audit(ctx, req, event)` before an action. The typed
+event replaces the action/details arguments and arbitrary payloads; variable and
+translation action names now end in `_requested`. Audits no longer appear as
+`warn` entries in the normal log stream. Query/archive the dedicated collection;
+logging thresholds cannot disable it. Records describe requested actions, with no
+old/new values or translation contents. A failed later action is not rolled back
+or recorded as completed by this helper.
+
 ## Unreleased — credential-bound production sessions
 
 Update the editable auth controller, auth helpers, Credential and Session models

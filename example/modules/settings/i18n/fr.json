@@ -9,5 +9,6 @@
   "notSupervised": "Pas géré par PM2 — redémarrez manuellement pour appliquer les changements",
   "fileLoggingDisabled": "LOG_FILE est désactivé — aucun fichier de log à diffuser",
   "invalidRestartTargets": "Chaque cible doit désigner un processus appartenant à cette application",
-  "noAppProcesses": "PM2 ne contient aucun processus vérifié pour cette application"
+  "noAppProcesses": "PM2 ne contient aucun processus vérifié pour cette application",
+  "auditUnavailable": "L’enregistrement d’audit n’a pas pu être confirmé ; l’action n’a pas été effectuée"
 }
