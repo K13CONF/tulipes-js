@@ -11,6 +11,45 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — refresh reuse expires the device family
+
+Deploy the updated auth token helper and controller together on every backend,
+with the session model comments and translations. The existing Session schema,
+TTL index and JWT fields remain compatible; no data migration is required. Mixed
+backends retain the old reuse behavior on old instances until all are updated.
+
+A valid, unexpired refresh token whose `jti` is no longer current now expires that
+session's entire token family. All access and refresh tokens sharing its `sid`
+lose authorization, and the device disappears from the active-session list.
+Other devices and later logins have different session IDs and remain active.
+Invalid signatures, malformed claims, wrong token types, expired tokens and
+wrong-owner sessions cannot trigger this action. Signature verification requires
+bounded string identifiers, a 24-digit hexadecimal user ID and integer issuance/
+expiry timestamps; custom callers must keep those starter token conventions.
+
+**Serialize refresh requests per session, including across browser tabs.** Two
+concurrent requests for the same refresh token still produce one 200 and one 401,
+but the replay invalidates the winning pair too. There is no grace period or
+idempotent replay. After a lost response or 503 REFRESH_UNAVAILABLE, discard the
+local pair and sign in again instead of blindly retrying a consumed token. A 401
+refresh rejection also requires signing in again. For suspected credential theft,
+changing the password revokes every device through the existing credential version.
+
+The helper uses one conditional MongoDB update: it either rotates the current
+refresh ID or sets the family's `expires_at` to the Unix epoch. Every session
+read already checks expiration, so TTL deletion need not finish before revocation.
+The update requests majority/journal acknowledgment with a five-second write-
+concern timeout. Connection/server-selection waits are separate. Write failures
+return a sanitized 503 with no token pair; the write might still have committed.
+There is no claim of rollback or of revocation when acknowledgment fails.
+
+This policy does not identify which caller is the thief. A holder of an old,
+still-valid refresh token can force that device to sign in again. Expired
+ancestors are rejected without revoking live descendants. Detection requires
+reuse; theft with no reuse is not discovered. Already authenticated HTTP requests
+and open log streams are not cancelled by this update. Real replica-set failover,
+client coordination and incident alerting remain deployment follow-ups.
+
 ## Unreleased — browser authentication guidance
 
 Production scaffolds now include `docs/browser-auth.md`. Copy that guide when

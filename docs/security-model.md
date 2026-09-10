@@ -19,7 +19,8 @@ name variables without their values. The guard is deployment validation, not a
 password-strength estimator. Set unique random keys and an operator-owned admin
 identity; environment validation alone does not check this policy until boot.
 
-Retained tests exercise concurrent refresh rotation (one winner), refresh replay,
+Retained tests exercise concurrent refresh rotation (one winner whose family is
+then revoked by reuse), refresh replay,
 logout invalidating old and rotated access/refresh tokens, and HTTP 500 responses
 without internal error messages or stack traces in production. PM2 compatibility
 is checked with a disposable daemon and actual process restarts. These checks
@@ -31,8 +32,8 @@ Before a production pilot, review and test:
 
 - Proxy trust configured for the exact deployment hops; proxy-aware rate limits
   for auth and administrative endpoints; secure headers and restrictive CORS.
-- Password-change invalidation, concurrent session operations and refresh theft
-  response. Decide and document whether reuse revokes the whole token family.
+- Client refresh coordination and incident response under the S08k policy below;
+  retain password-change and concurrent-session regressions during adaptations.
 - Audit durability for every secret reveal/update; role boundaries and omission
   of administrative modules; log redaction, file traversal and restart targets.
 - CSRF protection and cookie flags if an operator moves bearer tokens into
@@ -106,9 +107,9 @@ can return a pair before deletion, but that pair is unusable after revocation
 completes. Requests already authenticated are not canceled by deleting a session.
 
 The credential-version correction below addresses the login/password-change races
-and failure cases identified during S08b. Refresh replay is rejected without
-revoking the surviving token family; family-wide theft response remains an
-application-policy decision.
+and failure cases identified during S08b. At that stage, refresh replay rejected
+only the presented token. The S08k policy below supersedes that behavior with
+revocation of the device family.
 
 ## S08c — Password changes and in-flight session creation
 
@@ -220,4 +221,41 @@ The guide covers client credential storage, cookie attributes, session-bound CSR
 validation, exact-origin checks, login/refresh/logout coverage and browser checks
 required for an application that adopts cookies. HTTP regressions retain the
 existing transport boundaries; they do not simulate browser CORS or SameSite.
-Refresh theft-response policy remains the next S08 change set.
+The S08k policy below completes the refresh theft-response decision.
+
+
+## S08k — Strict refresh reuse revocation
+
+The chosen policy revokes one device family when a valid, unexpired refresh token
+is reused. The `sid` identifies the family; its row holds the only current refresh
+ID. Refresh performs a single conditional update, scoped to owner, credential
+version and a live expiration. A current token rotates normally; a noncurrent
+one sets expiration to the Unix epoch. Access authentication, refresh and session
+listing all reject that expired row before TTL cleanup. MongoDB's
+[single-document atomicity](https://www.mongodb.com/docs/manual/core/write-operations-atomicity/)
+and [conditional update pipelines](https://www.mongodb.com/docs/manual/tutorial/update-documents-with-aggregation-pipeline/)
+keep rotation and replay handling in the same write.
+
+The replay request receives 401. All tokens in that family stop authenticating;
+other devices survive. Concurrent duplicate refreshes produce one success and one
+rejection, with no usable surviving pair once replay handling completes. This
+chooses theft containment over transparent retries, following the rationale in
+[RFC 9700 section 4.14.2](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.14.2)
+without claiming this starter implements OAuth. Clients must coordinate refresh
+and sign in again after rejection or an uncertain outcome.
+
+Refresh verifies signature, expiry, token type and required scalar claim shapes
+before attempting a session write. An expired ancestor, malformed/forged token or
+wrong-owner session cannot revoke a live family. Majority/journal acknowledgment
+is requested; failures return sanitized REFRESH_UNAVAILABLE (503) without a pair.
+Tests inject failure both before and after commit, since a missing acknowledgment
+cannot establish whether the state changed. No token bodies enter the error.
+
+The tests also retain multi-generation replay, other-device isolation, a delayed
+winning response after revocation, expiry boundaries, logout and password-change
+races. There is no cross-document transaction, new token field, grace window or
+historic-token collection. Existing session expiration provides the revocation
+state, and TTL later removes it. Detection requires reuse while the presented
+ancestor is unexpired. Already authorized requests and open streams keep their
+existing behavior. Replica-set failover verification and an incident-alerting
+pipeline remain explicit follow-up work.

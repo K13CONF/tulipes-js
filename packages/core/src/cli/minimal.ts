@@ -65,18 +65,20 @@ async function post(path: string, body: unknown, token?: string) {
   return fetch(base + path, { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}) }, body: JSON.stringify(body) });
 }
 
-test("one concurrent refresh wins and logout revokes both token halves", async () => {
-  const registered = await post("/api/v1/auth/register", { email: randomBytes(12).toString("hex") + "@example.test", password: randomBytes(24).toString("hex") });
-  expect(registered.status).toBe(201);
-  const initial = tokens.parse(await registered.json()).data;
-  const attempts = await Promise.all([post("/api/v1/auth/refresh", { refresh_token: initial.refresh_token }), post("/api/v1/auth/refresh", { refresh_token: initial.refresh_token })]);
-  expect(attempts.map(response => response.status).sort()).toEqual([200, 401]);
-  const rotated = tokens.parse(await attempts.find(response => response.status === 200)!.json()).data;
-  expect((await post("/api/v1/auth/logout", {}, rotated.access_token)).status).toBe(200);
-  for (const token of [initial.access_token, rotated.access_token]) {
-    expect((await fetch(base + "/api/v1/auth/me", { headers: { authorization: "Bearer " + token } })).status).toBe(401);
-  }
-  expect((await post("/api/v1/auth/refresh", { refresh_token: rotated.refresh_token })).status).toBe(401);
+test("concurrent refresh has one winner but reuse invalidates its family", async () => {
+  const initial = await account();
+  const attempts = await Promise.all([
+    post("/api/v1/auth/refresh", { refresh_token: initial.refresh_token }),
+    post("/api/v1/auth/refresh", { refresh_token: initial.refresh_token }),
+  ]);
+
+  expect(attempts.map((response) => response.status).sort()).toEqual([200, 401]);
+  const winner = attempts.find((response) => response.status === 200)!;
+  const rotated = tokens.parse(await winner.json()).data;
+
+  // The server cannot tell a duplicate client request from a stolen token.
+  await assertRejected(initial);
+  await assertRejected(rotated);
 });
 
 async function account() {
@@ -96,6 +98,246 @@ async function assertRejected(pair: { access_token: string; refresh_token: strin
   expect((await get("/api/v1/auth/me", pair.access_token)).status).toBe(401);
   expect((await post("/api/v1/auth/refresh", { refresh_token: pair.refresh_token })).status).toBe(401);
 }
+
+test("refresh reuse revokes its whole device family while other devices survive", async () => {
+  const initial = await account();
+  const login = await post("/api/v1/auth/login", {
+    email: initial.email,
+    password: initial.password,
+  });
+  const other = tokens.parse(await login.json()).data;
+
+  // Reuse an ancestor after two rotations, not just the immediately prior token.
+  const first = await post("/api/v1/auth/refresh", {
+    refresh_token: initial.refresh_token,
+  });
+  const firstPair = tokens.parse(await first.json()).data;
+  const second = await post("/api/v1/auth/refresh", {
+    refresh_token: firstPair.refresh_token,
+  });
+  const latest = tokens.parse(await second.json()).data;
+
+  const replay = await post("/api/v1/auth/refresh", {
+    refresh_token: initial.refresh_token,
+  });
+  expect(replay.status).toBe(401);
+
+  for (const pair of [initial, firstPair, latest]) {
+    await assertRejected(pair);
+  }
+
+  expect((await get("/api/v1/auth/me", other.access_token)).status).toBe(200);
+  const devices = await get("/api/v1/auth/sessions", other.access_token);
+  expect(
+    z.object({ data: z.array(z.unknown()) }).parse(await devices.json()).data,
+  ).toHaveLength(1);
+  expect(
+    (
+      await post("/api/v1/auth/refresh", {
+        refresh_token: other.refresh_token,
+      })
+    ).status,
+  ).toBe(200);
+});
+
+test("a delayed successful rotation cannot resurrect a family revoked by reuse", async () => {
+  const initial = await account();
+  const collection = handle.ctx.models!.get("Session").collection;
+  const update = collection.findOneAndUpdate.bind(collection);
+  const committed = barrier();
+  const release = barrier();
+
+  // Hold the winner after its database write, before the HTTP response returns.
+  const spy = vi
+    .spyOn(collection, "findOneAndUpdate")
+    .mockImplementationOnce(async (...args) => {
+      const result = await update(...args);
+      committed.resolve();
+      await release.promise;
+      return result;
+    });
+  const pending = post("/api/v1/auth/refresh", {
+    refresh_token: initial.refresh_token,
+  });
+
+  try {
+    await Promise.race([
+      committed.promise,
+      pending.then(() => {
+        throw new Error("Rotation did not reach the write barrier");
+      }),
+    ]);
+
+    const replay = await post("/api/v1/auth/refresh", {
+      refresh_token: initial.refresh_token,
+    });
+    expect(replay.status).toBe(401);
+
+    release.resolve();
+    const winner = await pending;
+    expect(winner.status).toBe(200);
+
+    await assertRejected(tokens.parse(await winner.json()).data);
+    await assertRejected(initial);
+  } finally {
+    release.resolve();
+    await pending;
+    spy.mockRestore();
+  }
+});
+
+test("unacknowledged refresh writes return a sanitized failure without claiming revocation", async () => {
+  const initial = await account();
+  const first = await post("/api/v1/auth/refresh", {
+    refresh_token: initial.refresh_token,
+  });
+  const latest = tokens.parse(await first.json()).data;
+  const canary = "private refresh database error";
+  const spy = vi
+    .spyOn(handle.ctx.models!.get("Session").collection, "findOneAndUpdate")
+    .mockRejectedValueOnce(new Error(canary));
+
+  try {
+    const failed = await post("/api/v1/auth/refresh", {
+      refresh_token: initial.refresh_token,
+    });
+
+    expect(failed.status).toBe(503);
+    expect(await failed.json()).toMatchObject({
+      errors: [{ code: "REFRESH_UNAVAILABLE" }],
+    });
+  } finally {
+    spy.mockRestore();
+  }
+
+  // The failed write did not revoke the family. A later replay must still do so.
+  expect((await get("/api/v1/auth/me", latest.access_token)).status).toBe(200);
+  expect(
+    (
+      await post("/api/v1/auth/refresh", {
+        refresh_token: initial.refresh_token,
+      })
+    ).status,
+  ).toBe(401);
+  await assertRejected(latest);
+});
+
+test("invalid refresh credentials cannot revoke a live family", async () => {
+  const { default: jwt } = await import("jsonwebtoken");
+  const initial = await account();
+  const other = await account();
+  const original = jwt.decode(initial.refresh_token) as Record<string, unknown>;
+  const key = String(handle.ctx.Environment.get("JWT_REFRESH_SECRET"));
+  const sign = (changes: Record<string, unknown>) =>
+    jwt.sign({ ...original, ...changes }, key);
+  const missingJti = { ...original };
+  delete missingJti.jti;
+
+  const invalid = [
+    jwt.sign(original, "different-signing-key"),
+    sign({ typ: "access" }),
+    sign({ exp: Math.floor(Date.now() / 1000) - 1 }),
+    jwt.sign(missingJti, key),
+    sign({ jti: { $ne: null } }),
+    sign({ sid: { $ne: null } }),
+    sign({ sub: { $ne: null } }),
+  ];
+
+  // Signed malformed claims still cannot become filters or replay evidence.
+  for (const token of invalid) {
+    const response = await post("/api/v1/auth/refresh", {
+      refresh_token: token,
+    });
+    expect(response.status).toBe(401);
+  }
+
+  // Valid shape and signature alone do not establish ownership of another sid.
+  const wrongOwner = await post("/api/v1/auth/refresh", {
+    refresh_token: sign({ sub: other.userId }),
+  });
+  expect(wrongOwner.status).toBe(401);
+
+  expect((await get("/api/v1/auth/me", initial.access_token)).status).toBe(200);
+  expect((await get("/api/v1/auth/me", other.access_token)).status).toBe(200);
+  expect(
+    (
+      await post("/api/v1/auth/refresh", {
+        refresh_token: initial.refresh_token,
+      })
+    ).status,
+  ).toBe(200);
+});
+
+test("an expired ancestor is rejected without revoking its still-live descendants", async () => {
+  const initial = await account();
+  const { default: jwt } = await import("jsonwebtoken");
+  const ancestor = jwt.decode(initial.refresh_token) as { exp: number };
+  let latest!: { access_token: string; refresh_token: string };
+
+  // Move only the app clock so the ancestor expires while the rotated pair does not.
+  vi.useFakeTimers({ toFake: ["Date"] });
+
+  try {
+    vi.setSystemTime(new Date((ancestor.exp - 60) * 1000));
+    const rotated = await post("/api/v1/auth/refresh", {
+      refresh_token: initial.refresh_token,
+    });
+    expect(rotated.status).toBe(200);
+    latest = tokens.parse(await rotated.json()).data;
+
+    vi.setSystemTime(new Date(ancestor.exp * 1000));
+    const expired = await post("/api/v1/auth/refresh", {
+      refresh_token: initial.refresh_token,
+    });
+    expect(expired.status).toBe(401);
+    expect((await get("/api/v1/auth/me", latest.access_token)).status).toBe(
+      200,
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a lost acknowledgment after replay revocation never restores the family", async () => {
+  const initial = await account();
+  const first = await post("/api/v1/auth/refresh", {
+    refresh_token: initial.refresh_token,
+  });
+  const latest = tokens.parse(await first.json()).data;
+  const collection = handle.ctx.models!.get("Session").collection;
+  const update = collection.findOneAndUpdate.bind(collection);
+
+  // Simulate MongoDB committing the update before the reply is lost in transit.
+  const spy = vi
+    .spyOn(collection, "findOneAndUpdate")
+    .mockImplementationOnce(async (...args) => {
+      await update(...args);
+      throw new Error("private lost acknowledgment");
+    });
+
+  try {
+    const failed = await post("/api/v1/auth/refresh", {
+      refresh_token: initial.refresh_token,
+    });
+    expect(spy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        writeConcern: { w: "majority", j: true, wtimeout: 5000 },
+      }),
+    );
+
+    expect(failed.status).toBe(503);
+    expect(await failed.json()).toMatchObject({
+      errors: [{ code: "REFRESH_UNAVAILABLE" }],
+    });
+  } finally {
+    spy.mockRestore();
+  }
+
+  await assertRejected(latest);
+  await assertRejected(initial);
+});
 
 test("browser credentials use headers and JSON without issuing cookies", async () => {
   const credentials = {
@@ -147,6 +389,7 @@ test("browser credentials use headers and JSON without issuing cookies", async (
   expect(logout.status).toBe(200);
   expect(logout.headers.has("set-cookie")).toBe(false);
   await assertRejected(rotated);
+  await assertRejected(initial);
 });
 
 test("refresh ignores cookie and URL credentials and does not parse simple form bodies", async () => {

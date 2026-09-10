@@ -67,8 +67,12 @@ dedicated PM2_HOME. Logs and dependency reports live in ignored `reports/`.
 Temporary directories and process handles are cleaned up after checks.
 
 The production starter's own suite exercises concurrent refresh and logout via
-HTTP. The reference test is identical to generated code. Use test-only databases;
-application data must never be supplied to this suite.
+HTTP. Duplicate concurrent refreshes have one winner, but the replay expires
+that device family, so the winning pair must also fail subsequent authentication.
+The suite retains multi-generation reuse, other-device isolation, invalid/expired
+token rejection, a delayed response after revocation and write-acknowledgment
+failures before and after commit. The reference tests match generated code. Use
+test-only databases; application data must never be supplied to this suite.
 
 ## Offline inspection
 
