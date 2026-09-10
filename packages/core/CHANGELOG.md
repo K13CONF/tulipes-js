@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add explicit production proxy IP/CIDR trust with direct-peer defaults and
+  forwarded-header regressions. Update single-ingress nginx templates to overwrite
+  forwarded IP/host/protocol headers and remove blanket-trust guidance.
+
 - Persist settings audit requests with majority/journal acknowledgment before
   secret reveals, file/environment changes and restarts. Fail closed on audit
   errors, independently of logging thresholds; omit values from audit records.

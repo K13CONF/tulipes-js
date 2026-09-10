@@ -8,6 +8,13 @@
       "default": "1mb"
     },
     {
+      "name": "TRUST_PROXY_CIDRS",
+      "type": "string",
+      "group": "http",
+      "description": "Comma-separated trusted proxy IP addresses or CIDRs; empty ignores forwarded headers. Configure only actual proxy peers.",
+      "default": ""
+    },
+    {
       "name": "CORS_ORIGINS",
       "type": "string",
       "group": "cors",

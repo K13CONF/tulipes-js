@@ -61,6 +61,7 @@ jobs:
           diff "$RUNNER_TEMP/scaffold/tests/app.test.ts" example/tests/app.test.ts
           diff "$RUNNER_TEMP/scaffold/vitest.config.ts" example/vitest.config.ts
           diff "$RUNNER_TEMP/scaffold/config/routes.ts" example/config/routes.ts
+          diff -r "$RUNNER_TEMP/scaffold/nginx" example/nginx
       - uses: actions/upload-artifact@v4
         with:
           name: release-packages

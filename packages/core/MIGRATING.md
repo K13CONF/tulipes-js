@@ -11,6 +11,21 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — explicit production proxy trust
+
+Update security's `meta.variables.json`, route factory and new `helpers/proxy.ts`,
+plus the nginx templates. `TRUST_PROXY_CIDRS` defaults to empty, ignoring forwarded
+headers. For the supplied nginx-to-local-IPv4-backend topology, set it to
+`127.0.0.1/32`. List actual proxy addresses/CIDRs for other deployments; boolean
+values, hop counts, named aliases and `/0` ranges are not accepted. Changes require
+a restart and are validated during runtime boot, not offline spec generation.
+
+The nginx templates now overwrite forwarded IP/host/protocol headers for a single
+public ingress. Replace previous blanket `trust proxy=true` or
+`config.http.trustProxy` advice. Multi-proxy deployments must align header handling
+and explicit peer ranges at each layer. Sessions and audits use the resolved IP;
+rate limiting remains subsequent S08 work.
+
 ## Unreleased — durable production settings audits
 
 Update the settings controller and audit helper together, add the generated
