@@ -7,6 +7,8 @@ import { defineRoutes } from "@tulipes/core/http";
 export default defineRoutes(({ app, runtime }) => {
   const security = runtime(async ({ Environment, mode }) => {
     const { corsOptions, helmetOptions } = await import("../helpers/hardening.js");
+    const { trustedProxies } = await import("../helpers/proxy.js");
+    app.set("trust proxy", trustedProxies(String(Environment.get("TRUST_PROXY_CIDRS"))));
     const { logger } = await import("@app/core");
     return {
       headers: helmet(helmetOptions(Environment)),

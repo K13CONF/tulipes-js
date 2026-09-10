@@ -9,6 +9,7 @@ let handle: BootHandle;
 let base: string;
 beforeAll(async () => {
   vi.stubEnv("PORT", "0");
+  vi.stubEnv("TRUST_PROXY_CIDRS", "127.0.0.1/32,::1/128");
   if (!process.env.TEST_MONGO_URI || !process.env.TEST_REDIS_URL) {
     throw new Error("Tests require dedicated TEST_MONGO_URI and TEST_REDIS_URL services");
   }
@@ -443,4 +444,22 @@ test("ordinary administrators cannot reveal settings secrets or create an audit 
   await handle.ctx.models!.get("User").updateOne({ _id: user.userId }, { role: "admin" });
   expect((await get("/api/v1/settings/variables/AUTH_ADMIN_PASSWORD?reveal=true", user.access_token)).status).toBe(403);
   expect(await handle.ctx.models!.get("AuditEvent").countDocuments({ actor: user.userId })).toBe(0);
+});
+
+test("configured proxy trust supplies the same client IP to sessions and durable audits", async () => {
+  const user = await sysadmin();
+  const headers = { "X-Forwarded-For": "203.0.113.200, 198.51.100.19" };
+  const login = await fetch(base + "/api/v1/auth/login", {
+    method: "POST", headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ email: user.email, password: user.password }),
+  });
+  expect(login.status).toBe(200);
+  const pair = tokens.parse(await login.json()).data;
+  const identity = await get("/api/v1/auth/me", pair.access_token);
+  expect(await identity.json()).toMatchObject({ data: { session: { ip: "198.51.100.19" } } });
+  const revealed = await fetch(base + "/api/v1/settings/variables/AUTH_ADMIN_PASSWORD?reveal=true", {
+    headers: { ...headers, authorization: "Bearer " + pair.access_token },
+  });
+  expect(revealed.status).toBe(200);
+  expect(await handle.ctx.models!.get("AuditEvent").findOne({ actor: user.userId }).lean()).toMatchObject({ ip: "198.51.100.19" });
 });

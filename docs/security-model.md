@@ -174,3 +174,33 @@ operators own archival, retention, storage monitoring and database access contro
 File writes and PM2 operations are not transactional with MongoDB. A later action
 failure leaves its request record, without claiming the action completed. External
 archival and completion/outcome correlation are outside this bounded correction.
+
+## S08e — Explicit proxy trust and client IPs
+
+The production security module sets Express proxy trust from `TRUST_PROXY_CIDRS`
+at runtime. Empty (the default) uses the socket peer and ignores forwarded IP,
+host and protocol headers. Configuration accepts explicit IPv4/IPv6 addresses or
+CIDRs with nonzero prefix lengths; booleans, hop counts, named subnet aliases,
+empty list entries and invalid addresses fail startup. Keep the list limited to
+actual proxy peers; allowing broad networks can still trust unintended clients.
+
+For a trusted peer, Express walks the forwarded address chain from the application
+outward and selects the nearest untrusted address. Sessions and settings audits
+both use the resulting `req.ip`. A forwarding-header value is only reliable when
+the trusted proxies construct it correctly. Hostname and protocol also use
+forwarded headers from trusted peers. See the [Express proxy guide](https://expressjs.com/en/guide/behind-proxies/).
+
+The supplied nginx templates assume one public ingress proxy to a local IPv4
+backend. They overwrite `X-Forwarded-For` with `$remote_addr`,
+`X-Forwarded-Host` with `$host`, and `X-Forwarded-Proto` with `$scheme`.
+For that exact topology, set `TRUST_PROXY_CIDRS=127.0.0.1/32` and restrict access
+to the backend port. Additional upstream proxies require an explicit trust/header
+policy in both nginx and the app; these templates do not recover client addresses
+behind another load balancer automatically. Local processes are trusted when the
+loopback peer is trusted.
+
+Retained Express HTTP tests cover direct/untrusted peers, spoofed earlier entries,
+trusted intermediate hops, IPv6/mapped IPv4 and invalid configuration. The packed
+app test checks that session origins and audit records agree on the selected IP.
+This establishes IP handling for subsequent rate-limit work; it does not add rate
+limits. Live nginx deployment/topology validation remains an operator check.

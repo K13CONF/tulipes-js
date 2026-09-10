@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08d locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08e locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -72,7 +72,7 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 ## S08 change sets
 
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
-committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`.
+committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`.
 
 ### S08a — PM2 target scope
 
@@ -218,3 +218,38 @@ responsibilities; request records do not prove successful completion or prevent
 tampering by trusted operators. Remaining S08 work: proxy/IP/rate limits, file and
 streaming bounds, restart response delivery, cookie/CSRF guidance and refresh
 theft-response/family-revocation policy.
+
+### S08e — Explicit proxy trust and client IPs
+
+This increment handles the proxy/IP portion of the next S08 item; rate limits
+remain the following change set. The production security module now consumes
+`TRUST_PROXY_CIDRS` at runtime, defaults to direct-peer handling, and validates
+explicit addresses/CIDRs. It rejects implicit blanket/hop-count/alias settings.
+Session origins and audit IPs share Express's nearest-untrusted-address resolution.
+
+The single-ingress nginx templates now overwrite forwarded IP, host and protocol
+headers and replace incorrect blanket-trust guidance with explicit local-peer
+configuration. Generated templates and reference files are kept in parity; CI now
+retains nginx-template parity alongside modules, tests and route configuration.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- All 143 framework/spec tests passed, including 16 new proxy tests covering
+  actual Express HTTP handling, forged earlier chain entries, untrusted sockets,
+  explicit multi-hop trust, IPv6/mapped IPv4 and invalid configuration.
+- All 24 reference app tests passed with temporary MongoDB/Redis and no skips,
+  including configured session/audit IP agreement. Coverage floors stayed unchanged.
+- Package, example and test typechecks passed after typing the proxy harness's
+  JSON response. Builds and generated/reference module/test/config/nginx parity
+  passed.
+- Packed production passed all 24 generated app tests, typechecks, runtime/offline
+  specs, backend/shutdown, worker and isolated PM2 checks.
+- Evidence: ignored `reports/s08e-{proxy-tests,integration,types,test-types,parity,artifacts,packed}.log`
+  and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
+
+No live nginx binary is available on this runner; runtime topology and nginx
+deployment validation remain external.
+
+No rate limiter, provider extraction or deployment is added here. Remaining S08
+work: rate limits, file and streaming bounds, restart response delivery,
+cookie/CSRF guidance and refresh theft-response/family-revocation policy.
