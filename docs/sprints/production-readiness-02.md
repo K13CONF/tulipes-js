@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08c locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08d locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -72,7 +72,7 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 ## S08 change sets
 
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
-committed as `01f3f72`; S08b as `8d6f287`.
+committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`.
 
 ### S08a — PM2 target scope
 
@@ -179,3 +179,42 @@ transaction/replica-set requirement, provider extraction or token-format change 
 included. Remaining S08 work: audit durability/filtering, proxy/IP/rate limits,
 file and streaming bounds, restart response delivery, and cookie/CSRF guidance.
 Refresh theft-response/family-revocation policy also remains open.
+
+### S08d — Durable settings audit before action
+
+The previous helper used a filterable `warn` log with no persistence acknowledgment
+and recorded file mutations after applying them. Six regressions reproduced absent
+records, unblocked reveals/mutations/restart attempts on sink failure, and changes
+that skipped the acknowledgment barrier.
+
+The new settings AuditEvent model stores allowlisted request metadata in
+`settings_audit_events`. The helper awaits majority/journal acknowledgment before
+declared secret reveals, environment or translation writes, and restart attempts.
+Unavailable storage returns a sanitized 503 before the action. Ordinary log levels
+and destinations cannot suppress these records. Values, translation contents and
+arbitrary details are omitted; these records describe requests, not completion.
+Reference code, generated model/dependency/controller/helper and translations are
+updated together, with migration instructions for custom callers and operators.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- Six cases failed against the previous logger-based helper. All 23 reference app
+  tests now pass, including seven new cases for logging thresholds, write concern,
+  all four sink-failure paths, delayed acknowledgment, secret omission and the
+  admin/sysadmin boundary. File-write tests use disposable paths.
+- All 127 framework/spec tests passed with temporary MongoDB and Redis, no skips;
+  coverage floors remained unchanged. Package, example and test typechecks passed.
+- Builds and generated/reference module/test/config parity passed. Parity caught
+  a newline-escaping error in the generated test template, corrected before the
+  final packed run.
+- Packed production passed all 23 generated app tests, typechecks, runtime/offline
+  specs, backend/shutdown, worker and isolated PM2 checks.
+- Evidence: ignored `reports/s08d-{red,green,integration,types,parity,artifacts,packed}.log`
+  and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
+
+No audit browsing service, automatic retention, external archive or transactional
+file/PM2 operation is added. Database access, archival and retention remain operator
+responsibilities; request records do not prove successful completion or prevent
+tampering by trusted operators. Remaining S08 work: proxy/IP/rate limits, file and
+streaming bounds, restart response delivery, cookie/CSRF guidance and refresh
+theft-response/family-revocation policy.

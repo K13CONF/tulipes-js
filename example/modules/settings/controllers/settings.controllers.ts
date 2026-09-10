@@ -83,7 +83,7 @@ export class SettingsController {
       if (!found) throw new HttpError(404, "noSuchVariable", { field: "name" });
 
       if (reveal && found.isSecret) {
-        audit(this.ctx, req, "variable.revealed", { variable: name });
+        await audit(this.ctx, req, { action: "variable.reveal_requested", variable: name });
       }
 
       res.respond({ data: describeVariable(found) });
@@ -115,6 +115,7 @@ export class SettingsController {
         throw new HttpError(422, coerced.reason, { field: "value", code: "INVALID_VALUE" });
       }
 
+      await audit(this.ctx, req, { action: "variable.change_requested", variable: name });
       const { replaced } = writeVariable(this.ctx.Environment.envFile, name, value);
 
       // A container-injected variable outranks the file on the next boot
@@ -122,12 +123,6 @@ export class SettingsController {
       // live makes the change real for THIS process — and only this one.
       const shadowed = found.source === "process.env";
       if (shadowed) process.env[name] = value;
-
-      audit(this.ctx, req, "variable.changed", {
-        variable: name,
-        redacted: found.isSecret,
-        ...(found.isSecret ? {} : { from: found.value, to: coerced.value }),
-      });
 
       res.respond({
         data: {
@@ -165,13 +160,13 @@ export class SettingsController {
       if (!existsSync(file)) throw new HttpError(404, "noSuchLocale", { field: "locale" });
 
       const { translations } = req.body as { translations: Record<string, unknown> };
-      writeFileSync(file, `${JSON.stringify(translations, null, 2)}\n`);
-
-      audit(this.ctx, req, "i18n.changed", {
+      await audit(this.ctx, req, {
+        action: "i18n.change_requested",
         module,
         locale,
         keys: Object.keys(translations).length,
       });
+      writeFileSync(file, `${JSON.stringify(translations, null, 2)}\n`);
 
       // i18next loaded its resources at boot, so this file is not consulted
       // again until the process restarts.
@@ -195,7 +190,7 @@ export class SettingsController {
         });
       }
 
-      audit(this.ctx, req, "reboot.requested", { targets: targets ?? "all" });
+      await audit(this.ctx, req, { action: "reboot.requested", target_count: targets?.length ?? 0 });
 
       const outcome = await restart(targets ?? []);
       res.respond({ data: outcome });

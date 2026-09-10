@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Persist settings audit requests with majority/journal acknowledgment before
+  secret reveals, file/environment changes and restarts. Fail closed on audit
+  errors, independently of logging thresholds; omit values from audit records.
+
 - Bind production sessions to an atomically written credential version, closing
   delayed login/password-change races and preserving revocation when cleanup fails.
   Existing sessions require login again; legacy credentials upgrade on login.

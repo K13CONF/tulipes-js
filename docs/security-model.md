@@ -144,3 +144,33 @@ verified hash still matching. Existing sessions without a version require login
 again. Deploy all auth helpers/controllers and models together; old running code
 does not enforce the new check. `User.tokens_valid_from` is retained in the schema
 for existing data but is no longer read or advanced by the starter's auth flow.
+
+## S08d — Durable settings audit before action
+
+The settings controller awaits an `AuditEvent` insert before a declared secret
+reveal, environment-file change, translation-file change or restart attempt.
+Records live in MongoDB's `settings_audit_events` collection, independently of
+`LOG_LEVEL`, console/file destinations and log-stream filtering. Each insert
+requires majority acknowledgment and journaling, with a 5-second write-concern
+timeout. That timeout does not bound connection/server-selection delays.
+
+If the audit model is unavailable or its write fails, the endpoint returns
+`AUDIT_UNAVAILABLE` (503) before sending the secret, writing a file, changing the
+process environment or calling PM2. Sink errors are not included in the response.
+An uncertain acknowledgment can leave a stored record for an action that was
+blocked; records explicitly describe requests, not successful completion.
+
+The allowlisted fields identify the action, authenticated actor/role, observed IP,
+environment, process mode, timestamp, variable or module/locale, and counts. No
+old/new variable value, translation content, arbitrary details or raw restart
+target names are stored. A zero restart target count means the default selection
+of all verified application processes. IP remains informational until deployment
+proxy trust is reviewed. Ordinary administrators remain outside the settings ACL.
+
+The application only inserts these records; it does not expose an audit mutation
+or browsing API. This is not a tamper-proof store: trusted application/database
+operators can alter it. No automatic TTL or retention deletion is configured;
+operators own archival, retention, storage monitoring and database access controls.
+File writes and PM2 operations are not transactional with MongoDB. A later action
+failure leaves its request record, without claiming the action completed. External
+archival and completion/outcome correlation are outside this bounded correction.

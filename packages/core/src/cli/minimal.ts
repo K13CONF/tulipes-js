@@ -22,6 +22,7 @@ beforeAll(async () => {
   vi.stubEnv("JWT_REFRESH_SECRET", randomBytes(32).toString("hex"));
   vi.stubEnv("AUTH_ADMIN_EMAIL", "test-admin@example.test");
   vi.stubEnv("AUTH_ADMIN_PASSWORD", randomBytes(32).toString("hex"));
+  vi.stubEnv("LOG_LEVEL", "fatal");
   vi.stubEnv("LOG_FILE", "false");
   vi.stubEnv("LOG_CONSOLE", "false");` : ''}
   handle = await boot({ rootDir: fileURLToPath(new URL("../", import.meta.url)), appEnv: "test", handleSignals: false });
@@ -316,6 +317,136 @@ test("a legacy login cannot upgrade credentials replaced while its verification 
     await pending;
     spy.mockRestore();
   }
+});
+
+async function sysadmin() {
+  const user = await account();
+  await handle.ctx.models!.get("User").updateOne({ _id: user.userId }, { role: "sysadmin" });
+  return user;
+}
+
+async function settingsFiles(run: (files: { env: string; locale: string }) => Promise<void>) {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await mkdtemp(join(tmpdir(), "tulipes-settings-test-"));
+  const env = join(root, ".env.test");
+  const locale = join(root, "i18n", "en.json");
+  const manifest = handle.ctx.modules.find(entry => entry.name === "settings")!;
+  const originalDir = manifest.dir;
+  const originalEnv = handle.ctx.Environment.envFile;
+  const originalPassword = process.env.AUTH_ADMIN_PASSWORD;
+  await mkdir(join(root, "i18n"));
+  await writeFile(env, "# unchanged\\n");
+  await writeFile(locale, "{}\\n");
+  // Route real file operations into disposable files, never the reference app.
+  Object.defineProperty(handle.ctx.Environment, "envFile", { value: env });
+  Object.defineProperty(manifest, "dir", { value: root });
+  try { await run({ env, locale }); }
+  finally {
+    Object.defineProperty(handle.ctx.Environment, "envFile", { value: originalEnv });
+    Object.defineProperty(manifest, "dir", { value: originalDir });
+    if (originalPassword === undefined) delete process.env.AUTH_ADMIN_PASSWORD;
+    else process.env.AUTH_ADMIN_PASSWORD = originalPassword;
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+async function put(path: string, body: unknown, token: string) {
+  return fetch(base + path, { method: "PUT", headers: { "content-type": "application/json", authorization: "Bearer " + token }, body: JSON.stringify(body) });
+}
+
+test("secret reveal persists an acknowledged audit even with fatal-only logging", async () => {
+  const user = await sysadmin();
+  const Audit = handle.ctx.models!.get("AuditEvent");
+  const insert = vi.spyOn(Audit.collection, "insertOne");
+  try {
+    const response = await get("/api/v1/settings/variables/AUTH_ADMIN_PASSWORD?reveal=true", user.access_token);
+    expect(response.status).toBe(200);
+    const body = z.object({ data: z.object({ value: z.string() }) }).parse(await response.json());
+    expect(body.data.value === process.env.AUTH_ADMIN_PASSWORD).toBe(true);
+    const event = await Audit.findOne({ actor: user.userId }).lean();
+    expect(event).toMatchObject({ action: "variable.reveal_requested", actor_role: "sysadmin", variable: "AUTH_ADMIN_PASSWORD" });
+    expect(JSON.stringify(event).includes(body.data.value)).toBe(false);
+    expect(insert.mock.calls[0]?.[1]).toMatchObject({ w: "majority", j: true, wtimeout: 5000 });
+  } finally { insert.mockRestore(); }
+});
+
+test.each(["reveal", "variable", "translations", "reboot"])("audit failure blocks %s without exposing sink errors or changing files", async (action) => {
+  const user = await sysadmin();
+  const canary = randomBytes(24).toString("hex");
+  const Audit = handle.ctx.models!.get("AuditEvent");
+  const insert = vi.spyOn(Audit.collection, "insertOne").mockRejectedValue(new Error(canary));
+  // Prevent a real daemon connection even when running this test against the bug.
+  const specifier = "pm2";
+  const pm2 = (await import(specifier)).default;
+  const connect = vi.spyOn(pm2, "connect").mockImplementation(() => { throw new Error("unexpected restart"); });
+  const oldHome = process.env.PM2_HOME;
+  process.env.PM2_HOME = "/unused-settings-test";
+  try {
+    await settingsFiles(async files => {
+      const { readFile } = await import("node:fs/promises");
+      const oldPassword = process.env.AUTH_ADMIN_PASSWORD;
+      const response = action === "reveal"
+        ? await get("/api/v1/settings/variables/AUTH_ADMIN_PASSWORD?reveal=true", user.access_token)
+        : action === "variable"
+          ? await put("/api/v1/settings/variables/AUTH_ADMIN_PASSWORD", { value: canary }, user.access_token)
+          : action === "translations"
+            ? await put("/api/v1/settings/i18n/settings/en", { translations: { text: canary } }, user.access_token)
+            : await post("/api/v1/settings/reboot", {}, user.access_token);
+      expect.soft(response.status).toBe(503);
+      const body = await response.text();
+      expect.soft(body.includes(canary)).toBe(false);
+      expect.soft(body.includes(oldPassword!)).toBe(false);
+      expect.soft(await readFile(files.env, "utf8")).toBe("# unchanged\\n");
+      expect.soft(await readFile(files.locale, "utf8")).toBe("{}\\n");
+      expect.soft(process.env.AUTH_ADMIN_PASSWORD === oldPassword).toBe(true);
+      expect.soft(connect).not.toHaveBeenCalled();
+    });
+  } finally {
+    insert.mockRestore(); connect.mockRestore();
+    if (oldHome === undefined) delete process.env.PM2_HOME;
+    else process.env.PM2_HOME = oldHome;
+  }
+});
+
+test("settings mutation waits for audit acknowledgment and stores no old or new value", async () => {
+  const user = await sysadmin();
+  const Audit = handle.ctx.models!.get("AuditEvent");
+  const insert = Audit.collection.insertOne.bind(Audit.collection);
+  const entered = barrier();
+  const release = barrier();
+  const spy = vi.spyOn(Audit.collection, "insertOne").mockImplementationOnce(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return insert(...args);
+  });
+  try {
+    await settingsFiles(async files => {
+      const { readFile } = await import("node:fs/promises");
+      const value = randomBytes(24).toString("hex");
+      const before = process.env.AUTH_ADMIN_PASSWORD!;
+      const pending = put("/api/v1/settings/variables/AUTH_ADMIN_PASSWORD", { value }, user.access_token);
+      try {
+        await Promise.race([entered.promise, pending.then(() => { throw new Error("Mutation skipped the audit barrier"); })]);
+        expect(await readFile(files.env, "utf8")).toBe("# unchanged\\n");
+        expect(process.env.AUTH_ADMIN_PASSWORD === before).toBe(true);
+        release.resolve();
+        expect((await pending).status).toBe(200);
+        expect((await readFile(files.env, "utf8")).includes(value)).toBe(true);
+        const event = await Audit.findOne({ actor: user.userId }).lean();
+        expect(event).toMatchObject({ action: "variable.change_requested", variable: "AUTH_ADMIN_PASSWORD" });
+        expect(JSON.stringify(event).includes(value) || JSON.stringify(event).includes(before)).toBe(false);
+      } finally { release.resolve(); await pending; }
+    });
+  } finally { spy.mockRestore(); }
+});
+
+test("ordinary administrators cannot reveal settings secrets or create an audit event", async () => {
+  const user = await account();
+  await handle.ctx.models!.get("User").updateOne({ _id: user.userId }, { role: "admin" });
+  expect((await get("/api/v1/settings/variables/AUTH_ADMIN_PASSWORD?reveal=true", user.access_token)).status).toBe(403);
+  expect(await handle.ctx.models!.get("AuditEvent").countDocuments({ actor: user.userId })).toBe(0);
 });
 ` : `
 test("health needs no external infrastructure", async () => {
