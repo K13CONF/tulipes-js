@@ -20,6 +20,7 @@ export interface SessionAttrs {
   _id: Types.ObjectId;
   sid: string;
   user: Types.ObjectId;
+  credential_version: string;
   refresh_jti: string;
   ip?: string;
   user_agent?: string;
@@ -45,4 +46,12 @@ export interface CredentialDoc {
   _id: Types.ObjectId;
   user: Types.ObjectId;
   password_hash: string;
+  /** Missing only on credentials created before versioned sessions. */
+  version?: string;
+}
+
+/** A local-password verification result, kept separate from the public user. */
+export interface PasswordIdentity {
+  user: UserDoc;
+  credentialVersion: string;
 }

@@ -4,7 +4,7 @@ import type { Ctx } from "@tulipes/core/boot";
 import { HttpError, ValidationError, type FieldIssue } from "@tulipes/core/http";
 
 import { auth } from "../helpers/auth.js";
-import type { UserDoc } from "../helpers/documents.js";
+import type { PasswordIdentity, UserDoc } from "../helpers/documents.js";
 import { setPassword } from "../helpers/passwords.js";
 import {
   endSession,
@@ -74,9 +74,9 @@ export class AuthController {
       }
 
       const user = await User.create({ email: normalised, role: "user" });
-      await setPassword(this.ctx, String(user._id), password!);
+      const credentialVersion = await setPassword(this.ctx, String(user._id), password!);
 
-      const tokens = await startSession(this.ctx, String(user._id), originOf(req));
+      const tokens = await startSession(this.ctx, String(user._id), credentialVersion, originOf(req));
       res.respond({
         status: 201,
         data: {
@@ -93,13 +93,14 @@ export class AuthController {
       passport.authenticate(
         "local",
         { session: false },
-        async (error: unknown, user: UserDoc | false) => {
+        async (error: unknown, identity: PasswordIdentity | false) => {
           if (error) return next(error);
           // One message for "no such user" and "wrong password" alike.
-          if (!user) return next(new HttpError(401, "invalidCredentials"));
+          if (!identity) return next(new HttpError(401, "invalidCredentials"));
+          const { user, credentialVersion } = identity;
 
           try {
-            const tokens = await startSession(this.ctx, String(user._id), originOf(req));
+            const tokens = await startSession(this.ctx, String(user._id), credentialVersion, originOf(req));
             res.respond({
               data: {
                 user: { id: String(user._id), email: user.email, role: user.role },
@@ -233,14 +234,15 @@ export class AuthController {
       const { password } = (req.body ?? {}) as { password?: string };
       this.#assertPassword(password);
 
-      // setPassword bumps the token epoch AND drops every session row,
-      // so there is nothing left to sign out here.
-      await setPassword(this.ctx, userId, password!);
+      // Capture the version written by this change, even if another change races.
+      const expectedVersion = req.auth.session?.credential_version;
+      if (!expectedVersion) throw new HttpError(401, "invalidCredentials");
+      const credentialVersion = await setPassword(this.ctx, userId, password!, expectedVersion);
 
       // Every earlier token is dead now, including the one that made this
       // request — a fresh session keeps this client signed in while the
       // other devices are signed out.
-      const tokens = await startSession(this.ctx, userId, originOf(req));
+      const tokens = await startSession(this.ctx, userId, credentialVersion, originOf(req));
       res.respond({
         data: {
           message: req.t("passwordChanged"),

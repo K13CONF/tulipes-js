@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08b locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08c locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -72,7 +72,7 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 ## S08 change sets
 
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
-committed as `01f3f72`.
+committed as `01f3f72`; S08b as `8d6f287`.
 
 ### S08a — PM2 target scope
 
@@ -132,7 +132,7 @@ Locally verified on Node 24.14.0/macOS:
 - Evidence: ignored `reports/s08b-{red,green,integration,types,parity,artifacts,packed}.log`
   and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
 
-Remaining authentication work includes deterministic login/password-change races
+At the end of S08b, remaining authentication work included deterministic login/password-change races
 (an old-password verification may finish issuing a session after the change),
 concurrent password changes, and recovery from failures between credential, epoch
 and session writes. These tests do not establish atomicity across those writes or
@@ -140,3 +140,42 @@ cancel requests already authenticated before revocation. Refresh-token reuse sti
 rejects that token without revoking the surviving family; theft-response policy
 needs explicit review. Audit, proxy/rate limits, file/stream bounds, restart response
 delivery and cookie/CSRF guidance remain open under S08.
+
+### S08c — Credential versions and password-change races
+
+Four initial HTTP regressions reproduced stale session creation and failed
+revocation writes. The correction replaces timestamp invalidation with a random
+credential version written atomically with the password hash. Sessions keep the
+version used for password verification or replacement; every access/refresh and
+session listing checks the current credential. Session creation validates after
+insertion. Cleanup targets only the replaced version, preserving sessions created
+by a later password change even when the earlier cleanup is delayed.
+The authenticated password update also compares the session's version in its
+atomic write, preventing a paused older request from overwriting a newer password.
+
+This covers delayed login, concurrent password replacement, delayed cleanup,
+credential-write failure, post-commit cleanup failure and legacy upgrade races.
+Legacy credentials upgrade conditionally on login; existing unversioned sessions
+require reauthentication. Migration instructions require coordinated auth-code
+deployment and explain the changed helper contracts and partial-write outcome.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- Four initial regressions failed against the previous implementation. A further
+  pre-write barrier reproduced stale password overwrite before its conditional
+  write was added. All 16 final reference app cases passed, including eight new
+  cases for races, write failures and legacy migration.
+- All 127 framework/spec tests passed with temporary MongoDB and Redis and no
+  skips. Coverage floors remained unchanged. Package, example and test typechecks
+  passed, along with builds and generated/reference module/test/config parity.
+- Packed production installation passed all 16 generated app tests, typechecks,
+  runtime/offline spec generation, backend/shutdown, worker and isolated PM2 checks.
+- Evidence: ignored `reports/s08c-{red,write-race-red,green,integration,types,parity,artifacts,packed}.log`
+  and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
+
+This does not cancel requests already authenticating, roll back a committed
+password when cleanup fails, or resolve uncertain database-write outcomes. No
+transaction/replica-set requirement, provider extraction or token-format change is
+included. Remaining S08 work: audit durability/filtering, proxy/IP/rate limits,
+file and streaming bounds, restart response delivery, and cookie/CSRF guidance.
+Refresh theft-response/family-revocation policy also remains open.

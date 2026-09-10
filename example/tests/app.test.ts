@@ -161,3 +161,155 @@ test("refresh racing with device revocation cannot leave a usable token pair", a
   if (refreshed.status === 200) await assertRejected(tokens.parse(await refreshed.json()).data);
   expect((await get("/api/v1/auth/me", initial.access_token)).status).toBe(200);
 });
+
+function barrier() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+test.each(["login", "password", "cleanup", "credential-write"])("a paused %s cannot create a valid session after a later password change", async (operation) => {
+  const initial = await account();
+  const firstPassword = randomBytes(24).toString("hex");
+  const latestPassword = randomBytes(24).toString("hex");
+  const collection = handle.ctx.models!.get("Session").collection;
+  const insert = collection.insertOne.bind(collection);
+  const remove = collection.deleteMany.bind(collection);
+  const credentials = handle.ctx.models!.get("Credential").collection;
+  const replace = credentials.findOneAndUpdate.bind(credentials);
+  const entered = barrier();
+  const release = barrier();
+  const spy = operation === "credential-write"
+    ? vi.spyOn(credentials, "findOneAndUpdate").mockImplementationOnce(async (...args) => {
+      entered.resolve();
+      await release.promise;
+      return replace(...args);
+    })
+    : operation === "cleanup"
+    ? vi.spyOn(collection, "deleteMany").mockImplementationOnce(async (...args) => {
+      entered.resolve();
+      await release.promise;
+      return remove(...args);
+    })
+    : vi.spyOn(collection, "insertOne").mockImplementationOnce(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return insert(...args);
+  });
+  const pending = operation === "login"
+    ? post("/api/v1/auth/login", { email: initial.email, password: initial.password })
+    : post("/api/v1/auth/password", { password: firstPassword }, initial.access_token);
+  try {
+    // The real request has verified/written its password and reached session
+    // insertion or cleanup. Complete a later change before releasing that write.
+    await Promise.race([entered.promise, pending.then(() => { throw new Error("Request never reached the session barrier"); })]);
+    let access = initial.access_token;
+    if (operation === "password" || operation === "cleanup") {
+      const login = await post("/api/v1/auth/login", { email: initial.email, password: firstPassword });
+      expect(login.status).toBe(200);
+      access = tokens.parse(await login.json()).data.access_token;
+    }
+    const changed = await post("/api/v1/auth/password", { password: latestPassword }, access);
+    expect(changed.status).toBe(200);
+    const latest = tokens.parse(await changed.json()).data;
+    release.resolve();
+    const stale = await pending;
+    expect.soft(stale.status).toBe(401);
+    if (stale.status === 200) await assertRejected(tokens.parse(await stale.json()).data);
+    expect((await get("/api/v1/auth/me", latest.access_token)).status).toBe(200);
+    expect((await post("/api/v1/auth/login", { email: initial.email, password: latestPassword })).status).toBe(200);
+  } finally {
+    release.resolve();
+    await pending;
+    spy.mockRestore();
+  }
+});
+
+test("failed session cleanup after password replacement cannot preserve old sessions", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(Math.floor(Date.now() / 1000) * 1000 + 100));
+  try {
+    const initial = await account();
+    const password = randomBytes(24).toString("hex");
+    const spy = vi.spyOn(handle.ctx.models!.get("Session").collection, "deleteMany")
+      .mockRejectedValueOnce(new Error("injected cleanup failure"));
+    try {
+      const changed = await post("/api/v1/auth/password", { password }, initial.access_token);
+      expect(changed.status).toBe(500);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await handle.ctx.models!.get("Session").countDocuments({ user: initial.userId })).toBe(1);
+    expect.soft((await get("/api/v1/auth/me", initial.access_token)).status).toBe(401);
+    expect.soft((await post("/api/v1/auth/refresh", { refresh_token: initial.refresh_token })).status).toBe(401);
+    expect((await post("/api/v1/auth/login", { email: initial.email, password: initial.password })).status).toBe(401);
+    const login = await post("/api/v1/auth/login", { email: initial.email, password });
+    expect(login.status).toBe(200);
+    const current = tokens.parse(await login.json()).data;
+    const sessions = await get("/api/v1/auth/sessions", current.access_token);
+    expect(z.object({ data: z.array(z.unknown()) }).parse(await sessions.json()).data).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a failed credential write preserves the old password and session", async () => {
+  const initial = await account();
+  const password = randomBytes(24).toString("hex");
+  const spy = vi.spyOn(handle.ctx.models!.get("Credential").collection, "findOneAndUpdate")
+    .mockRejectedValueOnce(new Error("injected credential failure"));
+  try {
+    expect((await post("/api/v1/auth/password", { password }, initial.access_token)).status).toBe(500);
+  } finally {
+    spy.mockRestore();
+  }
+  expect((await get("/api/v1/auth/me", initial.access_token)).status).toBe(200);
+  expect((await post("/api/v1/auth/refresh", { refresh_token: initial.refresh_token })).status).toBe(200);
+  expect((await post("/api/v1/auth/login", { email: initial.email, password: initial.password })).status).toBe(200);
+  expect((await post("/api/v1/auth/login", { email: initial.email, password })).status).toBe(401);
+});
+
+test("legacy credentials upgrade on login while sessions without a version require reauthentication", async () => {
+  const initial = await account();
+  const Credential = handle.ctx.models!.get("Credential");
+  const Session = handle.ctx.models!.get("Session");
+  // Use collection writes to simulate persisted data from the previous starter.
+  const credential = await Credential.findOne({ user: initial.userId }).orFail();
+  await Credential.collection.updateOne({ _id: credential._id }, { $unset: { version: "" } });
+  await Session.collection.updateMany({ user: credential.get("user") }, { $unset: { credential_version: "" } });
+  await assertRejected(initial);
+  const login = await post("/api/v1/auth/login", { email: initial.email, password: initial.password });
+  expect(login.status).toBe(200);
+  const current = tokens.parse(await login.json()).data;
+  expect((await get("/api/v1/auth/me", current.access_token)).status).toBe(200);
+  await assertRejected(initial);
+});
+
+test("a legacy login cannot upgrade credentials replaced while its verification was in flight", async () => {
+  const initial = await account();
+  const Credential = handle.ctx.models!.get("Credential");
+  const row = await Credential.findOne({ user: initial.userId }).orFail();
+  await Credential.collection.updateOne({ _id: row._id }, { $unset: { version: "" } });
+  const update = Credential.collection.updateOne.bind(Credential.collection);
+  const entered = barrier();
+  const release = barrier();
+  const spy = vi.spyOn(Credential.collection, "updateOne").mockImplementationOnce(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return update(...args);
+  });
+  const pending = post("/api/v1/auth/login", { email: initial.email, password: initial.password });
+  try {
+    await Promise.race([entered.promise, pending.then(() => { throw new Error("Login never reached the credential barrier"); })]);
+    const password = randomBytes(24).toString("hex");
+    const { setPassword } = await import("../modules/auth/helpers/passwords.js");
+    await setPassword(handle.ctx, initial.userId, password);
+    release.resolve();
+    expect((await pending).status).toBe(401);
+    expect((await post("/api/v1/auth/login", { email: initial.email, password })).status).toBe(200);
+  } finally {
+    release.resolve();
+    await pending;
+    spy.mockRestore();
+  }
+});
