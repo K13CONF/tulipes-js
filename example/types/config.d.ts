@@ -32,9 +32,9 @@ declare module "@tulipes/core/env" {
     BODY_LIMIT: string;
     /** [security] Comma-separated trusted proxy IP addresses or CIDRs; empty ignores forwarded headers. Configure only actual proxy peers. */
     TRUST_PROXY_CIDRS: string;
-    /** [security] Comma-separated browser origins allowed to call this API; "*" allows any, empty allows none (same-origin only) */
+    /** [security] Comma-separated browser origins allowed to read API responses; "*" allows any, empty allows none (same-origin only) */
     CORS_ORIGINS: string;
-    /** [security] Allow cookies and Authorization headers on cross-origin requests (cannot be combined with CORS_ORIGINS=*) */
+    /** [security] Emit Access-Control-Allow-Credentials for browser credential mode; does not enable cookie authentication or CSRF protection (cannot be combined with CORS_ORIGINS=*) */
     CORS_CREDENTIALS: boolean;
     /** [security] Strict-Transport-Security max-age in seconds; 0 disables the header (browsers only honour it over HTTPS) */
     HSTS_MAX_AGE: number;

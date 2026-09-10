@@ -62,6 +62,8 @@ jobs:
           diff "$RUNNER_TEMP/scaffold/vitest.config.ts" example/vitest.config.ts
           diff "$RUNNER_TEMP/scaffold/config/routes.ts" example/config/routes.ts
           diff -r "$RUNNER_TEMP/scaffold/nginx" example/nginx
+          diff "$RUNNER_TEMP/scaffold/docs/browser-auth.md" example/docs/browser-auth.md
+          diff packages/core/templates/browser-auth.md example/docs/browser-auth.md
       - uses: actions/upload-artifact@v4
         with:
           name: release-packages

@@ -166,6 +166,12 @@ Failures are thrown, never responded. The message is an i18n key: it gets
 translated in the module's namespace and the code derives from it, so
 `notFound` becomes `NOT_FOUND` with nothing to keep in step.
 
+## Browser authentication
+
+Read [Browser authentication and cookies](docs/browser-auth.md) before wiring
+up a browser client. The starter uses Bearer headers and JSON refresh tokens;
+CORS settings do not install cookie authentication or CSRF protection.
+
 ## Translations
 
 Each module owns its strings, and the module IS the namespace. `req.t` is

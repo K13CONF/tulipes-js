@@ -6,9 +6,19 @@ import type { Ctx } from "@tulipes/core/boot";
 import type { Auth } from "@tulipes/core/http";
 
 import { verifyPassword } from "./passwords.js";
-import { isRevoked, loadSession, touchSession, type TokenClaims } from "./tokens.js";
+import {
+  isRevoked,
+  loadSession,
+  touchSession,
+  type TokenClaims,
+} from "./tokens.js";
 import { GUEST } from "./auth.js";
-import type { CredentialDoc, PasswordIdentity, SessionDoc, UserDoc } from "./documents.js";
+import type {
+  CredentialDoc,
+  PasswordIdentity,
+  SessionDoc,
+  UserDoc,
+} from "./documents.js";
 
 /**
  * Two strategies, both stateless as far as passport is concerned
@@ -42,18 +52,27 @@ export function configurePassport(ctx: Ctx): void {
 
           const ok = await verifyPassword(password, credential.password_hash);
           if (!ok) return done(null, false);
+
           if (!credential.version) {
             // Upgrade a legacy credential only if the verified hash is unchanged.
             // A racing password change or another upgrade makes this login retry.
             const version = randomUUID();
             const upgraded = await Credential.updateOne(
-              { user: user._id, password_hash: credential.password_hash, version: { $exists: false } },
+              {
+                user: user._id,
+                password_hash: credential.password_hash,
+                version: { $exists: false },
+              },
               { $set: { version } },
             );
             if (!upgraded.matchedCount) return done(null, false);
             credential.version = version;
           }
-          return done(null, { user, credentialVersion: credential.version } satisfies PasswordIdentity);
+
+          return done(null, {
+            user,
+            credentialVersion: credential.version,
+          } satisfies PasswordIdentity);
         } catch (error) {
           return done(error as Error);
         }
@@ -64,6 +83,8 @@ export function configurePassport(ctx: Ctx): void {
   passport.use(
     new JwtStrategy(
       {
+        // Cookies and URL parameters never authenticate this starter. A cookie
+        // extractor would also need the policy described in docs/browser-auth.md.
         jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
         secretOrKey: String(ctx.Environment.get("JWT_ACCESS_SECRET")),
         passReqToCallback: false,
@@ -124,9 +145,13 @@ function touchInterval(ctx: Ctx): number {
  */
 export function authenticate(): import("express").RequestHandler {
   return (req, res, next) => {
-    passport.authenticate("jwt", { session: false }, (_err: unknown, resolved: Auth | false) => {
-      req.auth = resolved || { ...GUEST };
-      next();
-    })(req, res, next);
+    passport.authenticate(
+      "jwt",
+      { session: false },
+      (_err: unknown, resolved: Auth | false) => {
+        req.auth = resolved || { ...GUEST };
+        next();
+      },
+    )(req, res, next);
   };
 }

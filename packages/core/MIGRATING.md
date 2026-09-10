@@ -11,6 +11,20 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — browser authentication guidance
+
+Production scaffolds now include `docs/browser-auth.md`. Copy that guide when
+updating an existing app, along with the clarified security variable descriptions
+and auth/security comments. Regenerate `.env.example` with `yarn sync` so its CORS
+help matches the module declarations.
+
+The transport remains Authorization-header access tokens and JSON-body refresh
+tokens. `CORS_CREDENTIALS` controls a browser response header; it does not enable
+cookie authentication or install CSRF protection. The guide describes the controls
+and browser validation needed before an application adds cookies. New retained
+HTTP tests check cookie/query-token rejection, JSON-only refresh and absent
+Set-Cookie headers. They do not establish a browser cookie-security policy.
+
 ## Unreleased — restart acknowledgment before execution
 
 Merge settings' PM2 helper, controller and route declaration together. The reboot

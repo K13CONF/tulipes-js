@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08i locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08j locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -73,7 +73,8 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
 committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
-S08e as `bd18bd6`; S08f as `7125ca1`; S08g as `4ed321c`; S08h as `0ed912a`.
+S08e as `bd18bd6`; S08f as `7125ca1`; S08g as `4ed321c`; S08h as `0ed912a`;
+S08i as `b7d63bb`.
 
 ### S08a — PM2 target scope
 
@@ -466,3 +467,52 @@ may restart before a later failure, a timed-out command may have reached PM2, an
 self-restart can end the caller before cleanup. Cross-backend restart coordination
 and the inventory-check/command race remain deployment limitations; there is no
 rollback or completion-status endpoint. No deployment or publication is included.
+
+
+### S08j — Browser authentication and cookie/CSRF guidance
+
+The production starter now ships `docs/browser-auth.md`, linked from its README
+and mirrored in the reference app. It describes the existing Authorization-header
+access flow and JSON-body refresh contract, browser credential storage, and the
+controls needed for an application that adopts cookies. Guidance cites the Fetch
+standard, Express, MDN and OWASP, checked on 2026-09-10. Cookie authentication and
+CSRF middleware are not added by this increment.
+
+The guide covers Secure/HttpOnly/SameSite, host-only scope and cookie prefixes,
+expiration/revocation, session-bound CSRF tokens, exact-origin checks, login and
+refresh/logout coverage, and required browser/deployment tests. It distinguishes
+same-site from same-origin and CORS response access from server authorization.
+Security variable descriptions, generated env/type help and helper comments now
+make clear that CORS_CREDENTIALS does not install cookie authentication or CSRF
+protection. Auth helper formatting expands dense expressions and separates
+credential checks, legacy upgrade, identity construction and callbacks.
+
+Three retained HTTP cases verify absent Set-Cookie on register/login/refresh/logout,
+rejection of cookie-only access/logout and URL access credentials, rejection of
+cookie/URL/form/text/multipart refresh credentials without consuming the token,
+and explicit Bearer preflight/response headers with credentials disabled. A request
+from an unlisted origin still authenticates with its own valid Bearer token while
+receiving no CORS read permission, retaining the documented server boundary.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- All 210 framework/spec tests and 40 reference app tests pass with temporary
+  MongoDB/Redis and no skips. The three transport regressions passed against the
+  existing behavior; this change documents and retains that contract.
+- Coverage remains above unchanged floors: 81.89% statements, 68.7% branches,
+  86.41% functions and 84.06% lines. Package, synced reference and test typechecks,
+  builds, and generated/reference module/test/config/nginx/guide parity pass.
+- Packed production passes all 40 generated app tests, generated types,
+  deterministic offline specs with connections denied, runtime specs,
+  backend/shutdown, worker and isolated PM2 HTTP self-restart checks. The installed
+  generator carries the exact packed browser guide. Packed minimal also passes.
+- Workspace/generated dependency audits pass the existing severity gates.
+  CI now retains browser-guide parity; these local checks do not establish Linux,
+  supported Node matrix or real-browser CORS/SameSite enforcement results.
+- Evidence: ignored `reports/s08j-{boundaries,integration,app,sync,types,test-types,artifacts,parity,packed,minimal,audit}.log`,
+  `reports/s08j-workspace-runtime.jsonl` and `reports/scaffold-{production,minimal}/`.
+
+Next planned S08 item: refresh theft-response/family-revocation policy. The S08h
+stream-authorization/draining backlog remains open. Any future cookie adapter must
+retain abuse tests and browser validation for its selected policy before claiming
+that policy implemented. No provider extraction, deployment or publication is added.

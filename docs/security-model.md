@@ -36,7 +36,8 @@ Before a production pilot, review and test:
 - Audit durability for every secret reveal/update; role boundaries and omission
   of administrative modules; log redaction, file traversal and restart targets.
 - CSRF protection and cookie flags if an operator moves bearer tokens into
-  cookies. The current Authorization-header flow is not a cookie/CSRF policy.
+  cookies. See the [browser authentication guide](../example/docs/browser-auth.md)
+  for the current transport contract and cookie-adaptation requirements.
 - TLS, credential provisioning, backup/restore, process isolation, least-privilege
   database access, dependency updates and load/recovery behavior.
 
@@ -204,3 +205,19 @@ trusted intermediate hops, IPv6/mapped IPv4 and invalid configuration. The packe
 app test checks that session origins and audit records agree on the selected IP.
 This establishes IP handling for subsequent rate-limit work; it does not add rate
 limits. Live nginx deployment/topology validation remains an operator check.
+
+
+## S08j — Browser authentication and cookie adaptation
+
+The reference and generated production apps carry the same
+[browser authentication guide](../example/docs/browser-auth.md). Access credentials
+come from the Authorization header; refresh credentials come from a JSON body.
+Cookie and URL credentials are ignored, and auth responses do not set cookies.
+CORS controls browser response access rather than rejecting incoming requests.
+Its credential flag does not install authentication or CSRF middleware.
+
+The guide covers client credential storage, cookie attributes, session-bound CSRF
+validation, exact-origin checks, login/refresh/logout coverage and browser checks
+required for an application that adopts cookies. HTTP regressions retain the
+existing transport boundaries; they do not simulate browser CORS or SameSite.
+Refresh theft-response policy remains the next S08 change set.
