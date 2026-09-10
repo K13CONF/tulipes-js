@@ -14,6 +14,8 @@ let base: string;
 beforeAll(async () => {
   vi.stubEnv("PORT", "0");
   ${production ? 'vi.stubEnv("TRUST_PROXY_CIDRS", "127.0.0.1/32,::1/128");' : ''}
+  ${production ? 'vi.stubEnv("CORS_ORIGINS", "https://console.example.test");' : ''}
+  ${production ? 'vi.stubEnv("CORS_CREDENTIALS", "false");' : ''}
   ${production ? `if (!process.env.TEST_MONGO_URI || !process.env.TEST_REDIS_URL) {
     throw new Error("Tests require dedicated TEST_MONGO_URI and TEST_REDIS_URL services");
   }
@@ -94,6 +96,141 @@ async function assertRejected(pair: { access_token: string; refresh_token: strin
   expect((await get("/api/v1/auth/me", pair.access_token)).status).toBe(401);
   expect((await post("/api/v1/auth/refresh", { refresh_token: pair.refresh_token })).status).toBe(401);
 }
+
+test("browser credentials use headers and JSON without issuing cookies", async () => {
+  const credentials = {
+    email: randomBytes(12).toString("hex") + "@example.test",
+    password: randomBytes(24).toString("hex"),
+  };
+  const registered = await post("/api/v1/auth/register", credentials);
+
+  expect(registered.status).toBe(201);
+  expect(registered.headers.has("set-cookie")).toBe(false);
+
+  const login = await post("/api/v1/auth/login", credentials);
+  expect(login.status).toBe(200);
+  expect(login.headers.has("set-cookie")).toBe(false);
+
+  const initial = tokens.parse(await login.json()).data;
+  const cookie = "access_token=" + initial.access_token;
+
+  // A valid token in an ambient cookie or URL must not establish identity.
+  const cookieOnly = await fetch(base + "/api/v1/auth/me", {
+    headers: { cookie },
+  });
+  const queryOnly = await fetch(
+    base + "/api/v1/auth/me?access_token=" + initial.access_token,
+  );
+
+  expect(cookieOnly.status).toBe(401);
+  expect(queryOnly.status).toBe(401);
+  expect((await get("/api/v1/auth/me", initial.access_token)).status).toBe(200);
+
+  // Cookie-only logout must also leave the real session usable.
+  const logoutWithCookie = await fetch(base + "/api/v1/auth/logout", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: "{}",
+  });
+
+  expect(logoutWithCookie.status).toBe(401);
+
+  const refreshed = await post("/api/v1/auth/refresh", {
+    refresh_token: initial.refresh_token,
+  });
+  expect(refreshed.status).toBe(200);
+  expect(refreshed.headers.has("set-cookie")).toBe(false);
+
+  const rotated = tokens.parse(await refreshed.json()).data;
+  const logout = await post("/api/v1/auth/logout", {}, rotated.access_token);
+
+  expect(logout.status).toBe(200);
+  expect(logout.headers.has("set-cookie")).toBe(false);
+  await assertRejected(rotated);
+});
+
+test("refresh ignores cookie and URL credentials and does not parse simple form bodies", async () => {
+  const initial = await account();
+  const endpoint = base + "/api/v1/auth/refresh";
+  const refresh = initial.refresh_token;
+  const attempts = [
+    await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: "refresh_token=" + refresh,
+      },
+      body: "{}",
+    }),
+    await fetch(endpoint + "?refresh_token=" + refresh, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    }),
+    await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ refresh_token: refresh }),
+    }),
+    await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ refresh_token: refresh }),
+    }),
+  ];
+
+  const form = new FormData();
+  form.set("refresh_token", refresh);
+  attempts.push(await fetch(endpoint, { method: "POST", body: form }));
+
+  for (const response of attempts) {
+    expect(response.status).toBe(422);
+    expect(response.headers.has("set-cookie")).toBe(false);
+  }
+
+  // Rejections must not consume the credential that was carried incorrectly.
+  const accepted = await post("/api/v1/auth/refresh", { refresh_token: refresh });
+  expect(accepted.status).toBe(200);
+});
+
+test("CORS permits explicit Bearer headers without enabling cookie credentials", async () => {
+  const origin = "https://console.example.test";
+  const endpoint = base + "/api/v1/auth/me";
+  const preflight = await fetch(endpoint, {
+    method: "OPTIONS",
+    headers: {
+      origin,
+      "access-control-request-method": "GET",
+      "access-control-request-headers": "authorization",
+    },
+  });
+
+  expect(preflight.status).toBe(204);
+  expect(preflight.headers.get("access-control-allow-origin")).toBe(origin);
+  expect(preflight.headers.get("access-control-allow-headers")).toBe("authorization");
+  expect(preflight.headers.has("access-control-allow-credentials")).toBe(false);
+
+  const initial = await account();
+  const allowed = await fetch(endpoint, {
+    headers: { origin, authorization: "Bearer " + initial.access_token },
+  });
+
+  expect(allowed.status).toBe(200);
+  expect(allowed.headers.get("access-control-allow-origin")).toBe(origin);
+  expect(allowed.headers.has("access-control-allow-credentials")).toBe(false);
+
+  // Node does not enforce CORS. This proves CORS is not server authorization:
+  // a valid Bearer token still works, while the origin gets no read permission.
+  const unlisted = await fetch(endpoint, {
+    headers: {
+      origin: "https://unlisted.example.test",
+      authorization: "Bearer " + initial.access_token,
+    },
+  });
+
+  expect(unlisted.status).toBe(200);
+  expect(unlisted.headers.has("access-control-allow-origin")).toBe(false);
+});
 
 test("session expiry rejects access and refresh before TTL cleanup and hides the device", async () => {
   const initial = await account();

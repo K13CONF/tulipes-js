@@ -35,6 +35,13 @@ try {
   const bin = join(cliRoot, 'node_modules/@tulipes/core/dist/cli/bin.js');
   const app = join(workspace, 'app');
   run(process.execPath, [bin, 'init', app, '--preset', preset], workspace);
+  if (preset === 'production') {
+    // The installed generator must carry the browser policy with its auth code.
+    const guide = readFileSync(join(app, 'docs/browser-auth.md'), 'utf8');
+    const template = readFileSync(join(cliRoot, 'node_modules/@tulipes/core/templates/browser-auth.md'), 'utf8');
+    if (guide !== template) throw new Error('Generated browser authentication guide differs from the packed template');
+  }
+
   const pkgFile = join(app, 'package.json');
   const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'));
   pkg.resolutions = { ...pkg.resolutions, ...resolutions };

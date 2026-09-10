@@ -18,14 +18,14 @@
       "name": "CORS_ORIGINS",
       "type": "string",
       "group": "cors",
-      "description": "Comma-separated browser origins allowed to call this API; \"*\" allows any, empty allows none (same-origin only)",
+      "description": "Comma-separated browser origins allowed to read API responses; \"*\" allows any, empty allows none (same-origin only)",
       "default": ""
     },
     {
       "name": "CORS_CREDENTIALS",
       "type": "boolean",
       "group": "cors",
-      "description": "Allow cookies and Authorization headers on cross-origin requests (cannot be combined with CORS_ORIGINS=*)",
+      "description": "Emit Access-Control-Allow-Credentials for browser credential mode; does not enable cookie authentication or CSRF protection (cannot be combined with CORS_ORIGINS=*)",
       "default": false
     },
     {
