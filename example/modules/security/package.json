@@ -17,6 +17,8 @@
     "cors": "^2",
     "express": "^5",
     "helmet": "^8",
+    "ioredis": "^5",
+    "ipaddr.js": "^2.2.0",
     "pino-http": "^10"
   },
   "devDependencies": {

@@ -3,14 +3,18 @@ import cors from "cors";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { defineRoutes } from "@tulipes/core/http";
+import { apiPrefix } from "../../../config/routes.js";
 
 export default defineRoutes(({ app, runtime }) => {
   const security = runtime(async ({ Environment, mode }) => {
     const { corsOptions, helmetOptions } = await import("../helpers/hardening.js");
     const { trustedProxies } = await import("../helpers/proxy.js");
     app.set("trust proxy", trustedProxies(String(Environment.get("TRUST_PROXY_CIDRS"))));
+    const { configuredRateLimits } = await import("../helpers/rate-limit.js");
+    const limits = configuredRateLimits(Environment);
     const { logger } = await import("@app/core");
     return {
+      limits,
       headers: helmet(helmetOptions(Environment)),
       cors: cors(corsOptions(Environment)),
       logging: pinoHttp({
@@ -26,9 +30,11 @@ export default defineRoutes(({ app, runtime }) => {
       json: express.json({ limit: String(Environment.get("BODY_LIMIT")) }),
     };
   });
-  // Header policy, CORS, logging and parsing retain their Express order.
+  // Quotas run before body parsing and Passport, using the configured proxy policy.
   app.use(security(value => value.headers));
   app.use(security(value => value.cors));
   app.use(security(value => value.logging));
+  app.use(`${apiPrefix}/auth`, security(value => value.limits.auth));
+  app.use(`${apiPrefix}/settings`, security(value => value.limits.settings));
   app.use(security(value => value.json));
 });

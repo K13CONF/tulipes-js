@@ -30,12 +30,24 @@ declare module "@tulipes/core/env" {
     LOG_RETENTION_FILES: number;
     /** [security] Largest JSON request body express will parse, e.g. "1mb"; nginx client_max_body_size must be at least this */
     BODY_LIMIT: string;
+    /** [security] Comma-separated trusted proxy IP addresses or CIDRs; empty ignores forwarded headers. Configure only actual proxy peers. */
+    TRUST_PROXY_CIDRS: string;
     /** [security] Comma-separated browser origins allowed to call this API; "*" allows any, empty allows none (same-origin only) */
     CORS_ORIGINS: string;
     /** [security] Allow cookies and Authorization headers on cross-origin requests (cannot be combined with CORS_ORIGINS=*) */
     CORS_CREDENTIALS: boolean;
     /** [security] Strict-Transport-Security max-age in seconds; 0 disables the header (browsers only honour it over HTTPS) */
     HSTS_MAX_AGE: number;
+    /** [security] Stable identifier shared by replicas; use a different value for unrelated apps on the same Redis database */
+    RATE_LIMIT_NAMESPACE: string;
+    /** [security] Fixed request window in milliseconds; positive integer, applied on restart */
+    RATE_LIMIT_WINDOW_MS: number;
+    /** [security] Combined login, register and password POST attempts per client per window; positive integer */
+    AUTH_RATE_LIMIT: number;
+    /** [security] All auth requests per client per window, including refresh and credential attempts; positive integer */
+    AUTH_SESSION_RATE_LIMIT: number;
+    /** [security] All settings requests per client per window; positive integer */
+    SETTINGS_RATE_LIMIT: number;
     /** [auth] Signing key for short-lived access tokens */
     JWT_ACCESS_SECRET: string;
     /** [auth] Signing key for refresh tokens; separate from the access key so leaking one cannot mint the other */
@@ -61,6 +73,9 @@ declare module "@tulipes/core/config" {
   interface GlobalConfig {
     "core"?: Awaited<
       ReturnType<(typeof import("./../modules/core/module.config.js"))["default"]>
+    >;
+    "security"?: Awaited<
+      ReturnType<(typeof import("./../modules/security/module.config.js"))["default"]>
     >;
     "auth"?: Awaited<
       ReturnType<(typeof import("./../modules/auth/module.config.js"))["default"]>

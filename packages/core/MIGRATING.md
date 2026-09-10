@@ -11,6 +11,56 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — shared production request limits
+
+Update security's package dependencies (`ioredis` and `ipaddr.js`), environment
+metadata, route factory, new `helpers/rate-limit.ts` and `module.config.ts`
+shutdown hook together. Generated production apps include these changes. Existing
+apps must merge their own route/config customizations. Minimal apps are unaffected.
+
+The production starter uses Redis fixed windows before JSON parsing and Passport:
+
+| Policy | Default requests per 60 seconds | Scope |
+|---|---:|---|
+| `AUTH_RATE_LIMIT` | 20 | Combined POST login, register and password attempts |
+| `AUTH_SESSION_RATE_LIMIT` | 120 | Every request under the auth prefix, including refresh, reads, logout and credential attempts |
+| `SETTINGS_RATE_LIMIT` | 60 | Every request under the settings prefix, including reveals, writes, restarts and stream openings |
+
+Successful, failed and malformed requests consume quotas. Credential requests also
+consume the broad auth quota. CORS preflights handled by CORS do not reach the
+limiter. A denied request returns the normal error envelope with 429,
+`TOO_MANY_REQUESTS` and a whole-second `Retry-After`. Redis failures return a
+sanitized 503 `RATE_LIMIT_UNAVAILABLE` before the protected action. There is no
+in-process fallback. Initial connection waiting and Redis commands each have a
+one-second bound; reconnection continues in the background. Unrelated public
+routes are unaffected. A command that timed out may still have consumed quota.
+
+Set `RATE_LIMIT_NAMESPACE` to a stable identifier shared by all replicas of one
+app and distinct from unrelated apps on the same Redis database. The default is
+`tulipes`; the application environment is appended automatically. Quotas and
+`RATE_LIMIT_WINDOW_MS` must be positive integers up to 2147483647. Apply the same
+settings to every replica and restart them together; existing windows expire
+naturally. The namespace accepts letters, digits, colon, underscore and hyphen,
+with a maximum of 128 characters including the appended environment.
+
+Counters use Express's resolved client IP: configure `TRUST_PROXY_CIDRS` and ingress
+headers first. IPv4-mapped addresses share IPv4 counters; IPv6 addresses share a
+/56 counter to constrain address rotation. Invalid resolved addresses share one
+unknown-client counter. Keys contain a SHA-256 digest of the normalized address,
+no credentials, token, email or request body; the digest is not anonymization.
+Atomic Redis scripts create counters with expiry, and rejected requests do not
+extend their window. See the [Redis counter pattern](https://redis.io/docs/latest/commands/incr/)
+and [ipaddr address normalization](https://github.com/whitequark/ipaddr.js).
+
+This is editable starter policy. Tune quotas for NAT users and legitimate clients;
+a client exhausting its broad auth quota also delays its logout/revocation calls.
+IP limits do not stop distributed credential attacks or provide account lockout.
+Windows permit bursts around reset boundaries. Redis eviction, data loss or a new
+namespace resets counters: use an appropriately sized store with a suitable
+persistence/eviction policy. Store exhaustion fails closed when Redis rejects
+writes. Edge traffic limits, account-aware abuse response, deployment/load tuning
+and concurrent/open-stream bounds remain separate work.
+
 ## Unreleased — explicit production proxy trust
 
 Update security's `meta.variables.json`, route factory and new `helpers/proxy.ts`,
@@ -24,7 +74,7 @@ The nginx templates now overwrite forwarded IP/host/protocol headers for a singl
 public ingress. Replace previous blanket `trust proxy=true` or
 `config.http.trustProxy` advice. Multi-proxy deployments must align header handling
 and explicit peer ranges at each layer. Sessions and audits use the resolved IP;
-rate limiting remains subsequent S08 work.
+shared request limits are described above.
 
 ## Unreleased — durable production settings audits
 
