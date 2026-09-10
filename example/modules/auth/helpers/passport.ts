@@ -1,4 +1,5 @@
 import passport from "passport";
+import { randomUUID } from "node:crypto";
 import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
 import { Strategy as LocalStrategy } from "passport-local";
 import type { Ctx } from "@tulipes/core/boot";
@@ -7,7 +8,7 @@ import type { Auth } from "@tulipes/core/http";
 import { verifyPassword } from "./passwords.js";
 import { isRevoked, loadSession, touchSession, type TokenClaims } from "./tokens.js";
 import { GUEST } from "./auth.js";
-import type { CredentialDoc, SessionDoc, UserDoc } from "./documents.js";
+import type { CredentialDoc, PasswordIdentity, SessionDoc, UserDoc } from "./documents.js";
 
 /**
  * Two strategies, both stateless as far as passport is concerned
@@ -32,15 +33,27 @@ export function configurePassport(ctx: Ctx): void {
           if (!user) return done(null, false);
 
           // The hash is select:false, so it has to be asked for by name.
-          const credential = await ctx.models!
-            .get<CredentialDoc>("Credential")
+          const Credential = ctx.models!.get<CredentialDoc>("Credential");
+          const credential = await Credential
             .findOne({ user: user._id })
             .select("+password_hash")
             .lean();
           if (!credential) return done(null, false);
 
           const ok = await verifyPassword(password, credential.password_hash);
-          return done(null, ok ? (user as Express.User) : false);
+          if (!ok) return done(null, false);
+          if (!credential.version) {
+            // Upgrade a legacy credential only if the verified hash is unchanged.
+            // A racing password change or another upgrade makes this login retry.
+            const version = randomUUID();
+            const upgraded = await Credential.updateOne(
+              { user: user._id, password_hash: credential.password_hash, version: { $exists: false } },
+              { $set: { version } },
+            );
+            if (!upgraded.matchedCount) return done(null, false);
+            credential.version = version;
+          }
+          return done(null, { user, credentialVersion: credential.version } satisfies PasswordIdentity);
         } catch (error) {
           return done(error as Error);
         }
@@ -71,17 +84,6 @@ export function configurePassport(ctx: Ctx): void {
 
           const user = await ctx.models!.get<UserDoc>("User").findById(claims.sub);
           if (!user) return done(null, false);
-
-          // A password change moves this epoch forward, which invalidates
-          // every token issued before it — on every device at once.
-          //
-          // Compared at second precision, because `iat` only has seconds:
-          // a token minted milliseconds *after* the epoch would otherwise
-          // look older than it and reject itself the moment it was issued.
-          if (user.tokens_valid_from) {
-            const epochSeconds = Math.floor(user.tokens_valid_from.getTime() / 1000);
-            if (claims.iat < epochSeconds) return done(null, false);
-          }
 
           await touchSession(ctx, session, touchInterval(ctx));
 

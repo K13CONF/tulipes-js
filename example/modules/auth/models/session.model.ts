@@ -22,6 +22,7 @@ const sessionSchema = new Schema(
   {
     sid: { type: String, required: true, unique: true, index: true },
     user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    credential_version: { type: String, required: true },
     refresh_jti: { type: String, required: true, index: true },
     /** Recorded at sign-in; a session that moves address keeps its origin. */
     ip: { type: String },

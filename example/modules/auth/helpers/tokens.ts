@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import type { Request } from "express";
 import type { Ctx } from "@tulipes/core/boot";
+import { HttpError } from "@tulipes/core/http";
+import { currentCredentialVersion } from "./passwords.js";
 
 import type { SessionDoc } from "./documents.js";
 
@@ -75,6 +77,7 @@ function mint(ctx: Ctx, userId: string, sid: string): TokenPair & { refreshJti: 
 export async function startSession(
   ctx: Ctx,
   userId: string,
+  credentialVersion: string,
   origin: SessionOrigin = {},
 ): Promise<TokenPair> {
   const sid = randomUUID();
@@ -83,12 +86,18 @@ export async function startSession(
   await ctx.models!.get("Session").create({
     sid,
     user: userId,
+    credential_version: credentialVersion,
     refresh_jti: refreshJti,
     ip: origin.ip,
     user_agent: origin.user_agent,
     expires_at: new Date(refreshExp * 1000),
   });
 
+  // A password change may have committed while this insert was in flight.
+  if (!await loadSession(ctx, sid, userId)) {
+    await endSession(ctx, sid);
+    throw new HttpError(401, "invalidCredentials");
+  }
   return pair;
 }
 
@@ -102,11 +111,13 @@ export async function rotateSession(
   ctx: Ctx,
   claims: TokenClaims,
 ): Promise<TokenPair | undefined> {
+  const version = await currentCredentialVersion(ctx, claims.sub);
+  if (!version) return undefined;
   const sid = claims.sid;
   const { refreshJti, refreshExp, ...pair } = mint(ctx, claims.sub, sid);
 
   const session = await ctx.models!.get("Session").findOneAndUpdate(
-    { sid, user: claims.sub, refresh_jti: claims.jti, expires_at: { $gt: new Date() } },
+    { sid, user: claims.sub, credential_version: version, refresh_jti: claims.jti, expires_at: { $gt: new Date() } },
     {
       refresh_jti: refreshJti,
       expires_at: new Date(refreshExp * 1000),
@@ -133,7 +144,9 @@ export function verify(
 
 /** A live session owned by the token subject. TTL cleanup is not authorization. */
 export async function loadSession(ctx: Ctx, sid: string, userId: string): Promise<SessionDoc | null> {
-  return ctx.models!.get<SessionDoc>("Session").findOne({ sid, user: userId, expires_at: { $gt: new Date() } });
+  const version = await currentCredentialVersion(ctx, userId);
+  if (!version) return null;
+  return ctx.models!.get<SessionDoc>("Session").findOne({ sid, user: userId, credential_version: version, expires_at: { $gt: new Date() } });
 }
 
 /**
@@ -172,14 +185,16 @@ export async function isRevoked(ctx: Ctx, jti: string): Promise<boolean> {
   return (await ctx.models!.get("RevokedToken").countDocuments({ jti }).limit(1)) > 0;
 }
 
-/** Drop every session a user holds — used after a password change. */
+/** Drop stored sessions for a user; this alone does not block concurrent sign-ins. */
 export async function endAllSessions(ctx: Ctx, userId: string): Promise<void> {
   await ctx.models!.get("Session").deleteMany({ user: userId });
 }
 
 /** Active devices, newest first, including when expired rows await TTL cleanup. */
 export async function listSessions(ctx: Ctx, userId: string): Promise<SessionDoc[]> {
-  return ctx.models!.get<SessionDoc>("Session").find({ user: userId, expires_at: { $gt: new Date() } }).sort({ created_at: -1 });
+  const version = await currentCredentialVersion(ctx, userId);
+  if (!version) return [];
+  return ctx.models!.get<SessionDoc>("Session").find({ user: userId, credential_version: version, expires_at: { $gt: new Date() } }).sort({ created_at: -1 });
 }
 
 /** Where a request came from, for the session row. */

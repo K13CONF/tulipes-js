@@ -104,9 +104,43 @@ the replacement pair and new password work. A refresh racing with session deleti
 can return a pair before deletion, but that pair is unusable after revocation
 completes. Requests already authenticated are not canceled by deleting a session.
 
-The password update, token epoch and session deletion remain separate database
-writes. Login/password-change races, concurrent password changes and partial-write
-failure recovery remain open review items. In particular, the current flow does
-not bind password verification to subsequent session creation. Refresh replay is
-rejected without revoking the surviving token family; family-wide theft response
-remains an application-policy decision.
+The credential-version correction below addresses the login/password-change races
+and failure cases identified during S08b. Refresh replay is rejected without
+revoking the surviving token family; family-wide theft response remains an
+application-policy decision.
+
+## S08c — Password changes and in-flight session creation
+
+Each password replacement writes a fresh random `Credential.version` together with
+the password hash in one atomic document update. Local password verification
+passes the version it verified to session creation. Registration and password
+replacement pass their own newly written version; they never adopt a later one.
+The password-change endpoint also requires its authenticated session's version to
+match in the credential update, so a delayed request cannot overwrite a newer
+password. Trusted provisioning/reset callers can deliberately omit that condition.
+Sessions store that value as `credential_version`. Access, refresh and device
+listing require it to match the current credential, in addition to owner and
+expiration checks. The credential lookup selects only the version, not the hash.
+
+Session creation checks validity after insertion, so a delayed login or older
+password-change response cannot create a usable session after a newer change.
+Cleanup deletes only sessions belonging to the replaced version. Delayed cleanup
+therefore cannot delete newer sessions. A cleanup failure can leave rows until TTL
+expiry, but those rows cannot authenticate or refresh. No MongoDB transaction or
+replica-set requirement is introduced.
+
+If the credential write fails before committing, the old password and sessions
+remain valid. If cleanup fails after that write, the endpoint returns 500 but the
+new password is already effective: retry login with it. Connection loss during the
+credential write can leave its outcome uncertain; this flow does not promise
+transactional rollback. Authentication already in progress may finish using its
+earlier credential snapshot. Every subsequent authentication/refresh checks the
+current version. A concurrent refresh may return a pair that is already unusable.
+
+Controlled HTTP tests pause credential writes, session insertion and cleanup around a later password
+change, inject write failures, and pause legacy credential upgrade around a reset.
+Legacy credentials acquire a version on successful login, conditional on the
+verified hash still matching. Existing sessions without a version require login
+again. Deploy all auth helpers/controllers and models together; old running code
+does not enforce the new check. `User.tokens_valid_from` is retained in the schema
+for existing data but is no longer read or advanced by the starter's auth flow.

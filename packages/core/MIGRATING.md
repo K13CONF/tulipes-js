@@ -11,13 +11,37 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — credential-bound production sessions
+
+Update the editable auth controller, auth helpers, Credential and Session models
+together. `setPassword` now returns the version written alongside the hash;
+`startSession(ctx, userId, credentialVersion, origin)` requires that exact version.
+The local Passport strategy returns `{ user, credentialVersion }` to its login
+callback. Carry the verified version through custom sign-in flows; do not replace
+it with a later read of the current credential.
+For authenticated password changes, pass the session's `credential_version` as
+`setPassword`'s fourth argument. That condition prevents overwriting a newer
+password; omitting it is reserved for trusted provisioning/reset callers.
+
+Existing sessions without `credential_version` are invalidated on deployment and
+users must log in again. Existing credentials gain `version` on successful password
+verification through a conditional update; no password reset or bulk backfill is
+required. Stop/drain old application processes when deploying the new auth code:
+mixed versions do not enforce the same policy. JWT and response formats are unchanged.
+
+The starter no longer reads or advances `User.tokens_valid_from`; migrate custom
+revocation code that relied on it. Password replacement invalidates sessions through
+the credential version even if later row cleanup fails. In that failure case the
+endpoint returns 500, but the new password already applies; log in with it. The
+flow does not roll back the credential write when cleanup fails.
+
 ## Unreleased — production session validity
 
 Refresh the editable `modules/auth/helpers/tokens.ts` and `passport.ts` from the
 updated starter. `loadSession` now requires the token subject as its third argument.
 Access and refresh reject expired sessions even before MongoDB TTL cleanup and
 require the stored session owner to match that subject. Session listings exclude
-expired rows. No schema migration or token-format change is needed.
+expired rows. Apply the credential-version upgrade above alongside these checks.
 
 ## Unreleased — production settings restart scope
 
