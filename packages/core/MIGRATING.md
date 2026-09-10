@@ -11,6 +11,43 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — restart acknowledgment before execution
+
+Merge settings' PM2 helper, controller and route declaration together. The reboot
+endpoint now returns **202 Accepted** with `data.supervised`, `data.accepted` and
+`data.scheduled` (the verified process names). It no longer returns `restarted`
+as if the operation had completed. Update clients to display an accepted request
+and separately check application health after reconnecting.
+
+The durable request audit still precedes PM2 access. All target names are validated
+against the installed application's canonical directory before acceptance. Restarts
+begin only after Node emits the response's `finish` event; disconnect/error before
+finish cancels the prepared restart. This establishes complete response handoff to
+the operating system, not a guarantee of receipt by a remote client. No arbitrary
+sleep or client-delivery claim is used. Self is restarted last.
+
+PM2 IDs, names, PIDs and ownership are rechecked immediately before each restart,
+so a delayed plan cannot restart a replacement process silently. Stopped processes
+with PID zero remain eligible. Overlapping requests in one backend return 409
+`RESTART_IN_PROGRESS` because the imported PM2 client shares its connection. PM2
+callbacks and response completion waits are bounded to five seconds; pre-acceptance
+driver failures return a sanitized 503 `RESTART_UNAVAILABLE`.
+
+After acceptance, failures are caught and emitted to stderr as `RESTART_FAILED`
+without driver details or a second HTTP response. A daemon may have applied a
+command even if its callback times out, and earlier targets may already have
+restarted before a later failure. There is no rollback, durable job queue or
+completion-status endpoint. The process may exit during its own restart before
+its callback or cleanup runs. Operators must use PM2 status/health and collected
+stderr for completion evidence. Cross-backend coordination remains deployment
+policy; this lock is local to one imported helper.
+
+Maintenance scripts can continue awaiting `restart(targets)` and reading its
+`RestartOutcome`; unexpected driver errors now use the sanitized restart error.
+The new `restartAfterResponse(res, targets)` owns HTTP acknowledgment and execution.
+Both use numeric PM2 selectors, retain scope checks and attempt connection cleanup.
+See [Node response finish semantics](https://nodejs.org/docs/latest-v24.x/api/http.html#event-finish_2).
+
 ## Unreleased — bounded log streaming
 
 Merge settings' `helpers/log-tail.ts`, new `helpers/log-stream.ts` and controller

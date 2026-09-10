@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08h locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08i locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -73,7 +73,7 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
 committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
-S08e as `bd18bd6`; S08f as `7125ca1`; S08g as `4ed321c`.
+S08e as `bd18bd6`; S08f as `7125ca1`; S08g as `4ed321c`; S08h as `0ed912a`.
 
 ### S08a — PM2 target scope
 
@@ -413,3 +413,56 @@ existing cleanup and the timeout is reported. Cross-replica connection leases an
 deployment load tuning remain application policy. Polling may miss intermediate
 rotations, and trusted directory ancestors remain an operator responsibility.
 No provider extraction, deployment or publication is included.
+
+
+### S08i — Restart acknowledgment before PM2 execution
+
+The reboot controller previously awaited restart callbacks before responding, so
+restarting its own backend could interrupt the response. The helper now validates
+all application-owned targets and sends 202 Accepted with `accepted` and `scheduled`
+fields before issuing restart commands. The durable audit still precedes PM2 access.
+The route metadata and migration guidance describe acceptance rather than completion.
+
+The response's finish event releases execution; close/error before finish cancels
+it. This means complete handoff to the operating system, without claiming remote
+receipt. Each numeric target is rechecked for canonical directory, name and PID
+before execution; stopped owned processes remain eligible and self runs last.
+A local lock protects the shared PM2 connection from overlapping requests. Daemon
+callbacks and response completion have five-second bounds. Preparation errors are
+sanitized; errors after acceptance produce a stable stderr signal without attempting
+another HTTP response. Maintenance scripts retain the awaited restart interface.
+
+Settings helpers, routes and controller now use expanded formatting, blank lines
+between separate operations, and comments explaining ordering, bounds and cleanup.
+The production generator mirrors these readability changes and the new behavior;
+the reference and generated app share the HTTP regression.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- The initial HTTP regression failed against the old response payload. All 19 PM2
+  scope/response cases pass, covering response-before-command ordering, invalid
+  targets, disconnect cancellation, changed PIDs, overlapping requests, sanitized
+  post-acceptance failures, daemon timeout, stopped processes and retained scope.
+- All 210 framework/spec tests and 37 reference app tests pass with temporary
+  MongoDB/Redis and no skips. Coverage remains above unchanged floors: 81.89%
+  statements, 68.7% branches, 86.41% functions and 84.06% lines.
+- Package, reference and test typechecks, builds, and generated/reference
+  module/test/config/nginx/agent-guide parity pass.
+- Packed production verification passes all 37 generated tests, generated types,
+  deterministic offline specs with connections denied, runtime specs,
+  backend/shutdown and worker checks. The isolated real PM2 HTTP check receives the
+  complete 202 body before observing both owned PIDs replaced, while unrelated
+  processes (including a same-name backend) keep their PIDs.
+- Workspace/generated dependency audits pass the existing severity gates.
+- Evidence: ignored `reports/s08i-{red,response,audit}.log`,
+  `reports/s08i-final-{integration,app,types,test-types,artifacts,parity,packed}.log`,
+  `reports/s08i-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux and supported Node matrix CI remain release gates; these are local results.
+
+Remaining planned S08 work: cookie/CSRF guidance and refresh theft-response/family-
+revocation policy. The S08h stream-authorization/draining backlog remains open.
+Restart acceptance is not a durable job or completion guarantee: earlier targets
+may restart before a later failure, a timed-out command may have reached PM2, and
+self-restart can end the caller before cleanup. Cross-backend restart coordination
+and the inventory-check/command race remain deployment limitations; there is no
+rollback or completion-status endpoint. No deployment or publication is included.
