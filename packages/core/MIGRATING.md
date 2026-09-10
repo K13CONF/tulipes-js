@@ -11,6 +11,48 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — constrained settings file access
+
+Merge settings' new `helpers/files.ts`, updated env helper and controller, and its
+explicit `dotenv` dependency. Existing applications keep their configured env
+file and manifest-selected translation locations. The settings API now rejects
+symlinked directories/files, hardlinked files and non-regular files with 409
+`SETTINGS_FILE_UNSAFE`. Missing locales remain 404. Other filesystem errors return
+a sanitized 503 `SETTINGS_FILE_UNAVAILABLE`, without paths or file contents.
+
+Reads use checked file descriptors with no-follow/non-blocking flags and a fixed
+1 MiB byte ceiling, including files that grow during a read. Writes also have a
+1 MiB ceiling. Directory enumeration stops after 256 entries. JSON must be an
+object with at most 64 levels and 10,000 visited nodes; malformed files return 422
+`SETTINGS_JSON_INVALID`. Missing-key paths are limited to 4096 bytes each, and the
+combined module summary allows at most 10,000 missing keys and 1 MiB of key bytes.
+Oversized inputs return 413. Larger catalogs must be edited through deployment
+files instead of this console. Log files/streaming are a separate S08 increment.
+
+File replacements use an exclusively created temporary sibling, sync its data,
+and rename it over the target. Failures before rename preserve the old contents
+and clean up the temporary file. Env files are mode 0600 after writing; translation
+files retain their existing permission bits. Atomic replacement requires directory
+write permission and changes the file inode/owner to the service's temporary file;
+custom ACLs/extended metadata are not preserved. This is not a cross-process edit
+lock or a power-loss durability guarantee for the directory entry. Audit records
+still acknowledge requests before mutation and do not prove completion.
+
+Env editing checks the actual dotenv parse result before replacing anything. It
+preserves unrelated lines and their effective values, and accepts only values
+that round-trip exactly. Unsupported quoting, CR/NUL values, duplicate assignments
+and existing multiline assignments requiring replacement return 422
+`ENV_FILE_UNSUPPORTED`; normalize these manually. New multiline values can be
+written when a quote form round-trips. They may subsequently need manual editing.
+The live process override is updated only after the file write succeeds.
+
+The configured directories and their ancestors must remain under trusted operator
+control. Checks reject static linked targets and the leaf open refuses symlink
+following, but Node's path-based rename/directory APIs do not provide an openat
+sandbox against a local writer racing directory replacements. Do not grant
+untrusted users write access to these directories. Configured ancestor paths may
+resolve through operator-managed links. See [Node filesystem flags and operations](https://nodejs.org/docs/latest-v24.x/api/fs.html).
+
 ## Unreleased — shared production request limits
 
 Update security's package dependencies (`ioredis` and `ipaddr.js`), environment

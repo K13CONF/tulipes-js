@@ -73,6 +73,7 @@ __metadata:
     "@app/auth": "workspace:*"
     "@app/core": "workspace:*"
     "@tulipes/core": "workspace:*"
+    dotenv: "npm:^16.4.7"
     express: "npm:^5"
     mongoose: "npm:^8"
     zod: "npm:^3.25"

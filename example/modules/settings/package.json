@@ -16,6 +16,7 @@
     "@app/auth": "workspace:*",
     "@app/core": "workspace:*",
     "@tulipes/core": "workspace:*",
+    "dotenv": "^16.4.7",
     "express": "^5",
     "mongoose": "^8",
     "zod": "^3.25"

@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08f locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08g locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -73,7 +73,7 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
 committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
-S08e as `bd18bd6`.
+S08e as `bd18bd6`; S08f as `7125ca1`.
 
 ### S08a — PM2 target scope
 
@@ -304,3 +304,54 @@ review account-aware/distributed abuse response and edge limits, and validate Re
 capacity, eviction/persistence and ingress topology under deployment load. IP
 quotas do not establish those guarantees; loss/eviction of counters resets limits.
 No provider extraction, deployment or publication is included.
+
+
+### S08g — Bounded environment and translation file operations
+
+This increment covers the settings file portion of the next S08 item; log files
+and streaming remain S08h. Settings previously followed symlinks/hardlinks, read
+entire files and rewrote targets directly. Its env quoting also changed some
+values on dotenv parsing, and duplicate assignments could keep an old value.
+
+The new file helper opens checked regular files without following leaf symlinks,
+refuses linked/special targets and linked immediate directories, and bounds reads
+and writes to 1 MiB. Directory enumeration, JSON traversal and expanded missing-key
+summaries have separate caps. Invalid JSON and unsafe/unavailable files produce
+explicit sanitized errors rather than empty successful results. Writes use a
+private temporary sibling and atomic rename; env files become mode 0600. Env
+editing verifies that dotenv returns the requested value and preserves all other
+effective values before writing. Unsupported assignments fail without mutation.
+The existing audit barrier remains ahead of mutations and live environment changes.
+
+Reference helpers/controllers/dependencies and generated production templates/tests
+are in parity. Migration instructions explain the limits, atomic replacement's
+permission/metadata implications and the trusted-directory assumption.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- Five of eight initial env regressions failed against the prior implementation.
+  All 18 final file cases pass, covering symlinks/hardlinks, linked directories,
+  FIFO refusal, a symlink swap at open, growth after fstat, bounded input/output,
+  JSON/key expansion, atomic rename failure/cleanup, private modes and dotenv
+  quoting/duplicate/multiline behavior.
+- All 182 framework/spec tests pass with temporary MongoDB/Redis and no skips.
+  All 34 reference app cases pass, including eight new HTTP cases for translation
+  file/link/size constraints, missing-key leaks/expansion, env target/live-state
+  protection and successful translation replacement.
+- Coverage remains 81.89% statements, 68.7% branches, 86.41% functions and 84.06%
+  lines, above unchanged floors. Package, reference and test typechecks, builds,
+  generated/reference module/dependency/test/config/nginx/agent-guide parity pass.
+- Packed production passes all 34 generated tests, generated types, deterministic
+  offline specs with connections denied, runtime specs, backend/shutdown, worker
+  and isolated PM2 checks. Workspace/generated audits pass the existing gates.
+- Evidence: ignored `reports/s08g-{red,files,green,integration,types,test-types,parity,artifacts,packed,audit}.log`,
+  `reports/s08g-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux and supported Node matrix CI remain release gates; these are local results.
+
+Remaining S08 work: log-file constraints and bounded streaming (S08h), restart
+response delivery, cookie/CSRF guidance and refresh theft-response/family-revocation
+policy. The new helper is not a sandbox against hostile local writers racing
+ancestor/directory replacement, a cross-process edit lock, or proof of power-loss
+rename durability. Operator-controlled ancestors, file permissions and concurrent
+editing remain deployment responsibilities. No provider extraction, deployment or
+publication is included.
