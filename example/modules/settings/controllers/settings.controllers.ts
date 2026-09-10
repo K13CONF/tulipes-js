@@ -1,4 +1,3 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
@@ -6,6 +5,7 @@ import { HttpError } from "@tulipes/core/http";
 import { coerceValue, type DescribedVariable } from "@tulipes/core/env";
 
 import { audit } from "../helpers/audit.js";
+import { MAX_SETTINGS_FILE_BYTES, missingTranslationKeys, readSettingsJson, settingsFileNames, settingsJson, writeSettingsFile } from "../helpers/files.js";
 import { writeVariable } from "../helpers/env-file.js";
 import { tailLogs } from "../helpers/log-tail.js";
 import { isSupervised, restart } from "../helpers/pm2.js";
@@ -28,6 +28,7 @@ export class SettingsController {
       const variables = this.ctx.Environment.store.describe();
       const routes = [...this.ctx.routes.all()];
       const grants = this.ctx.acl?.describe() ?? [];
+      const i18nBudget = { bytes: 0, keys: 0 };
 
       // ctx.modules is the authoritative list. Deriving it from config
       // keys instead would invent modules out of the app-level seed —
@@ -44,7 +45,7 @@ export class SettingsController {
             .filter((variable) => variable.owner === name)
             .map(describeVariable),
           config: this.ctx.config[name] ?? null,
-          i18n: this.#i18nOf(manifest.dir),
+          i18n: this.#i18nOf(manifest.dir, i18nBudget),
           routes: routes
             .filter((route) => route.module === name)
             .map((route) => ({
@@ -142,10 +143,9 @@ export class SettingsController {
   translations(): RequestHandler {
     return async (req: Request, res: Response) => {
       const { file, module, locale } = this.#localeFile(req);
-      if (!existsSync(file)) throw new HttpError(404, "noSuchLocale", { field: "locale" });
 
       res.respond({
-        data: { module, locale, translations: readJson(file) },
+        data: { module, locale, translations: readSettingsJson(file) },
       });
     };
   }
@@ -157,16 +157,16 @@ export class SettingsController {
   setTranslations(): RequestHandler {
     return async (req: Request, res: Response) => {
       const { file, module, locale } = this.#localeFile(req);
-      if (!existsSync(file)) throw new HttpError(404, "noSuchLocale", { field: "locale" });
 
-      const { translations } = req.body as { translations: Record<string, unknown> };
+      readSettingsJson(file);
+      const translations = settingsJson(req.body.translations);
       await audit(this.ctx, req, {
         action: "i18n.change_requested",
         module,
         locale,
         keys: Object.keys(translations).length,
       });
-      writeFileSync(file, `${JSON.stringify(translations, null, 2)}\n`);
+      writeSettingsFile(file, `${JSON.stringify(translations, null, 2)}\n`);
 
       // i18next loaded its resources at boot, so this file is not consulted
       // again until the process restarts.
@@ -277,11 +277,10 @@ export class SettingsController {
     return { file: join(manifest.dir, "i18n", `${locale}.json`), module, locale };
   }
 
-  #i18nOf(moduleDir: string): { locales: string[]; missing: Record<string, string[]> } {
+  #i18nOf(moduleDir: string, budget: { bytes: number; keys: number }): { locales: string[]; missing: Record<string, string[]> } {
     const i18nDir = join(moduleDir, "i18n");
-    if (!existsSync(i18nDir)) return { locales: [], missing: {} };
-
-    const files = readdirSync(i18nDir).filter((name) => name.endsWith(".json"));
+    const files = settingsFileNames(i18nDir)
+      .filter(name => /^[a-z]{2}(-[A-Za-z0-9]+)?(\.missing)?\.json$/.test(name));
     const locales = files
       .filter((name) => !name.endsWith(".missing.json"))
       .map((name) => name.replace(/\.json$/, ""))
@@ -292,7 +291,14 @@ export class SettingsController {
     const missing: Record<string, string[]> = {};
     for (const name of files.filter((file) => file.endsWith(".missing.json"))) {
       const locale = name.replace(/\.missing\.json$/, "");
-      missing[locale] = flattenKeys(readJson(join(i18nDir, name)));
+      const keys = missingTranslationKeys(readSettingsJson(join(i18nDir, name)));
+      budget.keys += keys.length;
+      budget.bytes += keys.reduce((total, key) => total + Buffer.byteLength(key), 0);
+      if (budget.keys > 10_000 || budget.bytes > MAX_SETTINGS_FILE_BYTES) {
+        throw new HttpError(413, "settingsMetadataTooLarge", { code: "SETTINGS_METADATA_TOO_LARGE",
+          defaultMessage: "The missing translation key summary exceeds the allowed size" });
+      }
+      missing[locale] = keys;
     }
 
     return { locales, missing };
@@ -343,22 +349,4 @@ function rolesFor(
     .filter(({ resource }) => resource === id || resource === "*" || resource === namespace)
     .map(({ role }) => role);
   return [...new Set(roles)].sort();
-}
-
-function readJson(file: string): Record<string, unknown> {
-  try {
-    return JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-/** `{ list: { empty: "…" } }` → `["list.empty"]`. */
-function flattenKeys(source: Record<string, unknown>, prefix = ""): string[] {
-  return Object.entries(source).flatMap(([key, value]) => {
-    const path = prefix ? `${prefix}.${key}` : key;
-    return value && typeof value === "object" && !Array.isArray(value)
-      ? flattenKeys(value as Record<string, unknown>, path)
-      : [path];
-  });
 }

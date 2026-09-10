@@ -485,6 +485,94 @@ test.each(["auth/login", "settings/modules"])("%s limits attempts before parsing
   expect(await blocked.json()).toMatchObject({ success: false, errors: [{ code: "TOO_MANY_REQUESTS" }] });
   expect((await fetch(base + "/api/v1/hello")).status).toBe(200);
 });
+
+
+test.each(["symlink", "hardlink", "directory-link", "oversized"])("settings translation reads and writes reject %s files", async kind => {
+  const user = await sysadmin();
+  await settingsFiles(async files => {
+    const { writeFile, readFile, unlink, symlink, link, rename } = await import("node:fs/promises");
+    const { dirname, join } = await import("node:path");
+    const outside = join(dirname(files.env), "outside.json");
+    const canary = randomBytes(24).toString("hex");
+    const original = JSON.stringify({ secret: canary });
+    await writeFile(outside, original);
+    if (kind === "directory-link") {
+      await rename(dirname(files.locale), dirname(files.locale) + "-original");
+      await symlink(dirname(files.locale) + "-original", dirname(files.locale));
+    } else {
+      await unlink(files.locale);
+      if (kind === "symlink") await symlink(outside, files.locale);
+      else if (kind === "hardlink") await link(outside, files.locale);
+      else await writeFile(files.locale, " ".repeat(1024 * 1024 + 1));
+    }
+    for (const response of [await get("/api/v1/settings/i18n/settings/en", user.access_token),
+      await put("/api/v1/settings/i18n/settings/en", { translations: { changed: true } }, user.access_token)]) {
+      expect(response.status).toBe(kind === "oversized" ? 413 : 409);
+      expect((await response.text()).includes(canary)).toBe(false);
+    }
+    expect(await readFile(outside, "utf8")).toBe(original);
+  });
+});
+
+test("linked missing-translation files cannot leak through the module summary", async () => {
+  const user = await sysadmin();
+  await settingsFiles(async files => {
+    const { writeFile, symlink } = await import("node:fs/promises");
+    const { dirname, join } = await import("node:path");
+    const outside = join(dirname(files.env), "outside.json");
+    const canary = randomBytes(24).toString("hex");
+    await writeFile(outside, JSON.stringify({ [canary]: "private" }));
+    await symlink(outside, join(dirname(files.locale), "en.missing.json"));
+    const response = await get("/api/v1/settings/modules", user.access_token);
+    expect(response.status).toBe(409);
+    expect((await response.text()).includes(canary)).toBe(false);
+  });
+});
+
+test("linked env files cannot modify their target or the live process environment", async () => {
+  const user = await sysadmin();
+  await settingsFiles(async files => {
+    const { writeFile, readFile, unlink, symlink } = await import("node:fs/promises");
+    const outside = files.env + "-outside";
+    await writeFile(outside, "# unchanged\\n");
+    await unlink(files.env);
+    await symlink(outside, files.env);
+    const previous = process.env.AUTH_ADMIN_PASSWORD;
+    const response = await put("/api/v1/settings/variables/AUTH_ADMIN_PASSWORD", { value: randomBytes(24).toString("hex") }, user.access_token);
+    expect(response.status).toBe(409);
+    expect(await readFile(outside, "utf8")).toBe("# unchanged\\n");
+    expect(process.env.AUTH_ADMIN_PASSWORD).toBe(previous);
+  });
+});
+
+
+test("module summaries bound the combined expansion of missing translation keys", async () => {
+  const user = await sysadmin();
+  await settingsFiles(async files => {
+    const { writeFile } = await import("node:fs/promises");
+    const { dirname, join } = await import("node:path");
+    const entries = { ["x".repeat(3000)]: Object.fromEntries(Array.from({ length: 200 }, (_, i) => [String(i), ""])) };
+    for (const locale of ["en", "fr"]) await writeFile(join(dirname(files.locale), locale + ".missing.json"), JSON.stringify(entries));
+    const response = await get("/api/v1/settings/modules", user.access_token);
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ errors: [{ code: "SETTINGS_METADATA_TOO_LARGE" }] });
+  });
+});
+
+
+test("translation replacement remains readable through the settings API", async () => {
+  const user = await sysadmin();
+  await settingsFiles(async files => {
+    const translations = { greeting: "updated", nested: { empty: "No entries" } };
+    const response = await put("/api/v1/settings/i18n/settings/en", { translations }, user.access_token);
+    expect(response.status).toBe(200);
+    const read = await get("/api/v1/settings/i18n/settings/en", user.access_token);
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({ data: { translations } });
+    const { readFile } = await import("node:fs/promises");
+    expect(JSON.parse(await readFile(files.locale, "utf8"))).toEqual(translations);
+  });
+});
 ` : `
 test("health needs no external infrastructure", async () => {
   expect(handle.ctx.models).toBeUndefined();
