@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08e locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08f locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -72,7 +72,8 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 ## S08 change sets
 
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
-committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`.
+committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
+S08e as `bd18bd6`.
 
 ### S08a — PM2 target scope
 
@@ -253,3 +254,53 @@ deployment validation remain external.
 No rate limiter, provider extraction or deployment is added here. Remaining S08
 work: rate limits, file and streaming bounds, restart response delivery,
 cookie/CSRF guidance and refresh theft-response/family-revocation policy.
+
+
+### S08f — Shared authentication and settings request limits
+
+The production starter previously accepted unlimited auth/settings attempts.
+Security now installs Redis-backed fixed-window quotas before JSON parsing and
+Passport: 20 combined credential POSTs, 120 total auth requests and 60 settings
+requests per client per minute by default. Environment variables configure the
+positive limits, window and shared app namespace; the app environment separates
+its keys. All backend replicas share atomic counters with automatic expiration.
+Rejected requests do not extend the window and return 429 with `Retry-After`.
+
+Client identities follow the S08e proxy policy, normalize mapped IPv4 and aggregate
+IPv6 /56 subnets. Invalid resolved addresses share one bucket. Redis errors and
+stalls return a sanitized 503 before protected actions, with bounded initial
+connection waiting and commands. Each boot environment owns its connection and
+shutdown cleanup. The new config hook preserves app-level security settings.
+Generated modules/dependencies/tests and regenerated reference env/type files are
+in sync, with migration instructions describing defaults and operator tradeoffs.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- Both new app HTTP cases failed against the previous implementation and passed
+  after the middleware was installed. All 26 reference app cases pass.
+- All 164 framework/spec tests pass with temporary MongoDB/Redis and no skips,
+  including 21 new cases covering shared concurrent quotas, policy separation,
+  route variants/methods, forged proxy chains, IPv6/mapped IPs, invalid addresses,
+  namespace isolation, expiry, sink failure, stalled handshakes/commands and
+  invalid configuration. The initial handshake test exposed a four-second driver
+  wait; the explicit wait bound corrected it.
+- Coverage floors pass unchanged: 81.89% statements, 68.7% branches, 86.41%
+  functions and 84.06% lines. Package, synced reference app and test typechecks,
+  builds and generated/reference module/test/config/nginx/agent-guide parity pass.
+- Packed production installation passes all 26 generated app tests, types,
+  deterministic offline specs with connections denied, runtime specs,
+  backend/shutdown, worker and isolated PM2 checks. Its first typecheck caught
+  the empty security config return type; preserving the app config fixed it.
+- Workspace and generated dependency audits pass the existing high/critical gates.
+  Evidence: ignored `reports/s08f-{red,timeout-red,limiter,green,integration,types,test-types,parity,artifacts,packed,audit}.log`,
+  `reports/s08f-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux and supported Node matrix CI remain release gates; these are local results.
+
+Remaining S08 work: file and streaming bounds, restart response delivery,
+cookie/CSRF guidance and refresh theft-response/family-revocation policy. Request
+quotas bound stream openings, not concurrent streams or their duration/bytes.
+Deployment/backlog follow-ups: tune quotas for legitimate shared-IP traffic,
+review account-aware/distributed abuse response and edge limits, and validate Redis
+capacity, eviction/persistence and ingress topology under deployment load. IP
+quotas do not establish those guarantees; loss/eviction of counters resets limits.
+No provider extraction, deployment or publication is included.

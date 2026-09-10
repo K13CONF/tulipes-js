@@ -34,6 +34,41 @@
       "group": "hardening",
       "description": "Strict-Transport-Security max-age in seconds; 0 disables the header (browsers only honour it over HTTPS)",
       "default": 15552000
+    },
+    {
+      "name": "RATE_LIMIT_NAMESPACE",
+      "type": "string",
+      "group": "rate-limits",
+      "description": "Stable identifier shared by replicas; use a different value for unrelated apps on the same Redis database",
+      "default": "tulipes"
+    },
+    {
+      "name": "RATE_LIMIT_WINDOW_MS",
+      "type": "number",
+      "group": "rate-limits",
+      "description": "Fixed request window in milliseconds; positive integer, applied on restart",
+      "default": 60000
+    },
+    {
+      "name": "AUTH_RATE_LIMIT",
+      "type": "number",
+      "group": "rate-limits",
+      "description": "Combined login, register and password POST attempts per client per window; positive integer",
+      "default": 20
+    },
+    {
+      "name": "AUTH_SESSION_RATE_LIMIT",
+      "type": "number",
+      "group": "rate-limits",
+      "description": "All auth requests per client per window, including refresh and credential attempts; positive integer",
+      "default": 120
+    },
+    {
+      "name": "SETTINGS_RATE_LIMIT",
+      "type": "number",
+      "group": "rate-limits",
+      "description": "All settings requests per client per window; positive integer",
+      "default": 60
     }
   ]
 }

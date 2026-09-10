@@ -15,6 +15,10 @@ beforeAll(async () => {
   }
   vi.stubEnv("MONGO_URI", process.env.TEST_MONGO_URI);
   vi.stubEnv("REDIS_URL", process.env.TEST_REDIS_URL);
+  vi.stubEnv("RATE_LIMIT_NAMESPACE", "test-" + randomBytes(12).toString("hex"));
+  vi.stubEnv("AUTH_RATE_LIMIT", "200");
+  vi.stubEnv("AUTH_SESSION_RATE_LIMIT", "1000");
+  vi.stubEnv("SETTINGS_RATE_LIMIT", "200");
   vi.stubEnv("JWT_ACCESS_SECRET", randomBytes(32).toString("hex"));
   vi.stubEnv("JWT_REFRESH_SECRET", randomBytes(32).toString("hex"));
   vi.stubEnv("AUTH_ADMIN_EMAIL", "test-admin@example.test");
@@ -462,4 +466,18 @@ test("configured proxy trust supplies the same client IP to sessions and durable
   });
   expect(revealed.status).toBe(200);
   expect(await handle.ctx.models!.get("AuditEvent").findOne({ actor: user.userId }).lean()).toMatchObject({ ip: "198.51.100.19" });
+});
+
+
+test.each(["auth/login", "settings/modules"])("%s limits attempts before parsing or authentication", async path => {
+  const responses = await Promise.all(Array.from({ length: 201 }, (_, index) => fetch(base + "/api/v1/" + path, {
+    method: path.startsWith("auth") ? "POST" : "GET",
+    headers: { "X-Forwarded-For": "203.0.113." + (index % 250 + 1) + ", 198.51.100.88", "content-type": "application/json" },
+    ...(path.startsWith("auth") ? { body: "{" } : {}),
+  })));
+  expect(responses.filter(response => response.status === 429)).toHaveLength(1);
+  const blocked = responses.find(response => response.status === 429)!;
+  expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
+  expect(await blocked.json()).toMatchObject({ success: false, errors: [{ code: "TOO_MANY_REQUESTS" }] });
+  expect((await fetch(base + "/api/v1/hello")).status).toBe(200);
 });
