@@ -7,7 +7,7 @@ import { coerceValue, type DescribedVariable } from "@tulipes/core/env";
 import { audit } from "../helpers/audit.js";
 import { MAX_SETTINGS_FILE_BYTES, missingTranslationKeys, readSettingsJson, settingsFileNames, settingsJson, writeSettingsFile } from "../helpers/files.js";
 import { writeVariable } from "../helpers/env-file.js";
-import { tailLogs } from "../helpers/log-tail.js";
+import { LogStreams } from "../helpers/log-stream.js";
 import { isSupervised, restart } from "../helpers/pm2.js";
 
 /**
@@ -20,6 +20,7 @@ import { isSupervised, restart } from "../helpers/pm2.js";
  * console cannot describe an app different from the one running.
  */
 export class SettingsController {
+  readonly #logStreams = new LogStreams();
   constructor(private readonly ctx: Ctx) {}
 
   /** Every module, with everything the framework knows about it. */
@@ -202,7 +203,7 @@ export class SettingsController {
    *
    * SSE rather than a socket: a log tail is one-way, it is plain HTTP so it
    * passes the RAI gate like every other endpoint, and the browser
-   * reconnects on its own.
+   * can reconnect using a client that sends the required Authorization header.
    */
   logStream(): RequestHandler {
     return async (req: Request, res: Response) => {
@@ -217,46 +218,13 @@ export class SettingsController {
       const level = typeof req.query.level === "string" ? req.query.level : undefined;
       const tail = Math.min(Number(req.query.tail ?? 200) || 0, 1000);
 
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        Connection: "keep-alive",
-        // nginx buffers proxied responses by default, which would hold
-        // every event until the buffer fills — this turns that off.
-        "X-Accel-Buffering": "no",
-      });
-
-      const send = (event: string, data: unknown): void => {
-        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-      };
-
-      const wanted = level ? LEVELS[level] ?? 0 : 0;
-      const stream = tailLogs({
+      const session = req.auth.session;
+      this.#logStreams.open(res, {
+        userId: req.auth.user ? String(req.auth.user._id) : "",
+        expiresAt: session ? Math.min(session.access_expires_at.getTime(), session.expires_at.getTime()) : 0,
         dir: String(this.ctx.Environment.get("LOG_DIR")),
         prefix: `${String(this.ctx.Environment.get("LOG_BASENAME"))}-${which}`,
-        tail,
-        onLine: (line) => {
-          // Lines are JSON from pino; anything else is a stray write and
-          // is passed through as a raw message rather than dropped.
-          try {
-            const entry = JSON.parse(line) as { level?: number };
-            if ((entry.level ?? 0) < wanted) return;
-            send("log", entry);
-          } catch {
-            send("log", { msg: line });
-          }
-        },
-      });
-
-      // Proxies drop an idle connection; a comment frame is the standard
-      // keep-alive and is ignored by EventSource.
-      const heartbeat = setInterval(() => res.write(": keep-alive\n\n"), 15_000);
-
-      send("ready", { process: which, tail, level: level ?? "all" });
-
-      req.on("close", () => {
-        clearInterval(heartbeat);
-        stream.close();
+        process: which, tail, ...(level ? { level } : {}),
       });
     };
   }
@@ -304,16 +272,6 @@ export class SettingsController {
     return { locales, missing };
   }
 }
-
-/** pino's numeric levels, for filtering a stream by severity. */
-const LEVELS: Record<string, number> = {
-  trace: 10,
-  debug: 20,
-  info: 30,
-  warn: 40,
-  error: 50,
-  fatal: 60,
-};
 
 /**
  * The full spec travels with every variable: a console needs the type,

@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08g locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08h locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -73,7 +73,7 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
 committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
-S08e as `bd18bd6`; S08f as `7125ca1`.
+S08e as `bd18bd6`; S08f as `7125ca1`; S08g as `4ed321c`.
 
 ### S08a — PM2 target scope
 
@@ -355,3 +355,61 @@ ancestor/directory replacement, a cross-process edit lock, or proof of power-los
 rename durability. Operator-controlled ancestors, file permissions and concurrent
 editing remain deployment responsibilities. No provider extraction, deployment or
 publication is included.
+
+
+### S08h — Constrained log files and bounded streaming
+
+Log history previously scanned whole files, followed linked candidates and matched
+unrelated basenames sharing a prefix. Streaming ignored response backpressure and
+had no connection, output or lifetime cap. The new tail matches only the configured
+basename/process plus supported pino date/index suffixes, refuses linked/special
+files and linked immediate directories, and caps directory scans at 1024 entries.
+
+History is limited to the last 256 KiB and requested complete lines; live reads use
+at most 64 KiB per second and 8 MiB per tail overall. Lines over 16 KiB are skipped.
+Partial UTF-8 lines remain buffered within that cap until newline. Observed inode
+replacement/truncation resets the cursor; fixed polling replaces filesystem-watch
+read storms. Consumer termination suppresses subsequent delivery and closes file
+handles when pending operations settle. Background failures are handled and carry
+only sanitized codes.
+
+Each backend controller permits four active streams, at most two per account.
+Connections end within the configured one-minute lifetime, current access/session
+expiry or 1 MiB output budget. Writes that encounter backpressure or exceed the
+64 KiB application buffer budget terminate the connection; history yields between
+records so healthy readers can drain it. Pending ends have a one-second forced
+close fallback. Response close/error clears polling, timers and active slots.
+The generated starter mirrors both helpers, the controller and HTTP regressions.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- All three initial tail cases failed against the old implementation; that red run
+  also exposed its unhandled asynchronous history-read rejection during cleanup.
+  All 20 final tail/stream cases pass, including linked files/directories, unrelated
+  prefixes, line/history bounds, partial UTF-8, tail zero, rotation/truncation,
+  close/consumer stop, live read budget, directory/options limits, sanitized
+  follow failures, per-user/total slots, cancellation, expiry/duration, severity,
+  output/backpressure and healthy history larger than a socket buffer.
+- All 202 framework/spec tests pass with temporary MongoDB/Redis and no skips.
+  All 36 reference app cases pass, including sysadmin-only log access, linked-target
+  refusal, HTTP connection quotas/cancellation and retained history delivery.
+- Coverage stays above unchanged floors: 81.89% statements, 68.7% branches,
+  86.41% functions and 84.06% lines. Package, synced reference and test typechecks,
+  builds and generated/reference module/test/config/nginx/agent-guide parity pass.
+- Packed production passes all 36 generated tests, generated types, deterministic
+  offline specs with connections denied, runtime specs, backend/shutdown, worker
+  and isolated PM2 checks. Workspace/generated audits pass the existing gates.
+- Evidence: ignored `reports/s08h-{red,tail,stream-tests,green,integration,types,test-types,parity,artifacts,packed,audit}.log`,
+  `reports/s08h-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux and supported Node matrix CI remain release gates; these are local results.
+
+Remaining planned S08 work: restart response delivery, cookie/CSRF guidance and
+refresh theft-response/family-revocation policy. Newly identified backlog:
+continuously revalidate open-stream authorization for immediate role/credential/
+session revocation, and signal streams before framework HTTP draining. Currently
+existing streams retain their opening authorization until the bounded lifetime or
+expiry; a stream still active at the HTTP shutdown deadline is force-closed by
+existing cleanup and the timeout is reported. Cross-replica connection leases and
+deployment load tuning remain application policy. Polling may miss intermediate
+rotations, and trusted directory ancestors remain an operator responsibility.
+No provider extraction, deployment or publication is included.

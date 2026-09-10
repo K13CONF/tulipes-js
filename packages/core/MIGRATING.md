@@ -11,6 +11,55 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — bounded log streaming
+
+Merge settings' `helpers/log-tail.ts`, new `helpers/log-stream.ts` and controller
+changes together. Production starters include the same implementation and HTTP
+regressions. Log viewing remains sysadmin-only and subject to S08f request quotas.
+
+The tail accepts the configured basename plus `-backend` or `-worker`, followed
+by an optional `.yyyy-MM-dd` date and numeric `.index`, ending in `.log`. A bare
+`.log` file also works. Other prefix matches and `current.log` aliases are excluded.
+Basenames must use letters, digits, underscore, dot or hyphen, with an alphanumeric,
+underscore or hyphen first, up to 128 characters including the process suffix.
+Linked directories, symlinks, hardlinks and non-regular matching files are refused.
+The configured directory's ancestors must be operator-controlled, as with S08g;
+this is not a filesystem sandbox against hostile local directory writers.
+
+History reads at most the final 256 KiB and returns at most the requested 1000
+complete lines. It can return fewer lines than requested. A leading fragment and
+lines over 16 KiB are discarded; an unfinished final line is retained until its
+newline arrives. Live reads are limited to 64 KiB per one-second poll and 8 MiB
+per tail overall, even when severity filtering emits nothing. Directory scans
+stop after 1024 entries. Inode replacement and observed truncation reset the
+cursor. Polling is best-effort: intermediate rotations or truncation/regrowth
+between polls may lose entries. These limits do not depend on logger rotation.
+
+Each backend controller allows four active streams, at most two per user; other
+replicas enforce their own cap. Excess opens return 429 `TOO_MANY_LOG_STREAMS`.
+Streams end after at most 60 seconds, access-token/session expiry, or 1 MiB of SSE
+output including ready/heartbeat frames. They disconnect if write backpressure
+occurs or a frame would exceed the 64 KiB pending-output budget. Delivery yields
+between records so healthy readers can drain history. A pending end is forcibly
+closed after one second if it cannot flush. Callers must handle EOF or a transport
+error and reconnect with an Authorization header; native browser EventSource
+cannot supply that header. No cookie authentication is introduced.
+
+The optional severity filter excludes entries without a numeric level when a
+minimum is requested. Initial unsafe-file failures use the normal error envelope;
+subsequent failures send a sanitized SSE error code (`LOG_UNAVAILABLE` or
+`LOG_READ_LIMIT`) and close. Disconnects stop delivery, clear polling/heartbeats/deadlines and release active
+slots; an in-flight filesystem operation is closed/discarded when it settles. Limits are editable constants in the two helpers;
+no runtime environment variables or shared Redis connection leases are added.
+
+Authorization is checked on opening. Existing streams do not continuously recheck
+role changes, credential replacement or revocation; the lifetime/expiry limit
+bounds their remaining exposure. Immediate stream revocation remains follow-up
+policy work. The framework drains HTTP before module shutdown hooks: a stream
+still open at its shutdown deadline is force-closed by the existing HTTP cleanup
+and that timeout is reported. Gracefully signaling streams before HTTP drain is
+recorded separately in the sprint backlog. See [Node response backpressure and close events](https://nodejs.org/docs/latest-v24.x/api/http.html).
+
 ## Unreleased — constrained settings file access
 
 Merge settings' new `helpers/files.ts`, updated env helper and controller, and its

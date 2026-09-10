@@ -569,3 +569,72 @@ test("translation replacement remains readable through the settings API", async 
     expect(JSON.parse(await readFile(files.locale, "utf8"))).toEqual(translations);
   });
 });
+
+
+async function logFiles(run: (dir: string) => Promise<void>) {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "tulipes-log-http-"));
+  const env = handle.ctx.Environment;
+  const previous = { file: env.get("LOG_FILE"), dir: env.get("LOG_DIR"), name: env.get("LOG_BASENAME") };
+  env.store.set("LOG_FILE", true); env.store.set("LOG_DIR", dir); env.store.set("LOG_BASENAME", "app");
+  try { await run(dir); }
+  finally {
+    env.store.set("LOG_FILE", previous.file); env.store.set("LOG_DIR", previous.dir); env.store.set("LOG_BASENAME", previous.name);
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+test("log streaming enforces sysadmin access and never follows linked log targets", async () => {
+  const ordinary = await account();
+  const user = await sysadmin();
+  await logFiles(async dir => {
+    const { writeFile, symlink } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const canary = randomBytes(24).toString("hex");
+    await writeFile(join(dir, "private"), canary);
+    await symlink(join(dir, "private"), join(dir, "app-backend.log"));
+    expect((await get("/api/v1/settings/logs/stream", ordinary.access_token)).status).toBe(403);
+    const response = await get("/api/v1/settings/logs/stream", user.access_token);
+    expect(response.status).toBe(409);
+    expect((await response.text()).includes(canary)).toBe(false);
+  });
+});
+
+test("log stream slots are capped per account and released on HTTP cancellation", async () => {
+  const user = await sysadmin();
+  await logFiles(async dir => {
+    const { writeFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    await writeFile(join(dir, "app-backend.2026-09-10.1.log"), JSON.stringify({ level: 30, msg: "retained line" }) + "\n");
+    const first = await get("/api/v1/settings/logs/stream", user.access_token);
+    const second = await get("/api/v1/settings/logs/stream", user.access_token);
+    try {
+      expect(first.status).toBe(200);
+      expect(first.headers.get("content-type")).toContain("text/event-stream");
+      const blocked = await get("/api/v1/settings/logs/stream", user.access_token);
+      expect(blocked.status).toBe(429);
+      expect(await blocked.json()).toMatchObject({ errors: [{ code: "TOO_MANY_LOG_STREAMS" }] });
+    } finally { await first.body?.cancel(); await second.body?.cancel(); }
+    let reopened: Response | undefined;
+    await vi.waitFor(async () => {
+      const response = await get("/api/v1/settings/logs/stream", user.access_token);
+      if (response.status === 200) reopened = response;
+      expect(response.status).toBe(200);
+    });
+    try {
+      const reader = reopened!.body!.getReader();
+      let received = "";
+      try {
+        while (!received.includes("retained line")) {
+          const part = await reader.read();
+          if (part.done) break;
+          received += new TextDecoder().decode(part.value);
+        }
+        expect(received).toContain("event: ready");
+        expect(received).toContain("retained line");
+      } finally { await reader.cancel(); }
+    } finally { if (!reopened!.body!.locked) await reopened!.body!.cancel(); }
+  });
+});
