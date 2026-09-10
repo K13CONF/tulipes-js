@@ -11,9 +11,10 @@ import { baseSchemaOptions } from "@app/core";
  * row across rotations is the point — `last_seen_at`, `ip` and `user_agent`
  * survive, and "sign out this device" is deleting one document.
  *
- * `refresh_jti` holds only the CURRENT refresh token. Rotation swaps it in
- * one atomic update, so presenting a superseded refresh token matches
- * nothing and is rejected as a replay.
+ * `refresh_jti` holds only the CURRENT refresh token. One atomic update
+ * either rotates that token or expires the family when a superseded one
+ * is reused. All access tokens share this row and lose authorization too.
+ * Each new login receives a separate sid, so other devices remain active.
  *
  * `expires_at` carries a TTL index, so mongo prunes dead sessions itself.
  * `created_at` is not declared here — baseSchemaOptions provides it.
@@ -21,7 +22,12 @@ import { baseSchemaOptions } from "@app/core";
 const sessionSchema = new Schema(
   {
     sid: { type: String, required: true, unique: true, index: true },
-    user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
     credential_version: { type: String, required: true },
     refresh_jti: { type: String, required: true, index: true },
     /** Recorded at sign-in; a session that moves address keeps its origin. */

@@ -1,7 +1,11 @@
 import passport from "passport";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
-import { HttpError, ValidationError, type FieldIssue } from "@tulipes/core/http";
+import {
+  HttpError,
+  ValidationError,
+  type FieldIssue,
+} from "@tulipes/core/http";
 
 import { auth } from "../helpers/auth.js";
 import type { PasswordIdentity, UserDoc } from "../helpers/documents.js";
@@ -74,9 +78,18 @@ export class AuthController {
       }
 
       const user = await User.create({ email: normalised, role: "user" });
-      const credentialVersion = await setPassword(this.ctx, String(user._id), password!);
+      const credentialVersion = await setPassword(
+        this.ctx,
+        String(user._id),
+        password!,
+      );
 
-      const tokens = await startSession(this.ctx, String(user._id), credentialVersion, originOf(req));
+      const tokens = await startSession(
+        this.ctx,
+        String(user._id),
+        credentialVersion,
+        originOf(req),
+      );
       res.respond({
         status: 201,
         data: {
@@ -100,10 +113,19 @@ export class AuthController {
           const { user, credentialVersion } = identity;
 
           try {
-            const tokens = await startSession(this.ctx, String(user._id), credentialVersion, originOf(req));
+            const tokens = await startSession(
+              this.ctx,
+              String(user._id),
+              credentialVersion,
+              originOf(req),
+            );
             res.respond({
               data: {
-                user: { id: String(user._id), email: user.email, role: user.role },
+                user: {
+                  id: String(user._id),
+                  email: user.email,
+                  role: user.role,
+                },
                 ...tokens,
               },
             });
@@ -124,18 +146,20 @@ export class AuthController {
       }
 
       const claims = verify(this.ctx, refresh_token, "refresh");
-      if (!claims) throw new HttpError(401, "refreshInvalid", { field: "refresh_token" });
+      if (!claims)
+        throw new HttpError(401, "refreshInvalid", { field: "refresh_token" });
 
-      const user = await this.ctx.models!.get<UserDoc>("User").findById(claims.sub).lean();
+      const user = await this.ctx
+        .models!.get<UserDoc>("User")
+        .findById(claims.sub)
+        .lean();
       if (!user) throw new HttpError(401, "accountGone");
 
-      // Rotating in place is what stops the same refresh token being
-      // exchanged twice: the update matches only the jti still current on
-      // the session row, so a replay — or the loser of a race — finds
-      // nothing. The session itself survives, keeping its device and its
-      // history.
+      // Rotation also detects reuse and expires this device's token family.
+      // A duplicate client request has the same consequence as token theft.
       const tokens = await rotateSession(this.ctx, claims);
-      if (!tokens) throw new HttpError(401, "refreshUsed", { field: "refresh_token" });
+      if (!tokens)
+        throw new HttpError(401, "refreshUsed", { field: "refresh_token" });
 
       res.respond({ data: tokens });
     };
@@ -174,7 +198,11 @@ export class AuthController {
         data: {
           is_authenticated: isAuthenticated,
           locale: req.locale,
-          user: user && { id: String(user._id), email: user.email, role: user.role },
+          user: user && {
+            id: String(user._id),
+            email: user.email,
+            role: user.role,
+          },
           session: session && {
             sid: session.sid,
             ip: session.ip,
@@ -237,12 +265,22 @@ export class AuthController {
       // Capture the version written by this change, even if another change races.
       const expectedVersion = req.auth.session?.credential_version;
       if (!expectedVersion) throw new HttpError(401, "invalidCredentials");
-      const credentialVersion = await setPassword(this.ctx, userId, password!, expectedVersion);
+      const credentialVersion = await setPassword(
+        this.ctx,
+        userId,
+        password!,
+        expectedVersion,
+      );
 
       // Every earlier token is dead now, including the one that made this
       // request — a fresh session keeps this client signed in while the
       // other devices are signed out.
-      const tokens = await startSession(this.ctx, userId, credentialVersion, originOf(req));
+      const tokens = await startSession(
+        this.ctx,
+        userId,
+        credentialVersion,
+        originOf(req),
+      );
       res.respond({
         data: {
           message: req.t("passwordChanged"),

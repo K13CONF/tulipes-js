@@ -95,4 +95,26 @@ TLS/proxy topology. Include missing Origin/Referer cases in the chosen policy.
 The starter's HTTP tests retain header/body-only authentication, absent Set-Cookie,
 and rejection of cookie-only, query-token and non-JSON refresh attempts. They run
 in Node and do not establish browser enforcement or validate a future cookie flow.
-Refresh-token theft response and family revocation are separate session policies.
+
+## Refresh rotation and suspected theft
+
+One login creates one token family, identified by the session's `sid`. Refresh
+rotates within that family. Reusing any valid, unexpired superseded refresh token
+expires the whole family, including its access tokens. Other devices stay active;
+changing the account password invalidates all devices. This strict policy follows
+the replay-detection rationale in [RFC 9700 section 4.14.2](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.14.2);
+the starter itself is not an OAuth authorization server.
+
+Serialize refreshes per session, coordinating tabs that share credentials. A
+concurrent duplicate causes one success and one rejection, but makes the success
+pair unusable too. After a refresh rejection, lost response or
+`REFRESH_UNAVAILABLE` (503), discard the local pair and sign in again. There is no
+retry grace period: a request that committed before its response was lost may
+already have consumed the token.
+
+Reuse does not reveal which caller is legitimate. Someone with an old unexpired
+token can force the device to sign in again; an expired token cannot trigger this
+revocation. Theft without reuse is not detected. A database failure may prevent
+revocation or obscure its outcome, and requests already authorized are not
+cancelled. Use password change for suspected account-wide compromise and apply
+your own incident-response and alerting policy.

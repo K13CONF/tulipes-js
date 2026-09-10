@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08j locally verified | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08k locally verified; stream follow-ups open | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -74,7 +74,7 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
 committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
 S08e as `bd18bd6`; S08f as `7125ca1`; S08g as `4ed321c`; S08h as `0ed912a`;
-S08i as `b7d63bb`.
+S08i as `b7d63bb`; S08j as `5eda964`.
 
 ### S08a — PM2 target scope
 
@@ -516,3 +516,68 @@ Next planned S08 item: refresh theft-response/family-revocation policy. The S08h
 stream-authorization/draining backlog remains open. Any future cookie adapter must
 retain abuse tests and browser validation for its selected policy before claiming
 that policy implemented. No provider extraction, deployment or publication is added.
+
+
+### S08k — Strict refresh reuse expires the device family
+
+The starter now adopts strict per-device family revocation. Each login's sid is
+one family; a valid unexpired refresh token with a superseded ID expires that
+family, including all access tokens. Other devices and subsequent logins remain
+separate. Duplicate concurrent refreshes have one 200 and one 401, but the winning
+pair is unusable after reuse handling completes. Clients must serialize refreshes
+and sign in again after rejection or an uncertain response; no grace window or
+idempotent replay is implemented.
+
+Rotation and replay handling use one conditional session update, scoped to owner,
+credential version and a live expiration. A current token rotates; a superseded
+one sets expires_at to the Unix epoch. Existing session reads reject the row
+before TTL cleanup, so there is no second revocation write to race or fail.
+Majority/journal acknowledgment is required with a five-second write-concern
+bound. Errors return a sanitized REFRESH_UNAVAILABLE (503), without claiming
+whether the database committed. Signature/type/expiry and scalar claim validation
+precede writes. Malformed, forged, wrong-owner and expired tokens cannot revoke
+another live family.
+
+Auth helpers/controllers have expanded formatting, spacing between independent
+steps, and comments explaining the atomic branch, replay tradeoff and uncertain
+acknowledgment. Generated modules, tests and English/French messages match the
+reference app. Migration and browser guides document client coordination,
+compatibility, failure handling and the limits of theft detection. The policy
+uses the replay-detection rationale in RFC 9700, checked on 2026-09-10; it does not
+claim OAuth implementation or add a new token format/schema.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- Four initial regressions failed against the old behavior and then passed.
+  Seven policy cases now cover duplicate refresh, ancestor replay across multiple
+  rotations, other-device isolation, a delayed winning response after revocation,
+  malformed/forged/wrong-owner tokens, expired ancestors, and acknowledgment
+  failure before/after commit. Existing logout/password-change/revocation cases
+  remain retained.
+- All 210 framework/spec tests and 46 reference app tests pass with temporary
+  MongoDB/Redis and no skips. Coverage remains above unchanged floors: 81.89%
+  statements, 68.7% branches, 86.41% functions and 84.06% lines.
+- Package and test typechecks pass. The reference typecheck found a mock overload
+  mismatch when inspecting driver options; moving the assertion to the recorded
+  mock call fixed it. The corrected acknowledgment case and reference types pass.
+  Builds and generated/reference module/test/config/nginx/browser/agent-guide
+  parity pass.
+- Packed production passes all 46 generated tests, generated types, deterministic
+  offline specs with connections denied, runtime specs, backend/shutdown, worker
+  and isolated PM2 HTTP self-restart checks. Workspace/generated audits pass the
+  existing severity gates.
+- Evidence: ignored `reports/s08k-{red,green,edges,integration,app,types,test-types,app-types,ack,artifacts,parity,packed,audit}.log`,
+  `reports/s08k-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux/Node matrix CI and replica-set failover are not established by these
+  local standalone-MongoDB results.
+
+The planned cookie/CSRF and refresh-policy review items are now locally complete.
+The next retained S08 backlog item is open-stream authorization revalidation:
+role, credential or session revocation must terminate an already-open log stream
+within a documented bound. Stream shutdown signaling before framework HTTP
+draining follows separately. Both were identified in S08h and remain unimplemented.
+New follow-up evidence gaps: replica-set failover under uncertain refresh writes
+and application incident alerts. Theft without reuse is not detected; expired
+ancestors are rejected without family revocation. Already authorized requests and
+streams are not cancelled by this session update. No deployment, publication or
+provider extraction is included.
