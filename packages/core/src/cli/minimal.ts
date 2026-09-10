@@ -642,6 +642,78 @@ test("log stream slots are capped per account and released on HTTP cancellation"
     } finally { if (!reopened!.body!.locked) await reopened!.body!.cancel(); }
   });
 });
+
+test("restart acknowledgment finishes before PM2 commands and retains its audit", async () => {
+  const user = await sysadmin();
+  const specifier = "pm2";
+  const pm2 = (await import(specifier)).default as {
+    connect(callback: (error?: Error) => void): void;
+    list(
+      callback: (error: Error | undefined, processes: unknown[]) => void,
+    ): void;
+    restart(id: number, callback: (error?: Error) => void): void;
+    disconnect(): void;
+  };
+  const { realpathSync } = await import("node:fs");
+  const root = realpathSync(fileURLToPath(new URL("../", import.meta.url)));
+  const oldHome = process.env.PM2_HOME;
+  process.env.PM2_HOME = "/unused-restart-response-test";
+
+  const connect = vi
+    .spyOn(pm2, "connect")
+    .mockImplementation((callback) => callback());
+  const list = vi
+    .spyOn(pm2, "list")
+    .mockImplementation((callback) =>
+      callback(undefined, [
+        {
+          name: "test-backend",
+          pm_id: 1,
+          pid: 1001,
+          pm2_env: { pm_cwd: root },
+        },
+      ]),
+    );
+  const disconnect = vi.spyOn(pm2, "disconnect").mockImplementation(() => {});
+  const restarted = barrier();
+  const restart = vi
+    .spyOn(pm2, "restart")
+    .mockImplementation((_id, callback) => {
+      restarted.resolve();
+      callback();
+    });
+
+  try {
+    const response = await post(
+      "/api/v1/settings/reboot",
+      {},
+      user.access_token,
+    );
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: { supervised: true, accepted: true, scheduled: ["test-backend"] },
+    });
+
+    await restarted.promise;
+    expect(restart).toHaveBeenCalledWith(1, expect.any(Function));
+    expect(
+      await handle.ctx
+        .models!.get("AuditEvent")
+        .findOne({ actor: user.userId })
+        .lean(),
+    ).toMatchObject({ action: "reboot.requested" });
+  } finally {
+    connect.mockRestore();
+    list.mockRestore();
+    restart.mockRestore();
+    disconnect.mockRestore();
+
+    if (oldHome === undefined) delete process.env.PM2_HOME;
+    else process.env.PM2_HOME = oldHome;
+  }
+});
 ` : `
 test("health needs no external infrastructure", async () => {
   expect(handle.ctx.models).toBeUndefined();

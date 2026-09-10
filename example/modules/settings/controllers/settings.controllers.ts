@@ -5,10 +5,17 @@ import { HttpError } from "@tulipes/core/http";
 import { coerceValue, type DescribedVariable } from "@tulipes/core/env";
 
 import { audit } from "../helpers/audit.js";
-import { MAX_SETTINGS_FILE_BYTES, missingTranslationKeys, readSettingsJson, settingsFileNames, settingsJson, writeSettingsFile } from "../helpers/files.js";
+import {
+  MAX_SETTINGS_FILE_BYTES,
+  missingTranslationKeys,
+  readSettingsJson,
+  settingsFileNames,
+  settingsJson,
+  writeSettingsFile,
+} from "../helpers/files.js";
 import { writeVariable } from "../helpers/env-file.js";
 import { LogStreams } from "../helpers/log-stream.js";
-import { isSupervised, restart } from "../helpers/pm2.js";
+import { isSupervised, restartAfterResponse } from "../helpers/pm2.js";
 
 /**
  * The infrastructure console: what every module declares, what its
@@ -85,7 +92,10 @@ export class SettingsController {
       if (!found) throw new HttpError(404, "noSuchVariable", { field: "name" });
 
       if (reveal && found.isSecret) {
-        await audit(this.ctx, req, { action: "variable.reveal_requested", variable: name });
+        await audit(this.ctx, req, {
+          action: "variable.reveal_requested",
+          variable: name,
+        });
       }
 
       res.respond({ data: describeVariable(found) });
@@ -114,11 +124,21 @@ export class SettingsController {
       // next boot — which is when it would otherwise surface.
       const coerced = coerceValue(found.spec, value);
       if (!coerced.ok) {
-        throw new HttpError(422, coerced.reason, { field: "value", code: "INVALID_VALUE" });
+        throw new HttpError(422, coerced.reason, {
+          field: "value",
+          code: "INVALID_VALUE",
+        });
       }
 
-      await audit(this.ctx, req, { action: "variable.change_requested", variable: name });
-      const { replaced } = writeVariable(this.ctx.Environment.envFile, name, value);
+      await audit(this.ctx, req, {
+        action: "variable.change_requested",
+        variable: name,
+      });
+      const { replaced } = writeVariable(
+        this.ctx.Environment.envFile,
+        name,
+        value,
+      );
 
       // A container-injected variable outranks the file on the next boot
       // too, so the file alone would silently change nothing. Setting it
@@ -191,10 +211,14 @@ export class SettingsController {
         });
       }
 
-      await audit(this.ctx, req, { action: "reboot.requested", target_count: targets?.length ?? 0 });
+      // An accepted request still needs its durable audit before PM2 is contacted.
+      await audit(this.ctx, req, {
+        action: "reboot.requested",
+        target_count: targets?.length ?? 0,
+      });
 
-      const outcome = await restart(targets ?? []);
-      res.respond({ data: outcome });
+      // The helper owns validation, response completion and deferred execution.
+      await restartAfterResponse(res, targets ?? []);
     };
   }
 
@@ -215,16 +239,24 @@ export class SettingsController {
       }
 
       const which = req.query.process === "worker" ? "worker" : "backend";
-      const level = typeof req.query.level === "string" ? req.query.level : undefined;
+      const level =
+        typeof req.query.level === "string" ? req.query.level : undefined;
       const tail = Math.min(Number(req.query.tail ?? 200) || 0, 1000);
 
       const session = req.auth.session;
       this.#logStreams.open(res, {
         userId: req.auth.user ? String(req.auth.user._id) : "",
-        expiresAt: session ? Math.min(session.access_expires_at.getTime(), session.expires_at.getTime()) : 0,
+        expiresAt: session
+          ? Math.min(
+              session.access_expires_at.getTime(),
+              session.expires_at.getTime(),
+            )
+          : 0,
         dir: String(this.ctx.Environment.get("LOG_DIR")),
         prefix: `${String(this.ctx.Environment.get("LOG_BASENAME"))}-${which}`,
-        process: which, tail, ...(level ? { level } : {}),
+        process: which,
+        tail,
+        ...(level ? { level } : {}),
       });
     };
   }
@@ -237,18 +269,27 @@ export class SettingsController {
     // directory comes from what the framework discovered at boot, so a
     // crafted module or locale name cannot address a path outside it.
     const manifest = this.ctx.modules.find((entry) => entry.name === module);
-    if (!manifest) throw new HttpError(404, "noSuchModule", { field: "module" });
+    if (!manifest)
+      throw new HttpError(404, "noSuchModule", { field: "module" });
     if (!/^[a-z]{2}(-[A-Za-z0-9]+)?$/.test(locale)) {
       throw new HttpError(422, "invalidLocale", { field: "locale" });
     }
 
-    return { file: join(manifest.dir, "i18n", `${locale}.json`), module, locale };
+    return {
+      file: join(manifest.dir, "i18n", `${locale}.json`),
+      module,
+      locale,
+    };
   }
 
-  #i18nOf(moduleDir: string, budget: { bytes: number; keys: number }): { locales: string[]; missing: Record<string, string[]> } {
+  #i18nOf(
+    moduleDir: string,
+    budget: { bytes: number; keys: number },
+  ): { locales: string[]; missing: Record<string, string[]> } {
     const i18nDir = join(moduleDir, "i18n");
-    const files = settingsFileNames(i18nDir)
-      .filter(name => /^[a-z]{2}(-[A-Za-z0-9]+)?(\.missing)?\.json$/.test(name));
+    const files = settingsFileNames(i18nDir).filter((name) =>
+      /^[a-z]{2}(-[A-Za-z0-9]+)?(\.missing)?\.json$/.test(name),
+    );
     const locales = files
       .filter((name) => !name.endsWith(".missing.json"))
       .map((name) => name.replace(/\.json$/, ""))
@@ -259,12 +300,20 @@ export class SettingsController {
     const missing: Record<string, string[]> = {};
     for (const name of files.filter((file) => file.endsWith(".missing.json"))) {
       const locale = name.replace(/\.missing\.json$/, "");
-      const keys = missingTranslationKeys(readSettingsJson(join(i18nDir, name)));
+      const keys = missingTranslationKeys(
+        readSettingsJson(join(i18nDir, name)),
+      );
       budget.keys += keys.length;
-      budget.bytes += keys.reduce((total, key) => total + Buffer.byteLength(key), 0);
+      budget.bytes += keys.reduce(
+        (total, key) => total + Buffer.byteLength(key),
+        0,
+      );
       if (budget.keys > 10_000 || budget.bytes > MAX_SETTINGS_FILE_BYTES) {
-        throw new HttpError(413, "settingsMetadataTooLarge", { code: "SETTINGS_METADATA_TOO_LARGE",
-          defaultMessage: "The missing translation key summary exceeds the allowed size" });
+        throw new HttpError(413, "settingsMetadataTooLarge", {
+          code: "SETTINGS_METADATA_TOO_LARGE",
+          defaultMessage:
+            "The missing translation key summary exceeds the allowed size",
+        });
       }
       missing[locale] = keys;
     }
@@ -278,7 +327,9 @@ export class SettingsController {
  * the enum and whether it is required to render a usable form, not just
  * the current value.
  */
-function describeVariable(variable: DescribedVariable): Record<string, unknown> {
+function describeVariable(
+  variable: DescribedVariable,
+): Record<string, unknown> {
   const { spec } = variable;
   return {
     name: spec.name,
@@ -304,7 +355,10 @@ function rolesFor(
 ): string[] {
   const namespace = `${id.split(":")[0]}:*`;
   const roles = grants
-    .filter(({ resource }) => resource === id || resource === "*" || resource === namespace)
+    .filter(
+      ({ resource }) =>
+        resource === id || resource === "*" || resource === namespace,
+    )
     .map(({ role }) => role);
   return [...new Set(roles)].sort();
 }
