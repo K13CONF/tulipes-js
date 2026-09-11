@@ -16,7 +16,10 @@ currently claimed as supported. Node upgrades require expanding CI first.
 
 ## Pre-1.0 policy
 
-Candidate: core 0.9.0-rc.2 and spec 0.3.0-rc.2 are published under `next`.
+Candidate line: core 0.9.0-rc.3 and spec 0.3.0-rc.3, released under `next`.
+Spec rc.3 requires core `^0.9.0-rc.3`; upgrade the pair together. The candidate
+includes Sprint 02 offline inspection and security controls; provider extraction
+and production-pilot acceptance remain later work.
 Candidate fixes target this pair; the stable support lines below remain in
 effect until 0.9.0 becomes stable.
 

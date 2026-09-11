@@ -422,7 +422,8 @@ config/route factories and shutdown hooks, while skipping bootstrap, sockets,
 listening and readiness. `--offline` builds opted-in native routers and loads ACL
 without services, runtime config or secrets. Both new presets use it in `yarn spec`.
 See [offline inspection](../../docs/offline-inspection.md) for migration and limits.
-This interface is unreleased; it requires core built from this checkout.
+This interface is available in core `0.9.0-rc.3` and later candidates; use
+`@tulipes/core@next` with `@tulipes/spec@next`.
 
 ## What `tulipes init --preset production` gives you
 

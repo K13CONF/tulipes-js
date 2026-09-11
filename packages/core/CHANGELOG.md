@@ -11,6 +11,12 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.9.0-rc.3] — 2026-09-11
+
+Released with `@tulipes/spec@0.3.0-rc.3`; both candidates use `next`.
+Existing generated apps must merge the security and router changes described in
+[MIGRATING.md](./MIGRATING.md); installing core alone does not update app policy.
+
 - Add optional `onDrain` module hooks at the start of shutdown, sharing the traffic
   drain deadline and aggregate cleanup errors. Production settings use the hook
   to stop log streams, reject late openings and abort pending authorization before
@@ -363,7 +369,8 @@ generated types, ACL, the model store, queues, sockets, the three process
 modes (`backend`, `worker`, `script`), the startup banner, and the CLI —
 `init`, `dev`, `sync`, `env:check`, `new module`, `update`.
 
-[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.2...HEAD
+[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.3...HEAD
+[0.9.0-rc.3]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.2...v0.9.0-rc.3
 [0.9.0-rc.2]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.1...v0.9.0-rc.2
 [0.9.0-rc.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.8.0...v0.9.0-rc.1
 [0.8.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.1...v0.8.0

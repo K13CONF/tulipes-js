@@ -11,7 +11,13 @@ what makes it work under nvm.
 
 ---
 
-## Unreleased — production security upgrade overview
+<a id="unreleased--production-security-upgrade-overview"></a>
+
+## 0.9.0-rc.3 — production security upgrade overview
+
+Upgrade core and spec together to `0.9.0-rc.3` / `0.3.0-rc.3`. Spec rc.3 declares
+core `^0.9.0-rc.3`; older core apps should retain their matching spec line until
+they migrate. Both packages remain prereleases under `next`.
 
 The S08a–S08m changes apply to editable generated application code as well as core.
 Regenerating a starter does not update an existing application. Merge the auth,
@@ -33,7 +39,9 @@ CSRF enforcement require a separately chosen application adaptation. The
 [Sprint 02 evidence map](../../docs/sprints/production-readiness-02-evidence.md)
 separate retained local behavior from pending CI and deployment verification.
 
-## Unreleased — early shutdown notification for long-lived responses
+<a id="unreleased--early-shutdown-notification-for-long-lived-responses"></a>
+
+## 0.9.0-rc.3 — early shutdown notification for long-lived responses
 
 Modules may export `onDrain(ctx)` from `module.config.ts`. Core invokes these
 hooks at the start of shutdown in reverse module load order, before starting its
@@ -73,7 +81,9 @@ cannot reopen it; another boot has its own fresh manager. Slow/non-draining peer
 retain the one-second forced socket-close fallback and the framework's overall
 HTTP deadline. Healthy log streams no longer force the HTTP drain timeout.
 
-## Unreleased — refresh reuse expires the device family
+<a id="unreleased--refresh-reuse-expires-the-device-family"></a>
+
+## 0.9.0-rc.3 — refresh reuse expires the device family
 
 Deploy the updated auth token helper and controller together on every backend,
 with the session model comments and translations. The existing Session schema,
@@ -113,7 +123,9 @@ are not cancelled by this update. Open log streams recheck authorization under
 the bounded lease described below. Real replica-set failover,
 client coordination and incident alerting remain deployment follow-ups.
 
-## Unreleased — browser authentication guidance
+<a id="unreleased--browser-authentication-guidance"></a>
+
+## 0.9.0-rc.3 — browser authentication guidance
 
 Production scaffolds now include `docs/browser-auth.md`. Copy that guide when
 updating an existing app, along with the clarified security variable descriptions
@@ -127,7 +139,9 @@ and browser validation needed before an application adds cookies. New retained
 HTTP tests check cookie/query-token rejection, JSON-only refresh and absent
 Set-Cookie headers. They do not establish a browser cookie-security policy.
 
-## Unreleased — restart acknowledgment before execution
+<a id="unreleased--restart-acknowledgment-before-execution"></a>
+
+## 0.9.0-rc.3 — restart acknowledgment before execution
 
 Merge settings' PM2 helper, controller and route declaration together. The reboot
 endpoint now returns **202 Accepted** with `data.supervised`, `data.accepted` and
@@ -164,7 +178,9 @@ The new `restartAfterResponse(res, targets)` owns HTTP acknowledgment and execut
 Both use numeric PM2 selectors, retain scope checks and attempt connection cleanup.
 See [Node response finish semantics](https://nodejs.org/docs/latest-v24.x/api/http.html#event-finish_2).
 
-## Unreleased — bounded log streaming
+<a id="unreleased--bounded-log-streaming"></a>
+
+## 0.9.0-rc.3 — bounded log streaming
 
 Merge settings' `helpers/log-tail.ts`, new `helpers/log-stream.ts` and controller
 changes together. Production starters include the same implementation and HTTP
@@ -242,7 +258,9 @@ streams before HTTP waits for completion; disposal hooks still follow draining.
 A peer that remains open at the HTTP deadline is force-closed and the timeout is
 reported. See [Node response backpressure and close events](https://nodejs.org/docs/latest-v24.x/api/http.html).
 
-## Unreleased — constrained settings file access
+<a id="unreleased--constrained-settings-file-access"></a>
+
+## 0.9.0-rc.3 — constrained settings file access
 
 Merge settings' new `helpers/files.ts`, updated env helper and controller, and its
 explicit `dotenv` dependency. Existing applications keep their configured env
@@ -284,7 +302,9 @@ sandbox against a local writer racing directory replacements. Do not grant
 untrusted users write access to these directories. Configured ancestor paths may
 resolve through operator-managed links. See [Node filesystem flags and operations](https://nodejs.org/docs/latest-v24.x/api/fs.html).
 
-## Unreleased — shared production request limits
+<a id="unreleased--shared-production-request-limits"></a>
+
+## 0.9.0-rc.3 — shared production request limits
 
 Update security's package dependencies (`ioredis` and `ipaddr.js`), environment
 metadata, route factory, new `helpers/rate-limit.ts` and `module.config.ts`
@@ -335,7 +355,9 @@ writes. Local concurrent/open-stream bounds are described above. Edge traffic
 limits, account-aware abuse response and cross-replica/load tuning remain
 deployment work.
 
-## Unreleased — explicit production proxy trust
+<a id="unreleased--explicit-production-proxy-trust"></a>
+
+## 0.9.0-rc.3 — explicit production proxy trust
 
 Update security's `meta.variables.json`, route factory and new `helpers/proxy.ts`,
 plus the nginx templates. `TRUST_PROXY_CIDRS` defaults to empty, ignoring forwarded
@@ -350,7 +372,9 @@ public ingress. Replace previous blanket `trust proxy=true` or
 and explicit peer ranges at each layer. Sessions and audits use the resolved IP;
 shared request limits are described above.
 
-## Unreleased — durable production settings audits
+<a id="unreleased--durable-production-settings-audits"></a>
+
+## 0.9.0-rc.3 — durable production settings audits
 
 Update the settings controller and audit helper together, add the generated
 `models/audit-event.model.ts`, and include settings' Mongoose dependency and new
@@ -367,7 +391,9 @@ logging thresholds cannot disable it. Records describe requested actions, with n
 old/new values or translation contents. A failed later action is not rolled back
 or recorded as completed by this helper.
 
-## Unreleased — credential-bound production sessions
+<a id="unreleased--credential-bound-production-sessions"></a>
+
+## 0.9.0-rc.3 — credential-bound production sessions
 
 Update the editable auth controller, auth helpers, Credential and Session models
 together. `setPassword` now returns the version written alongside the hash;
@@ -391,7 +417,9 @@ the credential version even if later row cleanup fails. In that failure case the
 endpoint returns 500, but the new password already applies; log in with it. The
 flow does not roll back the credential write when cleanup fails.
 
-## Unreleased — production session validity
+<a id="unreleased--production-session-validity"></a>
+
+## 0.9.0-rc.3 — production session validity
 
 Refresh the editable `modules/auth/helpers/tokens.ts` and `passport.ts` from the
 updated starter. `loadSession` now requires the token subject as its third argument.
@@ -399,7 +427,9 @@ Access and refresh reject expired sessions even before MongoDB TTL cleanup and
 require the stored session owner to match that subject. Session listings exclude
 expired rows. Apply the credential-version upgrade above alongside these checks.
 
-## Unreleased — production settings restart scope
+<a id="unreleased--production-settings-restart-scope"></a>
+
+## 0.9.0-rc.3 — production settings restart scope
 
 Refresh the editable `modules/settings/helpers/pm2.ts` from the updated production
 starter. Reboot targets must belong to the installed application's canonical PM2
@@ -408,7 +438,9 @@ invalid names now fail with 400 before any restart. A daemon without verified
 processes for this app returns 503. Keep PM2 `cwd` set to the application root.
 The helper restarts numeric IDs to avoid name collisions across applications.
 
-## Unreleased — offline inspection with native routers
+<a id="unreleased--offline-inspection-with-native-routers"></a>
+
+## 0.9.0-rc.3 — offline inspection with native routers
 
 Both new presets retain `routes/*.routes.ts` and native Express Router composition.
 Wrap offline-compatible factories in `defineRoutes()` from `@tulipes/core/http`,
@@ -448,9 +480,10 @@ keys and replace default admin credentials before staging/production boot.
 Generated tests require dedicated test MongoDB and Redis URLs for production;
 the minimal tests have no service requirements.
 
-This release does not extract provider dependencies or add general offline
-inspection. The candidate versions are core 0.9.0-rc.2 and spec 0.3.0-rc.2, published under
-`next`. Install the candidate CLI with `npm install -g @tulipes/core@next`;
+The rc.1/rc.2 releases established the minimal default without offline inspection.
+Core 0.9.0-rc.3 and spec 0.3.0-rc.3 add explicit offline native-router inspection
+and the security changes above. Provider extraction is still planned. These
+candidates publish under `next`. Install the candidate CLI with `npm install -g @tulipes/core@next`;
 generated apps select compatible candidate dependencies automatically.
 
 ## Reliability contracts (0.8)
