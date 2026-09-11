@@ -213,10 +213,12 @@ silently start those changes.
 core installation must not acquire Mongoose through direct dependencies, runtime
 imports or emitted public type declarations.
 
-**Status:** S09.1a delivered on 2026-09-11 (coupling register, measurement
-harness and baseline against `b42bd00` — see the
-[dependency inventory](../design/mongoose-dependency-inventory.md)); S09.1b and
-interface design/implementation have not started. See the
+**Status:** S09.1 complete on 2026-09-11 (coupling register, measurement
+harness, baseline and reproducibility run — see the
+[dependency inventory](../design/mongoose-dependency-inventory.md)); S09.2a
+interface selection recorded in the
+[provider design](../design/mongoose-provider-design.md); executable fixtures
+(S09.2b) and extraction have not started. See the
 [Sprint 03 execution plan](production-readiness-03.md). **Owner:** engineer; maintainer
 owns compatibility/versioning decisions. **Dependencies:** Sprint 02 lifecycle behavior
 and offline declarations. The original estimate was 5–8 engineering days for the
