@@ -9,6 +9,7 @@ retains job links, archive digests and separate deployment follow-ups. No versio
 was published and repository visibility is unchanged.
 
 Detailed program tasks: [sprint-by-sprint report](production-readiness-task-report.md).
+Next workstream: [Sprint 03 dependency inventory and provider design](production-readiness-03.md).
 
 ## Goal and backlog
 
