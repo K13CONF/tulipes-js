@@ -15,7 +15,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08k locally verified; stream follow-ups open | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08l locally verified; pre-drain stream shutdown open | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -74,7 +74,7 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
 committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
 S08e as `bd18bd6`; S08f as `7125ca1`; S08g as `4ed321c`; S08h as `0ed912a`;
-S08i as `b7d63bb`; S08j as `5eda964`.
+S08i as `b7d63bb`; S08j as `5eda964`; S08k as `a736237`.
 
 ### S08a — PM2 target scope
 
@@ -581,3 +581,81 @@ and application incident alerts. Theft without reuse is not detected; expired
 ancestors are rejected without family revocation. Already authorized requests and
 streams are not cancelled by this session update. No deployment, publication or
 provider extraction is included.
+
+
+### S08l — Revalidate authorization throughout log streaming
+
+Resumed the unfinished stream-access change set and completed its production
+scaffold, HTTP regressions and migration guidance. A captured access identity now
+reloads live session ownership/expiry, credential version, token revocation and
+current user/role authorization for `settings:logs` before SSE/file access and
+throughout the stream. Missing ACL authority fails closed.
+
+Checks begin once per second and have a one-second timeout. A decision expires
+two seconds from the check's start, so a delayed success cannot extend stale
+permission from its completion time. Idle streams close on failed verification;
+all writes check the lease too. Opening denial returns 403, opening failure returns
+sanitized 503, and background failure ends SSE without driver details. Existing
+output/lifetime/backpressure limits remain effective.
+
+Only one check runs per stream. Cancellation aborts cooperative callbacks and
+holds the stream's capacity until any pending underlying check settles. This
+bounds reconnect-driven outstanding work to four checks per controller, two per
+account. A permanently stalled driver can exhaust that local capacity; this
+change does not claim to cancel arbitrary driver work or provide shared replica
+leases. Timing assumes a responsive event loop and reads reflecting committed
+authority; already-buffered bytes and the separate one-second socket flush bound
+are outside the authorization decision's two-second limit.
+
+Locally verified on 2026-09-11, Node 24.14.0/macOS:
+
+- All 217 framework/spec tests and 54 reference app tests passed with disposable
+  MongoDB/Redis and no skips. The 13 stream/lease cases include opening rejection,
+  background failure, idle revocation, initial/background stalls, disconnect while
+  opening, reserved pending capacity and delayed-decision expiry.
+- Eight new real HTTP cases retain role removal, user deletion, session deletion,
+  session expiry, individual access revocation, logout, password replacement and
+  refresh reuse. Each observes an open SSE response before the authority change,
+  requires bounded EOF, rejects subsequent delivery and checks another account
+  can still open a stream.
+- Coverage floors passed unchanged: 81.89% statements, 68.7% branches, 86.41%
+  functions and 84.06% lines. Package/test/reference typechecks and builds passed.
+  Reference typechecking caught optional `ctx.acl` access; the corrected helper
+  denies absent ACL and passes reference types and the packed generated suite.
+- Generated/reference module, test, config, nginx, browser-guide and agent-guide
+  parity passed. Packed production passed all 54 generated tests, generated types,
+  deterministic offline specs with connections denied, runtime specs, backend
+  shutdown, worker and isolated PM2 HTTP self-restart checks.
+- Workspace/runtime and generated dependency audits passed existing severity
+  gates. The moderate cron-parser maintenance notice remains visible.
+- Evidence: ignored `reports/s08l-{stream,app-stream,integration,app,test-types,types,sync,app-types,artifacts,parity,packed,audit}.log`,
+  `reports/s08l-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux/supported Node matrix CI and replica-set failover remain external gates;
+  these are local checks against the working tree, not published release evidence.
+
+### Next change set — S08m: signal streams before HTTP draining
+
+Status: not started. S08l completes authorization revalidation only. Before
+claiming Sprint 02 complete, implement and verify this separate lifecycle item:
+
+- Provide a lifecycle signal at the start of shutdown while models/queues needed
+  by in-flight work are still available; retain the existing cleanup ownership,
+  idempotence and overall timeout semantics.
+- Make the settings stream controller reject new openings and close existing SSE
+  tails/timers in response to that signal, including an authorization check still
+  pending. Do not await uncooperative work indefinitely.
+- Retain real HTTP tests for active/idle streams, an opening/check racing shutdown,
+  repeated shutdown, other in-flight requests and cleanup failures. A healthy log
+  stream must no longer force the normal HTTP drain deadline to expire.
+- Mirror the lifecycle contract and settings wiring in generated output, retain
+  runtime/offline parity and update migration instructions.
+- Run required types/coverage, reference tests, parity and packed production
+  lifecycle checks; record local evidence separately from Linux/Node matrix CI.
+
+Before closing S08, reconcile cumulative changelog/security documentation with
+S08a–S08m and carry remaining deployment evidence into the program backlog:
+live nginx topology, cross-replica/load tuning, replica-set failover under uncertain
+refresh writes, audit retention/archival and application incident alerts. Cookie
+adaptation remains conditional on choosing cookie authentication. Provider
+extraction stays in Sprint 03. No deployment, publication or visibility change
+was performed by S08l.

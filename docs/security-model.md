@@ -259,3 +259,33 @@ state, and TTL later removes it. Detection requires reuse while the presented
 ancestor is unexpired. Already authorized requests and open streams keep their
 existing behavior. Replica-set failover verification and an incident-alerting
 pipeline remain explicit follow-up work.
+
+## S08l — Authorization throughout an open log stream
+
+Open settings log streams reload the original token's session owner, live expiry,
+credential version and revocation status, then reload the user and evaluate the
+current role for `settings:logs`. The controller repeats the check before file
+access/SSE headers to cover changes since request authentication. Idle and active
+streams recheck every second; a one-second check timeout and a lease measured from
+the check's start limit stale output authorization to two seconds with a responsive
+event loop. Each frame checks expiry before writing. Already-buffered bytes cannot
+be recalled, and the existing one-second socket flush fallback is separate.
+
+Role removal, user deletion, session deletion/expiry, access revocation, logout,
+password replacement and refresh reuse all have retained HTTP cases against real
+MongoDB. A normal refresh does not itself revoke the earlier access token.
+Opening denials use 403; verification failures/timeouts use sanitized 503. Once
+streaming begins, failed verification ends the response without exposing driver
+errors. Other accounts retain their ability to open streams.
+
+Only one verification runs per stream. Closing aborts cooperative work and keeps
+the connection slot reserved until any outstanding check settles, including a
+query that ignored cancellation. This bounds pending work across reconnects to
+four checks per controller, two per account, but a persistent database stall can
+exhaust stream capacity. It does not prove in-flight driver cancellation. The
+[migration guide](../packages/core/MIGRATING.md#unreleased--bounded-log-streaming)
+describes the new async helper contract, timing and operational limits.
+
+S08h/S08k descriptions of streams retaining their opening authority are superseded
+by this increment. Signaling streams before framework HTTP draining remains the
+separate S08m backlog item; cross-replica leases and deployment tuning remain open.

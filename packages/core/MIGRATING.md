@@ -47,7 +47,8 @@ This policy does not identify which caller is the thief. A holder of an old,
 still-valid refresh token can force that device to sign in again. Expired
 ancestors are rejected without revoking live descendants. Detection requires
 reuse; theft with no reuse is not discovered. Already authenticated HTTP requests
-and open log streams are not cancelled by this update. Real replica-set failover,
+are not cancelled by this update. Open log streams recheck authorization under
+the bounded lease described below. Real replica-set failover,
 client coordination and incident alerting remain deployment follow-ups.
 
 ## Unreleased — browser authentication guidance
@@ -142,10 +143,39 @@ subsequent failures send a sanitized SSE error code (`LOG_UNAVAILABLE` or
 slots; an in-flight filesystem operation is closed/discarded when it settles. Limits are editable constants in the two helpers;
 no runtime environment variables or shared Redis connection leases are added.
 
-Authorization is checked on opening. Existing streams do not continuously recheck
-role changes, credential replacement or revocation; the lifetime/expiry limit
-bounds their remaining exposure. Immediate stream revocation remains follow-up
-policy work. The framework drains HTTP before module shutdown hooks: a stream
+Merge auth's new `helpers/access-check.ts` and barrel export alongside settings'
+new `helpers/access-lease.ts`, updated `helpers/log-stream.ts` and controller.
+`LogStreams.open()` is now asynchronous: await it and supply an `authorize(signal)`
+callback that reloads current authority and returns a boolean. The supplied checker
+captures the original user/session/access-token identity, then reloads current
+credential version, session ownership/expiration, token revocation and user role
+against `settings:logs`. Refresh rotation alone does not revoke existing access;
+refresh reuse, logout, password replacement, session deletion/expiry, user deletion
+and permission loss invalidate the stream at its next check.
+
+The controller checks again before opening files or sending SSE headers, then
+rechecks once per second with a one-second timeout. A successful decision expires
+two seconds from the check's **start**, so a delayed result cannot extend old
+authority beyond that bound. Output stops on denial, failure, timeout or lease
+expiry, including idle streams; every frame also checks the lease before writing.
+The bound assumes a responsive event loop and database reads reflecting committed
+authority; it is not instantaneous cancellation or a guarantee about when buffered
+bytes reach the client. Socket flushing retains the separate one-second forced
+close fallback. A blocked event loop cannot execute timers on schedule.
+
+Opening denial returns 403. Opening failures/timeouts return sanitized 503
+`STREAM_AUTHORIZATION_UNAVAILABLE`; after SSE begins, authorization failures end
+the response without driver messages or a second HTTP envelope. Each stream runs
+one check at a time, and at most four checks can be outstanding per controller
+(two per account). Abort is cooperative: the default checker stops between reads
+but does not guarantee cancellation of an in-flight database query. A closed or
+timed-out stream retains its slot until that check settles, so reconnects cannot
+accumulate unbounded database work. Persistent stalled queries can exhaust local
+capacity and make new streams return 429 until the queries settle or the process
+restarts. Custom callbacks must respect the signal and avoid detached work.
+
+These limits are local to each controller; shared replica leases and load tuning
+remain deployment work. The framework drains HTTP before module shutdown hooks: a stream
 still open at its shutdown deadline is force-closed by the existing HTTP cleanup
 and that timeout is reported. Gracefully signaling streams before HTTP drain is
 recorded separately in the sprint backlog. See [Node response backpressure and close events](https://nodejs.org/docs/latest-v24.x/api/http.html).
