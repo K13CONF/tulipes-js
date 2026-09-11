@@ -2,10 +2,10 @@
 
 Prepared: 2026-09-11. Implementation baseline: `2d23433` (Sprint 02 / S08l).
 
-**Next action: improve test readability (S08-readability), then close out Sprint 02.**
+**Next action: complete Sprint 02 documentation/evidence closeout (02-C1–C5).**
 Sprint 02 is still open. Offline inspection, starter migration and security items
 S08a–S08m are implemented; provider extraction has not started.
-S08m was locally verified on 2026-09-11 with 225 framework/spec and 55 reference/
+S08m is committed as `d06066a`. It was locally verified on 2026-09-11 with 225 framework/spec and 55 reference/
 packed production tests; the S08l table below remains its dated baseline.
 
 This report translates the existing program into executable tasks. Sprint 01 and
@@ -21,7 +21,7 @@ for this report; earlier release statements remain dated evidence.
 | Sprint | Intended result | Current state | Main dependency |
 |---|---|---|---|
 | 01 — Package trust and first run | Reproducible minimal/production starters and verified release artifacts | Implementation recorded as delivered; external governance/release conditions remain distinct | Maintainer decisions for external account/release changes |
-| 02 — Offline inspection and security | Deterministic offline specs and retained auth/settings abuse cases | S06–S07 and S08a–S08m implemented; readability and closeout remain | Finish stream lifecycle behavior and review final evidence |
+| 02 — Offline inspection and security | Deterministic offline specs and retained auth/settings abuse cases | S06–S07, S08a–S08m and test readability implemented; closeout remains | Finish stream lifecycle behavior and review final evidence |
 | 03 — First provider extraction | Core can install and boot without Mongoose | Planned | Sprint 02 closeout and a compatible capability boundary |
 | 04 — Queues and sockets | Redis/queue and socket dependencies install only when selected | Proposed | Prove the first adapter before copying its design |
 | 05 — Packaging and composition | Measured packaging decisions and supported feature combinations | Proposed; individual splits conditional | Provider contracts, installation measurements and migration costs |
@@ -515,9 +515,9 @@ own existing or subsequent authorization.
 
 Recommended immediate order:
 
-1. **S08-readability:** expand compressed test code, add space between logical
-   steps, preserve test/fixture behavior and mirror generated starter tests. S08m
-   lifecycle implementation and local verification are complete.
+1. **Completed:** S08m lifecycle implementation and S08-readability. All tracked
+   tests/helpers and both starter test outputs now have expanded formatting and
+   space between distinct steps, with test behavior and fixture values retained.
 2. **02-C1–C5:** reconcile cumulative docs and close Sprint 02 with actual evidence
    and assigned external follow-ups.
 3. **S09.1–S09.2:** measure current dependencies and settle the first provider seam;

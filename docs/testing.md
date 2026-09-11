@@ -12,6 +12,13 @@ yarn test:types
 production builds include only `src/`. The compiler checks test code and
 `context.test-d.ts` with `@ts-expect-error` assertions for invalid phase access.
 
+Keep test code readable: expand long calls, objects and cleanup blocks over
+multiple lines, and separate setup, actions, assertions and cleanup with blank
+lines. Keep short related declarations or assertions together. Preserve comments
+that explain ordering, races and resource ownership. Apply the same formatting to
+reference tests and the starter test templates; literal fixture contents should
+only change when the test scenario itself requires it.
+
 Database and queue integration tests are skipped unless their respective test
 URLs are supplied. Use dedicated local services and a test-only Redis database:
 
