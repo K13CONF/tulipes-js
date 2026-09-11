@@ -4,10 +4,11 @@ The production preset generates editable application policy: auth, users,
 settings, logging and PM2 operations. The minimal preset omits these modules.
 Neither preset constitutes a completed external security audit.
 
-S08a–S08m are implemented and locally verified. This document describes their
+S08a–S08m are implemented and verified locally and in Sprint 02 CI. This document describes their
 cumulative behavior; dated dependency entries remain historical observations.
 The [Sprint 02 evidence map](sprints/production-readiness-02-evidence.md) links
-implementation and abuse tests and identifies pending CI and deployment evidence.
+implementation and abuse tests, records accepted CI evidence and identifies
+remaining deployment verification.
 
 ## Boundaries and controls
 

@@ -1,5 +1,11 @@
 # Sprint 02 — Security review evidence and external gates
 
+Sprint acceptance completed on 2026-09-11. All seven jobs in
+[CI run 34632402765](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765) passed
+for committed source `37dbca759833b743930c50fc2372eed217646f3e`.
+The CI acceptance section below retains job links and archive digests. Deployment
+and release acceptance remain separate from this completed sprint.
+
 Reviewed locally on 2026-09-11, Node 24.14.0/macOS. Runtime/test source baseline:
 `1be808c58d2f0155a785796d3c7964f96a5f70ae` (S08m plus test readability).
 The closeout changes documentation only. Package archives include the updated
@@ -11,27 +17,28 @@ publication. Final release bytes require their own committed-source verification
 
 Each row maps a control to executable evidence. **Local** means the full closeout
 run described below, including the generated production suite where applicable.
-**CI pending** means no run for this source commit was returned by the read-only
-GitHub query on 2026-09-11. Workflow definitions describe future checks, not results.
+**CI passed** refers to the successful run for `37dbca7`, which contains the same
+runtime/tests plus the local closeout documentation. Each required job is linked
+in the CI acceptance section below.
 Historical red/green evidence remains in the linked Sprint 02 change-set history.
 
 | Topic | Implementation / policy | Retained test and scenario | Local / CI |
 |---|---|---|---|
-| S06 — Offline declarations | [Inspection](../../packages/core/src/boot/inspect.ts), [contract](../offline-inspection.md) | [Inspection tests](../../packages/core/tests/inspection.test.ts): forbidden runtime imports/services, malformed declarations and route/schema parity | Passed / pending `tests`, `offline` |
-| S07 — Starter parity | [Generator](../../packages/core/src/cli/init.ts), [packed smoke](../../scripts/scaffold-smoke.mjs) | [Presets](../../packages/core/tests/presets.test.ts), [app parity](../../example/tests/app.test.ts): runtime/offline documents; two isolated generators produce identical bytes with connections denied | Passed / pending `pack`, `minimal`, `offline`, `production` |
-| S08a — Restart scope | [PM2 helper](../../example/modules/settings/helpers/pm2.ts) | [Scope tests](../../packages/core/tests/pm2-scope.test.ts): whole-target validation, foreign/same-name processes, numeric IDs and cleanup; [real PM2 smoke](../../scripts/pm2-smoke.mjs) retains unrelated PIDs | Passed / pending `tests`, `production` |
-| S08b — Session validity | [Auth helper](../../example/modules/auth/helpers/auth.ts) | [App tests](../../example/tests/app.test.ts): exact expiry before TTL cleanup, reassigned owner, same-second password change, refresh versus device revocation | Passed / pending `production` |
-| S08c — Credential races | [Auth helper](../../example/modules/auth/helpers/auth.ts), [password helper](../../example/modules/auth/helpers/passwords.ts) | [App tests](../../example/tests/app.test.ts): paused login/password change, stale overwrite, delayed/failed cleanup, failed credential write and legacy upgrade races | Passed / pending `production` |
-| S08d — Audit barrier and ACL | [Audit helper](../../example/modules/settings/helpers/audit.ts), [model](../../example/modules/settings/models/audit-event.model.ts) | [App tests](../../example/tests/app.test.ts): fatal-only logging, all sink-failure action paths, delayed acknowledgment, value omission and ordinary-admin denial | Passed / pending `production` |
-| S08e — Proxy/IP policy | [Proxy helper](../../example/modules/security/helpers/proxy.ts), [nginx templates](../../example/nginx) | [Proxy tests](../../packages/core/tests/proxy-trust.test.ts): forged chains, untrusted sockets, multi-hop and IPv6; app test checks session/audit IP agreement | Passed / pending `tests`, `pack`, `production`; live ingress remains S15.2 |
-| S08f — Shared request limits | [Limiter](../../example/modules/security/helpers/rate-limit.ts), [security routes](../../example/modules/security/routes/security.routes.ts) | [Rate tests](../../packages/core/tests/rate-limit.test.ts): atomic shared quotas, identity/namespace isolation, expiry, failed/stalled Redis; app tests verify rejection before parsing/authentication | Passed / pending `tests`, `production`; deployment load remains S16.5–S16.6 |
-| S08g — Settings paths and file bounds | [Files](../../example/modules/settings/helpers/files.ts), [env editing](../../example/modules/settings/helpers/env-file.ts) | [File tests](../../packages/core/tests/settings-files.test.ts): links/special files, descriptor growth, failed replacement, dotenv round-trip and key expansion; app tests cover translation/env endpoints | Passed / pending `tests`, `production` |
-| S08h — Log bounds and resource ownership | [Tail](../../example/modules/settings/helpers/log-tail.ts), [streams](../../example/modules/settings/helpers/log-stream.ts) | [Tail tests](../../packages/core/tests/log-tail.test.ts), [stream tests](../../packages/core/tests/log-stream.test.ts): rotation, filtering/read budgets, oversized lines, capacity, output/backpressure and disconnect cleanup; app tests retain sysadmin/linked-target boundaries | Passed / pending `tests`, `production` |
-| S08i — Restart response delivery | [PM2 helper](../../example/modules/settings/helpers/pm2.ts), [controller](../../example/modules/settings/controllers/settings.controllers.ts) | [Response tests](../../packages/core/tests/restart-response.test.ts): complete 202 before commands, pre-finish cancellation, identity replacement and bounded failures; app audit/order case and real PM2 HTTP self-restart | Passed / pending `tests`, `production` |
-| S08j — Browser transport policy | [Browser guide](../../example/docs/browser-auth.md), [Passport](../../example/modules/auth/helpers/passport.ts) | [App tests](../../example/tests/app.test.ts): no Set-Cookie, reject cookie/URL credentials and non-JSON refresh, explicit Bearer CORS headers | Passed / pending `production`; real browser S16.4, cookie adapter conditional |
-| S08k — Refresh theft-response policy | [Auth helper](../../example/modules/auth/helpers/auth.ts), [client contract](../../example/docs/browser-auth.md) | [App tests](../../example/tests/app.test.ts): duplicate winner invalidation, ancestor replay, other-device isolation, delayed winner, invalid/expired tokens and acknowledgment loss before/after commit | Passed / pending `production`; replica-set failover S15.3 |
-| S08l — Authority during SSE | [Access checker](../../example/modules/auth/helpers/access-check.ts), [lease](../../example/modules/settings/helpers/access-lease.ts) | [Stream tests](../../packages/core/tests/log-stream.test.ts): timeout, stale decision, pending capacity and failure; eight app cases revoke role/user/session/token/credential authority after SSE opens and require bounded EOF | Passed / pending `tests`, `production` |
-| S08m — Early stream drain | [Core cleanup](../../packages/core/src/boot/cleanup.ts), [settings hook](../../example/modules/settings/module.config.ts) | [Boot](../../packages/core/tests/boot.test.ts), [stream](../../packages/core/tests/log-stream.test.ts), [queue](../../packages/core/tests/queues.integration.test.ts) and app tests: idle/active/pending streams, ordinary requests/jobs, failed/stuck hooks, repeat shutdown and fresh later boot | Passed / pending `tests`, `production` |
+| S06 — Offline declarations | [Inspection](../../packages/core/src/boot/inspect.ts), [contract](../offline-inspection.md) | [Inspection tests](../../packages/core/tests/inspection.test.ts): forbidden runtime imports/services, malformed declarations and route/schema parity | Passed / passed `tests`, `offline` |
+| S07 — Starter parity | [Generator](../../packages/core/src/cli/init.ts), [packed smoke](../../scripts/scaffold-smoke.mjs) | [Presets](../../packages/core/tests/presets.test.ts), [app parity](../../example/tests/app.test.ts): runtime/offline documents; two isolated generators produce identical bytes with connections denied | Passed / passed `pack`, `minimal`, `offline`, `production` |
+| S08a — Restart scope | [PM2 helper](../../example/modules/settings/helpers/pm2.ts) | [Scope tests](../../packages/core/tests/pm2-scope.test.ts): whole-target validation, foreign/same-name processes, numeric IDs and cleanup; [real PM2 smoke](../../scripts/pm2-smoke.mjs) retains unrelated PIDs | Passed / passed `tests`, `production` |
+| S08b — Session validity | [Auth helper](../../example/modules/auth/helpers/auth.ts) | [App tests](../../example/tests/app.test.ts): exact expiry before TTL cleanup, reassigned owner, same-second password change, refresh versus device revocation | Passed / passed `production` |
+| S08c — Credential races | [Auth helper](../../example/modules/auth/helpers/auth.ts), [password helper](../../example/modules/auth/helpers/passwords.ts) | [App tests](../../example/tests/app.test.ts): paused login/password change, stale overwrite, delayed/failed cleanup, failed credential write and legacy upgrade races | Passed / passed `production` |
+| S08d — Audit barrier and ACL | [Audit helper](../../example/modules/settings/helpers/audit.ts), [model](../../example/modules/settings/models/audit-event.model.ts) | [App tests](../../example/tests/app.test.ts): fatal-only logging, all sink-failure action paths, delayed acknowledgment, value omission and ordinary-admin denial | Passed / passed `production` |
+| S08e — Proxy/IP policy | [Proxy helper](../../example/modules/security/helpers/proxy.ts), [nginx templates](../../example/nginx) | [Proxy tests](../../packages/core/tests/proxy-trust.test.ts): forged chains, untrusted sockets, multi-hop and IPv6; app test checks session/audit IP agreement | Passed / passed `tests`, `pack`, `production`; live ingress remains S15.2 |
+| S08f — Shared request limits | [Limiter](../../example/modules/security/helpers/rate-limit.ts), [security routes](../../example/modules/security/routes/security.routes.ts) | [Rate tests](../../packages/core/tests/rate-limit.test.ts): atomic shared quotas, identity/namespace isolation, expiry, failed/stalled Redis; app tests verify rejection before parsing/authentication | Passed / passed `tests`, `production`; deployment load remains S16.5–S16.6 |
+| S08g — Settings paths and file bounds | [Files](../../example/modules/settings/helpers/files.ts), [env editing](../../example/modules/settings/helpers/env-file.ts) | [File tests](../../packages/core/tests/settings-files.test.ts): links/special files, descriptor growth, failed replacement, dotenv round-trip and key expansion; app tests cover translation/env endpoints | Passed / passed `tests`, `production` |
+| S08h — Log bounds and resource ownership | [Tail](../../example/modules/settings/helpers/log-tail.ts), [streams](../../example/modules/settings/helpers/log-stream.ts) | [Tail tests](../../packages/core/tests/log-tail.test.ts), [stream tests](../../packages/core/tests/log-stream.test.ts): rotation, filtering/read budgets, oversized lines, capacity, output/backpressure and disconnect cleanup; app tests retain sysadmin/linked-target boundaries | Passed / passed `tests`, `production` |
+| S08i — Restart response delivery | [PM2 helper](../../example/modules/settings/helpers/pm2.ts), [controller](../../example/modules/settings/controllers/settings.controllers.ts) | [Response tests](../../packages/core/tests/restart-response.test.ts): complete 202 before commands, pre-finish cancellation, identity replacement and bounded failures; app audit/order case and real PM2 HTTP self-restart | Passed / passed `tests`, `production` |
+| S08j — Browser transport policy | [Browser guide](../../example/docs/browser-auth.md), [Passport](../../example/modules/auth/helpers/passport.ts) | [App tests](../../example/tests/app.test.ts): no Set-Cookie, reject cookie/URL credentials and non-JSON refresh, explicit Bearer CORS headers | Passed / passed `production`; real browser S16.4, cookie adapter conditional |
+| S08k — Refresh theft-response policy | [Auth helper](../../example/modules/auth/helpers/auth.ts), [client contract](../../example/docs/browser-auth.md) | [App tests](../../example/tests/app.test.ts): duplicate winner invalidation, ancestor replay, other-device isolation, delayed winner, invalid/expired tokens and acknowledgment loss before/after commit | Passed / passed `production`; replica-set failover S15.3 |
+| S08l — Authority during SSE | [Access checker](../../example/modules/auth/helpers/access-check.ts), [lease](../../example/modules/settings/helpers/access-lease.ts) | [Stream tests](../../packages/core/tests/log-stream.test.ts): timeout, stale decision, pending capacity and failure; eight app cases revoke role/user/session/token/credential authority after SSE opens and require bounded EOF | Passed / passed `tests`, `production` |
+| S08m — Early stream drain | [Core cleanup](../../packages/core/src/boot/cleanup.ts), [settings hook](../../example/modules/settings/module.config.ts) | [Boot](../../packages/core/tests/boot.test.ts), [stream](../../packages/core/tests/log-stream.test.ts), [queue](../../packages/core/tests/queues.integration.test.ts) and app tests: idle/active/pending streams, ordinary requests/jobs, failed/stuck hooks, repeat shutdown and fresh later boot | Passed / passed `tests`, `production` |
 
 The [security model](../security-model.md) describes cumulative controls and their
 limits; [migration guidance](../../packages/core/MIGRATING.md) describes adoption.
@@ -68,29 +75,55 @@ Archive digests for the locally verified bytes:
 
 No clean-source release attestation or Linux result is implied by these digests.
 
-## CI acceptance remains open
+## CI acceptance — passed on 2026-09-11
 
-Read-only query:
-`gh run list --commit 1be808c58d2f0155a785796d3c7964f96a5f70ae --limit 10`
-returned no runs; retained output: `reports/s08-closeout-ci.json`.
-The latest observed successful CI run was for older source `041d169`:
-[historical run](https://github.com/kemora13conf/bp-backend-express/actions/runs/34391892263).
-It does not validate Sprint 02 changes.
+At the local-closeout checkpoint GitHub returned no run for `1be808c`; that dated
+query remains in `reports/s08-closeout-ci.json`. The user then authorized completing
+the CI gate. Pushing `feat/sprint-02-native-routers` started the existing branch CI
+workflow for `37dbca759833b743930c50fc2372eed217646f3e`.
+[Run 34632402765](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765) completed successfully.
 
-The [existing reusable workflow](../../.github/workflows/verify.yml) must establish:
+| Required job | Result | Retained evidence |
+|---|---|---|
+| [verify / tests (24.0.0)](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765/job/103372140384) | Passed | Ubuntu 24.04, Node 24.0.0; 225 tests without skips, coverage, test/reference types and agent-guide parity |
+| [verify / tests (24)](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765/job/103372140705) | Passed | Ubuntu 24.04, Node 24.20.0; 225 tests without skips, coverage, test/reference types and agent-guide parity |
+| [verify / pack](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765/job/103372741607) | Passed | Ubuntu, Node 24.20.0; compiled archives, workspace/runtime audit and generated/reference parity |
+| [verify / production](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765/job/103372880470) | Passed | Ubuntu, Node 24.20.0; 55 generated tests, types, offline/runtime specs, backend/worker shutdown and real PM2 HTTP self-restart |
+| [verify / offline](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765/job/103372880487) | Passed | Ubuntu, Node 24.20.0; isolated production declarations and deterministic specs with sockets denied and empty secrets |
+| [verify / minimal (ubuntu-latest)](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765/job/103372880607) | Passed | Ubuntu, Node 24.20.0; service-free packed types/tests/specs, HTTP startup and shutdown |
+| [verify / minimal (macos-latest)](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765/job/103372880698) | Passed | macOS, Node 24.20.0; service-free packed types/tests/specs, HTTP startup and shutdown |
 
-- `tests`: Ubuntu, minimum Node 24.0.0 and current Node 24, integration coverage,
-  types and agent-guide parity.
-- `pack`: package builds/archives, workspace audit and production scaffold parity.
-- `minimal`: Ubuntu and macOS packed minimal on current Node 24.
-- `offline`: Ubuntu production offline-only with no application services.
-- `production`: Ubuntu generated suite, backend/worker and real PM2 checks.
+Both Ubuntu test jobs report 82.01% statements, 68.7% branches, 86.74% functions
+and 84.14% lines. Existing boot/ACL/env floors were unchanged. The workspace/runtime
+and generated audits passed the existing high/critical severity gate; the moderate
+cron-parser maintenance notice remains visible. Production's retained PM2 log
+confirms complete 202 delivery before self-restart and unchanged unrelated PIDs.
 
-Owner: engineer/release maintainer. Attach successful workflow links, source commit
-and matching archive digests before checking off 02-C3/02-C5. The local documentation
-change does not authorize a push or workflow publication. Sprint 02 therefore
-remains open solely for candidate CI evidence and final acceptance; implementation
-and local documentation/verification are complete.
+### CI archive identity
+
+The [release-packages artifact](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765/artifacts/10277490221)
+contains a manifest for source `37dbca759833b743930c50fc2372eed217646f3e`.
+Downloaded archives passed `scripts/artifacts.mjs verify`; their SHA-512 digests are:
+
+- `core-0.9.0-rc.2.tgz`: `sha512-GeHZyxiGeMVXNotRO760VUhFJ6Q94TJ5z+U0iJ72aL89APkB0AsDoryi/CrguWGrlYisQp8y6UdvWkk5HqyIag==`
+- `spec-0.3.0-rc.2.tgz`: `sha512-UCNCGeIMQbMMi5D9G9T3KCcctCLrTGp1aIB5m/2CatgWdbh2sf5Zb3yZoSs5MdhISapnoZ4CbESMuX03KBCZ8Q==`
+
+GitHub's artifact-container digest is `sha256:b9a19adda862afbe160f9bcb65a8161ec86d8e74e32eaa5ebbcafc27a1521b00`.
+This is distinct from the package archive digests above. The package version labels
+remain unchanged; these CI bytes were not published and are not assertions about
+existing registry bytes. A release still needs its own version/source/archive gates.
+
+Retained local copies: `reports/s08-ci-34632402765/` contains the run/job JSON,
+workflow log, artifact metadata, both coverage reports, production smoke logs and
+verified archives. GitHub retains the corresponding run artifacts under its
+retention policy; the source commit, job URLs and digests are recorded here so
+acceptance is not inferred from a later moving branch or a local-only run.
+
+02-C3 and 02-C5 are complete for the tested source. This acceptance update changes
+repository documentation only; runtime, generated templates, package docs and
+build inputs remain those tested in `37dbca7`. No merge, deployment, npm publication
+or repository visibility change was performed. Sprint 03 remains the next planned
+workstream; pilot evidence below remains assigned to Sprint 06.
 
 ## Deployment follow-ups and accountable roles
 
