@@ -17,7 +17,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08m locally verified; readability and closeout remain | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08m locally verified; documentation/evidence closeout remains | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -76,7 +76,7 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
 committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
 S08e as `bd18bd6`; S08f as `7125ca1`; S08g as `4ed321c`; S08h as `0ed912a`;
-S08i as `b7d63bb`; S08j as `5eda964`; S08k as `a736237`; S08l as `2d23433`.
+S08i as `b7d63bb`; S08j as `5eda964`; S08k as `a736237`; S08l as `2d23433`; S08m as `d06066a`.
 
 ### S08a — PM2 target scope
 
@@ -716,7 +716,7 @@ HTTP drain timeout; blocked event loops, uncooperative hooks/driver work and slo
 peers retain the existing deadline/supervisor limitations. No provider extraction
 or release action is included.
 
-### Next change set — S08-readability: make tests readable
+### S08-readability — Make tests readable
 
 Requested by the user during S08m. Expand compressed test code and add visual
 separation between setup, actions, assertions and cleanup across framework/spec
@@ -725,3 +725,32 @@ and fixture data, and validate types, tests and generated output. Do not add a n
 test framework or change assertions solely to obtain formatting. Commit the
 verified readability change separately. Sprint 02 documentation/evidence closeout
 (02-C1–C5 in the task report) follows; CI/deployment gaps remain explicit.
+
+
+Readability implementation, 2026-09-11:
+
+- Reformatted all 26 tracked framework/spec/reference test and helper files with
+  expanded calls/objects/cleanup blocks and blank lines between distinct steps.
+  Short related declarations, environment setup and assertions remain grouped.
+- Mirrored reference formatting in the production test generator and formatted
+  minimal starter tests too. The generator now selects two complete readable test
+  templates, avoiding interleaved conditional fragments inside the common prelude.
+  Test names, assertions, ordering, comments and literal fixture values are retained.
+- Compared parsed programs against the S08m commit with position/format metadata
+  excluded: all 26 files are equivalent. Generated production/minimal strings
+  exactly match their formatted reference outputs. No formatter dependency was
+  added to the repository; testing documentation records the readability convention.
+- All 225 framework/spec and 55 reference-app tests passed with disposable
+  MongoDB/Redis and no skips. Test/reference types, package builds, whitespace and
+  generated/reference module/test/config/guide parity passed. Packed minimal passed.
+  Packed production also passed all 55 generated tests, deterministic offline/
+  runtime specs, backend/worker shutdown, isolated PM2 restart and dependency audits.
+  Coverage was not rerun for this formatting-only change; S08m's retained coverage
+  evidence remains the runtime baseline. CI/platform and release results remain
+  separate from these local checks.
+- Evidence: ignored `reports/s08-readability-{format,integration,app,test-types,app-types,artifacts,parity,minimal,packed}.log`.
+
+Next implementation/documentation task: Sprint 02 closeout, 02-C1–C5 in the task
+report. Reconcile cumulative behavior summaries and evidence, then explicitly
+assign the remaining deployment gaps before marking the sprint complete. Provider
+extraction remains Sprint 03; no release, push or deployment was performed here.

@@ -16,6 +16,7 @@ const pm2 = vi.hoisted(() => ({
 vi.mock("pm2", () => ({ default: pm2 }));
 
 const root = realpathSync(resolve("example"));
+
 const inventory = () => [
   { name: "api", pm_id: 1, pid: 1001, pm2_env: { pm_cwd: root } },
   { name: "worker", pm_id: 2, pid: 1002, pm2_env: { pm_cwd: root } },
@@ -23,11 +24,14 @@ const inventory = () => [
 
 beforeEach(() => {
   vi.clearAllMocks();
+
   vi.stubEnv("PM2_HOME", "/tmp/tulipes-response-test");
   vi.stubEnv("pm_id", "1");
 
   pm2.connect.mockImplementation((callback) => callback());
+
   pm2.list.mockImplementation((callback) => callback(undefined, inventory()));
+
   pm2.restart.mockImplementation((_id, callback) => callback());
 });
 
@@ -38,6 +42,7 @@ async function fixture(run: (url: string) => Promise<void>, mode = "normal") {
 
   app.post("/", (req, res) => {
     bindRespond(req, res, { defaultLimit: 20, maxLimit: 100 });
+
     res.once("finish", () => {
       finishSeen = true;
     });
@@ -46,6 +51,7 @@ async function fixture(run: (url: string) => Promise<void>, mode = "normal") {
       // Simulate a peer disconnect before the acknowledgment can finish.
       res.respond = () => {
         res.destroy();
+
         return res;
       };
     }
@@ -69,12 +75,16 @@ async function fixture(run: (url: string) => Promise<void>, mode = "normal") {
   });
 
   const server = app.listen(0, "127.0.0.1");
+
   await new Promise<void>((resolve) => server.once("listening", resolve));
+
   const address = server.address();
+
   if (!address || typeof address === "string") throw new Error("No listener");
 
   pm2.restart.mockImplementation((_id, callback) => {
     expect(finishSeen).toBe(true);
+
     callback(
       mode === "failed" ? new Error("private daemon canary") : undefined,
     );
@@ -82,9 +92,11 @@ async function fixture(run: (url: string) => Promise<void>, mode = "normal") {
 
   try {
     await run("http://127.0.0.1:" + address.port + "/");
+
     await Promise.all(completed);
   } finally {
     server.closeAllConnections();
+
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
@@ -96,6 +108,7 @@ test("the complete 202 acknowledgment precedes every restart command", async () 
     const response = await fetch(url, { method: "POST" });
 
     expect(response.status).toBe(202);
+
     expect(await response.json()).toMatchObject({
       success: true,
       data: { accepted: true, supervised: true, scheduled: ["api"] },
@@ -111,6 +124,7 @@ test("invalid targets fail before acceptance or restart", async () => {
     const response = await fetch(url + "?invalid=1", { method: "POST" });
 
     expect(response.status).toBe(400);
+
     expect(await response.json()).toMatchObject({
       errors: [{ code: "INVALID_RESTART_TARGETS" }],
     });
@@ -140,6 +154,7 @@ test("a replaced process after acceptance is not restarted or exposed as an HTTP
     }, "changed");
 
     expect(pm2.restart).not.toHaveBeenCalled();
+
     expect(log).toHaveBeenCalledWith(
       "[settings] accepted restart did not complete",
       {
@@ -160,13 +175,16 @@ test("overlapping requests cannot share or disconnect the active PM2 client", as
 
   await fixture(async (url) => {
     const pending = fetch(url, { method: "POST" });
+
     await vi.waitFor(() => expect(release).toBeTypeOf("function"));
 
     const overlapping = await fetch(url, { method: "POST" });
+
     expect(overlapping.status).toBe(409);
     expect(pm2.disconnect).not.toHaveBeenCalled();
 
     release();
+
     expect((await pending).status).toBe(202);
   });
 
@@ -181,6 +199,7 @@ test("a post-acceptance driver failure is reported without rewriting the HTTP re
       const response = await fetch(url, { method: "POST" });
 
       expect(response.status).toBe(202);
+
       expect((await response.text()).includes("private daemon canary")).toBe(
         false,
       );
@@ -192,6 +211,7 @@ test("a post-acceptance driver failure is reported without rewriting the HTTP re
         code: "RESTART_FAILED",
       },
     );
+
     expect(pm2.disconnect).toHaveBeenCalledOnce();
   } finally {
     log.mockRestore();
@@ -205,6 +225,7 @@ test("an unresponsive PM2 connection produces a bounded sanitized 503", async ()
     const response = await fetch(url, { method: "POST" });
 
     expect(response.status).toBe(503);
+
     expect(await response.json()).toMatchObject({
       errors: [{ code: "RESTART_UNAVAILABLE" }],
     });
