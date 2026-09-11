@@ -1,8 +1,11 @@
 # Sprint 02 — Offline inspection and security review
 
-Status: in progress, continued on 2026-09-09 from merged Sprint 01 and the rc.2
-security fix. This working increment implements offline native-router inspection and migrates
-both starters. It does not publish a version or change repository visibility.
+Status: implementation and local closeout complete on 2026-09-11; sprint acceptance
+remains open for candidate CI evidence (02-C3/02-C5). S06–S07 and S08a–S08m are
+implemented, and documentation/evidence reconciliation is locally verified.
+See the [current evidence map](production-readiness-02-evidence.md) for each control,
+local checks, pending workflow jobs and assigned deployment follow-ups. No version
+was published and repository visibility is unchanged.
 
 Detailed program tasks: [sprint-by-sprint report](production-readiness-task-report.md).
 
@@ -17,7 +20,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08m locally verified; documentation/evidence closeout remains | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | S08a–S08m and local documentation/evidence closeout verified; CI acceptance pending | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -34,6 +37,10 @@ application lifecycle hooks. Declaration imports are trusted JavaScript, not a
 sandbox. Model metadata extraction and provider packaging remain later work.
 
 ## Validation
+
+The bullets below retain the original S06–S07 checkpoint. Current cumulative
+verification is recorded in the [closeout evidence map](production-readiness-02-evidence.md#complete-local-verification)
+and the 02-C1–C5 entry at the end of this tracker.
 
 - Core regressions verify forbidden runtime imports and service connections,
   absent secrets, malformed declarations and graphs, legacy errors, authorization,
@@ -61,8 +68,8 @@ sandbox. Model metadata extraction and provider packaging remain later work.
   reports/scaffold-*/. CI on Linux and the supported Node matrix remains the release
   gate; this local run does not establish those platform results.
 
-S08 must be completed before declaring the whole sprint finished. Provider
-extraction remains Sprint 03; no new package split is included here.
+S08 implementation and local closeout are complete. Candidate CI must pass before
+whole-sprint acceptance; provider extraction remains Sprint 03.
 
 ## Working discipline
 
@@ -72,6 +79,11 @@ results. Commit each coherent, verified set before starting the next. Keep S08
 changes separate from S06–S07; provider extraction remains outside Sprint 02.
 
 ## S08 change sets
+
+The entries below are chronological checkpoints. Their “remaining” and “next”
+statements describe work outstanding at that checkpoint; later entries supersede
+them. The evidence map and final closeout entry give current status without
+rewriting historical red/green validation results.
 
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
 committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
@@ -754,3 +766,40 @@ Next implementation/documentation task: Sprint 02 closeout, 02-C1–C5 in the ta
 report. Reconcile cumulative behavior summaries and evidence, then explicitly
 assign the remaining deployment gaps before marking the sprint complete. Provider
 extraction remains Sprint 03; no release, push or deployment was performed here.
+
+
+### 02-C1–C5 — Cumulative documentation and local evidence closeout
+
+Completed locally on 2026-09-11 against runtime/test source `1be808c`:
+
+- **02-C1 complete:** reconciled the cumulative changelog, security model and
+  migration overview through S08m. Added the missing S08f–S08i security summaries
+  and S08f–S08l changelog entries; replaced superseded response, limiter and stream
+  backlog wording while preserving dated change-set evidence.
+- **02-C2 complete:** the [evidence map](production-readiness-02-evidence.md) links
+  each review topic to implementation, retained abuse scenarios, local results and
+  the CI jobs still required. HTTP transport tests remain distinct from browser
+  enforcement; documented policy and deployment assumptions are explicit.
+- **02-C3 locally verified, CI pending:** all 225 framework/spec and 55 reference
+  tests passed with disposable MongoDB/Redis and no skips. Unchanged coverage floors
+  passed (82.01% statements, 68.7% branches, 86.74% functions, 84.14% lines).
+  Package/test/reference types, sync, builds, parity and audits passed. Both packed
+  presets and separate production offline-only passed, including 55 generated
+  production tests, runtime/offline documents and real PM2 HTTP self-restart.
+- **02-C4 complete as backlog assignment:** remaining deployment evidence is mapped
+  to S15.1–S16.7 with accountable roles and required results. Actual pilot personnel
+  remain to be named under S15.1. Cookie adaptation remains conditional.
+- **02-C5 pending final acceptance:** the tracker is reconciled, but Sprint 02 is
+  not marked fully complete because GitHub returned no workflow runs for this
+  source commit. The engineer/release maintainer must attach the candidate's
+  supported matrix and packed workflow results before final closure.
+
+Evidence: ignored `reports/s08-closeout-{integration,app,test-types,types,sync,app-types,artifacts,parity,audit,minimal,offline,packed}.log`,
+`reports/s08-closeout-workspace-runtime.jsonl`, `reports/s08-closeout-ci.json`
+and `reports/scaffold-*/`. Archive digests and the exact baseline are retained in
+the evidence map; archives include this change set's package documentation and
+are local working-tree artifacts, not clean-source release attestations.
+
+Relative links/anchors and whitespace passed. This coherent closeout changes
+only documentation. Remaining action: candidate CI and final 02-C3/02-C5 acceptance;
+no push, deployment, publication or provider extraction is included.

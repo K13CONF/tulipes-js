@@ -4,6 +4,11 @@ The production preset generates editable application policy: auth, users,
 settings, logging and PM2 operations. The minimal preset omits these modules.
 Neither preset constitutes a completed external security audit.
 
+S08a–S08m are implemented and locally verified. This document describes their
+cumulative behavior; dated dependency entries remain historical observations.
+The [Sprint 02 evidence map](sprints/production-readiness-02-evidence.md) links
+implementation and abuse tests and identifies pending CI and deployment evidence.
+
 ## Boundaries and controls
 
 Untrusted clients reach Express through the operator's TLS reverse proxy. Trusted
@@ -26,7 +31,7 @@ without internal error messages or stack traces in production. PM2 compatibility
 is checked with a disposable daemon and actual process restarts. These checks
 establish specific behavior; they do not prove all administrative paths safe.
 
-## Deployment and follow-on security sprint
+## Deployment verification still required
 
 Before a production pilot, review and test:
 
@@ -42,8 +47,9 @@ Before a production pilot, review and test:
 - TLS, credential provisioning, backup/restore, process isolation, least-privilege
   database access, dependency updates and load/recovery behavior.
 
-The next sprint should turn each threat into an abuse-case test and a documented
-control. Report suspected vulnerabilities using [SECURITY.md](../SECURITY.md).
+Sprint 02 retains abuse tests for the controls below. Sprint 06 tasks S15–S16
+carry the deployment checks, with accountable roles and required results listed
+in the evidence map. Report suspected vulnerabilities using [SECURITY.md](../SECURITY.md).
 
 ## Dependency review, 2026-09-08
 
@@ -87,9 +93,9 @@ The daemon and local filesystem remain trusted operator controls. A PM2 environm
 marker permits attempting daemon access; it is not proof of application ownership.
 Sysadmin authorization still comes from the existing settings RAI/ACL.
 
-Self-restart remains last and may interrupt the HTTP response. Durable audit and
-response-before-restart coordination remain S08 follow-up work. This bounded fix
-does not complete the rest of the auth/settings review.
+Self-restart runs last. S08d adds durable audit before PM2 access and S08i adds
+complete HTTP acceptance handoff before execution, as described below. These
+supersede the response/audit follow-ups recorded at the S08a checkpoint.
 
 ## S08b — Session validity and revocation timing
 
@@ -204,8 +210,83 @@ loopback peer is trusted.
 Retained Express HTTP tests cover direct/untrusted peers, spoofed earlier entries,
 trusted intermediate hops, IPv6/mapped IPv4 and invalid configuration. The packed
 app test checks that session origins and audit records agree on the selected IP.
-This establishes IP handling for subsequent rate-limit work; it does not add rate
-limits. Live nginx deployment/topology validation remains an operator check.
+S08f uses this IP policy for shared request limits. Live nginx deployment/topology
+validation remains an operator check.
+
+
+## S08f — Shared authentication and settings request limits
+
+Redis fixed-window counters run before JSON parsing and Passport. Defaults per
+client per minute are 20 combined credential POSTs, 120 total auth requests and
+60 settings requests. Replicas share atomic counters when they use the same app
+namespace, environment and quota configuration. Rejected requests do not extend
+the window; responses use 429 with `Retry-After`. Store errors and stalled initial
+connections/commands fail closed with sanitized 503 responses and one-second
+bounds. Each boot owns its limiter connection and cleanup.
+
+Client identity uses the proxy policy above, maps IPv4-mapped addresses to IPv4,
+and groups IPv6 by /56. Invalid addresses share a bucket. Keys contain an address
+digest, not credentials; that digest is not anonymization. Limits are editable
+application policy: NAT clients share quotas, fixed windows permit boundary bursts,
+and exhausting auth quota can also delay logout. IP quotas do not provide account
+lockout or stop distributed attacks. Redis eviction/data loss resets counters;
+operators own sizing, persistence and deployment tuning. See the
+[quota migration contract](../packages/core/MIGRATING.md#unreleased--shared-production-request-limits).
+
+## S08g — Constrained settings files
+
+Settings reads and writes refuse symlinked configured directories/files, hardlinked
+files and non-regular targets. Descriptor reads and writes have a 1 MiB ceiling;
+directory enumeration, JSON depth/node counts and missing-key expansion also have
+explicit bounds. Environment values must round-trip through dotenv without changing
+unrelated effective values. Replacements sync an exclusive temporary sibling before
+rename, preserve the old file on pre-rename failure and write env files as 0600.
+The live environment changes only after the file write succeeds.
+
+Unsafe, oversized, invalid and unavailable inputs have distinct sanitized errors.
+These checks require trusted operator-controlled directories and ancestors; they
+do not sandbox hostile local writers racing directory replacement. There is no
+cross-process edit lock or directory-entry power-loss guarantee. Custom file
+metadata is not preserved by replacement. The
+[file migration contract](../packages/core/MIGRATING.md#unreleased--constrained-settings-file-access)
+records exact limits and compatibility constraints. Audit acknowledgment precedes
+mutation and records a request, not proof of successful completion.
+
+## S08h — Bounded log history and streaming
+
+Only the configured log basename and documented rotation suffixes are eligible.
+Linked/non-regular targets are refused. History reads at most the last 256 KiB and
+1000 complete lines, dropping fragments and lines over 16 KiB. Live tails read at
+most 64 KiB per one-second poll and 8 MiB overall; directory scans stop after 1024
+entries. Rotation/truncation resets cursors when observed; polling can miss entries.
+
+Each controller permits four streams, at most two per account. Streams end at
+60 seconds, credential expiry or 1 MiB of SSE output. Backpressure or a frame
+exceeding the 64 KiB pending-output budget disconnects the reader; a pending end
+has a separate one-second forced-close fallback. Disconnect stops tails and timers.
+Outstanding authorization checks retain capacity until they settle under S08l.
+S08l and S08m below add continuous authority checks and early shutdown signaling.
+These are local caps; cross-replica capacity and realistic slow-reader/load results
+remain deployment work. The
+[stream migration contract](../packages/core/MIGRATING.md#unreleased--bounded-log-streaming)
+describes limits, sanitized errors and client reconnection requirements.
+
+## S08i — Restart acceptance before execution
+
+After durable audit and complete target validation, the endpoint returns 202 with
+`accepted` and `scheduled`. The response finish event releases PM2 execution;
+close/error before finish cancels it. This establishes complete handoff to the
+operating system, not remote receipt or restart completion. Each numeric target's
+canonical directory, name and PID are checked again before execution; self runs
+last. A local lock isolates shared PM2 client use, and callbacks/response completion
+have five-second bounds. Errors after acceptance emit a stable stderr signal
+without a second HTTP response.
+
+Earlier targets may restart before a later failure, and a timed-out command may
+have reached PM2. No durable job, rollback or completion endpoint is provided.
+Cross-backend coordination and the inventory-check/command race remain deployment
+limitations. See the
+[restart migration contract](../packages/core/MIGRATING.md#unreleased--restart-acknowledgment-before-execution).
 
 
 ## S08j — Browser authentication and cookie adaptation
@@ -256,8 +337,9 @@ winning response after revocation, expiry boundaries, logout and password-change
 races. There is no cross-document transaction, new token field, grace window or
 historic-token collection. Existing session expiration provides the revocation
 state, and TTL later removes it. Detection requires reuse while the presented
-ancestor is unexpired. Already authorized requests and open streams keep their
-existing behavior. Replica-set failover verification and an incident-alerting
+ancestor is unexpired. Already authorized ordinary requests may finish. S08l
+revalidates open log streams under the lease below; the refresh update itself does
+not cancel them. Replica-set failover verification and an incident-alerting
 pipeline remain explicit follow-up work.
 
 ## S08l — Authorization throughout an open log stream
@@ -287,8 +369,8 @@ exhaust stream capacity. It does not prove in-flight driver cancellation. The
 describes the new async helper contract, timing and operational limits.
 
 S08h/S08k descriptions of streams retaining their opening authority are superseded
-by this increment. Signaling streams before framework HTTP draining remains the
-separate S08m backlog item; cross-replica leases and deployment tuning remain open.
+by this increment. S08m now signals streams before framework HTTP draining, as
+described below. Cross-replica leases and deployment tuning remain open.
 
 
 ## S08m — Signal streams when shutdown begins

@@ -11,6 +11,28 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — production security upgrade overview
+
+The S08a–S08m changes apply to editable generated application code as well as core.
+Regenerating a starter does not update an existing application. Merge the auth,
+users, security and settings changes with local policy, including their models,
+helpers, configuration hooks, routes, translations and dependencies, then retain
+reference/generated test parity. The sections below give each contract in detail.
+
+Deploy credential-version enforcement across all auth instances together; existing
+unversioned sessions require login. Coordinate refresh across clients because
+reuse now expires the entire device family. Provision audit insert access and the
+shared limiter Redis namespace before enabling privileged endpoints. Check explicit
+proxy peers and trusted filesystem directories for the deployment. Restart clients
+must consume 202 acceptance, and log clients must handle bounded EOF and reconnect.
+Keep settings' early `onDrain` hook separate from resource disposal in `onShutdown`.
+
+Bearer headers and JSON refresh remain the transport. Cookie authentication and
+CSRF enforcement require a separately chosen application adaptation. The
+[security model](../../docs/security-model.md) and
+[Sprint 02 evidence map](../../docs/sprints/production-readiness-02-evidence.md)
+separate retained local behavior from pending CI and deployment verification.
+
 ## Unreleased — early shutdown notification for long-lived responses
 
 Modules may export `onDrain(ctx)` from `module.config.ts`. Core invokes these
@@ -236,7 +258,7 @@ object with at most 64 levels and 10,000 visited nodes; malformed files return 4
 `SETTINGS_JSON_INVALID`. Missing-key paths are limited to 4096 bytes each, and the
 combined module summary allows at most 10,000 missing keys and 1 MiB of key bytes.
 Oversized inputs return 413. Larger catalogs must be edited through deployment
-files instead of this console. Log files/streaming are a separate S08 increment.
+files instead of this console. Log files and streaming follow the bounded log-streaming contract above.
 
 File replacements use an exclusively created temporary sibling, sync its data,
 and rename it over the target. Failures before rename preserve the old contents
@@ -309,8 +331,9 @@ IP limits do not stop distributed credential attacks or provide account lockout.
 Windows permit bursts around reset boundaries. Redis eviction, data loss or a new
 namespace resets counters: use an appropriately sized store with a suitable
 persistence/eviction policy. Store exhaustion fails closed when Redis rejects
-writes. Edge traffic limits, account-aware abuse response, deployment/load tuning
-and concurrent/open-stream bounds remain separate work.
+writes. Local concurrent/open-stream bounds are described above. Edge traffic
+limits, account-aware abuse response and cross-replica/load tuning remain
+deployment work.
 
 ## Unreleased — explicit production proxy trust
 
