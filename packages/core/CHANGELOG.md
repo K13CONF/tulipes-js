@@ -11,6 +11,57 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.9.0-rc.3] — 2026-09-11
+
+Released with `@tulipes/spec@0.3.0-rc.3`; both candidates use `next`.
+Existing generated apps must merge the security and router changes described in
+[MIGRATING.md](./MIGRATING.md); installing core alone does not update app policy.
+
+- Add optional `onDrain` module hooks at the start of shutdown, sharing the traffic
+  drain deadline and aggregate cleanup errors. Production settings use the hook
+  to stop log streams, reject late openings and abort pending authorization before
+  resource disposal; a subsequent boot gets fresh stream admission.
+
+- Revoke a device's entire session family on valid refresh-token reuse. Duplicate
+  concurrent refreshes invalidate the winning pair too; clients must serialize
+  refresh and sign in again after rejection or an uncertain acknowledgment.
+- Add shared Redis fixed-window auth/settings quotas, normalized proxy-aware client
+  identities, 429 retry guidance and bounded fail-closed 503 responses.
+- Constrain settings file reads/writes, links, JSON expansion and dotenv values;
+  use bounded descriptor reads and atomic sibling replacement with private env files.
+- Bound log history, polling, output, backpressure, stream capacity and lifetime.
+  Revalidate current session/credential/user/ACL authority during open SSE with a
+  two-second authorization lease and bounded pending checks.
+- Return complete HTTP 202 acceptance before executing prepared PM2 restarts;
+  cancel on premature disconnect and revalidate process identity before commands.
+- Ship browser bearer/JSON transport guidance and retained boundary tests, with
+  explicit client refresh coordination and conditional cookie/CSRF requirements.
+
+- Add explicit production proxy IP/CIDR trust with direct-peer defaults and
+  forwarded-header regressions. Update single-ingress nginx templates to overwrite
+  forwarded IP/host/protocol headers and remove blanket-trust guidance.
+
+- Persist settings audit requests with majority/journal acknowledgment before
+  secret reveals, file/environment changes and restarts. Fail closed on audit
+  errors, independently of logging thresholds; omit values from audit records.
+
+- Bind production sessions to an atomically written credential version, closing
+  delayed login/password-change races and preserving revocation when cleanup fails.
+  Existing sessions require login again; legacy credentials upgrade on login.
+
+- Require live, matching-owner sessions for production access authentication and
+  atomic refresh rotation; exclude expired devices from session listings.
+
+- Scope production settings restarts to the application directory, validate targets
+  before action, and use PM2 process IDs to isolate duplicate names.
+
+- Add `defineRoutes()`, deferred runtime callback binding and `inspectRoutes()` for native router inspection.
+- Add explicit `routes/spec --offline` and `--runtime`, with strict option parsing.
+- Keep both starters on native routers, shared prefixes and offline spec scripts.
+- Support named mount parameters while preserving middleware, param callbacks and error-handler arity.
+- Verify runtime route/schema parity and deterministic packed spec generation with
+  service connections denied; retain legacy runtime inspection.
+
 ## [0.9.0-rc.2] — 2026-09-09
 
 - Override PM2's js-yaml dependency to 4.3.2 for GHSA-2883-xcg3-v3hh.
@@ -318,7 +369,8 @@ generated types, ACL, the model store, queues, sockets, the three process
 modes (`backend`, `worker`, `script`), the startup banner, and the CLI —
 `init`, `dev`, `sync`, `env:check`, `new module`, `update`.
 
-[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.2...HEAD
+[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.3...HEAD
+[0.9.0-rc.3]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.2...v0.9.0-rc.3
 [0.9.0-rc.2]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.1...v0.9.0-rc.2
 [0.9.0-rc.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.8.0...v0.9.0-rc.1
 [0.8.0]: https://github.com/kemora13conf/bp-backend-express/compare/v0.7.1...v0.8.0

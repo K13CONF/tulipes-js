@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { createAccessCheck } from "@app/auth";
 import { join } from "node:path";
 import type { Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
@@ -6,9 +6,17 @@ import { HttpError } from "@tulipes/core/http";
 import { coerceValue, type DescribedVariable } from "@tulipes/core/env";
 
 import { audit } from "../helpers/audit.js";
+import {
+  MAX_SETTINGS_FILE_BYTES,
+  missingTranslationKeys,
+  readSettingsJson,
+  settingsFileNames,
+  settingsJson,
+  writeSettingsFile,
+} from "../helpers/files.js";
 import { writeVariable } from "../helpers/env-file.js";
-import { tailLogs } from "../helpers/log-tail.js";
-import { isSupervised, restart } from "../helpers/pm2.js";
+import { configuredLogStreams, type LogStreams } from "../helpers/log-stream.js";
+import { isSupervised, restartAfterResponse } from "../helpers/pm2.js";
 
 /**
  * The infrastructure console: what every module declares, what its
@@ -20,7 +28,11 @@ import { isSupervised, restart } from "../helpers/pm2.js";
  * console cannot describe an app different from the one running.
  */
 export class SettingsController {
-  constructor(private readonly ctx: Ctx) {}
+  readonly #logStreams: LogStreams;
+
+  constructor(private readonly ctx: Ctx) {
+    this.#logStreams = configuredLogStreams(ctx.Environment);
+  }
 
   /** Every module, with everything the framework knows about it. */
   modules(): RequestHandler {
@@ -28,6 +40,7 @@ export class SettingsController {
       const variables = this.ctx.Environment.store.describe();
       const routes = [...this.ctx.routes.all()];
       const grants = this.ctx.acl?.describe() ?? [];
+      const i18nBudget = { bytes: 0, keys: 0 };
 
       // ctx.modules is the authoritative list. Deriving it from config
       // keys instead would invent modules out of the app-level seed —
@@ -44,7 +57,7 @@ export class SettingsController {
             .filter((variable) => variable.owner === name)
             .map(describeVariable),
           config: this.ctx.config[name] ?? null,
-          i18n: this.#i18nOf(manifest.dir),
+          i18n: this.#i18nOf(manifest.dir, i18nBudget),
           routes: routes
             .filter((route) => route.module === name)
             .map((route) => ({
@@ -83,7 +96,10 @@ export class SettingsController {
       if (!found) throw new HttpError(404, "noSuchVariable", { field: "name" });
 
       if (reveal && found.isSecret) {
-        audit(this.ctx, req, "variable.revealed", { variable: name });
+        await audit(this.ctx, req, {
+          action: "variable.reveal_requested",
+          variable: name,
+        });
       }
 
       res.respond({ data: describeVariable(found) });
@@ -112,22 +128,27 @@ export class SettingsController {
       // next boot — which is when it would otherwise surface.
       const coerced = coerceValue(found.spec, value);
       if (!coerced.ok) {
-        throw new HttpError(422, coerced.reason, { field: "value", code: "INVALID_VALUE" });
+        throw new HttpError(422, coerced.reason, {
+          field: "value",
+          code: "INVALID_VALUE",
+        });
       }
 
-      const { replaced } = writeVariable(this.ctx.Environment.envFile, name, value);
+      await audit(this.ctx, req, {
+        action: "variable.change_requested",
+        variable: name,
+      });
+      const { replaced } = writeVariable(
+        this.ctx.Environment.envFile,
+        name,
+        value,
+      );
 
       // A container-injected variable outranks the file on the next boot
       // too, so the file alone would silently change nothing. Setting it
       // live makes the change real for THIS process — and only this one.
       const shadowed = found.source === "process.env";
       if (shadowed) process.env[name] = value;
-
-      audit(this.ctx, req, "variable.changed", {
-        variable: name,
-        redacted: found.isSecret,
-        ...(found.isSecret ? {} : { from: found.value, to: coerced.value }),
-      });
 
       res.respond({
         data: {
@@ -147,10 +168,9 @@ export class SettingsController {
   translations(): RequestHandler {
     return async (req: Request, res: Response) => {
       const { file, module, locale } = this.#localeFile(req);
-      if (!existsSync(file)) throw new HttpError(404, "noSuchLocale", { field: "locale" });
 
       res.respond({
-        data: { module, locale, translations: readJson(file) },
+        data: { module, locale, translations: readSettingsJson(file) },
       });
     };
   }
@@ -162,16 +182,16 @@ export class SettingsController {
   setTranslations(): RequestHandler {
     return async (req: Request, res: Response) => {
       const { file, module, locale } = this.#localeFile(req);
-      if (!existsSync(file)) throw new HttpError(404, "noSuchLocale", { field: "locale" });
 
-      const { translations } = req.body as { translations: Record<string, unknown> };
-      writeFileSync(file, `${JSON.stringify(translations, null, 2)}\n`);
-
-      audit(this.ctx, req, "i18n.changed", {
+      readSettingsJson(file);
+      const translations = settingsJson(req.body.translations);
+      await audit(this.ctx, req, {
+        action: "i18n.change_requested",
         module,
         locale,
         keys: Object.keys(translations).length,
       });
+      writeSettingsFile(file, `${JSON.stringify(translations, null, 2)}\n`);
 
       // i18next loaded its resources at boot, so this file is not consulted
       // again until the process restarts.
@@ -195,10 +215,14 @@ export class SettingsController {
         });
       }
 
-      audit(this.ctx, req, "reboot.requested", { targets: targets ?? "all" });
+      // An accepted request still needs its durable audit before PM2 is contacted.
+      await audit(this.ctx, req, {
+        action: "reboot.requested",
+        target_count: targets?.length ?? 0,
+      });
 
-      const outcome = await restart(targets ?? []);
-      res.respond({ data: outcome });
+      // The helper owns validation, response completion and deferred execution.
+      await restartAfterResponse(res, targets ?? []);
     };
   }
 
@@ -207,7 +231,7 @@ export class SettingsController {
    *
    * SSE rather than a socket: a log tail is one-way, it is plain HTTP so it
    * passes the RAI gate like every other endpoint, and the browser
-   * reconnects on its own.
+   * can reconnect using a client that sends the required Authorization header.
    */
   logStream(): RequestHandler {
     return async (req: Request, res: Response) => {
@@ -219,49 +243,25 @@ export class SettingsController {
       }
 
       const which = req.query.process === "worker" ? "worker" : "backend";
-      const level = typeof req.query.level === "string" ? req.query.level : undefined;
+      const level =
+        typeof req.query.level === "string" ? req.query.level : undefined;
       const tail = Math.min(Number(req.query.tail ?? 200) || 0, 1000);
 
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        Connection: "keep-alive",
-        // nginx buffers proxied responses by default, which would hold
-        // every event until the buffer fills — this turns that off.
-        "X-Accel-Buffering": "no",
-      });
-
-      const send = (event: string, data: unknown): void => {
-        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-      };
-
-      const wanted = level ? LEVELS[level] ?? 0 : 0;
-      const stream = tailLogs({
+      const session = req.auth.session;
+      await this.#logStreams.open(res, {
+        authorize: createAccessCheck(this.ctx, req.auth, "settings:logs"),
+        userId: req.auth.user ? String(req.auth.user._id) : "",
+        expiresAt: session
+          ? Math.min(
+              session.access_expires_at.getTime(),
+              session.expires_at.getTime(),
+            )
+          : 0,
         dir: String(this.ctx.Environment.get("LOG_DIR")),
         prefix: `${String(this.ctx.Environment.get("LOG_BASENAME"))}-${which}`,
+        process: which,
         tail,
-        onLine: (line) => {
-          // Lines are JSON from pino; anything else is a stray write and
-          // is passed through as a raw message rather than dropped.
-          try {
-            const entry = JSON.parse(line) as { level?: number };
-            if ((entry.level ?? 0) < wanted) return;
-            send("log", entry);
-          } catch {
-            send("log", { msg: line });
-          }
-        },
-      });
-
-      // Proxies drop an idle connection; a comment frame is the standard
-      // keep-alive and is ignored by EventSource.
-      const heartbeat = setInterval(() => res.write(": keep-alive\n\n"), 15_000);
-
-      send("ready", { process: which, tail, level: level ?? "all" });
-
-      req.on("close", () => {
-        clearInterval(heartbeat);
-        stream.close();
+        ...(level ? { level } : {}),
       });
     };
   }
@@ -274,19 +274,27 @@ export class SettingsController {
     // directory comes from what the framework discovered at boot, so a
     // crafted module or locale name cannot address a path outside it.
     const manifest = this.ctx.modules.find((entry) => entry.name === module);
-    if (!manifest) throw new HttpError(404, "noSuchModule", { field: "module" });
+    if (!manifest)
+      throw new HttpError(404, "noSuchModule", { field: "module" });
     if (!/^[a-z]{2}(-[A-Za-z0-9]+)?$/.test(locale)) {
       throw new HttpError(422, "invalidLocale", { field: "locale" });
     }
 
-    return { file: join(manifest.dir, "i18n", `${locale}.json`), module, locale };
+    return {
+      file: join(manifest.dir, "i18n", `${locale}.json`),
+      module,
+      locale,
+    };
   }
 
-  #i18nOf(moduleDir: string): { locales: string[]; missing: Record<string, string[]> } {
+  #i18nOf(
+    moduleDir: string,
+    budget: { bytes: number; keys: number },
+  ): { locales: string[]; missing: Record<string, string[]> } {
     const i18nDir = join(moduleDir, "i18n");
-    if (!existsSync(i18nDir)) return { locales: [], missing: {} };
-
-    const files = readdirSync(i18nDir).filter((name) => name.endsWith(".json"));
+    const files = settingsFileNames(i18nDir).filter((name) =>
+      /^[a-z]{2}(-[A-Za-z0-9]+)?(\.missing)?\.json$/.test(name),
+    );
     const locales = files
       .filter((name) => !name.endsWith(".missing.json"))
       .map((name) => name.replace(/\.json$/, ""))
@@ -297,29 +305,36 @@ export class SettingsController {
     const missing: Record<string, string[]> = {};
     for (const name of files.filter((file) => file.endsWith(".missing.json"))) {
       const locale = name.replace(/\.missing\.json$/, "");
-      missing[locale] = flattenKeys(readJson(join(i18nDir, name)));
+      const keys = missingTranslationKeys(
+        readSettingsJson(join(i18nDir, name)),
+      );
+      budget.keys += keys.length;
+      budget.bytes += keys.reduce(
+        (total, key) => total + Buffer.byteLength(key),
+        0,
+      );
+      if (budget.keys > 10_000 || budget.bytes > MAX_SETTINGS_FILE_BYTES) {
+        throw new HttpError(413, "settingsMetadataTooLarge", {
+          code: "SETTINGS_METADATA_TOO_LARGE",
+          defaultMessage:
+            "The missing translation key summary exceeds the allowed size",
+        });
+      }
+      missing[locale] = keys;
     }
 
     return { locales, missing };
   }
 }
 
-/** pino's numeric levels, for filtering a stream by severity. */
-const LEVELS: Record<string, number> = {
-  trace: 10,
-  debug: 20,
-  info: 30,
-  warn: 40,
-  error: 50,
-  fatal: 60,
-};
-
 /**
  * The full spec travels with every variable: a console needs the type,
  * the enum and whether it is required to render a usable form, not just
  * the current value.
  */
-function describeVariable(variable: DescribedVariable): Record<string, unknown> {
+function describeVariable(
+  variable: DescribedVariable,
+): Record<string, unknown> {
   const { spec } = variable;
   return {
     name: spec.name,
@@ -345,25 +360,10 @@ function rolesFor(
 ): string[] {
   const namespace = `${id.split(":")[0]}:*`;
   const roles = grants
-    .filter(({ resource }) => resource === id || resource === "*" || resource === namespace)
+    .filter(
+      ({ resource }) =>
+        resource === id || resource === "*" || resource === namespace,
+    )
     .map(({ role }) => role);
   return [...new Set(roles)].sort();
-}
-
-function readJson(file: string): Record<string, unknown> {
-  try {
-    return JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-/** `{ list: { empty: "…" } }` → `["list.empty"]`. */
-function flattenKeys(source: Record<string, unknown>, prefix = ""): string[] {
-  return Object.entries(source).flatMap(([key, value]) => {
-    const path = prefix ? `${prefix}.${key}` : key;
-    return value && typeof value === "object" && !Array.isArray(value)
-      ? flattenKeys(value as Record<string, unknown>, path)
-      : [path];
-  });
 }

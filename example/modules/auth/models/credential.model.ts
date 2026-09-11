@@ -22,6 +22,7 @@ const credentialSchema = new Schema(
       unique: true,
       index: true,
     },
+    version: { type: String, required: true },
     password_hash: { type: String, required: true, select: false },
   },
   baseSchemaOptions,

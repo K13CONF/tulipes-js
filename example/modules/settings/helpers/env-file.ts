@@ -1,61 +1,73 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { parse } from "dotenv";
+import { HttpError } from "@tulipes/core/http";
+import { readSettingsFile, writeSettingsFile } from "./files.js";
 
-/**
- * Writes one variable into an `.envs/.env.<APP_ENV>` file.
- *
- * Surgical on purpose: the file is read, the single matching line is
- * replaced in place, and everything else — comments, blank lines, ordering,
- * unrelated entries — is written back byte-for-byte. The scaffold's env
- * files are half explanation, and a naive `stringify(parse(file))` would
- * throw all of it away on the first save.
- */
 export interface WriteResult {
-  /** True when the file already carried this variable. */
   replaced: boolean;
 }
 
-export function writeVariable(file: string, name: string, value: string): WriteResult {
-  const lines = existsSync(file) ? readFileSync(file, "utf8").split("\n") : [];
-  const rendered = `${name}=${quote(value)}`;
+const unsupported = () =>
+  new HttpError(422, "envFileUnsupported", {
+    code: "ENV_FILE_UNSUPPORTED",
+    defaultMessage:
+      "The value or existing env assignment cannot be safely edited; normalize it manually",
+  });
 
-  // Matches `NAME=…`, optionally exported and indented, but never a line
-  // where the name only appears inside a comment or another value.
-  const pattern = new RegExp(`^\\s*(?:export\\s+)?${escapeRegExp(name)}\\s*=`);
-  const index = lines.findIndex((line) => pattern.test(line));
+/** Preserve unrelated lines and verify the effective dotenv values before writing. */
+export function writeVariable(
+  file: string,
+  name: string,
+  value: string,
+): WriteResult {
+  if (!/^[A-Z][A-Z0-9_]*$/.test(name) || /[\r\0]/.test(value))
+    throw unsupported();
 
-  if (index !== -1) {
+  const original = readSettingsFile(file) ?? "";
+  const before = parse(original);
+
+  // dotenv does not implement JSON/shell quote escaping. Choose only a spelling
+  // its actual parser can read back exactly, without introducing another key.
+  const rendered = [
+    value,
+    "'" + value + "'",
+    '"' + value + '"',
+    "`" + value + "`",
+  ]
+    .map((candidate) => name + "=" + candidate)
+    .find((candidate) => {
+      const parsed = parse(candidate);
+      return Object.keys(parsed).length === 1 && parsed[name] === value;
+    });
+  if (!rendered) throw unsupported();
+
+  // Edit a single assignment, then verify the whole file before replacing it.
+  const lines = original.split("\n");
+  const pattern = new RegExp("^\\s*(?:export\\s+)?" + name + "\\s*=");
+  const matches = lines.flatMap((line, index) =>
+    pattern.test(line) ? [index] : [],
+  );
+  if (matches.length > 1) throw unsupported();
+
+  const index = matches[0];
+  if (index !== undefined) {
+    // Multiline existing assignments need a human edit; never leave their tail
+    // behind or treat a matching line inside another quoted value as a key.
+    if (parse(lines[index]!)[name] !== before[name]) throw unsupported();
     lines[index] = rendered;
-    save(file, lines);
-    return { replaced: true };
+  } else {
+    if (lines.at(-1) !== "") lines.push("");
+    lines.splice(lines.length - 1, 0, rendered);
   }
+  const content = lines.join("\n");
+  const expected = { ...before, [name]: value };
+  const actual = parse(content);
+  if (
+    Object.keys(actual).length !== Object.keys(expected).length ||
+    Object.entries(expected).some(([key, entry]) => actual[key] !== entry)
+  )
+    throw unsupported();
 
-  // Appended with a trailing newline preserved, so the next write finds a
-  // clean last line rather than concatenating onto this one.
-  if (lines.length > 0 && lines[lines.length - 1] !== "") lines.push("");
-  lines.splice(lines.length - 1, 0, rendered);
-  save(file, lines);
-  return { replaced: false };
-}
+  writeSettingsFile(file, content, true);
 
-/**
- * Quote only when the value would otherwise not survive a round trip —
- * whitespace, quotes, `#`, or an empty value. dotenv reads bare values
- * fine, and leaving them bare keeps hand-edited files readable.
- */
-function quote(value: string): string {
-  if (value === "" || /[\s"'#]/.test(value)) {
-    return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-  }
-  return value;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function save(file: string, lines: string[]): void {
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, lines.join("\n"));
+  return { replaced: index !== undefined };
 }

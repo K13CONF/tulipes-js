@@ -10,6 +10,8 @@ Status: implementation authorized, 2026-09-08, with repository visibility explic
 - S04: staging/production credential guard, concurrent refresh/logout regressions, production 500 redaction, qs update and PM2 7.0.4 upgrade with isolated start/restart checks. Audits retain lower severity findings.
 - S05: corrected quick-start URLs, tested tutorial commands, CLI infrastructure requirements, compatibility/migration and release recovery documentation.
 
+Sprint 02 is now in progress: see [its backlog and implementation status](production-readiness-02.md).
+
 Follow-on scope remains offline declaration/inspection, provider package extraction, full administrative/authentication security review and production pilot. A minimal runtime still installs the core package's provider dependencies. Publication requires a separate version/release change and the completed gates.
 
 Validation details are maintained in docs/testing.md and the implementation PR. The original estimates below describe the full sprint capacity rather than actual elapsed time.

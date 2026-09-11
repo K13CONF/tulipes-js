@@ -17,6 +17,7 @@ export const registration = z.object({
   password: z.string("passwordTooShort").min(8, "passwordTooShort"),
 });
 
+// Refresh credentials come from the JSON body, never ambient browser cookies.
 export const refreshBody = z.object({
   refresh_token: z.string("refreshRequired").min(1, "refreshRequired"),
 });

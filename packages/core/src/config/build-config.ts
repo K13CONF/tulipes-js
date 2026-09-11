@@ -11,6 +11,7 @@ import type {
 interface ConfigModuleShape {
   default?: unknown;
   onReady?: unknown;
+  onDrain?: unknown;
   onShutdown?: unknown;
 }
 
@@ -75,7 +76,7 @@ function collectLifecycle(
 ): ModuleLifecycle | undefined {
   const lifecycle: ModuleLifecycle = { module: moduleName };
 
-  for (const hook of ["onReady", "onShutdown"] as const) {
+  for (const hook of ["onReady", "onDrain", "onShutdown"] as const) {
     const value = exported[hook];
     if (value === undefined) continue;
     if (typeof value !== "function") {
@@ -89,5 +90,5 @@ function collectLifecycle(
     lifecycle[hook] = value as LifecycleHook;
   }
 
-  return lifecycle.onReady || lifecycle.onShutdown ? lifecycle : undefined;
+  return lifecycle.onReady || lifecycle.onDrain || lifecycle.onShutdown ? lifecycle : undefined;
 }

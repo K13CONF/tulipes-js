@@ -1,21 +1,22 @@
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
-import { appBoot, importFromApp, registerTypeScript } from "./app-core.js";
+import { importFromApp } from "./app-core.js";
+import { inspectApp } from "./inspection.js";
 
 /**
  * `tulipes spec` — an OpenAPI document and/or a Postman collection, built
  * from the app's declared routes.
  *
- * Boots in the backend branch without listening, exactly as `tulipes
- * routes` does, so the document describes the router that is actually
- * mounted rather than what a parser guessed from source.
+ * Shares the routes command's inspection path: offline declarations when
+ * requested, or backend inspection without listening for legacy factories.
  *
  * The generator lives in `@tulipes/spec`, imported lazily: core carries no
  * dependency on it, and an app that never generates a spec never installs
  * it.
  */
 export interface SpecOptions {
+  offline?: boolean;
   openapi?: string;
   postman?: string;
   /** Base URL the documents advertise. */
@@ -46,18 +47,7 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
   const spec = await loadGenerator(rootDir);
   if (!spec) return;
 
-  await registerTypeScript();
-
-  // The app's own boot, so mongoose and friends stay to one copy.
-  const boot = await appBoot(rootDir);
-
-  const handle = await boot({
-    rootDir,
-    mode: "backend",
-    handleSignals: false,
-    // No port: this must work while the app is already running.
-    inspect: true,
-  });
+  const handle = await inspectApp(rootDir, options.offline);
 
   try {
     const source = spec.extract(handle.ctx) as { routes: unknown[]; folders: string[] };
@@ -66,7 +56,7 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
       return;
     }
 
-    const url = options.url ?? defaultUrl(handle.env);
+    const url = options.url ?? (handle.env ? defaultUrl(handle.env) : "http://localhost:3000");
     const warnings = new Set<string>();
 
     if (options.openapi) {

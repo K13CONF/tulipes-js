@@ -3,6 +3,7 @@ import type { Express, Router, Request, RequestHandler, Response } from "express
 import { HttpError, ValidationError, type FieldIssue } from "./error-handler.js";
 import { codeOfIssue, fieldOf, type RouteSchemas, type ValidatableSchema } from "./schema.js";
 import type { Auth } from "./index.js";
+import { routePath } from "./paths.js";
 
 /**
  * RAI — Resource Access Identifier.
@@ -106,10 +107,10 @@ export class RouteRegistry {
   #checker: AccessChecker | undefined;
   #records: RouteRecord[] = [];
 
-  /** Mount a router with an explicit literal prefix, preserved for inspection. */
+  /** Mount a router with a prefix preserved for inspection, including named parameters. */
   mount(parent: Express | Router, path: string, router: Router): void {
-    if (path !== "" && !/^\/[a-zA-Z0-9_.~%/-]*$/.test(path)) {
-      throw new Error(`unsupported router mount "${path}" — use a literal path`);
+    if (path !== "" && !routePath.test(path)) {
+      throw new Error(`unsupported router mount "${path}" — use a literal path with named :parameters`);
     }
     (parent as Router).use(path || "/", router);
     const stack = "router" in parent

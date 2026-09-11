@@ -29,12 +29,14 @@ export function helmetOptions(environment: Environment): HelmetOptions {
 }
 
 /**
- * CORS from the environment, because allowed origins differ per
- * deployment. Fail-closed: the default is an empty list, meaning no
- * cross-origin browser may call this API until one is named.
+ * CORS controls which browser origins can read responses. An empty list
+ * grants no cross-origin access; it does not reject incoming HTTP requests.
+ * Authentication and any future cookie/CSRF checks remain separate controls.
  */
 export function corsOptions(environment: Environment): CorsOptions {
   const raw = String(environment.get("CORS_ORIGINS")).trim();
+  // This controls Access-Control-Allow-Credentials, not token extraction.
+  // Explicit Bearer headers do not require cookie authentication to be enabled.
   const credentials = Boolean(environment.get("CORS_CREDENTIALS"));
 
   if (raw === "*") {
@@ -46,9 +48,14 @@ export function corsOptions(environment: Environment): CorsOptions {
         'CORS_ORIGINS="*" cannot be combined with CORS_CREDENTIALS=true — list the origins explicitly',
       );
     }
+
     return { origin: true, credentials: false };
   }
 
-  const origins = raw.split(",").map((origin) => origin.trim()).filter(Boolean);
+  const origins = raw
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   return { origin: origins, credentials };
 }

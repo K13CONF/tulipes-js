@@ -10,20 +10,36 @@ test("shutdown disconnects Socket.IO clients and releases the HTTP listener", as
       });
     `,
   });
+
   const handle = await app.boot();
-  const socket = io(url(handle) + "/probe", { transports: ["websocket"], reconnection: false });
+
+  const socket = io(url(handle) + "/probe", {
+    transports: ["websocket"],
+    reconnection: false,
+  });
+
   try {
     const greeting = await new Promise((resolve, reject) => {
       socket.once("ready", resolve);
+
       socket.once("connect_error", reject);
     });
+
     expect(greeting).toEqual({ message: "ready" });
-    const disconnected = new Promise(resolve => socket.once("disconnect", resolve));
+
+    const disconnected = new Promise((resolve) =>
+      socket.once("disconnect", resolve),
+    );
+
     await handle.shutdown();
+
     await disconnected;
+
     expect(handle.server!.listening).toBe(false);
     expect(socket.connected).toBe(false);
-  } finally { socket.disconnect(); }
+  } finally {
+    socket.disconnect();
+  }
 });
 
 test("inspection skips socket setup and readiness hooks", async () => {
@@ -34,7 +50,9 @@ test("inspection skips socket setup and readiness hooks", async () => {
     `,
     "modules/probe/sockets/probe.sockets.js": `export default () => { throw new Error('must not attach sockets'); };`,
   });
+
   const handle = await app.boot({ inspect: true });
+
   expect(handle.ctx.sockets).toBeUndefined();
   expect(handle.server!.listening).toBe(false);
 });

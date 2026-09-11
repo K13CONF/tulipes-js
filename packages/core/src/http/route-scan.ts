@@ -2,6 +2,7 @@ import type { Express } from "express";
 
 import { BootReport } from "../errors/boot-error.js";
 import { RAI_TAG, MOUNT_PATH, type RaiTag, type RouteRecord } from "./rai.js";
+import { routePath } from "./paths.js";
 
 /**
  * Validate each endpoint's execution chain. Middleware remains trusted app
@@ -21,7 +22,6 @@ interface Layer {
 }
 
 const METHODS = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"]);
-const PATH = /^\/(?:[a-zA-Z0-9_./~%-]|:[a-zA-Z_]\w*)*$/;
 const tagOf = (entry: Handler | undefined): RaiTag | undefined =>
   (entry?.handle as Record<symbol, RaiTag> | undefined)?.[RAI_TAG];
 
@@ -33,7 +33,7 @@ export function scanRoutes(app: Express, report: BootReport): RouteRecord[] {
   for (const { layer, prefix } of walk(app, report)) {
     const route = layer.route!;
     const methods = Object.keys(route.methods ?? {});
-    if (typeof route.path !== "string" || !PATH.test(route.path)) {
+    if (typeof route.path !== "string" || !routePath.test(route.path)) {
       report.add({ scope: "routes", message: `unsupported route path ${String(route.path)} — use a literal path with named :parameters` });
       continue;
     }
@@ -49,6 +49,10 @@ export function scanRoutes(app: Express, report: BootReport): RouteRecord[] {
       const tag = tags[0];
       if (!tag) {
         report.add({ scope: "routes", message: `${method} ${path} has no rai() declaration` });
+        continue;
+      }
+      if (typeof tag.info.id !== "string" || !tag.info.id.trim()) {
+        report.add({ scope: "routes", module: tag.module, message: `${method} ${path}: rai id must be a nonempty string` });
         continue;
       }
       if (tagOf(stack[0]) !== tag || tags.length !== 1) {

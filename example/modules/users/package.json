@@ -9,7 +9,8 @@
     "dependsOn": [
       "auth",
       "core"
-    ]
+    ],
+    "offline": true
   },
   "dependencies": {
     "@app/auth": "workspace:*",

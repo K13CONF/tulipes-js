@@ -25,7 +25,8 @@ touching anything else.
    contract — package.json (scope detected from siblings), meta.variables,
    config with lifecycle hooks, ACL, helper, a controller class, routes
    declaring a RAI, model, bootstrap, queue and socket. Delete the ones this feature does not
-   need; an absent file is always valid.
+   need. For offline inspection, keep tulipes.offline: true and wrap route
+   factories in defineRoutes(); modules without routes need no placeholder file.
 2. Set ordering in `modules/billing/package.json`:
 
 ```json
@@ -38,7 +39,8 @@ touching anything else.
 
 3. `yarn install` — the module is a workspace, so the package manager must
    link it before imports resolve.
-4. Add only what the feature needs (every file is optional): `routes/`,
+4. Put endpoints and shared middleware in native `routes/*.routes.ts` factories.
+   Add optional files as needed:
    `models/`, `queues/`, `sockets/`, `bootstrap/`, `module.acl.ts`,
    `i18n/` — the module is its own i18n namespace. → skill `tulipes-i18n`
 5. `yarn sync && yarn dev` — the banner must list the module.
