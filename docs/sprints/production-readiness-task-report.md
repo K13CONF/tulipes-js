@@ -267,7 +267,7 @@ first extraction; reassess after the inventory and interface task below.
   Verify license, exports, dependency/peer ranges and digest handling for every
   archive; preserve preflight of all immutable-version conflicts before uploads.
   Add isolated core-only and provider-enabled installation jobs.
-- [ ] **S09.9 — Verify failure and omitted-provider modes.** Retain live database
+- [x] **S09.9 — Verify failure and omitted-provider modes.** Retain live database
   model/HTTP behavior, duplicate registration and startup failures, partial cleanup,
   shutdown deadlines and declaration parity. Prove core-only boot/inspection works
   when importing or resolving Mongoose is impossible. Missing required capability
