@@ -1023,6 +1023,93 @@ test("log stream slots are capped per account and released on HTTP cancellation"
   });
 });
 
+test.each([
+  "role removal",
+  "user deletion",
+  "session revocation",
+  "session expiry",
+  "access revocation",
+  "logout",
+  "password replacement",
+  "refresh reuse",
+])("an open log stream closes after %s", async (change) => {
+  const user = await sysadmin();
+  const { verify, endSession, revokeAccess } = await import("../modules/auth/helpers/tokens.js");
+  const claims = verify(handle.ctx, user.access_token, "access")!;
+
+  await logFiles(async (dir) => {
+    const response = await get("/api/v1/settings/logs/stream?tail=0", user.access_token);
+    expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let body = "";
+
+    try {
+      // Observe actual SSE delivery before changing the authority behind it.
+      while (!body.includes("event: ready")) {
+        const part = await reader.read();
+        expect(part.done).toBe(false);
+        body += decoder.decode(part.value);
+      }
+
+      if (change === "role removal") {
+        await handle.ctx.models!.get("User").updateOne({ _id: user.userId }, { role: "admin" });
+      } else if (change === "user deletion") {
+        await handle.ctx.models!.get("User").deleteOne({ _id: user.userId });
+      } else if (change === "session revocation") {
+        await endSession(handle.ctx, claims.sid);
+      } else if (change === "session expiry") {
+        await handle.ctx.models!.get("Session").updateOne({ sid: claims.sid }, { expires_at: new Date(0) });
+      } else if (change === "access revocation") {
+        await revokeAccess(handle.ctx, claims);
+      } else if (change === "logout") {
+        expect((await post("/api/v1/auth/logout", {}, user.access_token)).status).toBe(200);
+      } else if (change === "password replacement") {
+        const { setPassword } = await import("../modules/auth/helpers/passwords.js");
+        await setPassword(handle.ctx, user.userId, randomBytes(24).toString("hex"));
+      } else {
+        expect((await post("/api/v1/auth/refresh", { refresh_token: user.refresh_token })).status).toBe(200);
+        expect((await post("/api/v1/auth/refresh", { refresh_token: user.refresh_token })).status).toBe(401);
+      }
+
+      const started = performance.now();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          (async () => {
+            for (;;) {
+              const part = await reader.read();
+              if (part.done) break;
+              body += decoder.decode(part.value);
+            }
+          })(),
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(() => reject(new Error("Revoked stream stayed open")), 3000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timeout);
+      }
+      // Two-second authorization lease plus scheduling tolerance on this runner.
+      expect(performance.now() - started).toBeLessThan(3000);
+
+      const { writeFile } = await import("node:fs/promises");
+      const { join } = await import("node:path");
+      await writeFile(join(dir, "app-backend.log"), "after revocation\\n");
+      expect((await reader.read()).done).toBe(true);
+      expect(body).not.toContain("after revocation");
+
+      // A different administrator can still use the controller after closure.
+      const other = await sysadmin();
+      const replacement = await get("/api/v1/settings/logs/stream?tail=0", other.access_token);
+      expect(replacement.status).toBe(200);
+      await replacement.body?.cancel();
+    } finally {
+      await reader.cancel();
+    }
+  });
+});
+
 test("restart acknowledgment finishes before PM2 commands and retains its audit", async () => {
   const user = await sysadmin();
   const specifier = "pm2";

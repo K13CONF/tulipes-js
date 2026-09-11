@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import { HttpError } from "@tulipes/core/http";
+import { AccessLease } from "./access-lease.js";
 import { tailLogs, type Tail } from "./log-tail.js";
 
 export const LOG_STREAM_LIMITS = Object.freeze({
@@ -9,11 +10,14 @@ export const LOG_STREAM_LIMITS = Object.freeze({
   outputBytes: 1024 * 1024,
   bufferBytes: 64 * 1024,
   heartbeatMs: 15_000,
+  authorizationIntervalMs: 1000,
+  authorizationTimeoutMs: 1000,
 });
 
 type StreamLimits = { [K in keyof typeof LOG_STREAM_LIMITS]: number };
 
 interface StreamOptions {
+  authorize: (signal: AbortSignal) => Promise<boolean>;
   userId: string;
   expiresAt: number;
   dir: string;
@@ -53,7 +57,7 @@ export class LogStreams {
     }
   }
 
-  open(res: Response, options: StreamOptions): void {
+  async open(res: Response, options: StreamOptions): Promise<void> {
     const lifetime = Math.min(
       this.#limits.durationMs,
       options.expiresAt - Date.now(),
@@ -86,6 +90,20 @@ export class LogStreams {
     let deadline: ReturnType<typeof setTimeout> | undefined;
     let heartbeat: ReturnType<typeof setInterval> | undefined;
 
+    const authorization = new AccessLease(
+      options.authorize,
+      this.#limits.authorizationIntervalMs,
+      this.#limits.authorizationTimeoutMs,
+      () => close(),
+    );
+
+    const releaseSlot = () => {
+      this.#count--;
+      const remaining = (this.#active.get(options.userId) ?? 1) - 1;
+      if (remaining) this.#active.set(options.userId, remaining);
+      else this.#active.delete(options.userId);
+    };
+
     // All termination paths converge here; repeated events cannot release twice.
     const close = (destroy = false) => {
       if (closed) return;
@@ -95,10 +113,9 @@ export class LogStreams {
       clearInterval(heartbeat);
       tail?.close();
 
-      this.#count--;
-      const remaining = (this.#active.get(options.userId) ?? 1) - 1;
-      if (remaining) this.#active.set(options.userId, remaining);
-      else this.#active.delete(options.userId);
+      // A timed-out query may still run. Hold its slot until it settles so
+      // reconnects cannot create an unbounded queue of authorization work.
+      void authorization.close().then(releaseSlot);
 
       res.off("close", disconnected);
       res.off("error", disconnected);
@@ -123,7 +140,7 @@ export class LogStreams {
     const write = (frame: string): boolean => {
       if (closed) return false;
 
-      if (Date.now() >= expiresAt) {
+      if (Date.now() >= expiresAt || !authorization.valid) {
         close();
         return false;
       }
@@ -163,6 +180,10 @@ export class LogStreams {
     res.once("error", disconnected);
 
     try {
+      // Recheck before file access or SSE headers, closing the opening-request gap.
+      await authorization.start();
+      if (closed) return;
+
       tail = tailLogs({
         dir: options.dir,
         prefix: options.prefix,

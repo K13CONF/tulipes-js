@@ -1,3 +1,4 @@
+import { createAccessCheck } from "@app/auth";
 import { join } from "node:path";
 import type { Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
@@ -244,7 +245,8 @@ export class SettingsController {
       const tail = Math.min(Number(req.query.tail ?? 200) || 0, 1000);
 
       const session = req.auth.session;
-      this.#logStreams.open(res, {
+      await this.#logStreams.open(res, {
+        authorize: createAccessCheck(this.ctx, req.auth, "settings:logs"),
         userId: req.auth.user ? String(req.auth.user._id) : "",
         expiresAt: session
           ? Math.min(
