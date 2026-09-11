@@ -96,3 +96,12 @@ This installs and typechecks a packed production starter, then generates specs i
 two independent processes with socket connections denied, invalid service URLs
 and empty runtime secrets. It requires package-registry access for installation
 and audit, but no application services. CI runs it in a separate service-free job.
+
+
+## Sprint 02 review traceability
+
+The [Sprint 02 evidence map](sprints/production-readiness-02-evidence.md) links each
+security/offline topic to its implementation and retained scenarios, records the
+latest local candidate checks, and lists required CI jobs and deployment owners.
+Preserve those scenarios during later provider extraction; local results cannot
+substitute for the supported runtime/platform matrix or pilot evidence.

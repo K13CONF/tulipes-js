@@ -1,27 +1,29 @@
 # Production readiness — detailed sprint task report
 
-Prepared: 2026-09-11. Implementation baseline: `2d23433` (Sprint 02 / S08l).
+Prepared: 2026-09-11. Current runtime/test baseline: `1be808c` (S08m plus readability).
 
-**Next action: complete Sprint 02 documentation/evidence closeout (02-C1–C5).**
-Sprint 02 is still open. Offline inspection, starter migration and security items
-S08a–S08m are implemented; provider extraction has not started.
-S08m is committed as `d06066a`. It was locally verified on 2026-09-11 with 225 framework/spec and 55 reference/
-packed production tests; the S08l table below remains its dated baseline.
+**Next acceptance action: retain candidate CI evidence for 02-C3/02-C5.**
+Sprint 02 implementation and local documentation/evidence closeout are complete.
+Offline inspection, starter migration and S08a–S08m are implemented; provider
+extraction has not started. The [evidence map](production-readiness-02-evidence.md)
+records current results and external gates. No GitHub run for this source commit
+was returned on 2026-09-11, so final sprint acceptance remains open.
 
 This report translates the existing program into executable tasks. Sprint 01 and
 02 statuses come from their retained trackers and the local repository. Sprint 03
 is the existing next workstream. Sprints 04–06 are a proposed division of the
 previously unnamed later milestone, not additional implementation already started
 or fixed delivery commitments. Package names and exact interfaces remain design
-outputs. External repository, registry and deployment state were not rechecked
-for this report; earlier release statements remain dated evidence.
+outputs. Closeout checked GitHub workflow availability read-only; registry,
+deployment and other external settings were not rechecked. Earlier release
+statements remain dated evidence.
 
 ## 1. Program map and evidence baseline
 
 | Sprint | Intended result | Current state | Main dependency |
 |---|---|---|---|
 | 01 — Package trust and first run | Reproducible minimal/production starters and verified release artifacts | Implementation recorded as delivered; external governance/release conditions remain distinct | Maintainer decisions for external account/release changes |
-| 02 — Offline inspection and security | Deterministic offline specs and retained auth/settings abuse cases | S06–S07, S08a–S08m and test readability implemented; closeout remains | Finish stream lifecycle behavior and review final evidence |
+| 02 — Offline inspection and security | Deterministic offline specs and retained auth/settings abuse cases | Implementation, readability and local closeout complete; CI acceptance pending | Candidate Linux/Node matrix and packed workflow evidence |
 | 03 — First provider extraction | Core can install and boot without Mongoose | Planned | Sprint 02 closeout and a compatible capability boundary |
 | 04 — Queues and sockets | Redis/queue and socket dependencies install only when selected | Proposed | Prove the first adapter before copying its design |
 | 05 — Packaging and composition | Measured packaging decisions and supported feature combinations | Proposed; individual splits conditional | Provider contracts, installation measurements and migration costs |
@@ -33,21 +35,21 @@ collected against the final candidate. A candidate release need not wait for all
 later sprints if its scope is accurately described and its release gates pass.
 A 1.0 readiness claim requires the broader milestone evidence.
 
-Latest **local** S08l evidence, Node 24.14.0/macOS:
+Latest **local** 02-C3 closeout evidence, Node 24.14.0/macOS:
 
 | Check | Result | What it establishes |
 |---|---|---|
-| Framework/spec suite | 217 passed, no skips, temporary MongoDB/Redis | Retained framework behavior and stream lease/resource cases |
-| Reference production app | 54 passed, no skips | Real HTTP auth/settings behavior, including eight open-stream revocation cases |
-| Packed production app | 54 generated tests passed | Installed artifacts carry the same behavior outside workspace resolution |
+| Framework/spec suite | 225 passed, no skips, temporary MongoDB/Redis | Retained framework behavior, stream leases and early drain/resource cases |
+| Reference production app | 55 passed, no skips | Real HTTP auth/settings behavior, including eight open-stream revocation cases and shutdown/fresh boot |
+| Packed production app | 55 generated tests passed | Installed artifacts carry the same behavior outside workspace resolution |
 | Types/builds/parity | Passed | Package, test and reference types; compiled archives; generated/reference modules, tests and configuration agree |
 | Offline/runtime tooling | Passed in packed verification | Deterministic offline documents with connections denied; runtime spec generation works |
 | Runtime lifecycle/PM2 | Passed in packed verification | Backend/worker checks and complete 202 response before isolated self-restart |
-| Coverage | 81.89% statements; 68.7% branches; 86.41% functions; 84.06% lines | Existing boot/ACL/env floors passed; this is not whole-project security coverage |
+| Coverage | 82.01% statements; 68.7% branches; 86.74% functions; 84.14% lines | Existing boot/ACL/env floors passed; this is not whole-project security coverage |
 | Dependency audits | Existing severity gates passed | Dated workspace/runtime and generated inventory; moderate maintenance notice retained |
 
-Evidence is summarized in [Sprint 02](production-readiness-02.md#s08l--revalidate-authorization-throughout-log-streaming).
-Raw `reports/s08l-*` files are ignored local artifacts. They are not CI attachments,
+Evidence is mapped by topic in the [closeout record](production-readiness-02-evidence.md).
+Raw `reports/s08-closeout-*` files are ignored local artifacts. They are not CI attachments,
 release attestations or evidence of Linux, minimum Node, browser or replica-set
 failover behavior. Collect those results in the appropriate CI/pilot stage.
 
@@ -167,19 +169,25 @@ platform/runtime results separately from local runs.
 
 ### S08 closeout — Documentation and evidence reconciliation
 
-- [ ] **02-C1 — Reconcile current behavior.** Update cumulative changelog and
+Local closeout completed on 2026-09-11; see the
+[evidence map](production-readiness-02-evidence.md) and final tracker entry.
+02-C3's local checks pass; its required candidate CI attachment and 02-C5 final
+acceptance remain open. Deployment follow-ups have accountable roles, with actual
+pilot personnel still to be selected under S15.1.
+
+- [x] **02-C1 — Reconcile current behavior.** Update cumulative changelog and
   security/migration summaries to cover S08a–S08m. Mark older incremental statements
   as historical where later fixes supersede them, including restart delivery,
   audit durability, rate limits and stream authorization/draining. Remove ambiguity
   without rewriting the retained validation history.
-- [ ] **02-C2 — Map each review topic to evidence.** Link its implementation,
+- [x] **02-C2 — Map each review topic to evidence.** Link its implementation,
   retained test, local result and CI result. Distinguish implemented controls,
   documented application policy, conditional browser-cookie work and unverified
   deployment properties. Do not use test counts as a substitute for this mapping.
 - [ ] **02-C3 — Verify the complete candidate.** Run both packed presets and the
   production offline-only job; preserve coverage floors, audits and guide/module
   parity. Attach Linux/Node matrix results through the existing workflow.
-- [ ] **02-C4 — Carry deployment gaps forward.** Assign the named tasks in Sprint
+- [x] **02-C4 — Carry deployment gaps forward.** Assign the named tasks in Sprint
   06 for nginx topology, replica-set failures, audit retention/archival, incident
   alerts and cross-replica/load tuning. Keep cookie adaptation conditional.
 - [ ] **02-C5 — Close the tracker accurately.** Mark Sprint 02 complete only after
@@ -518,8 +526,9 @@ Recommended immediate order:
 1. **Completed:** S08m lifecycle implementation and S08-readability. All tracked
    tests/helpers and both starter test outputs now have expanded formatting and
    space between distinct steps, with test behavior and fixture values retained.
-2. **02-C1–C5:** reconcile cumulative docs and close Sprint 02 with actual evidence
-   and assigned external follow-ups.
+2. **02-C1–C5:** local documentation, evidence mapping and deployment backlog
+   assignment are complete. Retain candidate CI results for 02-C3, then complete
+   final 02-C5 acceptance; no current-source workflow run was found locally.
 3. **S09.1–S09.2:** measure current dependencies and settle the first provider seam;
    use those results to confirm Sprint 03 scope and estimate.
 4. **S09.3–S09.10:** extract Mongoose and prove installed absence, compatibility,

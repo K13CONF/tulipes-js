@@ -1,11 +1,35 @@
 # Changelog
 
-## Unreleased
+All notable changes to `@tulipes/core`.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+While the major version is `0`, a minor bump may carry breaking changes —
+`0.2 → 0.5` each did. Upgrading across any of them needs the notes in
+[MIGRATING.md](./MIGRATING.md).
+
+## [Unreleased]
 
 - Add optional `onDrain` module hooks at the start of shutdown, sharing the traffic
   drain deadline and aggregate cleanup errors. Production settings use the hook
   to stop log streams, reject late openings and abort pending authorization before
   resource disposal; a subsequent boot gets fresh stream admission.
+
+- Revoke a device's entire session family on valid refresh-token reuse. Duplicate
+  concurrent refreshes invalidate the winning pair too; clients must serialize
+  refresh and sign in again after rejection or an uncertain acknowledgment.
+- Add shared Redis fixed-window auth/settings quotas, normalized proxy-aware client
+  identities, 429 retry guidance and bounded fail-closed 503 responses.
+- Constrain settings file reads/writes, links, JSON expansion and dotenv values;
+  use bounded descriptor reads and atomic sibling replacement with private env files.
+- Bound log history, polling, output, backpressure, stream capacity and lifetime.
+  Revalidate current session/credential/user/ACL authority during open SSE with a
+  two-second authorization lease and bounded pending checks.
+- Return complete HTTP 202 acceptance before executing prepared PM2 restarts;
+  cancel on premature disconnect and revalidate process identity before commands.
+- Ship browser bearer/JSON transport guidance and retained boundary tests, with
+  explicit client refresh coordination and conditional cookie/CSRF requirements.
 
 - Add explicit production proxy IP/CIDR trust with direct-peer defaults and
   forwarded-header regressions. Update single-ingress nginx templates to overwrite
@@ -31,18 +55,6 @@
 - Support named mount parameters while preserving middleware, param callbacks and error-handler arity.
 - Verify runtime route/schema parity and deterministic packed spec generation with
   service connections denied; retain legacy runtime inspection.
-
-
-All notable changes to `@tulipes/core`.
-
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-While the major version is `0`, a minor bump may carry breaking changes —
-`0.2 → 0.5` each did. Upgrading across any of them needs the notes in
-[MIGRATING.md](./MIGRATING.md).
-
-## [Unreleased]
 
 ## [0.9.0-rc.2] — 2026-09-09
 
