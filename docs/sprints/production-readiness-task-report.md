@@ -2,8 +2,10 @@
 
 Prepared: 2026-09-11. Accepted Sprint 02 source: `37dbca7`.
 
-**Current authorized operation:** [rc.3 candidate release](release-0.9.0-rc.3.md)
-under 01-C4. Sprint 03 implementation remains unstarted.
+**Latest completed operation:** [rc.3 candidate release](release-0.9.0-rc.3.md)
+under 01-C4. Core `0.9.0-rc.3` / spec `0.3.0-rc.3` are published under `next`;
+release CI, registry archive identity and fresh installed smokes passed.
+Sprint 03 implementation remains unstarted.
 
 **Next planned workstream: Sprint 03, S09.1–S09.2 (inventory and provider seam).**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
