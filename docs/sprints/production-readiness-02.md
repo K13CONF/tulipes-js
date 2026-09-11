@@ -4,6 +4,8 @@ Status: in progress, continued on 2026-09-09 from merged Sprint 01 and the rc.2
 security fix. This working increment implements offline native-router inspection and migrates
 both starters. It does not publish a version or change repository visibility.
 
+Detailed program tasks: [sprint-by-sprint report](production-readiness-task-report.md).
+
 ## Goal and backlog
 
 A production starter can generate deterministic route/spec descriptions without
@@ -74,7 +76,7 @@ changes separate from S06–S07; provider extraction remains outside Sprint 02.
 S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
 committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
 S08e as `bd18bd6`; S08f as `7125ca1`; S08g as `4ed321c`; S08h as `0ed912a`;
-S08i as `b7d63bb`; S08j as `5eda964`; S08k as `a736237`.
+S08i as `b7d63bb`; S08j as `5eda964`; S08k as `a736237`; S08l as `2d23433`.
 
 ### S08a — PM2 target scope
 
@@ -659,3 +661,18 @@ refresh writes, audit retention/archival and application incident alerts. Cookie
 adaptation remains conditional on choosing cookie authentication. Provider
 extraction stays in Sprint 03. No deployment, publication or visibility change
 was performed by S08l.
+
+
+### S08-report — Detailed sprint task breakdown
+
+Completed on 2026-09-11 after S08l commit `2d23433`, at the user's request.
+The [task report](production-readiness-task-report.md) records completed work,
+remaining Sprint 01/02 gates, the existing Sprint 03 provider scope and a proposed
+Sprint 04–06 allocation for later adapters, packaging and the production pilot.
+Each workstream includes tasks, dependencies, acceptance evidence and ownership;
+optional package splits and cookie adaptation remain conditional.
+
+Validation: checked relative document/file links, task identifiers, whitespace,
+status against this tracker and S08l local test/packed evidence. This documentation
+increment changes no runtime behavior and does not establish new CI, deployment
+or release results. S08m remains the next implementation task.
