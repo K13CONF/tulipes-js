@@ -492,7 +492,7 @@ required by this plan.
 | Item | Status | Evidence / remaining work |
 |---|---|---|
 | S09-plan | Complete | Source-grounded plan saved; 46 relative links/anchors across three documents, scope and whitespace validated; `reports/s09-plan-docs.log` |
-| S09.1 | In progress | S09.1a complete on 2026-09-11 against `b42bd00`: 41-row coupling register, behavior maps, harness `scripts/s09-inventory.mjs`, installation shapes A–D and startup baselines in [the inventory](../design/mongoose-dependency-inventory.md); raw samples in ignored `reports/s09-inventory/b42bd00/`. S09.1b: representative re-run on the committed harness and checklist closure against S09.2 |
+| S09.1 | Complete | 2026-09-11: 41-row coupling register, behavior maps, harness `scripts/s09-inventory.mjs`, installation shapes A–D and startup baselines against `b42bd00`, reproduced at `9aba800` (inventory identical, timings within 4–11%) — [inventory](../design/mongoose-dependency-inventory.md); raw samples in ignored `reports/s09-inventory/{b42bd00,9aba800}/` |
 | S09.2 | Planned | Alternatives, decision checklist and fixtures specified; selected interface and executable proof still required |
 | S09.3–S09.10 | Not started | Handoff criteria above; execution follows completed inventory/design |
 

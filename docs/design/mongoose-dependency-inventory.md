@@ -1,9 +1,9 @@
 # Mongoose dependency inventory (S09.1)
 
-Status: S09.1a — coupling register, measurement harness and baseline
-measurements recorded on 2026-09-11 against source `b42bd00` (clean tree, branch
-`feat/sprint-03-s09-inventory`). S09.1b re-runs representative measurements on
-the committed harness and closes the checklist assignments (§5) against S09.2.
+Status: S09.1 complete on 2026-09-11 — coupling register, measurement harness
+and baseline recorded against source `b42bd00` (S09.1a), reproduced on the
+committed harness at `9aba800` (S09.1b, §4.3). Checklist assignments in §5 are
+refined by the [provider design](mongoose-provider-design.md) as S09.2 settles.
 
 Plan: [Sprint 03 §4](../sprints/production-readiness-03.md#4-s091--inventory-and-baseline-measurements).
 Program: [S09.1](../sprints/production-readiness-task-report.md#s09--mongoose-provider-and-capability-contract).
@@ -268,6 +268,31 @@ Reading the numbers:
 
 No before/after comparison or percentage improvement is claimed here; the
 tables are the baseline S09.10 reruns against.
+
+### 4.3 Reproducibility run (S09.1b)
+
+Repeated on the committed harness at `9aba800` (documentation and harness
+commit; core/spec source unchanged, archives byte-identical, clean tree),
+fixtures A and B, full sampling policy. Raw data: `reports/s09-inventory/9aba800/`.
+
+| Measurement | First run (`b42bd00`) | Repeat (`9aba800`) | Delta |
+|---|---|---|---|
+| A installed bytes / unique / copies | 52,960,060 / 151 / 151 | identical | 0 |
+| B installed bytes / unique / copies | 137,095,845 / 199 / 206 | identical | 0 |
+| Exclusive mongoose graph | 17 / 10,998,896 | identical | 0 |
+| A warm install (3 runs) | 711, 686, 703 ms | 722, 666, 641 ms | within noise |
+| A `import_boot` median / p95 | 229 / 257 ms | 216 / 225 ms | −6% |
+| A `import_mongoose` median | 109 ms | 97 ms | −11% |
+| B `import_boot` median / p95 | 232 / 252 ms | 219 / 224 ms | −6% |
+| B `import_boot_tsx` median | 335 ms | 325 ms | −3% |
+| B `offline_spec` median | 599 ms | 573 ms | −4% |
+| B `backend_readiness` median / p95 | 455 / 472 ms | 439 / 464 ms | −4% |
+
+Inventory figures reproduce exactly; timing medians reproduce within 4–11% on
+the same host (the first run overlapped a concurrent install of fixtures C/D
+and the machine was otherwise idle for the repeat). Comparisons in S09.10 must
+therefore treat startup differences under ~10% as noise unless the sample
+ranges separate.
 
 ## 5. Affected-file extraction checklist
 
