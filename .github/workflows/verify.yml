@@ -119,6 +119,27 @@ jobs:
         with:
           name: production-offline-smoke
           path: reports/
+  upgrade:
+    needs: pack
+    runs-on: ubuntu-latest
+    # The last published production starter, refused with migration diagnostics
+    # and then migrated per MIGRATING.md; no services, network only for the old archive.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-packages
+          path: .artifacts
+      - run: node scripts/upgrade-smoke.mjs .artifacts 0.9.0-rc.3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: upgrade-smoke
+          path: reports/
   production:
     needs: pack
     runs-on: ubuntu-latest

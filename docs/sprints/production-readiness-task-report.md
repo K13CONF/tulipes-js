@@ -257,7 +257,7 @@ first extraction; reassess after the inventory and interface task below.
   starter generator, model examples, module helpers, CLI-generated types and spec
   consumers. Minimal must omit the provider completely. Document manual migration
   for apps whose generated files were edited locally.
-- [ ] **S09.7 — Define legacy compatibility.** Inventory documented database
+- [x] **S09.7 — Define legacy compatibility.** Inventory documented database
   exports and existing app usage. Choose a bridge, deprecation window or explicit
   breaking prerelease path. Any compatibility wrapper that installs Mongoose must
   live outside the claimed provider-free core path. Retain an upgrade fixture
