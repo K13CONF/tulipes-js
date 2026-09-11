@@ -1,8 +1,8 @@
 # Sprint 03 — Dependency inventory and first provider design
 
-Status: planning complete; S09.1a (register, harness, baseline) recorded in
-[docs/design/mongoose-dependency-inventory.md](../design/mongoose-dependency-inventory.md);
-S09.1b and S09.2 are not yet complete. Prepared on 2026-09-11 against source `3d56aed`.
+Status: executed on 2026-09-11 — S09.1 through S09.10 delivered on
+`feat/sprint-03-s09-inventory` (see §9); the release decision and supported CI
+evidence on merged source remain open. Plan prepared against source `3d56aed`.
 This is the execution plan for those two items, followed by a handoff to the
 remaining Mongoose extraction tasks. It does not implement or release a provider.
 
@@ -498,7 +498,7 @@ required by this plan.
 | S09.4, S09.5, S09.6, S09.8 | Complete | 2026-09-11, one change set (inseparable for CI): `packages/mongoose` holds the runtime; core drops the dependency and its declarations are verified Mongoose-free at pack time; generator, example and `new module` migrated; three archives with a core-only smoke launcher and a packed resolve probe proving minimal absence — [design §9.2](../design/mongoose-provider-design.md#92-extraction-evidence-s094s096-s098-2026-09-11) |
 | S09.7 | Complete | 2026-09-11: breaking-prerelease path with a migration stub at `@tulipes/core/db`; `scripts/upgrade-smoke.mjs` + CI job `upgrade` take the published 0.9.0-rc.3 production starter through the expected diagnostics and the documented migration — [design §9.2](../design/mongoose-provider-design.md#92-extraction-evidence-s094s096-s098-2026-09-11) |
 | S09.9 | Complete | 2026-09-11: eight real-driver scenarios in `packages/mongoose/tests/provider-matrix.integration.test.ts` (selection semantics, requirement shapes, two-boot plugin identity, bootstrap/duplicate failures with release) plus the four moved tests; core-only and packed-absence proofs in the smokes — [design §9.3](../design/mongoose-provider-design.md#93-failure-and-omission-matrix-with-the-real-driver-s099-2026-09-11) |
-| S09.10 | Not started | Before/after measurements on the committed harness; migration docs; release decision |
+| S09.10 | Complete (local) | 2026-09-11: same harness on `78bf4eb` — core-only install −20.7% (−10,986,291 B, −17 packages), minimal −8.0%, mongoose unresolvable from A/B/D, `import_boot` −32–37%, minimal readiness −19%, production unchanged within noise — [inventory §4.4](../design/mongoose-dependency-inventory.md#44-after-extraction-s0910); MIGRATING/CHANGELOG/README/skills updated. Not done here: CI run on the merged source, version/range/dist-tag decision, publication |
 
 Stop inventory/design expansion once their exit criteria are met. Record unrelated
 issues in the backlog, commit the coherent verified outputs and proceed to the

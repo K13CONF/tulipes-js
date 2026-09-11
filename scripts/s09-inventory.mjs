@@ -428,8 +428,8 @@ async function startup(keys) {
     const scenarios = {};
     scenarios.import_root = await timed(async () => importTiming(record.app, '@tulipes/core'));
     scenarios.import_boot = await timed(async () => importTiming(record.app, '@tulipes/core/boot'));
-    // Attribution only: the driver's own import cost, and the tsx loader's.
-    scenarios.import_mongoose = await timed(async () => importTiming(record.app, 'mongoose'));
+    // Attribution only: the driver's own import cost (where it is installed at all), and the tsx loader's.
+    if (record.resolve.app.mongoose) scenarios.import_mongoose = await timed(async () => importTiming(record.app, 'mongoose'));
     if (record.root && existsSync(join(record.root, 'cli'))) {
       scenarios.import_boot_tsx = await timed(async () => importTiming(record.app, '@tulipes/core/boot', ['--import', 'tsx']));
       const bin = join(record.root, 'cli/node_modules/@tulipes/core/dist/cli/bin.js');

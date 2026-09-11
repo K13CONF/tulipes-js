@@ -213,12 +213,13 @@ silently start those changes.
 core installation must not acquire Mongoose through direct dependencies, runtime
 imports or emitted public type declarations.
 
-**Status:** S09.1–S09.6 and S09.8 complete on 2026-09-11 — inventory, harness
-and baseline in the [dependency inventory](../design/mongoose-dependency-inventory.md);
-seam, extraction into `@tulipes/mongoose` and evidence in the
-[provider design](../design/mongoose-provider-design.md). Remaining: S09.7
-upgrade fixture, S09.9 failure/omission matrix with the real driver, S09.10
-measurements and release decision. See the
+**Status:** S09.1–S09.10 complete on 2026-09-11 on branch
+`feat/sprint-03-s09-inventory` — inventory, harness, baseline and the
+before/after comparison in the [dependency inventory](../design/mongoose-dependency-inventory.md);
+seam, extraction into `@tulipes/mongoose`, upgrade fixture and failure matrix
+in the [provider design](../design/mongoose-provider-design.md). Supported CI
+evidence on the merged source and the release decision (three-package
+candidate, ranges, dist-tags) remain with the maintainer. See the
 [Sprint 03 execution plan](production-readiness-03.md). **Owner:** engineer; maintainer
 owns compatibility/versioning decisions. **Dependencies:** Sprint 02 lifecycle behavior
 and offline declarations. The original estimate was 5–8 engineering days for the
@@ -272,7 +273,7 @@ first extraction; reassess after the inventory and interface task below.
   shutdown deadlines and declaration parity. Prove core-only boot/inspection works
   when importing or resolving Mongoose is impossible. Missing required capability
   should produce an actionable module error.
-- [ ] **S09.10 — Record measurements and commit migration.** Compare installed
+- [x] **S09.10 — Record measurements and commit migration.** Compare installed
   inventory/size and documented startup measurements with S09.1. Update migration,
   package docs and the sprint tracker with exact local/CI evidence. Break delivery
   into reviewed, coherent commits; keep package release as a separate decision.
