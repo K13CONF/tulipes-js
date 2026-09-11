@@ -237,7 +237,7 @@ first extraction; reassess after the inventory and interface task below.
   database-free, provider-present and missing-required-provider examples with
   compile-time fixtures; avoid creating a general plugin bus without demonstrated
   requirements.
-- [ ] **S09.3 — Separate metadata from connected models.** Identify whether model
+- [x] **S09.3 — Separate metadata from connected models.** Identify whether model
   documentation is actually needed for current tooling. Where required, expose
   declaration metadata without building connected models or importing runtime
   plugins offline. Preserve the route-schema declaration source. If metadata
