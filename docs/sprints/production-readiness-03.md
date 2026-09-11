@@ -498,7 +498,21 @@ required by this plan.
 | S09.4, S09.5, S09.6, S09.8 | Complete | 2026-09-11, one change set (inseparable for CI): `packages/mongoose` holds the runtime; core drops the dependency and its declarations are verified Mongoose-free at pack time; generator, example and `new module` migrated; three archives with a core-only smoke launcher and a packed resolve probe proving minimal absence — [design §9.2](../design/mongoose-provider-design.md#92-extraction-evidence-s094s096-s098-2026-09-11) |
 | S09.7 | Complete | 2026-09-11: breaking-prerelease path with a migration stub at `@tulipes/core/db`; `scripts/upgrade-smoke.mjs` + CI job `upgrade` take the published 0.9.0-rc.3 production starter through the expected diagnostics and the documented migration — [design §9.2](../design/mongoose-provider-design.md#92-extraction-evidence-s094s096-s098-2026-09-11) |
 | S09.9 | Complete | 2026-09-11: eight real-driver scenarios in `packages/mongoose/tests/provider-matrix.integration.test.ts` (selection semantics, requirement shapes, two-boot plugin identity, bootstrap/duplicate failures with release) plus the four moved tests; core-only and packed-absence proofs in the smokes — [design §9.3](../design/mongoose-provider-design.md#93-failure-and-omission-matrix-with-the-real-driver-s099-2026-09-11) |
-| S09.10 | Complete (local) | 2026-09-11: same harness on `78bf4eb` — core-only install −20.7% (−10,986,291 B, −17 packages), minimal −8.0%, mongoose unresolvable from A/B/D, `import_boot` −32–37%, minimal readiness −19%, production unchanged within noise — [inventory §4.4](../design/mongoose-dependency-inventory.md#44-after-extraction-s0910); MIGRATING/CHANGELOG/README/skills updated. Not done here: CI run on the merged source, version/range/dist-tag decision, publication |
+| S09.10 | Complete | 2026-09-11: same harness on `78bf4eb` — core-only install −20.7% (−10,986,291 B, −17 packages), minimal −8.0%, mongoose unresolvable from A/B/D, `import_boot` −32–37%, minimal readiness −19%, production unchanged within noise — [inventory §4.4](../design/mongoose-dependency-inventory.md#44-after-extraction-s0910); MIGRATING/CHANGELOG/README/skills updated. Not done here: CI run on the merged source, version/range/dist-tag decision, publication |
+
+## 10. Supported CI evidence
+
+[PR #5](https://github.com/kemora13conf/bp-backend-express/pull/5), head
+`6249c592a741a6e49ddbacec752a9e0bbcbe51c1`, workflow run
+[34648822187](https://github.com/kemora13conf/bp-backend-express/actions/runs/34648822187)
+on 2026-09-11: all eight jobs passed — `tests (24)`, `tests (24.0.0)` with
+MongoDB 8 / Redis 7 services and `REQUIRE_INTEGRATION_TESTS=1`, `pack` (three
+verified archives, generator/reference parity), `minimal (ubuntu-latest)`,
+`minimal (macos-latest)` (both with the packed absence probe), `offline`,
+`upgrade` (published 0.9.0-rc.3 starter from the registry), `production`
+(packed backend, worker, login, PM2). The release decision — versions, the
+provider's core peer range, dist-tags — is a separate PR under
+[the release procedure](../releasing.md).
 
 Stop inventory/design expansion once their exit criteria are met. Record unrelated
 issues in the backlog, commit the coherent verified outputs and proceed to the
