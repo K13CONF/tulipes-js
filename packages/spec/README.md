@@ -11,13 +11,13 @@ Generates an **OpenAPI 3.1 document** and a **Postman collection** from a
 routes.
 
 Requires Node 24.x. Runtime inspection connects configured infrastructure.
-The unreleased native-router interface in this checkout adds `--offline`: both
+Core 0.9.0-rc.3 adds the native-router `--offline` interface: both
 migrated presets generate specs without MongoDB, Redis or runtime secrets.
 See the [offline inspection guide](../../docs/offline-inspection.md).
 
-Version 0.3.0-rc.2 supports core `^0.8.0 || ^0.9.0-rc.1`. Install the candidate
+Version 0.3.0-rc.3 supports core `^0.9.0-rc.3`. Install the candidate
 with `yarn add -D @tulipes/spec@next`. See the core
-[migration guide](https://github.com/kemora13conf/bp-backend-express/blob/v0.8.0/packages/core/MIGRATING.md#reliability-contracts-08)
+[migration guide](https://github.com/kemora13conf/bp-backend-express/blob/v0.9.0-rc.3/packages/core/MIGRATING.md#090-rc3--production-security-upgrade-overview)
 when upgrading from an earlier release.
 
 The source is the RAI registry, populated by building the same native routers
@@ -114,7 +114,7 @@ Runtime inspection skips bootstrap, sockets, listening and readiness hooks, so i
 while the app is serving. Imports, config/route factories and applicable database
 and queue connections still run. Always release them with `shutdown()`.
 
-With the unreleased offline interface, no runtime shutdown is needed:
+With the offline interface, no runtime shutdown is needed:
 
 ```ts
 import { inspectRoutes } from "@tulipes/core/boot";
@@ -151,3 +151,11 @@ dependencies, so this package never pins a second copy of either.
 <div align="center">
 <sub>Part of <a href="https://www.npmjs.com/package/@tulipes/core">Tulipes</a></sub>
 </div>
+
+## 0.3.0-rc.3 release notes
+
+`extract()` accepts the shared route/config/ACL context from either runtime boot
+or offline inspection. The core rc.3 CLI and both starters use this release for
+deterministic offline OpenAPI/Postman generation. Runtime extraction remains
+available. Upgrade core and spec together; earlier core versions should retain
+their matching spec line until migrated.

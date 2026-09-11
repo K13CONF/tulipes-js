@@ -98,7 +98,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
   const core = `^${coreVersion}`;
   // The generator ships its own version line; it only has to be recent
   // enough to understand the RouteInfo schemas this core declares.
-  const specVersion = "^0.3.0-rc.2";
+  const specVersion = "^0.3.0-rc.3";
 
   const files: [string, string][] = [
     // Ship browser policy as an editable document alongside the auth modules.
