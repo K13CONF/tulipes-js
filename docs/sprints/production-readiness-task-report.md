@@ -3,6 +3,8 @@
 Prepared: 2026-09-11. Accepted Sprint 02 source: `37dbca7`.
 
 **Next planned workstream: Sprint 03, S09.1–S09.2 (inventory and provider seam).**
+The [detailed execution plan](production-readiness-03.md) defines the coupling
+register, measurement protocol, interface decisions, fixtures and delivery order.
 Sprint 02 implementation, local closeout and CI acceptance are complete.
 [CI run 34632402765](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765) passed
 all seven jobs, including Ubuntu Node 24.0.0/24.20.0, packed minimal on Linux/macOS,
@@ -206,8 +208,10 @@ silently start those changes.
 core installation must not acquire Mongoose through direct dependencies, runtime
 imports or emitted public type declarations.
 
-**Status:** planned in the existing program. **Owner:** engineer; maintainer owns
-compatibility/versioning decisions. **Dependencies:** Sprint 02 lifecycle behavior
+**Status:** detailed S09.1–S09.2 planning complete; inventory measurements and
+interface implementation have not started. See the
+[Sprint 03 execution plan](production-readiness-03.md). **Owner:** engineer; maintainer
+owns compatibility/versioning decisions. **Dependencies:** Sprint 02 lifecycle behavior
 and offline declarations. The original estimate was 5–8 engineering days for the
 first extraction; reassess after the inventory and interface task below.
 
@@ -530,8 +534,9 @@ Recommended immediate order:
    space between distinct steps, with test behavior and fixture values retained.
 2. **Completed — 02-C1–C5:** local documentation, evidence mapping, deployment
    backlog assignment and final CI acceptance are recorded for `37dbca7`.
-3. **S09.1–S09.2:** measure current dependencies and settle the first provider seam;
-   use those results to confirm Sprint 03 scope and estimate.
+3. **S09.1–S09.2:** follow the [detailed plan](production-readiness-03.md) to measure
+   current dependencies and settle the first provider seam; use those results to
+   confirm extraction scope and estimate.
 4. **S09.3–S09.10:** extract Mongoose and prove installed absence, compatibility,
    cleanup and production behavior before applying the pattern elsewhere.
 5. Re-estimate Sprints 04–06 from the first extraction and the pilot's concrete
@@ -546,6 +551,7 @@ range are quoted here; later sprint durations need evidence before commitment.
 
 - [Sprint 01 plan and implementation status](production-readiness-01.md)
 - [Sprint 02 tracker and S08 history](production-readiness-02.md)
+- [Sprint 03 inventory and provider design plan](production-readiness-03.md)
 - [Offline inspection contract](../offline-inspection.md)
 - [Security model and remaining review](../security-model.md)
 - [Testing and packed verification](../testing.md)
