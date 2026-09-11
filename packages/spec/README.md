@@ -70,6 +70,16 @@ router.post(
 );
 ```
 
+**Models are not a source.** Nothing in the document is derived from a
+Mongoose schema, a registered model or a database connection: the `returns`
+schema on the route is the only description of a response body. This is
+deliberate — it is what lets `tulipes spec --offline` run with no provider
+installed and no service reachable — and no consumer needs model metadata
+today (the Sprint 03 inventory found none). If one appears, the requirement
+is a pure declaration that can be read without compiling models or importing
+runtime plugins; connecting a database or building dummy models to describe
+a document is out of scope.
+
 **Use `zod/v4`.** `z.toJSONSchema` is what this package calls and it only
 understands v4 schemas. A classic `from "zod"` schema still validates, but
 produces no shape in the document — `tulipes spec` reports each one it
