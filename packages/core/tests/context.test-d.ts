@@ -68,6 +68,9 @@ backend.app.disable("x-powered-by");
 // @ts-expect-error A backend may have no database.
 backend.models.get("User");
 
+// Members of ModelsCapability come from a provider's declarations; this test
+// program includes @tulipes/mongoose's, so `get` exists here. The packed
+// core-only fixture is what proves a core-only app cannot call it.
 requireModels(backend).get("User");
 
 requireQueues(backend).queue("users.welcome");

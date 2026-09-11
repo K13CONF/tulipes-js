@@ -27,6 +27,12 @@ test("artifact verification rejects changed archives before any publication", as
             file: "spec.tgz",
             integrity: "sha512-original",
           },
+          {
+            name: "@tulipes/mongoose",
+            version: "0.1.0",
+            file: "mongoose.tgz",
+            integrity: "sha512-original",
+          },
         ],
       }),
     );

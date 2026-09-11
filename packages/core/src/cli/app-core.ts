@@ -30,11 +30,10 @@ export async function importFromApp<T>(rootDir: string, specifier: string): Prom
 /**
  * The `boot` belonging to the app, falling back to this CLI's own.
  *
- * Booting through the app's own `@tulipes/core` is what keeps mongoose,
- * ioredis and every other shared singleton to ONE copy. Booting through
- * the CLI's copy instead makes the app's models fail their `instanceof
- * Schema` check and aborts the boot with a report blaming the models —
- * which is exactly the wrong place to look.
+ * Booting through the app's own `@tulipes/core` is what keeps ioredis and
+ * every other shared singleton to ONE copy, and what makes the app's
+ * declared providers (`tulipes.providers`) resolve from the app rather than
+ * from wherever the CLI happens to be installed.
  *
  * The fallback covers an app with no local install, where the CLI's copy
  * is the only one there is. A version skew between the two is reported by

@@ -13,7 +13,7 @@ connection and puts it in the model store.
 
 ```ts
 import { Schema } from "mongoose";
-import type { ModelDef } from "@tulipes/core/db";
+import type { ModelDef } from "@tulipes/mongoose";
 import { baseSchemaOptions } from "@app/core";
 
 const invoiceSchema = new Schema(
@@ -55,7 +55,7 @@ so a typo fails at the call site instead of returning `undefined`.
 ## Requirements
 
 - The app selects its database once, in its root `package.json`:
-  `"tulipes": { "providers": { "models": "@tulipes/core/db" } }`. A module
+  `"tulipes": { "providers": { "models": "@tulipes/mongoose" } }`. A module
   with `models/` or `bootstrap/` files in an app without that line is a boot
   refusal before any model is imported. A module that reads models but owns
   none declares `"tulipes": { "requires": ["models"] }` in its own manifest.

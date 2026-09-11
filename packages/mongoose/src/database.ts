@@ -1,9 +1,9 @@
 import { createConnection, Schema, type Connection } from "mongoose";
 
-import { BootReport } from "../errors/boot-error.js";
-import { importFile } from "../boot/import-file.js";
-import type { Ctx, DatabaseCtx } from "../boot/contracts.js";
-import type { ModuleFiles } from "../modules/explorer.js";
+import { importFile, type Ctx, type DatabaseCtx } from "@tulipes/core/boot";
+import type { BootReport } from "@tulipes/core/errors";
+import type { ModuleFiles } from "@tulipes/core/modules";
+
 import { ModelStore } from "./model-store.js";
 
 /**
@@ -24,11 +24,11 @@ export type BootstrapFn = (ctx: DatabaseCtx) => void | Promise<void>;
 const MONGO_URI = "MONGO_URI";
 
 /**
- * Boot phase 8, run by the "models" provider: connect, register every model
- * in load order, then run every bootstrap task in load order (indexes, seed
+ * Boot phase 8, run by the provider below: connect, register every model in
+ * load order, then run every bootstrap task in load order (indexes, seed
  * roles, default records).
  *
- * Reached only when the app declared the provider, so a missing connection
+ * Reached only when the app declared this provider, so a missing connection
  * string is a contradiction the boot must refuse — an app without a database
  * simply declares no provider.
  */

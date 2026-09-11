@@ -1,11 +1,10 @@
 # Mongoose provider design (S09.2)
 
-Status: S09.2 complete on 2026-09-11 — interface selected (S09.2a, against
-`9aba800`) and implemented in core with executable fixtures (S09.2b, §9 records
-what ran). The built-in Mongoose loader is exposed as the first provider at
-`@tulipes/core/db`; moving it into its own package is S09.4/S09.5. Nothing here
-is published or released; the provider package name is a proposal until the
-release maintainer accepts it.
+Status: S09.2 complete and the extraction (S09.4 runtime move, S09.5 core
+dependency removal, S09.6 consumer migration, S09.8 artifact tooling) landed on
+2026-09-11 as one coherent change — §9.2 records the evidence. The provider is
+`packages/mongoose` (`@tulipes/mongoose` 0.1.0-rc.1, unpublished); the package
+name and ranges remain release-maintainer decisions until publication.
 
 Plan: [Sprint 03 §5](../sprints/production-readiness-03.md#5-s092--select-the-provider-interface).
 Inputs: [dependency inventory](mongoose-dependency-inventory.md) (register rows
@@ -246,10 +245,12 @@ Rules:
 
 ## 7. Provider package
 
-- Proposed name `@tulipes/mongoose`, initial version `0.1.0-rc.1`, published
-  alongside core 0.10.0-rc.1 and spec 0.4.0-rc.1 (ranges are release outputs).
-- `peerDependencies`: `@tulipes/core` (the rc line that ships the contract),
-  `mongoose ^8`. `dependencies`: none. `devDependencies` for tests only.
+- Name `@tulipes/mongoose`, version `0.1.0-rc.1` in the workspace; to be
+  published alongside the core/spec candidates that ship the contract (final
+  ranges are release outputs — the workspace peer range is `>=0.9.0-rc.3 <1`
+  until core's next version is chosen).
+- `peerDependencies`: `@tulipes/core`, `mongoose ^8`. `dependencies`: none —
+  enforced by `artifacts.mjs verify`. `devDependencies` for tests only.
 - Exports: `.` (default `provider`, `ModelDef`, `BootstrapFn`, `ModelStore`), no
   subpaths. Declarations augment `@tulipes/core/boot`.
 - Reads `MONGO_URI` exactly as today (declared by the app's sys core module —
@@ -330,9 +331,27 @@ one is a boot error, `BootHandle.connection` is gone.
 | Packed | `artifacts.mjs prepare`; generator/reference parity diffs; minimal smoke (install, sync, typecheck, tests, offline specs, backend/shutdown, `ctx.models` undefined); production offline smoke with sockets denied | pass |
 | Packed production runtime | `scaffold-smoke.mjs … production` with local services — install, sync, typecheck, tests, offline specs, backend + worker booting through `@tulipes/core/db` resolved from `dist/`, login, start and PM2 smokes | pass |
 
-Not executed: packed **absence** of Mongoose (F1 negative) — impossible until
-S09.5; the prior-contract upgrade fixture (F8, S09.7); two-boot plugin identity
-with the real driver (S09.9).
+Not executed at 2b: packed **absence** of Mongoose (F1 negative); the
+prior-contract upgrade fixture (F8, S09.7); two-boot plugin identity with the
+real driver (S09.9).
+
+### 9.2 Extraction evidence (S09.4–S09.6, S09.8; 2026-09-11)
+
+| Claim | Evidence | Result |
+|---|---|---|
+| Runtime moved (S09.4) | `packages/mongoose/src/{database,model-store,provider,index}.ts` — the loader verbatim, `own()` registered in `onConnection` before `asPromise()`; the four integration tests moved with it and pass against local Mongo | pass |
+| Core declarations free of Mongoose (S09.5) | `artifacts.mjs verify` now greps every packed core `.d.ts` for `from "mongoose"` and refuses; packed core: 0 hits, `dependencies` without mongoose; `build` scripts clean `dist/` first (a stale `dist/db/database.d.ts` had survived `tsc` and shipped) | pass |
+| Packed absence (F1 negative) | `scaffold-smoke.mjs minimal` resolve probe: `mongoose`, `mongodb`, `bson`, `@tulipes/mongoose` unresolvable from the app, from core's directory and from the launcher (`reports/scaffold-minimal/resolve.json`) | pass |
+| Core-only launcher (S09.8-isolation) | Smoke launcher installs only the core archive; the production app resolves the provider from its own `node_modules`, never through the launcher | pass |
+| Consumers migrated (S09.6) | Generator and `example/`: root manifest declares `@tulipes/mongoose`, model-owning modules depend on it, six model files import `ModelDef` from it; parity diffs identical; `tulipes new module` provider-aware (`cli.test.ts`) | pass |
+| Migration stub (S09.7 prerequisite) | `@tulipes/core/db` default-exports a provider whose acquisition reports the move; type imports fail with "no exported member" | implemented; upgrade fixture pending (S09.7) |
+| Three archives (S09.8) | `artifacts.mjs` inventory `core, spec, mongoose`; provider archive verified to carry no `dependencies` and a `mongoose` peer; `artifacts.test.ts` updated | pass |
+| Whole suite | 236 core/spec/mongoose tests with services (`REQUIRE_INTEGRATION_TESTS=1`), coverage 84/72/87/86, `test:types`, workspace typecheck, example 55 tests, generated/reference and template parity, packed minimal smoke, packed production offline and runtime (backend, worker, login, PM2) smokes | pass |
+
+Core-only type proof: with the provider out of the repository tests' program
+`requireModels(ctx).get` stopped compiling (observed during the move); the
+shared test program includes `packages/mongoose/tests`, so that assertion
+lives in the packed minimal typecheck rather than in `context.test-d.ts`.
 
 ## 10. Compatibility table
 

@@ -1,10 +1,12 @@
 import mongoose from "mongoose";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "./fixture.js";
+import { fixture } from "../../core/tests/fixture.js";
+// Brings this package's ModelsCapability augmentation into the test program.
+import type { ModelStore } from "../src/index.js";
 
 const mongo = process.env.TEST_MONGO_URI;
 const integration = test.skipIf(!mongo);
-const declared = JSON.stringify({ type: "module", tulipes: { providers: { models: "@tulipes/core/db" } } });
+const declared = JSON.stringify({ type: "module", tulipes: { providers: { models: "@tulipes/mongoose" } } });
 
 beforeEach(() => {
   if (mongo) vi.stubEnv("MONGO_URI", mongo);
@@ -132,7 +134,7 @@ integration(
     });
 
     const handle = await app.boot({ mode: "script", shutdownTimeoutMs: 50 });
-    const connection = handle.ctx.models!.connection;
+    const connection = (handle.ctx.models as ModelStore).connection;
 
     const close = vi
       .spyOn(connection, "close")

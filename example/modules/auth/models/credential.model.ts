@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import type { ModelDef } from "@tulipes/core/db";
+import type { ModelDef } from "@tulipes/mongoose";
 import { baseSchemaOptions } from "@app/core";
 
 /**

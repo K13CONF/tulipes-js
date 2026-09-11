@@ -355,8 +355,10 @@ export default function billingRoutes(ctx: Ctx): Router {
   return router;
 }
 
-// models/*.model.ts — a declaration; never call mongoose.model() yourself
-export default { name: "Invoice", schema } satisfies ModelDef;
+// models/*.model.ts — a declaration; never call mongoose.model() yourself.
+// Needs the app to declare its models provider in package.json:
+//   "tulipes": { "providers": { "models": "@tulipes/mongoose" } }
+export default { name: "Invoice", schema } satisfies ModelDef; // ModelDef from @tulipes/mongoose
 
 // bootstrap/*.bootstrap.ts — runs in every process, so make it idempotent
 export default async function seed({ models }: Ctx) {}
@@ -471,7 +473,7 @@ middleware belongs, and how to read an aggregate boot report.
 | `@tulipes/core/env` | `Environment`, `KnownVariables` (codegen target), spec types |
 | `@tulipes/core/http` | `HttpError`, `notFoundHandler`, `errorHandler` |
 | `@tulipes/core/acl` | `Acl`, `AclBuilder`, `AclFn` |
-| `@tulipes/core/db` | the built-in Mongoose `models` provider (default export), `ModelStore`, `ModelDef`, `BootstrapFn` |
+| `@tulipes/core/db` | migration stub only — the Mongoose provider, `ModelStore`, `ModelDef` and `BootstrapFn` live in [`@tulipes/mongoose`](https://www.npmjs.com/package/@tulipes/mongoose) |
 | `@tulipes/core/queues` | `QueueManager`, `QueueRegistry`, `QueuesFn` |
 | `@tulipes/core/sockets` | `SocketManager`, `SocketRegistry`, `SocketsFn` |
 | `@tulipes/core/modules` | module graph, explorer, manifest schema |

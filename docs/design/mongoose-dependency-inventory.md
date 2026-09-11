@@ -296,7 +296,9 @@ ranges separate.
 
 ## 5. Affected-file extraction checklist
 
-Grouped by downstream task; each item references a register row.
+Grouped by downstream task; each item references a register row. Items for
+S09.2, S09.3, S09.4, S09.5, S09.6 and S09.8 were executed on 2026-09-11 (see
+the [provider design §9](mongoose-provider-design.md#9-executable-fixtures-for-s092b)).
 
 - **S09.2 (design):** R7/R8 access contract; R3/R9 status type; R12/R13 requirement declaration; R15 runtime selection; R26 new-module policy; R30 explicit selection; §3.3 bootstrap-only gap — all decided in [the provider design §1](mongoose-provider-design.md#1-decision-summary).
 - **S09.3 (metadata):** R18 — document "model metadata unsupported"; no code.

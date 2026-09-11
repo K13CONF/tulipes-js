@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { BootReport } from "../errors/boot-error.js";
+import { readProviderDeclarations } from "../boot/providers.js";
 import { coreVersion } from "./package-info.js";
 
 /**
@@ -11,8 +13,17 @@ import { coreVersion } from "./package-info.js";
  *
  * The package scope is borrowed from an existing sibling so the app keeps
  * one naming convention without configuring it anywhere.
+ *
+ * Model and bootstrap files are emitted only when the app has selected a
+ * models provider (`tulipes.providers.models` in its package.json): in a
+ * provider-free app they would make the module require a database the app
+ * refuses to boot without. `--model` / `--no-model` override the detection.
  */
-export async function runNewModule(rootDir: string, name: string): Promise<void> {
+export async function runNewModule(
+  rootDir: string,
+  name: string,
+  options: { models?: boolean } = {},
+): Promise<void> {
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     console.error(`module name "${name}" is invalid — lowercase kebab-case required`);
     process.exitCode = 2;
@@ -29,8 +40,10 @@ export async function runNewModule(rootDir: string, name: string): Promise<void>
 
   const scope = detectScope(modulesDir) ?? "@app";
   const locales = detectLocales(modulesDir);
+  const declared = readProviderDeclarations(rootDir, new BootReport()).models;
+  const models = options.models ?? declared !== undefined;
 
-  for (const [relPath, content] of renderModule(name, scope, locales)) {
+  for (const [relPath, content] of renderModule(name, scope, locales, models)) {
     const filePath = join(dir, relPath);
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, content);
@@ -47,6 +60,14 @@ export async function runNewModule(rootDir: string, name: string): Promise<void>
       "  yarn sync        # regenerate config types and .env.example",
       "",
       `Delete unused files; keep route files wrapped in defineRoutes for offline inspection.`,
+      ...(models
+        ? declared
+          ? []
+          : ["", "--model was given but package.json declares no models provider: add",
+             '  "tulipes": { "providers": { "models": "@tulipes/mongoose" } } and install it, or the boot will refuse this module.']
+        : ["", "No models/ or bootstrap/ files: package.json declares no models provider.",
+           "To add a database, declare \"tulipes\": { \"providers\": { \"models\": \"@tulipes/mongoose\" } }, install it,",
+           `then \`tulipes new module ${name} --model\` in a scratch app to copy the model template.`]),
     ].join("\n"),
   );
 }
@@ -57,11 +78,12 @@ function renderModule(
   name: string,
   scope: string,
   locales: readonly string[],
+  models: boolean,
 ): [string, string][] {
   const fn = camel(name);
   const Model = pascal(name);
 
-  return [
+  const files: [string, string][] = [
     // One file per locale the app already ships. The module IS the i18n
     // namespace, so `req.t("title")` in this module's endpoints resolves
     // here and nowhere else. Only the default locale has to be complete —
@@ -79,14 +101,14 @@ function renderModule(
       version: "0.0.0",
       private: true,
       type: "module",
-      // dependsOn "core" because the model below imports from it. The npm
+      // dependsOn "core" because the helpers below import from it. The npm
       // dependency makes it resolve; dependsOn makes the ordering explicit.
       tulipes: { offline: true, tier: "app", priority: 100, dependsOn: ["core"] },
       dependencies: {
         "@tulipes/core": `^${coreVersion()}`,
         [`${scope}/core`]: "workspace:*",
         express: "^5",
-        mongoose: "^8",
+        ...(models && { "@tulipes/mongoose": "^0.1.0-rc.1", mongoose: "^8" }),
       },
     })],
 
@@ -199,7 +221,7 @@ function renderModule(
 
     [`models/${name}.model.ts`, [
       `import { Schema } from "mongoose";`,
-      `import type { ModelDef } from "@tulipes/core/db";`,
+      `import type { ModelDef } from "@tulipes/mongoose";`,
       ``,
       `import { baseSchemaOptions } from "${scope}/core";`,
       ``,
@@ -277,6 +299,8 @@ function renderModule(
       ``,
     ].join("\n")],
   ];
+
+  return models ? files : files.filter(([path]) => !path.startsWith("models/") && !path.startsWith("bootstrap/"));
 }
 
 /**
