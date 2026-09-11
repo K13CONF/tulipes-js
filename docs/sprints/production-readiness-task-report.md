@@ -213,11 +213,12 @@ silently start those changes.
 core installation must not acquire Mongoose through direct dependencies, runtime
 imports or emitted public type declarations.
 
-**Status:** S09.1 and S09.2 complete on 2026-09-11 — inventory, harness and
-baseline in the [dependency inventory](../design/mongoose-dependency-inventory.md);
-selected seam, core implementation and executed fixtures in the
-[provider design](../design/mongoose-provider-design.md). Extraction into a
-separate package (S09.3–S09.10) has not started. See the
+**Status:** S09.1–S09.6 and S09.8 complete on 2026-09-11 — inventory, harness
+and baseline in the [dependency inventory](../design/mongoose-dependency-inventory.md);
+seam, extraction into `@tulipes/mongoose` and evidence in the
+[provider design](../design/mongoose-provider-design.md). Remaining: S09.7
+upgrade fixture, S09.9 failure/omission matrix with the real driver, S09.10
+measurements and release decision. See the
 [Sprint 03 execution plan](production-readiness-03.md). **Owner:** engineer; maintainer
 owns compatibility/versioning decisions. **Dependencies:** Sprint 02 lifecycle behavior
 and offline declarations. The original estimate was 5–8 engineering days for the
@@ -243,16 +244,16 @@ first extraction; reassess after the inventory and interface task below.
   plugins offline. Preserve the route-schema declaration source. If metadata
   extraction is deferred, make the unsupported capability explicit instead of
   substituting dummy models or connecting the database.
-- [ ] **S09.4 — Move runtime implementation.** Create the provider package with
+- [x] **S09.4 — Move runtime implementation.** Create the provider package with
   registration, model store, connection policy, exports, dependencies and tests.
   Register cleanup immediately after acquisition, including partially failed boot.
   Preserve useful error aggregation and ordering; do not hide provider failures
   behind a generic startup error. Keep provider-specific tuning in the provider.
-- [ ] **S09.5 — Remove core's installation coupling.** Remove direct/transitive
+- [x] **S09.5 — Remove core's installation coupling.** Remove direct/transitive
   Mongoose dependencies and runtime/type imports from the core-only path. Inspect
   emitted declarations and root/subpath imports from an isolated packed install.
   Do not describe runtime-disabled Mongoose as an installation reduction.
-- [ ] **S09.6 — Migrate real consumers.** Update the production reference app,
+- [x] **S09.6 — Migrate real consumers.** Update the production reference app,
   starter generator, model examples, module helpers, CLI-generated types and spec
   consumers. Minimal must omit the provider completely. Document manual migration
   for apps whose generated files were edited locally.
@@ -261,7 +262,7 @@ first extraction; reassess after the inventory and interface task below.
   breaking prerelease path. Any compatibility wrapper that installs Mongoose must
   live outside the claimed provider-free core path. Retain an upgrade fixture
   from the prior supported app contract and record expected diagnostics.
-- [ ] **S09.8 — Extend artifact verification.** Generalize the currently two-package
+- [x] **S09.8 — Extend artifact verification.** Generalize the currently two-package
   artifact manifest/validation/publish planning for the chosen package inventory.
   Verify license, exports, dependency/peer ranges and digest handling for every
   archive; preserve preflight of all immutable-version conflicts before uploads.

@@ -4,7 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const packages = ['core', 'spec'];
+// Every published package, in release order; core first because its version names the tag.
+const packages = ['core', 'spec', 'mongoose'];
 const digest = file => 'sha512-' + createHash('sha512').update(readFileSync(file)).digest('base64');
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: 'inherit', ...options });
 const readJson = file => JSON.parse(readFileSync(file, 'utf8'));
@@ -12,7 +13,7 @@ const readJson = file => JSON.parse(readFileSync(file, 'utf8'));
 function verify(dir, expectedCommit) {
   const manifest = readJson(join(dir, 'manifest.json'));
   if (expectedCommit && manifest.commit !== expectedCommit) throw new Error('Artifact commit does not match the release commit');
-  if (manifest.packages?.length !== 2) throw new Error('Expected core and spec archives');
+  if (manifest.packages?.length !== packages.length) throw new Error(`Expected ${packages.length} archives: ${packages.join(', ')}`);
   for (const name of packages) {
     const pkg = manifest.packages.find(pkg => pkg.name === '@tulipes/' + name);
     if (!pkg || basename(pkg.file) !== pkg.file) throw new Error('Invalid artifact manifest');
@@ -27,6 +28,16 @@ function verify(dir, expectedCommit) {
     }
     if (name === 'core' && (packed.bin.tulipes !== './dist/cli/bin.js' || !listing.includes('package/dist/cli/bin.js'))) throw new Error('Missing compiled CLI');
     if (listing.some(path => /\/(?:node_modules|tests|\.envs)\//.test(path))) throw new Error('Unexpected private/test content in archive');
+    // Core must not carry a driver — not as a dependency, and not through an
+    // emitted declaration that a consumer's typecheck would need to resolve.
+    if (name === 'core' && packed.dependencies?.mongoose) throw new Error('Core must not depend on mongoose');
+    if (name === 'core') {
+      const declarations = listing.filter(path => path.endsWith('.d.ts'));
+      const leaking = execFileSync('tar', ['-xOf', file, ...declarations], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+        .split('\n').filter(line => /from ["']mongoose["']/.test(line));
+      if (leaking.length) throw new Error('Core declarations import mongoose: ' + leaking.join(' | '));
+    }
+    if (name === 'mongoose' && (packed.dependencies?.mongoose || !packed.peerDependencies?.mongoose)) throw new Error('The provider must declare mongoose as a peer dependency only');
   }
   return manifest;
 }

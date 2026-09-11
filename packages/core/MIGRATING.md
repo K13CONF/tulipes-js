@@ -15,12 +15,24 @@ what makes it work under nvm.
 
 ## Unreleased — declare the models provider
 
-The database is now selected by the app, not by the presence of `MONGO_URI`.
-Add one line to the root `package.json` of every app that has models:
+The database is now selected by the app, not by the presence of `MONGO_URI`,
+and the Mongoose implementation lives in its own package. For every app that
+has models:
 
-```jsonc
-{ "tulipes": { "providers": { "models": "@tulipes/core/db" } } }
-```
+1. `yarn add @tulipes/mongoose@next` in the app root and in every module that
+   owns `models/` or `bootstrap/` files (they already depend on `mongoose`;
+   keep that — the provider needs it as a peer so schemas and provider share
+   one instance).
+2. Add one line to the root `package.json`:
+
+   ```jsonc
+   { "tulipes": { "providers": { "models": "@tulipes/mongoose" } } }
+   ```
+
+3. Replace `from "@tulipes/core/db"` with `from "@tulipes/mongoose"` for
+   `ModelDef`, `BootstrapFn` and `ModelStore`. The old subpath now exports only
+   a provider that stops the boot with this instruction, and the old type
+   imports fail with "no exported member".
 
 - Without it, a module with `models/` or `bootstrap/` files (or a manifest
   `requires: ["models"]`) stops the boot during the `providers` phase, before
@@ -29,8 +41,9 @@ Add one line to the root `package.json` of every app that has models:
 - `handle.connection` is gone: read `handle.providers` for banner-style status,
   or `handle.ctx.models.connection` when a script or test needs the driver.
 - Consumers keep `ctx.models`, `requireModels(ctx)`, `DatabaseCtx`, `ModelDef`
-  and `BootstrapFn`; only the specifier above is new. When the provider moves
-  into its own package the specifier changes and this file will say so.
+  and `BootstrapFn`; `ctx.models.get` is typed once the provider package is in
+  the compilation, which any model file's `ModelDef` import guarantees.
+- Apps without a database change nothing and stop installing Mongoose.
 
 ---
 

@@ -1,14 +1,18 @@
-import type { Provider } from "../boot/providers.js";
+import type { Provider } from "@tulipes/core/boot";
+
 import { initDatabase } from "./database.js";
 
 /**
- * Core's built-in Mongoose implementation, exposed as the "models" provider
- * the app declares with `"tulipes": { "providers": { "models": "@tulipes/core/db" } }`.
- * It is the same loader boot always ran; the provider seam is what lets it
- * move into its own package (S09.4) without the app changing anything but
- * that specifier.
+ * The "models" provider an app selects with
+ * `"tulipes": { "providers": { "models": "@tulipes/mongoose" } }`.
+ *
+ * Core owns the phase order, the shutdown deadline and the aggregate boot
+ * report; this package owns the connection, model compilation, bootstrap
+ * policy and the driver's own close/force-close. `mongoose` is a peer
+ * dependency on purpose: the app's schemas and this provider must share one
+ * instance, or `instanceof Schema` and the app's global plugins stop applying.
  */
-const provider: Provider<"models"> = {
+export const provider: Provider<"models"> = {
   contract: 1,
   capability: "models",
   name: "mongoose",
@@ -29,5 +33,3 @@ const provider: Provider<"models"> = {
     return connection ? ctx.models : undefined;
   },
 };
-
-export default provider;

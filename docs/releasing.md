@@ -5,8 +5,10 @@ No release is created just by merging a feature PR.
 
 1. Update versions of every changed published package, changelog, migration notes
    and supported lines. Update generated dependency ranges and spec's core peer
-   range when necessary. Since this sprint changes both packed packages, both
-   need new versions before publication.
+   range when necessary. Three packages are packed and published together —
+   `@tulipes/core`, `@tulipes/spec` and `@tulipes/mongoose`; every one whose
+   bytes changed needs a new version before publication, and the provider's
+   core peer range must admit the core it ships with.
 2. Open and merge a reviewed PR with passing CI. For structural changes, choose
    a prerelease version first (for example `0.9.0-rc.1`) and compatible spec
    dependencies. RC versions publish to `next`, stable versions to `latest`.
@@ -47,7 +49,7 @@ fails, fix the cause in a new PR and version as needed. If publication partially
 succeeds, recover using the original verified archives: an identical published
 package is skipped, and any byte mismatch stops the run. Repacking on a rerun
 can change bytes; when the original archive cannot be recovered, release new
-versions. npm has no transaction spanning both packages.
+versions. npm has no transaction spanning the packages.
 
 Do not bypass failed audits, digest checks or smoke tests to meet a release date.
 Review moderate/low findings in retained reports; no high/critical exceptions

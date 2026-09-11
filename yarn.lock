@@ -11,6 +11,7 @@ __metadata:
   dependencies:
     "@app/core": "workspace:*"
     "@tulipes/core": "workspace:*"
+    "@tulipes/mongoose": "workspace:*"
     "@types/jsonwebtoken": "npm:^9"
     "@types/passport": "npm:^1"
     "@types/passport-jwt": "npm:^4"
@@ -45,6 +46,7 @@ __metadata:
     "@app/auth": "workspace:*"
     "@app/core": "workspace:*"
     "@tulipes/core": "workspace:*"
+    "@tulipes/mongoose": "workspace:*"
     express: "npm:^5"
     mongoose: "npm:^8"
   languageName: unknown
@@ -73,6 +75,7 @@ __metadata:
     "@app/auth": "workspace:*"
     "@app/core": "workspace:*"
     "@tulipes/core": "workspace:*"
+    "@tulipes/mongoose": "workspace:*"
     dotenv: "npm:^16.4.7"
     express: "npm:^5"
     mongoose: "npm:^8"
@@ -87,6 +90,7 @@ __metadata:
     "@app/auth": "workspace:*"
     "@app/core": "workspace:*"
     "@tulipes/core": "workspace:*"
+    "@tulipes/mongoose": "workspace:*"
     express: "npm:^5"
     mongoose: "npm:^8"
   languageName: unknown
@@ -583,6 +587,7 @@ __metadata:
   resolution: "@tulipes-example/app@workspace:example"
   dependencies:
     "@tulipes/core": "workspace:*"
+    "@tulipes/mongoose": "workspace:*"
     "@tulipes/spec": "workspace:*"
     ioredis: "npm:^5"
     mongoose: "npm:^8"
@@ -607,13 +612,26 @@ __metadata:
     i18next: "npm:^26.4.2"
     i18next-fs-backend: "npm:^2.6.7"
     ioredis: "npm:^5"
-    mongoose: "npm:^8"
     socket.io: "npm:^4"
     tsx: "npm:^4"
     typescript: "npm:^7.0.2"
     zod: "npm:^3.24.1"
   bin:
     tulipes: ./bin/tulipes.js
+  languageName: unknown
+  linkType: soft
+
+"@tulipes/mongoose@workspace:*, @tulipes/mongoose@workspace:packages/mongoose":
+  version: 0.0.0-use.local
+  resolution: "@tulipes/mongoose@workspace:packages/mongoose"
+  dependencies:
+    "@tulipes/core": "workspace:*"
+    "@types/node": "npm:^24.2.0"
+    mongoose: "npm:^8"
+    typescript: "npm:^7.0.2"
+  peerDependencies:
+    "@tulipes/core": ">=0.9.0-rc.3 <1"
+    mongoose: ^8
   languageName: unknown
   linkType: soft
 

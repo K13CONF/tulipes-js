@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -26,6 +26,31 @@ test("a generated kebab-case module produces valid TypeScript configuration decl
 
   expect(result.status, result.stdout + result.stderr).toBe(0);
   expect(await readFile(path, "utf8")).toContain('"billing-history"?');
+});
+
+test("new module emits model and bootstrap files only for apps that declare a models provider", async () => {
+  const exists = (path: string) => access(path).then(() => true, () => false);
+
+  const bare = await fixture({ "modules/core/package.json": '{"name":"@test/core","type":"module"}' });
+  await runNewModule(bare.rootDir, "notes");
+  expect(await exists(bare.rootDir + "/modules/notes/models/notes.model.ts")).toBe(false);
+  expect(await exists(bare.rootDir + "/modules/notes/bootstrap/notes.bootstrap.ts")).toBe(false);
+  expect(JSON.parse(await readFile(bare.rootDir + "/modules/notes/package.json", "utf8")).dependencies).not.toHaveProperty("mongoose");
+
+  await runNewModule(bare.rootDir, "forced", { models: true });
+  expect(await exists(bare.rootDir + "/modules/forced/models/forced.model.ts")).toBe(true);
+  await expect(bare.boot({ mode: "script" })).rejects.toThrow(/\[forced\] requires capability "models"/);
+
+  const declared = await fixture({
+    "package.json": JSON.stringify({ type: "module", tulipes: { providers: { models: "@tulipes/mongoose" } } }),
+    "modules/core/package.json": '{"name":"@test/core","type":"module"}',
+  });
+  await runNewModule(declared.rootDir, "notes");
+  expect(await readFile(declared.rootDir + "/modules/notes/models/notes.model.ts", "utf8")).toContain('from "@tulipes/mongoose"');
+  expect(JSON.parse(await readFile(declared.rootDir + "/modules/notes/package.json", "utf8")).dependencies).toMatchObject({ "@tulipes/mongoose": expect.any(String), mongoose: "^8" });
+
+  await runNewModule(declared.rootDir, "plain", { models: false });
+  expect(await exists(declared.rootDir + "/modules/plain/models")).toBe(false);
 });
 
 test.each([false, true])(

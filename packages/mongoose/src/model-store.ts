@@ -1,13 +1,13 @@
 import type { Connection, Model } from "mongoose";
 
-import type { ModelsCapability } from "../boot/contracts.js";
+import type { ModelsCapability } from "@tulipes/core/boot";
 
 /**
- * Until the Mongoose provider is extracted (S09.4/S09.5), core's own store is
- * the one implementation of the models capability, so core supplies the
- * augmentation the provider package will own afterwards.
+ * What `ctx.models` is once this provider is in the compilation. Core's
+ * ModelsCapability is empty; an app that imports anything from this package
+ * (its model files do, for ModelDef) sees these members typed.
  */
-declare module "../boot/contracts.js" {
+declare module "@tulipes/core/boot" {
   interface ModelsCapability {
     has(name: string): boolean;
     ownerOf(name: string): string | undefined;
@@ -19,8 +19,8 @@ declare module "../boot/contracts.js" {
 }
 
 /**
- * Global model registry, populated from every module's `models/*.model.ts`
- * during phase 8.
+ * Model registry for one boot, populated from every module's
+ * `models/*.model.ts` during phase 8.
  *
  * Same fail-closed read contract as the variable store: asking for a model
  * nobody registered throws at the call site — a typo'd model name must never
