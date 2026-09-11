@@ -1,9 +1,9 @@
 # Mongoose dependency inventory (S09.1)
 
-Status: S09.1 complete on 2026-09-11 — coupling register, measurement harness
-and baseline recorded against source `b42bd00` (S09.1a), reproduced on the
-committed harness at `9aba800` (S09.1b, §4.3). Checklist assignments in §5 are
-refined by the [provider design](mongoose-provider-design.md) as S09.2 settles.
+Status: complete on 2026-09-11 — coupling register, harness and baseline
+against `b42bd00` (S09.1a), reproduced at `9aba800` (S09.1b, §4.3), and the
+post-extraction comparison at `78bf4eb` (S09.10, §4.4). Design and evidence for
+the extraction itself are in the [provider design](mongoose-provider-design.md).
 
 Plan: [Sprint 03 §4](../sprints/production-readiness-03.md#4-s091--inventory-and-baseline-measurements).
 Program: [S09.1](../sprints/production-readiness-task-report.md#s09--mongoose-provider-and-capability-contract).
@@ -293,6 +293,68 @@ the same host (the first run overlapped a concurrent install of fixtures C/D
 and the machine was otherwise idle for the repeat). Comparisons in S09.10 must
 therefore treat startup differences under ~10% as noise unless the sample
 ranges separate.
+
+### 4.4 After extraction (S09.10)
+
+Same harness, policy, host and local services, on `78bf4eb` (the extraction
+plus S09.7/S09.9 tests; runtime source unchanged since `96444f1`). Raw data:
+`reports/s09-inventory/78bf4eb/`. "Before" is the `b42bd00` baseline (§4.1–4.2);
+the `9aba800` repeat (§4.3) sets the noise floor at roughly ±10% for timings.
+
+Archives: core 352,776 B / 1,120,464 B unpacked / 209 files, **0** `.d.ts`
+lines importing mongoose (was 3); spec unchanged in substance; new
+`@tulipes/mongoose` 7,370 B / 21,577 B / 15 files (its two `.d.ts` mongoose
+imports are the point).
+
+| Fixture | Metric | Before (`b42bd00`) | After (`78bf4eb`) | Change |
+|---|---|---|---|---|
+| A — core only | unique packages / copies | 151 / 151 | 134 / 134 | −17 / −17 |
+| A | installed bytes | 52,960,060 | 41,973,769 | **−10,986,291 (−20.7%)** |
+| A | `du -sk` | 64,112 KiB | 51,132 KiB | −20.2% |
+| A | mongoose / mongodb / bson resolvable from app, core | yes, yes | **no, no** | absence proven |
+| A | warm install (3 runs) | 711, 686, 703 ms | 633, 727, 657 ms | noise |
+| A | `import_boot` median / p95 | 229 / 257 ms | **146 / 160 ms** | −36% |
+| A | `import_root` median | 254 ms | 157 ms | −38% |
+| B — minimal | unique packages / copies | 199 / 206 | 182 / 189 | −17 / −17 |
+| B | installed bytes | 137,095,845 | 126,110,245 | **−10,985,600 (−8.0%)** |
+| B | mongoose resolvable (app, core) | yes, yes | **no, no** | absence proven |
+| B | `import_boot` median | 232 ms | 158 ms | −32% |
+| B | `import_boot_tsx` median | 335 ms | 245 ms | −27% |
+| B | `offline_spec` median / p95 | 599 / 630 ms | 441 / 548 ms | −26% |
+| B | `backend_readiness` median / p95 | 455 / 472 ms | **367 / 390 ms** | −19% |
+| B | RSS at readiness (median) | 146,016 KiB | 119,120 KiB | −18% |
+| C — production | unique packages / copies | 328 / 337 | 329 / 338 | +1 (`@tulipes/mongoose`) |
+| C | installed bytes | 168,419,061 | 168,459,228 | +40,167 (+0.02%) |
+| C | mongoose graph | 19 pkgs / 11,048,410 B, 17 exclusive | identical | app-owned, as designed |
+| C | `import_boot` median | 249 ms | 158 ms | −37% (the driver now loads in phase 8, not at import) |
+| C | `import_mongoose` median | 106 ms | 108 ms | unchanged (attribution) |
+| C | `offline_spec` median | 633 ms | 467 ms | −26% |
+| C | `backend_readiness` median / p95 | 566 / 611 ms | 617 / 663 ms | +9% — within the noise floor; the driver import moved from process start into phase 8, so readiness pays it either way |
+| C | `worker_readiness` median | 496 ms | 549 ms | +11% — same; investigate only if a repeat separates the ranges |
+| C | first backend run (index build + seed) | 1,352 ms | 1,390 ms | noise |
+| D — launcher (all archives) | unique packages | 152 | 136 | −16 |
+| D | installed bytes | 53,009,662 | 42,046,377 | −20.7% |
+| D | mongoose resolvable | yes | **no** | the provider archive is installed but declares mongoose only as a peer |
+
+Reading:
+
+- The removable graph measured in §4.1 (17 packages, 10,998,896 B) is exactly
+  what disappeared from A, B and D; nothing else moved. Fixture D still
+  installs the provider archive and still cannot resolve mongoose, which is the
+  peer-dependency design working as intended.
+- Every process that never connects — the minimal app, offline `spec`, the
+  CLI — stopped paying the driver's import (~100 ms) because `boot.ts` no
+  longer imports it statically; import and readiness times dropped by a
+  quarter to a third and minimal RSS at readiness by 27 MiB.
+- The production app keeps its own Mongoose (its modules declare it) and its
+  readiness is unchanged within measurement noise: the same driver is imported
+  one phase later. Its offline `spec` and bare import benefit like minimal's.
+- No production-preset size claim is made; +40 KB is the provider itself.
+
+Remaining cost recorded for the next adapters (S10/S11): fixture A still
+carries `bullmq`, `ioredis`, `socket.io` and `tsx` in core's dependencies
+(41.97 MB installed); the harness reports their graphs the same way once the
+`mongooseGraph` root is generalized.
 
 ## 5. Affected-file extraction checklist
 

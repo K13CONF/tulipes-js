@@ -21,7 +21,10 @@ Spec rc.3 requires core `^0.9.0-rc.3`; upgrade the pair together. The candidate
 includes Sprint 02 offline inspection and security controls; provider extraction
 and production-pilot acceptance remain later work.
 Candidate fixes target this pair; the stable support lines below remain in
-effect until 0.9.0 becomes stable.
+effect until 0.9.0 becomes stable. The workspace additionally carries the
+unreleased `@tulipes/mongoose` provider (Sprint 03): the next candidate ships
+it as a third package, with the core/provider/spec ranges set in that release
+PR, and core stops installing Mongoose from that version on.
 
 The current released lines are core 0.8.x and spec 0.2.x. Normal fixes target
 these lines. Critical security fixes for the previous core minor (0.7.x, with
