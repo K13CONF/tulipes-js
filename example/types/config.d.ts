@@ -86,6 +86,9 @@ declare module "@tulipes/core/config" {
     "hello"?: Awaited<
       ReturnType<(typeof import("./../modules/hello/module.config.js"))["default"]>
     >;
+    "settings"?: Awaited<
+      ReturnType<(typeof import("./../modules/settings/module.config.js"))["default"]>
+    >;
   }
 }
 

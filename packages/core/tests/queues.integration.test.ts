@@ -16,6 +16,7 @@ integration("worker shutdown finishes active jobs before hooks and keeps produce
     ] }),
     "modules/probe/module.config.js": `
       export default () => ({ closed: false, started: false });
+      export function onDrain(ctx) { ctx.config.probe.draining = true; }
       export async function onShutdown(ctx) {
         ctx.config.probe.closed = true;
         await ctx.queues.add(${JSON.stringify(name)}, 'from-hook', {});
@@ -41,6 +42,7 @@ integration("worker shutdown finishes active jobs before hooks and keeps produce
   state.release!();
   await stopping;
   expect(state.closedDuringJob).toBe(false);
+  expect(handle.ctx.config.probe).toMatchObject({ draining: true });
 
   const url = new URL(redisUrl!);
   const observer = new Queue(name, { connection: {

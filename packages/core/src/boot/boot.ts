@@ -323,7 +323,13 @@ async function shutdown(
   timeoutMs: number,
 ): Promise<void> {
   const cleanup = new Cleanup(timeoutMs);
+  // Begin notification before waiting for traffic. Hooks share the drain's
+  // deadline, so a stuck notifier cannot prevent HTTP/workers from stopping.
+  const notifications = [...lifecycles].reverse().map(({ module, onDrain }) =>
+    cleanup.run(`${module} onDrain`, () => onDrain?.(handle.ctx)),
+  );
   await Promise.all([
+    ...notifications,
     cleanup.run("http", async () => {
       if (handle.server?.listening) {
         await new Promise<void>((resolve, reject) => {

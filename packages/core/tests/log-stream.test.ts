@@ -6,7 +6,7 @@ import { expect, test, vi } from "vitest";
 import { LogStreams } from "../../../example/modules/settings/helpers/log-stream.js";
 import { errorHandler } from "../src/http/error-handler.js";
 
-async function fixture(run: (get: (user?: string, query?: string) => Promise<Response>, dir: string) => Promise<void>, limits: ConstructorParameters<typeof LogStreams>[0] = {}, authorize: (signal: AbortSignal) => Promise<boolean> = async () => true) {
+async function fixture(run: (get: (user?: string, query?: string) => Promise<Response>, dir: string, streams: LogStreams) => Promise<void>, limits: ConstructorParameters<typeof LogStreams>[0] = {}, authorize: (signal: AbortSignal) => Promise<boolean> = async () => true) {
   const dir = mkdtempSync(join(tmpdir(), "tulipes-log-stream-"));
   const streams = new LogStreams({ durationMs: 3000, ...limits });
   const app = express();
@@ -21,7 +21,7 @@ async function fixture(run: (get: (user?: string, query?: string) => Promise<Res
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("No server");
   try {
-    await run((user = "one", query = "") => fetch("http://127.0.0.1:" + address.port + "/?user=" + user + query), dir);
+    await run((user = "one", query = "") => fetch("http://127.0.0.1:" + address.port + "/?user=" + user + query), dir, streams);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
@@ -262,4 +262,51 @@ test("a slow successful check cannot extend permission from its completion time"
     await lease.close();
     vi.useRealTimers();
   }
+});
+
+test.each([false, true])("drain closes idle/active SSE and rejects late openings (history=%s)", async (history) => {
+  await fixture(async (get, dir, streams) => {
+    if (history) writeFileSync(join(dir, "app-backend.log"), '{"msg":"before shutdown"}\n');
+    const response = await get();
+    const reader = response.body!.getReader();
+    let body = "";
+    try {
+      do {
+        const part = await reader.read();
+        expect(part.done).toBe(false);
+        body += new TextDecoder().decode(part.value);
+      } while (!body.includes(history ? "before shutdown" : "event: ready"));
+      streams.drain();
+      streams.drain();
+      expect((await reader.read()).done).toBe(true);
+      const late = await get();
+      expect(late.status).toBe(503);
+      expect(await late.json()).toMatchObject({ errors: [{ code: "LOG_STREAMS_DRAINING" }] });
+    } finally { await reader.cancel(); }
+  });
+});
+
+test.each([true, false])("drain aborts a stuck initial/background authorization without waiting (opening=%s)", async (opening) => {
+  let checks = 0;
+  let complete!: (allowed: boolean) => void;
+  let signal: AbortSignal | undefined;
+  await fixture(async (get, dir, streams) => {
+    const pending = get();
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    streams.drain();
+    expect(signal!.aborted).toBe(true);
+    const response = await pending;
+    expect(response.status).toBe(opening ? 503 : 200);
+    const body = await response.text();
+    expect(body).not.toContain("event: log");
+    expect(body).toContain(opening ? "LOG_STREAMS_DRAINING" : "event: ready");
+    complete(true);
+    writeFileSync(join(dir, "app-backend.log"), "late completion must not reopen\n");
+    expect((await get()).status).toBe(503);
+    expect(checks).toBe(opening ? 1 : 2);
+  }, { authorizationIntervalMs: 20 }, async (pendingSignal) => {
+    if (++checks === 1 && !opening) return true;
+    signal = pendingSignal;
+    return new Promise<boolean>((resolve) => { complete = resolve; });
+  });
 });

@@ -2,9 +2,11 @@
 
 Prepared: 2026-09-11. Implementation baseline: `2d23433` (Sprint 02 / S08l).
 
-**Next action: complete S08m, graceful log-stream shutdown before HTTP draining.**
+**Next action: improve test readability (S08-readability), then close out Sprint 02.**
 Sprint 02 is still open. Offline inspection, starter migration and security items
-S08a–S08l are implemented; provider extraction has not started.
+S08a–S08m are implemented; provider extraction has not started.
+S08m was locally verified on 2026-09-11 with 225 framework/spec and 55 reference/
+packed production tests; the S08l table below remains its dated baseline.
 
 This report translates the existing program into executable tasks. Sprint 01 and
 02 statuses come from their retained trackers and the local repository. Sprint 03
@@ -19,7 +21,7 @@ for this report; earlier release statements remain dated evidence.
 | Sprint | Intended result | Current state | Main dependency |
 |---|---|---|---|
 | 01 — Package trust and first run | Reproducible minimal/production starters and verified release artifacts | Implementation recorded as delivered; external governance/release conditions remain distinct | Maintainer decisions for external account/release changes |
-| 02 — Offline inspection and security | Deterministic offline specs and retained auth/settings abuse cases | S06–S07 and S08a–S08l implemented; S08m and closeout remain | Finish stream lifecycle behavior and review final evidence |
+| 02 — Offline inspection and security | Deterministic offline specs and retained auth/settings abuse cases | S06–S07 and S08a–S08m implemented; readability and closeout remain | Finish stream lifecycle behavior and review final evidence |
 | 03 — First provider extraction | Core can install and boot without Mongoose | Planned | Sprint 02 closeout and a compatible capability boundary |
 | 04 — Queues and sockets | Redis/queue and socket dependencies install only when selected | Proposed | Prove the first adapter before copying its design |
 | 05 — Packaging and composition | Measured packaging decisions and supported feature combinations | Proposed; individual splits conditional | Provider contracts, installation measurements and migration costs |
@@ -114,6 +116,7 @@ production secrets and retains tests for concrete auth/settings abuse cases.
 | S08j | Browser bearer/cookie adaptation guidance | Existing transport rejects cookie/URL credentials; CORS does not imply cookie auth or CSRF protection |
 | S08k | Strict refresh reuse expires the device family | Concurrent duplicate winner also becomes unusable; unrelated devices survive; uncertain writes return sanitized failure |
 | S08l | Current authority checked throughout open SSE streams | Role/user/session/credential/token changes close streams under the lease bound; failures do not leak details or accumulate pending checks |
+| S08m | Early drain notifications and per-boot stream shutdown | Healthy SSE ends without HTTP drain timeout; pending/late openings stop; regular requests/jobs retain resources; later boots have fresh admission |
 
 S08l is committed as `2d23433`. Its default authorization lease lasts at most two
 seconds from a check's start with a responsive event loop; the separate socket
@@ -121,36 +124,37 @@ flush bound and already-buffered data are documented limits.
 
 ### S08m — Graceful log-stream shutdown before HTTP drain
 
-**Priority:** first. **Owner:** engineer, with maintainer review of the public
+**Status:** implemented and locally verified on 2026-09-11; see the active tracker.
+**Owner:** engineer, with maintainer review of the public
 lifecycle contract. **Suggested effort:** 1–3 engineering days, then re-estimate
 if lifecycle compatibility requires a larger design change. These are planning
 assumptions, not elapsed-time commitments.
 
-- [ ] **S08m.1 — Retain the failing lifecycle scenario.** Open a real idle SSE
+- [x] **S08m.1 — Retain the failing lifecycle scenario.** Open a real idle SSE
   stream and call application shutdown. Demonstrate the existing forced HTTP drain
   timeout. Add an active stream and an opening request paused in authorization.
   The tests should distinguish normal graceful completion from forced cleanup.
-- [ ] **S08m.2 — Define the early shutdown signal.** Choose the smallest public
+- [x] **S08m.2 — Define the early shutdown signal.** Choose the smallest public
   lifecycle capability that tells long-lived handlers shutdown has begun before
   waiting for HTTP connections. Specify availability by boot phase, late
   subscribers, repeated shutdown and startup failure. Preserve database/producer
   availability for work still draining. Document the contract and compatibility.
-- [ ] **S08m.3 — Integrate cleanup ownership.** Trigger the signal once, before
+- [x] **S08m.3 — Integrate cleanup ownership.** Trigger the signal once, before
   HTTP drain. Preserve aggregate diagnostics, the overall deadline, idempotent
   shutdown and attempts to clean every acquired resource even if another fails.
   Avoid an unbounded new hook or a second independently owned cleanup sequence.
-- [ ] **S08m.4 — Connect settings streams.** Stop admitting new streams on the
+- [x] **S08m.4 — Connect settings streams.** Stop admitting new streams on the
   signal; end existing responses, close tails and clear timers. Abort cooperative
   authorization work. Cover a callback completing after shutdown so it cannot
   reopen SSE or resume output. Do not wait indefinitely for an ignored abort.
-- [ ] **S08m.5 — Protect normal draining.** Verify ordinary in-flight requests and
+- [x] **S08m.5 — Protect normal draining.** Verify ordinary in-flight requests and
   queue work retain required resources; an early stream signal must not close
   shared models/Redis before their consumers finish. Exercise repeated shutdown,
   cleanup exceptions and a stuck authorization callback.
-- [ ] **S08m.6 — Update consumers and documentation.** Mirror reference and
+- [x] **S08m.6 — Update consumers and documentation.** Mirror reference and
   generated starter wiring, check phase-specific types, update migration and
   security guidance, and keep offline inspection free of lifecycle execution.
-- [ ] **S08m.7 — Validate and commit.** Run relevant lifecycle/stream regressions,
+- [x] **S08m.7 — Validate and commit.** Run relevant lifecycle/stream regressions,
   full required integration coverage, test/package/reference types, builds,
   generated parity and packed production startup/shutdown/worker/PM2 checks.
   Record evidence in the tracker and commit under `sprint-02/S08m`.
@@ -511,8 +515,9 @@ own existing or subsequent authorization.
 
 Recommended immediate order:
 
-1. **S08m:** retain the shutdown failure, implement early signaling and settings
-   cleanup, then verify and commit the complete lifecycle change.
+1. **S08-readability:** expand compressed test code, add space between logical
+   steps, preserve test/fixture behavior and mirror generated starter tests. S08m
+   lifecycle implementation and local verification are complete.
 2. **02-C1–C5:** reconcile cumulative docs and close Sprint 02 with actual evidence
    and assigned external follow-ups.
 3. **S09.1–S09.2:** measure current dependencies and settle the first provider seam;

@@ -79,11 +79,15 @@ export type LifecycleHook = (ctx: Ctx) => void | Promise<void>;
 /**
  * Optional named exports of `module.config.ts`:
  *   onReady    — after the process is fully up (server listening / worker consuming)
- *   onShutdown — graceful shutdown, invoked in REVERSE load order
+ *   onDrain    — stop long-lived work at the start of shutdown; do not dispose dependencies
+ *   onShutdown — dispose resources after traffic drains, in REVERSE load order
+ * Drain hooks start in reverse load order, concurrently with traffic draining.
+ * Both shutdown phases share the same deadline and aggregate failures.
  */
 export interface ModuleLifecycle {
   module: string;
   onReady?: LifecycleHook;
+  onDrain?: LifecycleHook;
   onShutdown?: LifecycleHook;
 }
 

@@ -1181,6 +1181,50 @@ test("restart acknowledgment finishes before PM2 commands and retains its audit"
     else process.env.PM2_HOME = oldHome;
   }
 });
+
+test("shutdown drains settings streams and a later boot owns fresh stream admission", async () => {
+  const user = await sysadmin();
+  await logFiles(async (dir) => {
+    const { writeFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    await writeFile(join(dir, "app-backend.log"), JSON.stringify({ msg: "before drain" }) + "\\n");
+    const active = await get("/api/v1/settings/logs/stream", user.access_token);
+    const idle = await get("/api/v1/settings/logs/stream?tail=0", user.access_token);
+    expect(active.status).toBe(200);
+    expect(idle.status).toBe(200);
+    const readers = [active.body!.getReader(), idle.body!.getReader()];
+
+    try {
+      for (const [index, reader] of readers.entries()) {
+        let body = "";
+        do {
+          const part = await reader.read();
+          expect(part.done).toBe(false);
+          body += new TextDecoder().decode(part.value);
+        } while (!body.includes(index ? "event: ready" : "before drain"));
+      }
+      const stopping = handle.shutdown();
+      expect(handle.shutdown()).toBe(stopping);
+      await expect(stopping).resolves.toBeUndefined();
+      for (const reader of readers) expect((await reader.read()).done).toBe(true);
+
+      // The module is imported once, but stream admission belongs to each boot.
+      const next = await boot({ rootDir: fileURLToPath(new URL("../", import.meta.url)), appEnv: "test", handleSignals: false });
+      try {
+        next.env.store.set("LOG_FILE", true);
+        next.env.store.set("LOG_DIR", dir);
+        next.env.store.set("LOG_BASENAME", "app");
+        const address = next.server!.address();
+        if (!address || typeof address === "string") throw new Error("No listener after restart");
+        const response = await fetch("http://127.0.0.1:" + address.port + "/api/v1/settings/logs/stream?tail=0", {
+          headers: { authorization: "Bearer " + user.access_token },
+        });
+        expect(response.status).toBe(200);
+        await response.body?.cancel();
+      } finally { await next.shutdown(); }
+    } finally { await Promise.all(readers.map(reader => reader.cancel())); }
+  });
+});
 ` : `
 test("health needs no external infrastructure", async () => {
   expect(handle.ctx.models).toBeUndefined();

@@ -17,7 +17,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | In progress: S08a–S08l locally verified; pre-drain stream shutdown open | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | In progress: S08a–S08m locally verified; readability and closeout remain | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -635,10 +635,10 @@ Locally verified on 2026-09-11, Node 24.14.0/macOS:
   Linux/supported Node matrix CI and replica-set failover remain external gates;
   these are local checks against the working tree, not published release evidence.
 
-### Next change set — S08m: signal streams before HTTP draining
+### S08m — Signal streams before HTTP draining
 
-Status: not started. S08l completes authorization revalidation only. Before
-claiming Sprint 02 complete, implement and verify this separate lifecycle item:
+Status: implemented and locally verified on 2026-09-11. The following acceptance
+criteria guided this lifecycle change set:
 
 - Provide a lifecycle signal at the start of shutdown while models/queues needed
   by in-flight work are still available; retain the existing cleanup ownership,
@@ -675,4 +675,53 @@ optional package splits and cookie adaptation remain conditional.
 Validation: checked relative document/file links, task identifiers, whitespace,
 status against this tracker and S08l local test/packed evidence. This documentation
 increment changes no runtime behavior and does not establish new CI, deployment
-or release results. S08m remains the next implementation task.
+or release results. S08m was the next implementation task at that checkpoint.
+
+
+### S08m — Implementation and local evidence
+
+Verified on 2026-09-11, Node 24.14.0/macOS:
+
+- Core collects optional `onDrain` exports during config validation. Notifications
+  start in reverse module order before HTTP/socket/worker drain actions, and then
+  progress concurrently with those drains under the existing total deadline.
+  Errors/timeouts are aggregated; disposal hooks and infrastructure cleanup remain
+  after drain attempts. Repeated/reentrant shutdown shares one operation.
+- Settings shares a log-stream manager per boot Environment and drains it from
+  the new module hook. It preserves app-level settings config, closes idle/active
+  SSE, aborts pending checks without awaiting uncooperative work, and returns
+  sanitized 503 `LOG_STREAMS_DRAINING` for pending/late openings. A late result or
+  controller cannot reopen that manager; another boot receives a fresh instance.
+- Three corrected initial regressions failed against the prior core, including
+  a real idle SSE causing `http timed out`. Final cases cover concurrent ordinary
+  requests, invalid/failing/stuck hooks, failed boot, a hook-only module, repeated/
+  reentrant shutdown, idle/active streams and pending initial/background checks.
+  The existing live worker case now also retains early notification while jobs
+  and disposal hooks preserve their dependencies.
+- All 225 framework/spec tests and 55 reference app tests passed with temporary
+  MongoDB/Redis, no skips. Coverage passed unchanged floors: 82.01% statements,
+  68.7% branches, 86.74% functions and 84.14% lines. Package/test/reference types,
+  sync, builds and generated/reference module/test/config/guide parity passed.
+- Packed production passed all 55 generated tests, deterministic offline specs
+  with connections denied, runtime specs, backend/worker shutdown and isolated
+  PM2 HTTP self-restart. Packed minimal passed without application services.
+  Workspace/runtime and generated audits passed the existing severity gates.
+- Evidence: ignored `reports/s08m-{red,focused,app-drain,integration,app,test-types,types,sync,app-types,artifacts,parity,packed,minimal,audit}.log`,
+  `reports/s08m-workspace-runtime.jsonl` and `reports/scaffold-*/`. These local
+  working-tree results do not establish Linux/Node matrix CI or deployment results.
+
+The optional hook's contract and template migration are documented in core's
+README/MIGRATING/changelog and the security model. Healthy streams no longer force
+HTTP drain timeout; blocked event loops, uncooperative hooks/driver work and slow
+peers retain the existing deadline/supervisor limitations. No provider extraction
+or release action is included.
+
+### Next change set — S08-readability: make tests readable
+
+Requested by the user during S08m. Expand compressed test code and add visual
+separation between setup, actions, assertions and cleanup across framework/spec
+and reference-app tests. Keep generated starter tests in parity, preserve behavior
+and fixture data, and validate types, tests and generated output. Do not add a new
+test framework or change assertions solely to obtain formatting. Commit the
+verified readability change separately. Sprint 02 documentation/evidence closeout
+(02-C1–C5 in the task report) follows; CI/deployment gaps remain explicit.
