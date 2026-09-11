@@ -11,6 +11,8 @@ export {
   DEFAULT_PRIORITY,
   tulipesManifestSchema,
   moduleTiers,
+  providerCapabilities,
   type ModuleManifest,
   type ModuleTier,
+  type ProviderCapability,
 } from "./manifest.js";

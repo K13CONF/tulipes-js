@@ -108,6 +108,10 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       name,
       private: true,
       type: "module",
+      // The one line that selects a database: modules with models/ or
+      // bootstrap/ directories require it, and nothing else — not an
+      // installed package, not a MONGO_URI — connects one.
+      tulipes: { providers: { models: "@tulipes/core/db" } },
       // Pins yarn 4 through corepack; without it a global classic yarn
       // would handle the workspaces and produce a v1 lockfile.
       packageManager: "yarn@4.18.0",

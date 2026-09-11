@@ -213,12 +213,11 @@ silently start those changes.
 core installation must not acquire Mongoose through direct dependencies, runtime
 imports or emitted public type declarations.
 
-**Status:** S09.1 complete on 2026-09-11 (coupling register, measurement
-harness, baseline and reproducibility run — see the
-[dependency inventory](../design/mongoose-dependency-inventory.md)); S09.2a
-interface selection recorded in the
-[provider design](../design/mongoose-provider-design.md); executable fixtures
-(S09.2b) and extraction have not started. See the
+**Status:** S09.1 and S09.2 complete on 2026-09-11 — inventory, harness and
+baseline in the [dependency inventory](../design/mongoose-dependency-inventory.md);
+selected seam, core implementation and executed fixtures in the
+[provider design](../design/mongoose-provider-design.md). Extraction into a
+separate package (S09.3–S09.10) has not started. See the
 [Sprint 03 execution plan](production-readiness-03.md). **Owner:** engineer; maintainer
 owns compatibility/versioning decisions. **Dependencies:** Sprint 02 lifecycle behavior
 and offline declarations. The original estimate was 5–8 engineering days for the
@@ -226,12 +225,12 @@ first extraction; reassess after the inventory and interface task below.
 
 ### S09 — Mongoose provider and capability contract
 
-- [ ] **S09.1 — Inventory every coupling.** Map core dependencies, root/subpath
+- [x] **S09.1 — Inventory every coupling.** Map core dependencies, root/subpath
   exports, boot acquisition, context types, model registration, module config,
   scaffold output, CLI sync, spec metadata and tests that reference Mongoose.
   Record package sizes, installed dependency inventory and startup measurements
   before changing them. Deliver a bounded extraction checklist with affected files.
-- [ ] **S09.2 — Define the capability seam.** Specify how an app opts into the
+- [x] **S09.2 — Define the capability seam.** Specify how an app opts into the
   provider, how modules declare/require models, when models become available and
   which component owns acquisition/cleanup. Reuse the boot driver and BootReport.
   Keep concrete infrastructure types out of core's public context. Include valid

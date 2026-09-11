@@ -11,6 +11,7 @@ export type BootScope =
   | "i18n"
   | "acl"
   | "routes"
+  | "providers"
   | "boot";
 
 export interface BootIssue {

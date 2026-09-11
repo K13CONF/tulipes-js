@@ -10,6 +10,7 @@ import { scanRoutes } from "../http/route-scan.js";
 import { discoverModules } from "../modules/discovery.js";
 import { exploreModules } from "../modules/explorer.js";
 import { sortModules } from "../modules/graph.js";
+import { checkRequirements, readProviderDeclarations } from "./providers.js";
 import type { Ctx } from "./contracts.js";
 
 export type InspectionContext = Pick<Ctx, "config" | "routes" | "acl">;
@@ -34,6 +35,9 @@ export async function inspectRoutes({ rootDir }: { rootDir: string }): Promise<I
     }
   }
   const explored = exploreModules(order);
+  // Declarations only: the provider specifier is validated, never imported,
+  // so an uninstalled runtime provider is not an offline error.
+  checkRequirements(explored, readProviderDeclarations(rootDir, report), report);
   for (const files of explored) {
     if (!files.module.offline) report.add({ scope: "routes", module: files.module.name,
       message: "offline inspection requires tulipes.offline: true and defineRoutes factories in routes/*.routes; use --runtime for legacy factories" });

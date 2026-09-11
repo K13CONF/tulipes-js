@@ -54,8 +54,13 @@ so a typo fails at the call site instead of returning `undefined`.
 
 ## Requirements
 
-- The database needs `MONGO_URI` declared (sys `core` module) and set. A
-  module that ships models without it is a boot refusal, not a warning.
+- The app selects its database once, in its root `package.json`:
+  `"tulipes": { "providers": { "models": "@tulipes/core/db" } }`. A module
+  with `models/` or `bootstrap/` files in an app without that line is a boot
+  refusal before any model is imported. A module that reads models but owns
+  none declares `"tulipes": { "requires": ["models"] }` in its own manifest.
+- The provider needs `MONGO_URI` declared (sys `core` module) and set;
+  selected without a value is a boot refusal, not a warning.
 - Model names are globally unique; two modules registering `Invoice`
   crashes the boot naming both.
 - Reference other modules' models by name (`ref: "User"`) — no import,

@@ -328,7 +328,7 @@ interface Ctx {
   t: (ns: string, locale?: string) => TFunction;  // off-request translator
   i18n: I18nextInstance;    // the instance underneath
   acl?: Acl;                // after phase 6
-  models?: ModelStore;      // after phase 7
+  models?: ModelsCapability; // after phase 8, when package.json declares a models provider
   queues?: QueueManager;    // after phase 8
   sockets?: SocketManager;  // backend only
   app?: Express;            // backend only
@@ -471,7 +471,7 @@ middleware belongs, and how to read an aggregate boot report.
 | `@tulipes/core/env` | `Environment`, `KnownVariables` (codegen target), spec types |
 | `@tulipes/core/http` | `HttpError`, `notFoundHandler`, `errorHandler` |
 | `@tulipes/core/acl` | `Acl`, `AclBuilder`, `AclFn` |
-| `@tulipes/core/db` | `ModelStore`, `ModelDef`, `BootstrapFn` |
+| `@tulipes/core/db` | the built-in Mongoose `models` provider (default export), `ModelStore`, `ModelDef`, `BootstrapFn` |
 | `@tulipes/core/queues` | `QueueManager`, `QueueRegistry`, `QueuesFn` |
 | `@tulipes/core/sockets` | `SocketManager`, `SocketRegistry`, `SocketsFn` |
 | `@tulipes/core/modules` | module graph, explorer, manifest schema |

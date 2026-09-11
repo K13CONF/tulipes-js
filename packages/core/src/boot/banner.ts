@@ -47,17 +47,14 @@ export function printStartupBanner(
     ]);
   }
 
-  if (handle.connection) {
-    const { host, port, name, readyState } = handle.connection;
-    const connected = readyState === 1;
+  for (const { capability, provider, label, ready } of handle.providers) {
     rows.push([
-      "Database",
-      `${cyan(`mongodb://${host}:${port}/${name}`)}  ${dot(connected)} ${
-        connected ? green("connected") : red("disconnected")
-      }`,
+      capability[0]!.toUpperCase() + capability.slice(1),
+      `${cyan(label)}  ${dot(ready)} ${ready ? green("ready") : red("not ready")}  ${dim("·")}  ${gray(provider)}`,
     ]);
-  } else {
-    rows.push(["Database", gray("not configured")]);
+  }
+  if (!handle.providers.some((p) => p.capability === "models")) {
+    rows.push(["Models", gray("no provider declared")]);
   }
 
   if (ctx.queues) {

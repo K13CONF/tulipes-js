@@ -11,6 +11,17 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- Add the provider seam (S09.2): an app selects its database with
+  `"tulipes": { "providers": { "models": "@tulipes/core/db" } }` in its root
+  `package.json`; modules with `models/` or `bootstrap/` files, or a manifest
+  `requires: ["models"]`, are refused before any module code is imported when
+  no provider is declared. `ctx.models` is typed as an augmentable
+  `ModelsCapability`; `BootHandle.connection` is replaced by
+  `BootHandle.providers` statuses and `ctx.models.connection`. A `MONGO_URI`
+  without a declaration no longer connects; a declared provider without one is
+  a boot error. Offline inspection validates declarations without importing
+  the provider. `@tulipes/core/boot` exports the `Provider` contract.
+
 ## [0.9.0-rc.3] — 2026-09-11
 
 Released with `@tulipes/spec@0.3.0-rc.3`; both candidates use `next`.

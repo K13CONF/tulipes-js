@@ -117,10 +117,10 @@ test("capability accessors reject missing infrastructure and preserve available 
   const { ModelStore } = await import("../src/db/model-store.js");
   const { QueueManager } = await import("../src/queues/queue-manager.js");
 
-  expect(() => requireModels({})).toThrow(/requires a database/);
+  expect(() => requireModels({})).toThrow(/tulipes\.providers\.models/);
   expect(() => requireQueues({})).toThrow(/requires a queue/);
 
-  const models = new ModelStore(),
+  const models = new ModelStore({} as never),
     queues = new QueueManager("redis://127.0.0.1:1");
 
   expect(requireModels({ models })).toBe(models);
