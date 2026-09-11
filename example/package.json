@@ -1,5 +1,10 @@
 {
   "name": "@tulipes-example/app",
+  "tulipes": {
+    "providers": {
+      "models": "@tulipes/core/db"
+    }
+  },
   "private": true,
   "type": "module",
   "scripts": {

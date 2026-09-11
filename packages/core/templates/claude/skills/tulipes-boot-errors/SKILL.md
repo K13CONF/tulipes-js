@@ -33,8 +33,11 @@ problems the report has not reached yet.
 | `config` | `module.config must default-export a function` | Missing/misspelled `export default`. |
 | `acl` | `allow() on unknown role "x"` | Role never defined. Roles live in the sys `auth` module; define it there and `dependsOn: ["auth"]`. |
 | `acl` | `already granted … duplicate grant` | Two modules grant the same role+resource. Namespace the resource by module. |
-| `database` | `connection failed` | Mongo unreachable or `MONGO_URI` wrong. Check the service is running. |
-| `database` | `modules declare models but "MONGO_URI" is not declared` | Add the variable to the sys `core` module's meta file. |
+| `providers` | `[x] requires capability "models" … declares no provider for it` | A module has `models/` or `bootstrap/` files (or `requires: ["models"]`) but the app's `package.json` has no `"tulipes": { "providers": { "models": "@tulipes/core/db" } }`. Add that line; an installed package or a `MONGO_URI` alone selects nothing. |
+| `providers` | `provider "…" cannot be resolved from …` | The declared specifier is not installed in the app. Install it (or fix the path). |
+| `providers` | `provider "mongoose" is selected but "MONGO_URI" is not declared/set` | Add the variable to the sys `core` module's meta file and set it. |
+| `providers` | `database connection failed` | Mongo unreachable or `MONGO_URI` wrong. Check the service is running. |
+| `providers` | `package.json "tulipes" key: providers — Unrecognized key` | Typo in the capability name; only `models` exists. |
 | `queues` | `queue name … is invalid` | Queue names use `.`, not `:`. |
 | `routes` | `must default-export a routes function` | Missing `export default` in a `*.routes.ts`. |
 

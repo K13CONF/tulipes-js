@@ -79,6 +79,7 @@ const module = (
   tier,
   priority,
   dependsOn,
+  requires: [],
 });
 
 test("dependencies outrank priority while sys modules precede app modules", () => {

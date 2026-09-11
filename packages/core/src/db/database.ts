@@ -24,12 +24,13 @@ export type BootstrapFn = (ctx: DatabaseCtx) => void | Promise<void>;
 const MONGO_URI = "MONGO_URI";
 
 /**
- * Boot phase 8: connect, register every model in load order, then run every
- * bootstrap task in load order (indexes, seed roles, default records).
+ * Boot phase 8, run by the "models" provider: connect, register every model
+ * in load order, then run every bootstrap task in load order (indexes, seed
+ * roles, default records).
  *
- * A DB-less app is legitimate — no models and no MONGO_URI simply skips the
- * phase. Declaring models *without* a connection string, though, is a
- * contradiction the boot must refuse.
+ * Reached only when the app declared the provider, so a missing connection
+ * string is a contradiction the boot must refuse — an app without a database
+ * simply declares no provider.
  */
 export interface InitDatabaseOptions {
   /**
@@ -48,18 +49,15 @@ export async function initDatabase(
   report: BootReport,
   options: InitDatabaseOptions = {},
 ): Promise<Connection | undefined> {
-  const hasModels = explored.some((files) => files.modelFiles.length > 0);
   const uri = ctx.Environment.store.has(MONGO_URI)
     ? String(ctx.Environment.get(MONGO_URI))
     : undefined;
 
   if (!uri) {
-    if (hasModels) {
-      report.add({
-        scope: "boot",
-        message: `modules declare models but "${MONGO_URI}" is not declared/set — a database is required`,
-      });
-    }
+    report.add({
+      scope: "providers",
+      message: `provider "mongoose" is selected but "${MONGO_URI}" is not declared/set — declare it in a sys module's meta.variables.json and set it`,
+    });
     return undefined;
   }
 
@@ -80,7 +78,7 @@ export async function initDatabase(
     return undefined;
   }
 
-  const store = new ModelStore();
+  const store = new ModelStore(connection);
   ctx.models = store;
 
   await registerModels(explored, connection, store, report);

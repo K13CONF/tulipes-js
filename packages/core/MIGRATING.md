@@ -11,6 +11,29 @@ what makes it work under nvm.
 
 ---
 
+<a id="unreleased--declare-the-models-provider"></a>
+
+## Unreleased — declare the models provider
+
+The database is now selected by the app, not by the presence of `MONGO_URI`.
+Add one line to the root `package.json` of every app that has models:
+
+```jsonc
+{ "tulipes": { "providers": { "models": "@tulipes/core/db" } } }
+```
+
+- Without it, a module with `models/` or `bootstrap/` files (or a manifest
+  `requires: ["models"]`) stops the boot during the `providers` phase, before
+  any module code is imported. A `MONGO_URI` on its own no longer connects.
+- With it, a missing `MONGO_URI` is a boot error instead of a silent skip.
+- `handle.connection` is gone: read `handle.providers` for banner-style status,
+  or `handle.ctx.models.connection` when a script or test needs the driver.
+- Consumers keep `ctx.models`, `requireModels(ctx)`, `DatabaseCtx`, `ModelDef`
+  and `BootstrapFn`; only the specifier above is new. When the provider moves
+  into its own package the specifier changes and this file will say so.
+
+---
+
 <a id="unreleased--production-security-upgrade-overview"></a>
 
 ## 0.9.0-rc.3 — production security upgrade overview

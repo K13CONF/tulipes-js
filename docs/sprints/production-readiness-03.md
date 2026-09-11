@@ -493,8 +493,8 @@ required by this plan.
 |---|---|---|
 | S09-plan | Complete | Source-grounded plan saved; 46 relative links/anchors across three documents, scope and whitespace validated; `reports/s09-plan-docs.log` |
 | S09.1 | Complete | 2026-09-11: 41-row coupling register, behavior maps, harness `scripts/s09-inventory.mjs`, installation shapes A–D and startup baselines against `b42bd00`, reproduced at `9aba800` (inventory identical, timings within 4–11%) — [inventory](../design/mongoose-dependency-inventory.md); raw samples in ignored `reports/s09-inventory/{b42bd00,9aba800}/` |
-| S09.2 | In progress | S09.2a on 2026-09-11: candidate A selected (augmentable `ModelsCapability` slot, `package.json` `tulipes.providers`, manifest `requires`), B and a boot option rejected with criteria; phases/ownership sequence, provider package shape, tooling behavior and compatibility table in the [provider design](../design/mongoose-provider-design.md). S09.2b: executable type/runtime fixtures (§9 of the design) |
-| S09.3–S09.10 | Not started | Handoff criteria above; execution follows completed inventory/design |
+| S09.2 | Complete | 2026-09-11: candidate A selected (augmentable `ModelsCapability`, `package.json` `tulipes.providers`, manifest `requires`), B and a boot option rejected; contract implemented in core (`boot/providers.ts`), built-in loader exposed as the first provider at `@tulipes/core/db`, generator/example declare it; 10 runtime + type fixtures, full suite with services, packed minimal/production smokes — [provider design §9.1](../design/mongoose-provider-design.md#91-what-ran-s092b-2026-09-11) |
+| S09.3–S09.10 | Not started | Handoff criteria above; S09.4 moves `packages/core/src/db/*` into the provider package and changes the declared specifier; S09.5 removes the dependency and proves packed absence |
 
 Stop inventory/design expansion once their exit criteria are met. Record unrelated
 issues in the backlog, commit the coherent verified outputs and proceed to the

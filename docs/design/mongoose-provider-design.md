@@ -1,10 +1,11 @@
 # Mongoose provider design (S09.2)
 
-Status: S09.2a — interface selected, ownership and requirement rules settled,
-compatibility path chosen. Prepared on 2026-09-11 against source `9aba800`
-(inventory `b42bd00`). S09.2b adds the executable type/runtime fixtures listed
-in §9 and records which passed. Nothing here is published or released; the
-provider package name is a proposal until the release maintainer accepts it.
+Status: S09.2 complete on 2026-09-11 — interface selected (S09.2a, against
+`9aba800`) and implemented in core with executable fixtures (S09.2b, §9 records
+what ran). The built-in Mongoose loader is exposed as the first provider at
+`@tulipes/core/db`; moving it into its own package is S09.4/S09.5. Nothing here
+is published or released; the provider package name is a proposal until the
+release maintainer accepts it.
 
 Plan: [Sprint 03 §5](../sprints/production-readiness-03.md#5-s092--select-the-provider-interface).
 Inputs: [dependency inventory](mongoose-dependency-inventory.md) (register rows
@@ -23,7 +24,7 @@ Inputs: [dependency inventory](mongoose-dependency-inventory.md) (register rows
 | Instance identity (Q5) | Provider lists `mongoose` as a **peer dependency** (`^8`) and `@tulipes/core` as a peer; the app owns the single mongoose copy (already true — every generated production manifest declares it). Provider must not bundle or depend on mongoose directly. Verified by the two-boot and separately-installed fixtures. |
 | `new module` (Q6) | Emits model + bootstrap files only when the app declares a `models` provider; otherwise emits a provider-free module and prints one line saying how to add models. `--model`/`--no-model` force either shape. |
 | Bootstrap-only module without URI (Q7) | Becomes a declared requirement: a `bootstrap/` directory implies `requires: ["models"]` too, so the silent skip turns into the missing-provider diagnostic. |
-| Compatibility (Q8) | Explicit breaking prerelease (`@tulipes/core` 0.10.0-rc.1). `@tulipes/core/db` stays as a **migration stub**: its declaration exports only `@deprecated` never-typed names and its runtime throws a message naming `@tulipes/mongoose`. No bridge installs Mongoose through core. |
+| Compatibility (Q8) | Explicit breaking prerelease (`@tulipes/core` 0.10.0-rc.1). Interim (S09.2b): `@tulipes/core/db` **is** the provider specifier. After extraction it stays as a **migration stub**: its declaration exports only `@deprecated` never-typed names and its runtime throws a message naming `@tulipes/mongoose`. No bridge installs Mongoose through core. |
 | Selection semantics | Installed ≠ selected. `MONGO_URI` alone never acquires anything. Selected + no `MONGO_URI` → provider reports a boot error. Selected + no consumers → still acquired (explicit intent), banner shows it. One provider per capability, one Mongoose connection per boot. |
 | Metadata (S09.3) | Unsupported and documented as such; specs keep reading route schemas. |
 
@@ -131,7 +132,9 @@ export interface AcquiredResource {
   status(): { label: string; ready: boolean };
 }
 
-export interface ProviderContext extends Pick<Ctx, "mode" | "Environment" | "modules" | "config" | "acl" | "t" | "i18n"> {
+export interface ProviderContext {
+  /** The live boot context after ACL; bootstrap tasks run against it. Core alone assigns the slot. */
+  ctx: Ctx;
   rootDir: string;
   /** Discovered files for every module in load order; the provider decides what to import. */
   files: readonly ModuleFiles[];
@@ -302,11 +305,34 @@ into the temp app, no Mongoose):
 - Strict schema: `"tulipes": { "providers": { "modles": … } }` and
   `"requires": ["modles"]` both fail with the path in the message.
 
-Legacy path during 2b: the built-in `initDatabase` remains wired for apps with
-no `providers` declaration so the repository, example and CI keep passing;
-S09.4 replaces it and S09.5 removes the dependency. A `MONGO_URI` without a
-declaration therefore still connects **until S09.4** — recorded here so the
-interim state is not mistaken for the contract.
+### 9.1 What ran (S09.2b, 2026-09-11)
+
+No legacy path was kept. Instead the built-in loader became the first provider
+(`packages/core/src/db/provider.ts`, default export of `@tulipes/core/db`), the
+production generator and the reference app declare it, and the contract holds
+in full: an undeclared `MONGO_URI` connects nothing, a declared provider without
+one is a boot error, `BootHandle.connection` is gone.
+
+| Fixture | Evidence | Result |
+|---|---|---|
+| Type fixtures | `packages/core/tests/providers.test-d.ts` (`yarn test:types`) — phase omission, `handle.connection` removed, `Provider` contract/capability/resource shape rejected | pass |
+| F2 acquire/expose/dispose | `providers.test.ts` "declared provider is acquired once…" — `ctx.models`, `handle.providers`, config sees no slot, dispose logged once | pass |
+| F3 explicit requirement | "…refused before any module code is imported" — throwing `module.config.js` never runs | pass |
+| F3′ implied requirement | "models/ and bootstrap/ directories imply…" — both directories, model file never imported | pass |
+| F4 installed but undeclared | "…never imported, even with MONGO_URI set" — throwing provider file untouched, `ctx.models` undefined | pass |
+| F5 failure after `own()` | report / throw / silent-return → dispose logged, boot rejects with each message | pass |
+| Provider errors | `own()` twice, contract 2, capability mismatch, unresolvable specifier, malformed export | pass |
+| F6 two boots | separate values; disposing one leaves the other; two disposals total | pass |
+| Typos | `providers.modles` and `requires: ["modles"]` fail with the path in the message | pass |
+| F7 offline | `inspectRoutes` succeeds with an **uninstalled** declared specifier and a throwing provider file; unmet `requires` reported offline | pass |
+| Real provider, live database | `database.integration.test.ts` (4 tests, `@tulipes/core/db` declared): registration failure releases the connection, schema throw outside the report, inspection skips bootstrap, forced cleanup bounded by the deadline (step now named `provider mongoose`) | pass, local Mongo |
+| Whole suite | 235 core/spec tests in 24 files with `REQUIRE_INTEGRATION_TESTS=1`; example 55 tests; `yarn test:types`; core and example typecheck | pass, local services |
+| Packed | `artifacts.mjs prepare`; generator/reference parity diffs; minimal smoke (install, sync, typecheck, tests, offline specs, backend/shutdown, `ctx.models` undefined); production offline smoke with sockets denied | pass |
+| Packed production runtime | `scaffold-smoke.mjs … production` with local services — install, sync, typecheck, tests, offline specs, backend + worker booting through `@tulipes/core/db` resolved from `dist/`, login, start and PM2 smokes | pass |
+
+Not executed: packed **absence** of Mongoose (F1 negative) — impossible until
+S09.5; the prior-contract upgrade fixture (F8, S09.7); two-boot plugin identity
+with the real driver (S09.9).
 
 ## 10. Compatibility table
 

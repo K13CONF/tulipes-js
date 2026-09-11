@@ -4,6 +4,7 @@ import { fixture } from "./fixture.js";
 
 const mongo = process.env.TEST_MONGO_URI;
 const integration = test.skipIf(!mongo);
+const declared = JSON.stringify({ type: "module", tulipes: { providers: { models: "@tulipes/core/db" } } });
 
 beforeEach(() => {
   if (mongo) vi.stubEnv("MONGO_URI", mongo);
@@ -22,6 +23,7 @@ integration(
   "releases the acquired connection when model registration fails",
   async () => {
     const app = await fixture({
+      "package.json": declared,
       "modules/probe/meta.variables.json": JSON.stringify({
         variables: [
           {
@@ -47,6 +49,7 @@ integration(
   "releases Mongo even when schema compilation throws outside the boot report",
   async () => {
     const app = await fixture({
+      "package.json": declared,
       "modules/probe/meta.variables.json": JSON.stringify({
         variables: [
           {
@@ -81,6 +84,7 @@ integration(
     const { access } = await import("node:fs/promises");
 
     const app = await fixture({
+      "package.json": declared,
       "modules/probe/meta.variables.json": JSON.stringify({
         variables: [
           {
@@ -114,6 +118,7 @@ integration(
   "shutdown bounds forced database cleanup when the driver does not settle",
   async () => {
     const app = await fixture({
+      "package.json": declared,
       "modules/probe/meta.variables.json": JSON.stringify({
         variables: [
           {
@@ -127,7 +132,7 @@ integration(
     });
 
     const handle = await app.boot({ mode: "script", shutdownTimeoutMs: 50 });
-    const connection = handle.connection!;
+    const connection = handle.ctx.models!.connection;
 
     const close = vi
       .spyOn(connection, "close")
@@ -155,7 +160,7 @@ integration(
       ]);
 
       await expect(outcome).rejects.toThrow(
-        /database forced cleanup.*timed out/,
+        /provider mongoose forced cleanup.*timed out/,
       );
     } finally {
       clearTimeout(timer);
