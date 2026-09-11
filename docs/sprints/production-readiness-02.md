@@ -1,10 +1,11 @@
 # Sprint 02 — Offline inspection and security review
 
-Status: implementation and local closeout complete on 2026-09-11; sprint acceptance
-remains open for candidate CI evidence (02-C3/02-C5). S06–S07 and S08a–S08m are
-implemented, and documentation/evidence reconciliation is locally verified.
-See the [current evidence map](production-readiness-02-evidence.md) for each control,
-local checks, pending workflow jobs and assigned deployment follow-ups. No version
+Status: complete on 2026-09-11. S06–S07, S08a–S08m and closeout criteria
+02-C1–C5 are implemented and accepted. All seven jobs in
+[CI run 34632402765](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765) passed
+for `37dbca7`, including the Ubuntu Node 24.0.0/24.20.0 matrix, both packed presets
+and production offline-only verification. The [evidence map](production-readiness-02-evidence.md)
+retains job links, archive digests and separate deployment follow-ups. No version
 was published and repository visibility is unchanged.
 
 Detailed program tasks: [sprint-by-sprint report](production-readiness-task-report.md).
@@ -20,7 +21,7 @@ application-policy decisions.
 |---|---|---|
 | S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
 | S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
-| S08 — Focused auth/settings security review | S08a–S08m and local documentation/evidence closeout verified; CI acceptance pending | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+| S08 — Focused auth/settings security review | S08a–S08m and 02-C1–C5 accepted locally and in CI | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
 
 ## Design and compatibility
 
@@ -68,8 +69,8 @@ and the 02-C1–C5 entry at the end of this tracker.
   reports/scaffold-*/. CI on Linux and the supported Node matrix remains the release
   gate; this local run does not establish those platform results.
 
-S08 implementation and local closeout are complete. Candidate CI must pass before
-whole-sprint acceptance; provider extraction remains Sprint 03.
+Sprint 02 implementation, local closeout and candidate CI acceptance are complete.
+Provider extraction remains Sprint 03; deployment/release gates remain separate.
 
 ## Working discipline
 
@@ -803,3 +804,29 @@ are local working-tree artifacts, not clean-source release attestations.
 Relative links/anchors and whitespace passed. This coherent closeout changes
 only documentation. Remaining action: candidate CI and final 02-C3/02-C5 acceptance;
 no push, deployment, publication or provider extraction is included.
+
+
+### 02-C3 / 02-C5 — CI evidence and final sprint acceptance
+
+Completed on 2026-09-11 after the user authorized the remaining CI gate.
+Branch `feat/sprint-02-native-routers` was pushed at `37dbca7`; all seven jobs in
+[run 34632402765](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765)
+passed. The Ubuntu 24.04 matrix ran Node 24.0.0 and 24.20.0, with 225 tests per
+job and no skips. Coverage remained 82.01% statements, 68.7% branches, 86.74%
+functions and 84.14% lines against unchanged floors; types and agent-guide parity
+passed on both versions.
+
+CI also passed package builds, archive/audit and generated-reference parity;
+service-free minimal packed checks on Ubuntu and macOS; production offline-only;
+and full production with 55 generated tests, runtime/offline specs, backend/worker
+shutdown and actual PM2 HTTP self-restart preserving unrelated PIDs. Downloaded
+archives passed local identity/content/digest verification against the CI manifest.
+The [evidence map](production-readiness-02-evidence.md#ci-acceptance--passed-on-2026-09-11)
+records every job link, source commit and archive digest. Raw copies are retained
+in ignored `reports/s08-ci-34632402765/`.
+
+02-C3 and 02-C5 are now complete. This acceptance record changes repository
+documentation only; tested runtime/templates/package bytes remain unchanged.
+Relative links/anchors and whitespace were checked before committing. Sprint 03
+is the next planned workstream. S15–S16 deployment evidence and release gates
+remain separate; no merge, deployment, npm publication or visibility change occurred.

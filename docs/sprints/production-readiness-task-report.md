@@ -1,20 +1,22 @@
 # Production readiness — detailed sprint task report
 
-Prepared: 2026-09-11. Current runtime/test baseline: `1be808c` (S08m plus readability).
+Prepared: 2026-09-11. Accepted Sprint 02 source: `37dbca7`.
 
-**Next acceptance action: retain candidate CI evidence for 02-C3/02-C5.**
-Sprint 02 implementation and local documentation/evidence closeout are complete.
-Offline inspection, starter migration and S08a–S08m are implemented; provider
-extraction has not started. The [evidence map](production-readiness-02-evidence.md)
-records current results and external gates. No GitHub run for this source commit
-was returned on 2026-09-11, so final sprint acceptance remains open.
+**Next planned workstream: Sprint 03, S09.1–S09.2 (inventory and provider seam).**
+Sprint 02 implementation, local closeout and CI acceptance are complete.
+[CI run 34632402765](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765) passed
+all seven jobs, including Ubuntu Node 24.0.0/24.20.0, packed minimal on Linux/macOS,
+production offline-only and full packed production. The
+[evidence map](production-readiness-02-evidence.md) retains exact-source results,
+archive digests and separate deployment/release gates. Provider extraction has
+not started.
 
 This report translates the existing program into executable tasks. Sprint 01 and
 02 statuses come from their retained trackers and the local repository. Sprint 03
 is the existing next workstream. Sprints 04–06 are a proposed division of the
 previously unnamed later milestone, not additional implementation already started
 or fixed delivery commitments. Package names and exact interfaces remain design
-outputs. Closeout checked GitHub workflow availability read-only; registry,
+outputs. Closeout ran and retained GitHub CI for the authorized branch push; registry,
 deployment and other external settings were not rechecked. Earlier release
 statements remain dated evidence.
 
@@ -23,7 +25,7 @@ statements remain dated evidence.
 | Sprint | Intended result | Current state | Main dependency |
 |---|---|---|---|
 | 01 — Package trust and first run | Reproducible minimal/production starters and verified release artifacts | Implementation recorded as delivered; external governance/release conditions remain distinct | Maintainer decisions for external account/release changes |
-| 02 — Offline inspection and security | Deterministic offline specs and retained auth/settings abuse cases | Implementation, readability and local closeout complete; CI acceptance pending | Candidate Linux/Node matrix and packed workflow evidence |
+| 02 — Offline inspection and security | Deterministic offline specs and retained auth/settings abuse cases | Complete, including candidate CI acceptance | Deployment and release evidence remains separately scoped |
 | 03 — First provider extraction | Core can install and boot without Mongoose | Planned | Sprint 02 closeout and a compatible capability boundary |
 | 04 — Queues and sockets | Redis/queue and socket dependencies install only when selected | Proposed | Prove the first adapter before copying its design |
 | 05 — Packaging and composition | Measured packaging decisions and supported feature combinations | Proposed; individual splits conditional | Provider contracts, installation measurements and migration costs |
@@ -49,9 +51,10 @@ Latest **local** 02-C3 closeout evidence, Node 24.14.0/macOS:
 | Dependency audits | Existing severity gates passed | Dated workspace/runtime and generated inventory; moderate maintenance notice retained |
 
 Evidence is mapped by topic in the [closeout record](production-readiness-02-evidence.md).
-Raw `reports/s08-closeout-*` files are ignored local artifacts. They are not CI attachments,
-release attestations or evidence of Linux, minimum Node, browser or replica-set
-failover behavior. Collect those results in the appropriate CI/pilot stage.
+Raw `reports/s08-closeout-*` files are ignored local artifacts. Separate CI evidence
+for `37dbca7` now establishes the supported Linux/Node matrix and packed checks;
+see the linked evidence map. Browser, replica-set failover, deployment and release
+verification remain separate tasks.
 
 ## 2. Sprint 01 — Package trust and a verifiable first run
 
@@ -169,11 +172,10 @@ platform/runtime results separately from local runs.
 
 ### S08 closeout — Documentation and evidence reconciliation
 
-Local closeout completed on 2026-09-11; see the
+Local closeout and final CI acceptance completed on 2026-09-11; see the
 [evidence map](production-readiness-02-evidence.md) and final tracker entry.
-02-C3's local checks pass; its required candidate CI attachment and 02-C5 final
-acceptance remain open. Deployment follow-ups have accountable roles, with actual
-pilot personnel still to be selected under S15.1.
+All 02-C1–C5 criteria are complete. Deployment follow-ups have accountable roles,
+with actual pilot personnel still to be selected under S15.1.
 
 - [x] **02-C1 — Reconcile current behavior.** Update cumulative changelog and
   security/migration summaries to cover S08a–S08m. Mark older incremental statements
@@ -184,13 +186,13 @@ pilot personnel still to be selected under S15.1.
   retained test, local result and CI result. Distinguish implemented controls,
   documented application policy, conditional browser-cookie work and unverified
   deployment properties. Do not use test counts as a substitute for this mapping.
-- [ ] **02-C3 — Verify the complete candidate.** Run both packed presets and the
+- [x] **02-C3 — Verify the complete candidate.** Run both packed presets and the
   production offline-only job; preserve coverage floors, audits and guide/module
   parity. Attach Linux/Node matrix results through the existing workflow.
 - [x] **02-C4 — Carry deployment gaps forward.** Assign the named tasks in Sprint
   06 for nginx topology, replica-set failures, audit retention/archival, incident
   alerts and cross-replica/load tuning. Keep cookie adaptation conditional.
-- [ ] **02-C5 — Close the tracker accurately.** Mark Sprint 02 complete only after
+- [x] **02-C5 — Close the tracker accurately.** Mark Sprint 02 complete only after
   S08m and closeout acceptance pass, with outstanding external evidence explicitly
   identified. Commit the documentation closeout separately from lifecycle code.
 
@@ -526,9 +528,8 @@ Recommended immediate order:
 1. **Completed:** S08m lifecycle implementation and S08-readability. All tracked
    tests/helpers and both starter test outputs now have expanded formatting and
    space between distinct steps, with test behavior and fixture values retained.
-2. **02-C1–C5:** local documentation, evidence mapping and deployment backlog
-   assignment are complete. Retain candidate CI results for 02-C3, then complete
-   final 02-C5 acceptance; no current-source workflow run was found locally.
+2. **Completed — 02-C1–C5:** local documentation, evidence mapping, deployment
+   backlog assignment and final CI acceptance are recorded for `37dbca7`.
 3. **S09.1–S09.2:** measure current dependencies and settle the first provider seam;
    use those results to confirm Sprint 03 scope and estimate.
 4. **S09.3–S09.10:** extract Mongoose and prove installed absence, compatibility,
