@@ -11,18 +11,33 @@ test("a generated kebab-case module produces valid TypeScript configuration decl
   const app = await fixture({
     "modules/core/package.json": '{"name":"@test/core","type":"module"}',
   });
+
   await runNewModule(app.rootDir, "billing-history");
+
   await runSync(app.rootDir);
+
   const path = app.rootDir + "/types/config.d.ts";
-  const result = spawnSync(resolve("node_modules/.bin/tsc"), [path, "--noEmit", "--skipLibCheck"], { encoding: "utf8" });
+
+  const result = spawnSync(
+    resolve("node_modules/.bin/tsc"),
+    [path, "--noEmit", "--skipLibCheck"],
+    { encoding: "utf8" },
+  );
+
   expect(result.status, result.stdout + result.stderr).toBe(0);
   expect(await readFile(path, "utf8")).toContain('"billing-history"?');
 });
 
-test.each([false, true])("generated authentication isolates guests before rai, with Passport: %s", async (withPassport) => {
-  const app = await fixture();
-  await runInit(app.rootDir, "generated", "production");
-  await app.write("generated/check-auth.ts", `
+test.each([false, true])(
+  "generated authentication isolates guests before rai, with Passport: %s",
+  async (withPassport) => {
+    const app = await fixture();
+
+    await runInit(app.rootDir, "generated", "production");
+
+    await app.write(
+      "generated/check-auth.ts",
+      `
     import assert from 'node:assert/strict';
     import { once } from 'node:events';
     import express from 'express';
@@ -51,9 +66,18 @@ test.each([false, true])("generated authentication isolates guests before rai, w
       assert.deepEqual(await get('/change'), { authenticated: true });
       assert.deepEqual(await get('/guest'), { authenticated: false });
     } finally { await new Promise(resolve => server.close(resolve)); }
-  `);
-  const result = spawnSync(process.execPath, ["--import", "tsx", app.rootDir + "/generated/check-auth.ts"], {
-    encoding: "utf8", timeout: 5_000,
-  });
-  expect(result.status, result.stdout + result.stderr).toBe(0);
-});
+  `,
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", app.rootDir + "/generated/check-auth.ts"],
+      {
+        encoding: "utf8",
+        timeout: 5_000,
+      },
+    );
+
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+  },
+);

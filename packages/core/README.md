@@ -92,10 +92,10 @@ delete what this feature does not need.
 modules/billing/
 ├── package.json              name + "tulipes" ordering key
 ├── meta.variables.json       this module's environment contract
-├── module.config.ts          config factory + onReady / onShutdown
+├── module.config.ts          config factory + onReady / onDrain / onShutdown
 ├── module.acl.ts             permission grants
-├── routes/*.routes.ts        (ctx) => Router
-├── controllers/              the work; routes import it directly
+├── routes/*.routes.ts        native Router factories, optionally wrapped in defineRoutes
+├── controllers/              the work; handler factories import it lazily
 ├── helpers/                  pure logic, no framework
 ├── i18n/<locale>.json        this module's strings — the module is the namespace
 ├── models/*.model.ts         { name, schema } — a declaration, not a registration
@@ -305,11 +305,15 @@ call site without core knowing anything about your models.
     worker           one BullMQ worker per registered processor
     script           start nothing; the caller owns the process
 10  onReady          hooks in load order → startup banner
-    shutdown         SIGTERM → stop/drain http + sockets + workers →
+    shutdown         SIGTERM → onDrain + stop/drain http + sockets + workers →
                      onShutdown in REVERSE order → queues → redis → mongo
 ```
 
 Each phase crashes with its own aggregate report before the next begins.
+`onDrain` hooks start in reverse module order before traffic drain actions;
+asynchronous hooks and traffic drain concurrently under the same shutdown deadline.
+Keep dependencies available until `onShutdown`. Failed/timed-out notifications are
+aggregated and do not prevent later cleanup attempts.
 
 <details>
 <summary><b>Contracts — what each file exports</b></summary>
@@ -335,7 +339,8 @@ export default function billingConfig({ Environment }: Ctx) {
   return { trialDays: Environment.get("BILLING_TRIAL_DAYS") };
 }
 export async function onReady(ctx: Ctx) {}
-export async function onShutdown(ctx: Ctx) {}    // reverse load order
+export async function onDrain(ctx: Ctx) {}       // signal long-lived work to stop
+export async function onShutdown(ctx: Ctx) {}    // dispose after draining, reverse order
 
 // routes/*.routes.ts — every route declares a RAI, or the boot fails
 export default function billingRoutes(ctx: Ctx): Router {
@@ -397,8 +402,8 @@ only in development.
 | `tulipes dev [entry]` | regenerate types, then run under tsx watch |
 | `tulipes sync` | regenerate `types/config.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting — a CI gate |
-| `tulipes routes` | inspect endpoints and roles; connects configured infrastructure |
-| `tulipes spec [--openapi file] [--postman file] [--url base]` | generate specs; connects configured infrastructure |
+| `tulipes routes [--offline \| --runtime]` | inspect shared declarations offline or runtime endpoints |
+| `tulipes spec [--offline \| --runtime] [--openapi file] [--postman file] [--url base]` | generate specs from the selected inspection mode |
 | `tulipes new module <name>` | scaffold a module with every contract |
 | `tulipes update` | upgrade the global CLI and, inside an app, the app itself |
 | `tulipes -v` | print the CLI version, and the app's when they differ |
@@ -412,10 +417,13 @@ target a different Node version than the one holding your binary.
 `init`, `sync`, `env:check`, `new module`, version and update commands do not
 connect application infrastructure (`update` uses the package registry). `dev`
 boots the application and requires its declared services. `routes` and `spec`
-use inspection: the minimal starter needs no services, but the production
-starter still connects MongoDB/Redis. Inspection skips bootstrap, sockets,
-listening and readiness; config/route factories and shutdown hooks still run.
-A general-purpose `--offline` mode is not implemented.
+default to runtime inspection, which connects configured infrastructure and runs
+config/route factories and shutdown hooks, while skipping bootstrap, sockets,
+listening and readiness. `--offline` builds opted-in native routers and loads ACL
+without services, runtime config or secrets. Both new presets use it in `yarn spec`.
+See [offline inspection](../../docs/offline-inspection.md) for migration and limits.
+This interface is available in core `0.9.0-rc.3` and later candidates; use
+`@tulipes/core@next` with `@tulipes/spec@next`.
 
 ## What `tulipes init --preset production` gives you
 
@@ -513,10 +521,11 @@ language:
   "meta": {} }
 ```
 
-Generation uses backend **inspection**: it mounts routes without bootstrap tasks,
-Socket.IO setup, listening or readiness hooks. It can still connect Mongo/Redis
-because route factories may require those services. Imports and factories retain
-their own side effects; inspection is not a sandbox.
+`--offline` builds the same `defineRoutes()` router trees used at runtime,
+without acquiring callbacks registered through `runtime()` or connecting services. Use `--url` to set the deployment
+URL; offline defaults to `http://localhost:3000` and package.json title/version.
+The default `--runtime` path retains infrastructure-backed inspection for legacy
+factories. Declaration imports remain trusted JavaScript, not a sandbox.
 
 Use `ctx.routes.mount(parent, "/api", childRouter)` for nested routers so the
 registry records the full prefix. Each supported HTTP method needs exactly one

@@ -1,4 +1,5 @@
 {
+  "refreshUnavailable": "The refresh operation could not be acknowledged; sign in again",
   "credentialsRequired": "An email address and a password are required",
   "invalidCredentials": "Invalid email or password",
   "passwordTooShort": "Password must be at least 8 characters",

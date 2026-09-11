@@ -1,54 +1,60 @@
 import type { Ctx } from "@tulipes/core/boot";
 import type { Request } from "express";
+import { HttpError } from "@tulipes/core/http";
 
-import { moduleLogger } from "@app/core";
+/** These are requested actions, not proof that a later side effect succeeded. */
+export type AuditEvent =
+  | { action: "variable.change_requested"; variable: string }
+  | { action: "variable.reveal_requested"; variable: string }
+  | {
+      action: "i18n.change_requested";
+      module: string;
+      locale: string;
+      keys: number;
+    }
+  | { action: "reboot.requested"; target_count: number };
 
 /**
- * Every consequential settings action leaves a record.
- *
- * Logged at `warn` deliberately: above the default `info`, so an audit
- * entry survives a deployment that raises LOG_LEVEL to quiet ordinary
- * request logs, and `?level=warn` on the log stream shows the audit trail
- * and nothing else. It rides the app's normal log file from there, so it
- * ships off the box with everything else.
- *
- * A secret's value is NEVER recorded, in either direction. That an audit
- * entry can reconstruct a rotated key would defeat rotating it.
+ * Persist before revealing secrets or applying changes, independent of LOG_LEVEL.
+ * Only identifiers and counts enter the record, never values or request bodies.
+ * Failure is deliberately terminal: the caller must await this before acting.
  */
-export type AuditAction =
-  | "variable.changed"
-  | "variable.revealed"
-  | "i18n.changed"
-  | "reboot.requested";
-
-export interface AuditDetails {
-  variable?: string;
-  module?: string;
-  locale?: string;
-  from?: unknown;
-  to?: unknown;
-  /** Set when the values are withheld because the variable is a secret. */
-  redacted?: boolean;
-  [key: string]: unknown;
-}
-
-export function audit(
+export async function audit(
   ctx: Ctx,
   req: Request,
-  action: AuditAction,
-  details: AuditDetails = {},
-): void {
-  const { user } = req.auth;
+  event: AuditEvent,
+): Promise<void> {
+  const user = req.auth.user;
+  if (!user) throw new HttpError(401, "unauthorized");
 
-  moduleLogger(ctx.Environment, "settings", ctx.mode).warn(
-    {
-      action,
-      actor: user ? String(user._id) : "unknown",
-      actor_role: user?.role,
+  // Select fields explicitly. Even an untyped caller cannot override actor/action
+  // or smuggle from/to values into the record through an arbitrary details object.
+  const details =
+    event.action === "variable.change_requested" ||
+    event.action === "variable.reveal_requested"
+      ? { variable: event.variable }
+      : event.action === "i18n.change_requested"
+        ? { module: event.module, locale: event.locale, keys: event.keys }
+        : { target_count: event.target_count };
+
+  try {
+    const Audit = ctx.models!.get("AuditEvent");
+    await new Audit({
+      ...details,
+      action: event.action,
+      actor: String(user._id),
+      actor_role: user.role,
       ip: req.ip,
       app_env: ctx.Environment.appEnv,
-      ...details,
-    },
-    `settings: ${action}`,
-  );
+      mode: ctx.mode,
+      recorded_at: new Date(),
+    }).save({ w: "majority", j: true, wtimeout: 5000 });
+  } catch {
+    // Sink/validation errors may contain record content or connection details.
+    throw new HttpError(503, "auditUnavailable", {
+      code: "AUDIT_UNAVAILABLE",
+      defaultMessage:
+        "The audit record could not be acknowledged; the action was not performed",
+    });
+  }
 }

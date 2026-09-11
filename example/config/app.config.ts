@@ -1,3 +1,4 @@
+import { apiPrefix } from "./routes.js";
 import type { AppConfigFn } from "@tulipes/core/boot";
 
 /**
@@ -27,11 +28,11 @@ const appConfig = (() => ({
 
   /**
    * Route prefixing. Modules build paths from this instead of hardcoding
-   * "/api/v1", so versioning the whole API is a one-line change:
+   * "/api/v1", so versioning the whole API is a one-line change in config/routes.ts:
    * `router.get(`${config.api!.prefix}/users`, …)`.
    */
   api: {
-    prefix: "/api/v1",
+    prefix: apiPrefix,
   },
 
   /**

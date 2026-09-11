@@ -27,6 +27,8 @@ export const tulipesManifestSchema = z
     priority: z.number().int().default(DEFAULT_PRIORITY),
     /** Short names of modules that must load before this one. */
     dependsOn: z.array(z.string().min(1)).default([]),
+    /** All route files use defineRoutes with infrastructure acquired through runtime(). */
+    offline: z.boolean().optional(),
   })
   .strict();
 
@@ -42,4 +44,5 @@ export interface ModuleManifest {
   tier: ModuleTier;
   priority: number;
   dependsOn: readonly string[];
+  offline?: boolean;
 }

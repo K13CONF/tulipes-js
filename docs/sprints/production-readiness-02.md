@@ -1,0 +1,833 @@
+# Sprint 02 — Offline inspection and security review
+
+Status: complete on 2026-09-11. S06–S07, S08a–S08m and closeout criteria
+02-C1–C5 are implemented and accepted. All seven jobs in
+[CI run 34632402765](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765) passed
+for `37dbca7`, including the Ubuntu Node 24.0.0/24.20.0 matrix, both packed presets
+and production offline-only verification. The [evidence map](production-readiness-02-evidence.md)
+retains job links, archive digests and separate deployment follow-ups. No version
+was published and repository visibility is unchanged.
+
+Detailed program tasks: [sprint-by-sprint report](production-readiness-task-report.md).
+Next workstream: [Sprint 03 dependency inventory and provider design](production-readiness-03.md).
+
+## Goal and backlog
+
+A production starter can generate deterministic route/spec descriptions without
+services or production secrets, with runtime parity proven by retained tests.
+The subsequent auth/settings review retains abuse cases and records remaining
+application-policy decisions.
+
+| Item | Status | Exit evidence |
+|---|---|---|
+| S06 — Shared route declarations and explicit offline tooling | Implemented | Native `routes/*.routes.ts` factories wrapped in `defineRoutes` are consumed by runtime and `inspectRoutes`; `--offline` and `--runtime` CLI paths; strict legacy diagnostics; shared RAI scan; dynamic authorization metadata |
+| S07 — Starter migration and repeatable verification | Implemented and locally verified | Both presets and new-module output use native routers; controllers acquired once through `runtime()`; production prefix shared in `config/routes.ts`; generated runtime parity tests; packed offline CI without services |
+| S08 — Focused auth/settings security review | S08a–S08m and 02-C1–C5 accepted locally and in CI | Password-change and revocation timing, audit sink failure/filtering, proxy/IP policy and rate limits, file/log paths, streaming bounds, PM2 target scope, cookie/CSRF guidance |
+
+## Design and compatibility
+
+See [offline inspection](../offline-inspection.md) for the interface, migration
+steps and guarantees. Runtime route factories remain supported. Offline behavior
+is explicit, while generated `yarn spec` scripts select it. The initial interface
+uses static route selection; runtime environment-dependent factories use
+`--runtime`. Runtime boot still validates all environment values and credentials.
+
+Offline inspection validates the module graph, environment declaration structure
+and ownership, ACL and route declarations. It skips runtime config, controllers,
+models, middleware acquisition, translation initialization, infrastructure and all
+application lifecycle hooks. Declaration imports are trusted JavaScript, not a
+sandbox. Model metadata extraction and provider packaging remain later work.
+
+## Validation
+
+The bullets below retain the original S06–S07 checkpoint. Current cumulative
+verification is recorded in the [closeout evidence map](production-readiness-02-evidence.md#complete-local-verification)
+and the 02-C1–C5 entry at the end of this tracker.
+
+- Core regressions verify forbidden runtime imports and service connections,
+  absent secrets, malformed declarations and graphs, legacy errors, authorization,
+  runtime route/schema parity and repeatable production document generation.
+- Both starter suites compare normalized OpenAPI/Postman documents from runtime
+  and offline router builds; shared schema instances need not have object identity.
+- Packed verification runs offline route listing and spec generation with sockets
+  denied, invalid service URLs and empty runtime secrets. Two separate generator
+  processes must produce byte-identical documents.
+- A dedicated CI job checks the packed production preset without services.
+- Local verification on Node 24.14.0/macOS: all 116 framework/spec tests passed
+  with temporary MongoDB and Redis, no skips; all four production reference app
+  tests passed. The 30 inspection regressions are included in the 116, covering native router
+  middleware, param callbacks, nested/parameterized mounts and error middleware.
+- Coverage passed unchanged floors: 81.89% statements, 68.7% branches, 86.41%
+  functions, 84.06% lines. Package and example typechecks, test type contracts,
+  production builds and scaffold/agent-guide parity passed.
+- Corrected native-router packed verification passed: minimal startup/shutdown,
+  production backend and worker, generated app tests, runtime/offline document
+  parity, and isolated PM2 supervision/restart. The production offline-only smoke
+  passed with network connections denied. Generated dependency audits passed the
+  existing severity gates. Both starter suites passed all four tests.
+- Local evidence is in ignored reports/native-router-packed.log,
+  reports/native-router-integration.log, reports/native-router-artifacts.log and
+  reports/scaffold-*/. CI on Linux and the supported Node matrix remains the release
+  gate; this local run does not establish those platform results.
+
+Sprint 02 implementation, local closeout and candidate CI acceptance are complete.
+Provider extraction remains Sprint 03; deployment/release gates remain separate.
+
+## Working discipline
+
+Before each change set, read this tracker and the relevant sprint acceptance
+criteria, and identify the owning item. Update its status with actual validation
+results. Commit each coherent, verified set before starting the next. Keep S08
+changes separate from S06–S07; provider extraction remains outside Sprint 02.
+
+## S08 change sets
+
+The entries below are chronological checkpoints. Their “remaining” and “next”
+statements describe work outstanding at that checkpoint; later entries supersede
+them. The evidence map and final closeout entry give current status without
+rewriting historical red/green validation results.
+
+S06–S07 and the sprint/commit workflow were committed as `c0befdb`; S08a was
+committed as `01f3f72`; S08b as `8d6f287`; S08c as `0f97ddc`; S08d as `d21de1a`;
+S08e as `bd18bd6`; S08f as `7125ca1`; S08g as `4ed321c`; S08h as `0ed912a`;
+S08i as `b7d63bb`; S08j as `5eda964`; S08k as `a736237`; S08l as `2d23433`; S08m as `d06066a`.
+
+### S08a — PM2 target scope
+
+The restart helper selected the entire PM2 inventory for an empty target list,
+and restarting by name could affect a different application with the same name.
+The correction derives the app root from the installed helper, matches canonical
+PM2 working directories exactly, validates all requested names before any restart,
+and restarts only verified numeric IDs. A failed connection also disconnects.
+Self is restarted last; delivering the HTTP response before self-restart remains
+an explicit follow-up rather than an implied guarantee of ordering.
+
+Locally verified on Node 24.14.0/macOS:
+
+- All 11 helper regressions passed after a red run with 10 failures. Cases cover
+  whole-request validation, foreign and duplicate names, cluster members, invalid
+  scope metadata, numeric IDs, self ordering and connection cleanup.
+- All 127 framework/spec tests and four production reference app tests passed
+  with temporary MongoDB and Redis and no skips. Coverage floors passed unchanged.
+- Package, example and test typechecks, builds and generated/reference parity
+  passed.
+- Packed production installation, generated tests/types, runtime/offline specs,
+  backend/shutdown and worker checks passed. The real PM2 daemon check verified
+  that both owned processes restarted while two unrelated processes retained their
+  PIDs, including one sharing the backend's name. Invalid target sets were rejected.
+- Evidence: ignored `reports/s08-pm2-{red,tests,integration,parity,artifacts,packed}.log`
+  and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
+
+Remaining S08 work: password-change/revocation timing, audit durability and filtering,
+proxy/IP/rate-limit policy, log/file constraints and streaming bounds, restart
+response delivery, and cookie/CSRF guidance. None is marked complete by this fix.
+
+### S08b — Session validity and revocation timing
+
+Session reads and refresh rotation previously accepted expired rows until MongoDB
+TTL cleanup and did not bind the session owner to the token subject. The helper now
+requires a matching user and a strictly future expiration. Refresh enforces these
+conditions in the same atomic update that consumes its current token ID; expired
+devices are also excluded from the session list. The generated starter mirrors the
+reference application and includes the same HTTP regressions.
+
+The new cases cover the exact expiration boundary with the row still present,
+session ownership mismatch, password change within one JWT second across two
+devices, and refresh racing with device revocation. The completed password change
+invalidates both old pairs while its replacement remains usable. A concurrent
+refresh may return 200 before revocation, but its pair cannot authenticate after
+the session deletion completes.
+
+Locally verified on Node 24.14.0/macOS:
+
+- The two validity regressions failed before the fix (five assertions) and passed
+  afterward. All eight reference app tests now pass.
+- All 127 framework/spec tests passed with temporary MongoDB and Redis, no skips;
+  coverage floors remained unchanged. Package, example and test typechecks passed.
+- Builds and generated/reference module, test and configuration parity passed.
+- The packed production app passed all eight generated tests, typechecks,
+  runtime/offline spec checks, backend/shutdown, worker and isolated PM2 checks.
+- Evidence: ignored `reports/s08b-{red,green,integration,types,parity,artifacts,packed}.log`
+  and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
+
+At the end of S08b, remaining authentication work included deterministic login/password-change races
+(an old-password verification may finish issuing a session after the change),
+concurrent password changes, and recovery from failures between credential, epoch
+and session writes. These tests do not establish atomicity across those writes or
+cancel requests already authenticated before revocation. Refresh-token reuse still
+rejects that token without revoking the surviving family; theft-response policy
+needs explicit review. Audit, proxy/rate limits, file/stream bounds, restart response
+delivery and cookie/CSRF guidance remain open under S08.
+
+### S08c — Credential versions and password-change races
+
+Four initial HTTP regressions reproduced stale session creation and failed
+revocation writes. The correction replaces timestamp invalidation with a random
+credential version written atomically with the password hash. Sessions keep the
+version used for password verification or replacement; every access/refresh and
+session listing checks the current credential. Session creation validates after
+insertion. Cleanup targets only the replaced version, preserving sessions created
+by a later password change even when the earlier cleanup is delayed.
+The authenticated password update also compares the session's version in its
+atomic write, preventing a paused older request from overwriting a newer password.
+
+This covers delayed login, concurrent password replacement, delayed cleanup,
+credential-write failure, post-commit cleanup failure and legacy upgrade races.
+Legacy credentials upgrade conditionally on login; existing unversioned sessions
+require reauthentication. Migration instructions require coordinated auth-code
+deployment and explain the changed helper contracts and partial-write outcome.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- Four initial regressions failed against the previous implementation. A further
+  pre-write barrier reproduced stale password overwrite before its conditional
+  write was added. All 16 final reference app cases passed, including eight new
+  cases for races, write failures and legacy migration.
+- All 127 framework/spec tests passed with temporary MongoDB and Redis and no
+  skips. Coverage floors remained unchanged. Package, example and test typechecks
+  passed, along with builds and generated/reference module/test/config parity.
+- Packed production installation passed all 16 generated app tests, typechecks,
+  runtime/offline spec generation, backend/shutdown, worker and isolated PM2 checks.
+- Evidence: ignored `reports/s08c-{red,write-race-red,green,integration,types,parity,artifacts,packed}.log`
+  and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
+
+This does not cancel requests already authenticating, roll back a committed
+password when cleanup fails, or resolve uncertain database-write outcomes. No
+transaction/replica-set requirement, provider extraction or token-format change is
+included. Remaining S08 work: audit durability/filtering, proxy/IP/rate limits,
+file and streaming bounds, restart response delivery, and cookie/CSRF guidance.
+Refresh theft-response/family-revocation policy also remains open.
+
+### S08d — Durable settings audit before action
+
+The previous helper used a filterable `warn` log with no persistence acknowledgment
+and recorded file mutations after applying them. Six regressions reproduced absent
+records, unblocked reveals/mutations/restart attempts on sink failure, and changes
+that skipped the acknowledgment barrier.
+
+The new settings AuditEvent model stores allowlisted request metadata in
+`settings_audit_events`. The helper awaits majority/journal acknowledgment before
+declared secret reveals, environment or translation writes, and restart attempts.
+Unavailable storage returns a sanitized 503 before the action. Ordinary log levels
+and destinations cannot suppress these records. Values, translation contents and
+arbitrary details are omitted; these records describe requests, not completion.
+Reference code, generated model/dependency/controller/helper and translations are
+updated together, with migration instructions for custom callers and operators.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- Six cases failed against the previous logger-based helper. All 23 reference app
+  tests now pass, including seven new cases for logging thresholds, write concern,
+  all four sink-failure paths, delayed acknowledgment, secret omission and the
+  admin/sysadmin boundary. File-write tests use disposable paths.
+- All 127 framework/spec tests passed with temporary MongoDB and Redis, no skips;
+  coverage floors remained unchanged. Package, example and test typechecks passed.
+- Builds and generated/reference module/test/config parity passed. Parity caught
+  a newline-escaping error in the generated test template, corrected before the
+  final packed run.
+- Packed production passed all 23 generated app tests, typechecks, runtime/offline
+  specs, backend/shutdown, worker and isolated PM2 checks.
+- Evidence: ignored `reports/s08d-{red,green,integration,types,parity,artifacts,packed}.log`
+  and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
+
+No audit browsing service, automatic retention, external archive or transactional
+file/PM2 operation is added. Database access, archival and retention remain operator
+responsibilities; request records do not prove successful completion or prevent
+tampering by trusted operators. Remaining S08 work: proxy/IP/rate limits, file and
+streaming bounds, restart response delivery, cookie/CSRF guidance and refresh
+theft-response/family-revocation policy.
+
+### S08e — Explicit proxy trust and client IPs
+
+This increment handles the proxy/IP portion of the next S08 item; rate limits
+remain the following change set. The production security module now consumes
+`TRUST_PROXY_CIDRS` at runtime, defaults to direct-peer handling, and validates
+explicit addresses/CIDRs. It rejects implicit blanket/hop-count/alias settings.
+Session origins and audit IPs share Express's nearest-untrusted-address resolution.
+
+The single-ingress nginx templates now overwrite forwarded IP, host and protocol
+headers and replace incorrect blanket-trust guidance with explicit local-peer
+configuration. Generated templates and reference files are kept in parity; CI now
+retains nginx-template parity alongside modules, tests and route configuration.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- All 143 framework/spec tests passed, including 16 new proxy tests covering
+  actual Express HTTP handling, forged earlier chain entries, untrusted sockets,
+  explicit multi-hop trust, IPv6/mapped IPv4 and invalid configuration.
+- All 24 reference app tests passed with temporary MongoDB/Redis and no skips,
+  including configured session/audit IP agreement. Coverage floors stayed unchanged.
+- Package, example and test typechecks passed after typing the proxy harness's
+  JSON response. Builds and generated/reference module/test/config/nginx parity
+  passed.
+- Packed production passed all 24 generated app tests, typechecks, runtime/offline
+  specs, backend/shutdown, worker and isolated PM2 checks.
+- Evidence: ignored `reports/s08e-{proxy-tests,integration,types,test-types,parity,artifacts,packed}.log`
+  and `reports/scaffold-production/`. Linux and Node matrix CI remain release gates.
+
+No live nginx binary is available on this runner; runtime topology and nginx
+deployment validation remain external.
+
+No rate limiter, provider extraction or deployment is added here. Remaining S08
+work: rate limits, file and streaming bounds, restart response delivery,
+cookie/CSRF guidance and refresh theft-response/family-revocation policy.
+
+
+### S08f — Shared authentication and settings request limits
+
+The production starter previously accepted unlimited auth/settings attempts.
+Security now installs Redis-backed fixed-window quotas before JSON parsing and
+Passport: 20 combined credential POSTs, 120 total auth requests and 60 settings
+requests per client per minute by default. Environment variables configure the
+positive limits, window and shared app namespace; the app environment separates
+its keys. All backend replicas share atomic counters with automatic expiration.
+Rejected requests do not extend the window and return 429 with `Retry-After`.
+
+Client identities follow the S08e proxy policy, normalize mapped IPv4 and aggregate
+IPv6 /56 subnets. Invalid resolved addresses share one bucket. Redis errors and
+stalls return a sanitized 503 before protected actions, with bounded initial
+connection waiting and commands. Each boot environment owns its connection and
+shutdown cleanup. The new config hook preserves app-level security settings.
+Generated modules/dependencies/tests and regenerated reference env/type files are
+in sync, with migration instructions describing defaults and operator tradeoffs.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- Both new app HTTP cases failed against the previous implementation and passed
+  after the middleware was installed. All 26 reference app cases pass.
+- All 164 framework/spec tests pass with temporary MongoDB/Redis and no skips,
+  including 21 new cases covering shared concurrent quotas, policy separation,
+  route variants/methods, forged proxy chains, IPv6/mapped IPs, invalid addresses,
+  namespace isolation, expiry, sink failure, stalled handshakes/commands and
+  invalid configuration. The initial handshake test exposed a four-second driver
+  wait; the explicit wait bound corrected it.
+- Coverage floors pass unchanged: 81.89% statements, 68.7% branches, 86.41%
+  functions and 84.06% lines. Package, synced reference app and test typechecks,
+  builds and generated/reference module/test/config/nginx/agent-guide parity pass.
+- Packed production installation passes all 26 generated app tests, types,
+  deterministic offline specs with connections denied, runtime specs,
+  backend/shutdown, worker and isolated PM2 checks. Its first typecheck caught
+  the empty security config return type; preserving the app config fixed it.
+- Workspace and generated dependency audits pass the existing high/critical gates.
+  Evidence: ignored `reports/s08f-{red,timeout-red,limiter,green,integration,types,test-types,parity,artifacts,packed,audit}.log`,
+  `reports/s08f-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux and supported Node matrix CI remain release gates; these are local results.
+
+Remaining S08 work: file and streaming bounds, restart response delivery,
+cookie/CSRF guidance and refresh theft-response/family-revocation policy. Request
+quotas bound stream openings, not concurrent streams or their duration/bytes.
+Deployment/backlog follow-ups: tune quotas for legitimate shared-IP traffic,
+review account-aware/distributed abuse response and edge limits, and validate Redis
+capacity, eviction/persistence and ingress topology under deployment load. IP
+quotas do not establish those guarantees; loss/eviction of counters resets limits.
+No provider extraction, deployment or publication is included.
+
+
+### S08g — Bounded environment and translation file operations
+
+This increment covers the settings file portion of the next S08 item; log files
+and streaming remain S08h. Settings previously followed symlinks/hardlinks, read
+entire files and rewrote targets directly. Its env quoting also changed some
+values on dotenv parsing, and duplicate assignments could keep an old value.
+
+The new file helper opens checked regular files without following leaf symlinks,
+refuses linked/special targets and linked immediate directories, and bounds reads
+and writes to 1 MiB. Directory enumeration, JSON traversal and expanded missing-key
+summaries have separate caps. Invalid JSON and unsafe/unavailable files produce
+explicit sanitized errors rather than empty successful results. Writes use a
+private temporary sibling and atomic rename; env files become mode 0600. Env
+editing verifies that dotenv returns the requested value and preserves all other
+effective values before writing. Unsupported assignments fail without mutation.
+The existing audit barrier remains ahead of mutations and live environment changes.
+
+Reference helpers/controllers/dependencies and generated production templates/tests
+are in parity. Migration instructions explain the limits, atomic replacement's
+permission/metadata implications and the trusted-directory assumption.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- Five of eight initial env regressions failed against the prior implementation.
+  All 18 final file cases pass, covering symlinks/hardlinks, linked directories,
+  FIFO refusal, a symlink swap at open, growth after fstat, bounded input/output,
+  JSON/key expansion, atomic rename failure/cleanup, private modes and dotenv
+  quoting/duplicate/multiline behavior.
+- All 182 framework/spec tests pass with temporary MongoDB/Redis and no skips.
+  All 34 reference app cases pass, including eight new HTTP cases for translation
+  file/link/size constraints, missing-key leaks/expansion, env target/live-state
+  protection and successful translation replacement.
+- Coverage remains 81.89% statements, 68.7% branches, 86.41% functions and 84.06%
+  lines, above unchanged floors. Package, reference and test typechecks, builds,
+  generated/reference module/dependency/test/config/nginx/agent-guide parity pass.
+- Packed production passes all 34 generated tests, generated types, deterministic
+  offline specs with connections denied, runtime specs, backend/shutdown, worker
+  and isolated PM2 checks. Workspace/generated audits pass the existing gates.
+- Evidence: ignored `reports/s08g-{red,files,green,integration,types,test-types,parity,artifacts,packed,audit}.log`,
+  `reports/s08g-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux and supported Node matrix CI remain release gates; these are local results.
+
+Remaining S08 work: log-file constraints and bounded streaming (S08h), restart
+response delivery, cookie/CSRF guidance and refresh theft-response/family-revocation
+policy. The new helper is not a sandbox against hostile local writers racing
+ancestor/directory replacement, a cross-process edit lock, or proof of power-loss
+rename durability. Operator-controlled ancestors, file permissions and concurrent
+editing remain deployment responsibilities. No provider extraction, deployment or
+publication is included.
+
+
+### S08h — Constrained log files and bounded streaming
+
+Log history previously scanned whole files, followed linked candidates and matched
+unrelated basenames sharing a prefix. Streaming ignored response backpressure and
+had no connection, output or lifetime cap. The new tail matches only the configured
+basename/process plus supported pino date/index suffixes, refuses linked/special
+files and linked immediate directories, and caps directory scans at 1024 entries.
+
+History is limited to the last 256 KiB and requested complete lines; live reads use
+at most 64 KiB per second and 8 MiB per tail overall. Lines over 16 KiB are skipped.
+Partial UTF-8 lines remain buffered within that cap until newline. Observed inode
+replacement/truncation resets the cursor; fixed polling replaces filesystem-watch
+read storms. Consumer termination suppresses subsequent delivery and closes file
+handles when pending operations settle. Background failures are handled and carry
+only sanitized codes.
+
+Each backend controller permits four active streams, at most two per account.
+Connections end within the configured one-minute lifetime, current access/session
+expiry or 1 MiB output budget. Writes that encounter backpressure or exceed the
+64 KiB application buffer budget terminate the connection; history yields between
+records so healthy readers can drain it. Pending ends have a one-second forced
+close fallback. Response close/error clears polling, timers and active slots.
+The generated starter mirrors both helpers, the controller and HTTP regressions.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- All three initial tail cases failed against the old implementation; that red run
+  also exposed its unhandled asynchronous history-read rejection during cleanup.
+  All 20 final tail/stream cases pass, including linked files/directories, unrelated
+  prefixes, line/history bounds, partial UTF-8, tail zero, rotation/truncation,
+  close/consumer stop, live read budget, directory/options limits, sanitized
+  follow failures, per-user/total slots, cancellation, expiry/duration, severity,
+  output/backpressure and healthy history larger than a socket buffer.
+- All 202 framework/spec tests pass with temporary MongoDB/Redis and no skips.
+  All 36 reference app cases pass, including sysadmin-only log access, linked-target
+  refusal, HTTP connection quotas/cancellation and retained history delivery.
+- Coverage stays above unchanged floors: 81.89% statements, 68.7% branches,
+  86.41% functions and 84.06% lines. Package, synced reference and test typechecks,
+  builds and generated/reference module/test/config/nginx/agent-guide parity pass.
+- Packed production passes all 36 generated tests, generated types, deterministic
+  offline specs with connections denied, runtime specs, backend/shutdown, worker
+  and isolated PM2 checks. Workspace/generated audits pass the existing gates.
+- Evidence: ignored `reports/s08h-{red,tail,stream-tests,green,integration,types,test-types,parity,artifacts,packed,audit}.log`,
+  `reports/s08h-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux and supported Node matrix CI remain release gates; these are local results.
+
+Remaining planned S08 work: restart response delivery, cookie/CSRF guidance and
+refresh theft-response/family-revocation policy. Newly identified backlog:
+continuously revalidate open-stream authorization for immediate role/credential/
+session revocation, and signal streams before framework HTTP draining. Currently
+existing streams retain their opening authorization until the bounded lifetime or
+expiry; a stream still active at the HTTP shutdown deadline is force-closed by
+existing cleanup and the timeout is reported. Cross-replica connection leases and
+deployment load tuning remain application policy. Polling may miss intermediate
+rotations, and trusted directory ancestors remain an operator responsibility.
+No provider extraction, deployment or publication is included.
+
+
+### S08i — Restart acknowledgment before PM2 execution
+
+The reboot controller previously awaited restart callbacks before responding, so
+restarting its own backend could interrupt the response. The helper now validates
+all application-owned targets and sends 202 Accepted with `accepted` and `scheduled`
+fields before issuing restart commands. The durable audit still precedes PM2 access.
+The route metadata and migration guidance describe acceptance rather than completion.
+
+The response's finish event releases execution; close/error before finish cancels
+it. This means complete handoff to the operating system, without claiming remote
+receipt. Each numeric target is rechecked for canonical directory, name and PID
+before execution; stopped owned processes remain eligible and self runs last.
+A local lock protects the shared PM2 connection from overlapping requests. Daemon
+callbacks and response completion have five-second bounds. Preparation errors are
+sanitized; errors after acceptance produce a stable stderr signal without attempting
+another HTTP response. Maintenance scripts retain the awaited restart interface.
+
+Settings helpers, routes and controller now use expanded formatting, blank lines
+between separate operations, and comments explaining ordering, bounds and cleanup.
+The production generator mirrors these readability changes and the new behavior;
+the reference and generated app share the HTTP regression.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- The initial HTTP regression failed against the old response payload. All 19 PM2
+  scope/response cases pass, covering response-before-command ordering, invalid
+  targets, disconnect cancellation, changed PIDs, overlapping requests, sanitized
+  post-acceptance failures, daemon timeout, stopped processes and retained scope.
+- All 210 framework/spec tests and 37 reference app tests pass with temporary
+  MongoDB/Redis and no skips. Coverage remains above unchanged floors: 81.89%
+  statements, 68.7% branches, 86.41% functions and 84.06% lines.
+- Package, reference and test typechecks, builds, and generated/reference
+  module/test/config/nginx/agent-guide parity pass.
+- Packed production verification passes all 37 generated tests, generated types,
+  deterministic offline specs with connections denied, runtime specs,
+  backend/shutdown and worker checks. The isolated real PM2 HTTP check receives the
+  complete 202 body before observing both owned PIDs replaced, while unrelated
+  processes (including a same-name backend) keep their PIDs.
+- Workspace/generated dependency audits pass the existing severity gates.
+- Evidence: ignored `reports/s08i-{red,response,audit}.log`,
+  `reports/s08i-final-{integration,app,types,test-types,artifacts,parity,packed}.log`,
+  `reports/s08i-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux and supported Node matrix CI remain release gates; these are local results.
+
+Remaining planned S08 work: cookie/CSRF guidance and refresh theft-response/family-
+revocation policy. The S08h stream-authorization/draining backlog remains open.
+Restart acceptance is not a durable job or completion guarantee: earlier targets
+may restart before a later failure, a timed-out command may have reached PM2, and
+self-restart can end the caller before cleanup. Cross-backend restart coordination
+and the inventory-check/command race remain deployment limitations; there is no
+rollback or completion-status endpoint. No deployment or publication is included.
+
+
+### S08j — Browser authentication and cookie/CSRF guidance
+
+The production starter now ships `docs/browser-auth.md`, linked from its README
+and mirrored in the reference app. It describes the existing Authorization-header
+access flow and JSON-body refresh contract, browser credential storage, and the
+controls needed for an application that adopts cookies. Guidance cites the Fetch
+standard, Express, MDN and OWASP, checked on 2026-09-10. Cookie authentication and
+CSRF middleware are not added by this increment.
+
+The guide covers Secure/HttpOnly/SameSite, host-only scope and cookie prefixes,
+expiration/revocation, session-bound CSRF tokens, exact-origin checks, login and
+refresh/logout coverage, and required browser/deployment tests. It distinguishes
+same-site from same-origin and CORS response access from server authorization.
+Security variable descriptions, generated env/type help and helper comments now
+make clear that CORS_CREDENTIALS does not install cookie authentication or CSRF
+protection. Auth helper formatting expands dense expressions and separates
+credential checks, legacy upgrade, identity construction and callbacks.
+
+Three retained HTTP cases verify absent Set-Cookie on register/login/refresh/logout,
+rejection of cookie-only access/logout and URL access credentials, rejection of
+cookie/URL/form/text/multipart refresh credentials without consuming the token,
+and explicit Bearer preflight/response headers with credentials disabled. A request
+from an unlisted origin still authenticates with its own valid Bearer token while
+receiving no CORS read permission, retaining the documented server boundary.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- All 210 framework/spec tests and 40 reference app tests pass with temporary
+  MongoDB/Redis and no skips. The three transport regressions passed against the
+  existing behavior; this change documents and retains that contract.
+- Coverage remains above unchanged floors: 81.89% statements, 68.7% branches,
+  86.41% functions and 84.06% lines. Package, synced reference and test typechecks,
+  builds, and generated/reference module/test/config/nginx/guide parity pass.
+- Packed production passes all 40 generated app tests, generated types,
+  deterministic offline specs with connections denied, runtime specs,
+  backend/shutdown, worker and isolated PM2 HTTP self-restart checks. The installed
+  generator carries the exact packed browser guide. Packed minimal also passes.
+- Workspace/generated dependency audits pass the existing severity gates.
+  CI now retains browser-guide parity; these local checks do not establish Linux,
+  supported Node matrix or real-browser CORS/SameSite enforcement results.
+- Evidence: ignored `reports/s08j-{boundaries,integration,app,sync,types,test-types,artifacts,parity,packed,minimal,audit}.log`,
+  `reports/s08j-workspace-runtime.jsonl` and `reports/scaffold-{production,minimal}/`.
+
+Next planned S08 item: refresh theft-response/family-revocation policy. The S08h
+stream-authorization/draining backlog remains open. Any future cookie adapter must
+retain abuse tests and browser validation for its selected policy before claiming
+that policy implemented. No provider extraction, deployment or publication is added.
+
+
+### S08k — Strict refresh reuse expires the device family
+
+The starter now adopts strict per-device family revocation. Each login's sid is
+one family; a valid unexpired refresh token with a superseded ID expires that
+family, including all access tokens. Other devices and subsequent logins remain
+separate. Duplicate concurrent refreshes have one 200 and one 401, but the winning
+pair is unusable after reuse handling completes. Clients must serialize refreshes
+and sign in again after rejection or an uncertain response; no grace window or
+idempotent replay is implemented.
+
+Rotation and replay handling use one conditional session update, scoped to owner,
+credential version and a live expiration. A current token rotates; a superseded
+one sets expires_at to the Unix epoch. Existing session reads reject the row
+before TTL cleanup, so there is no second revocation write to race or fail.
+Majority/journal acknowledgment is required with a five-second write-concern
+bound. Errors return a sanitized REFRESH_UNAVAILABLE (503), without claiming
+whether the database committed. Signature/type/expiry and scalar claim validation
+precede writes. Malformed, forged, wrong-owner and expired tokens cannot revoke
+another live family.
+
+Auth helpers/controllers have expanded formatting, spacing between independent
+steps, and comments explaining the atomic branch, replay tradeoff and uncertain
+acknowledgment. Generated modules, tests and English/French messages match the
+reference app. Migration and browser guides document client coordination,
+compatibility, failure handling and the limits of theft detection. The policy
+uses the replay-detection rationale in RFC 9700, checked on 2026-09-10; it does not
+claim OAuth implementation or add a new token format/schema.
+
+Locally verified on 2026-09-10, Node 24.14.0/macOS:
+
+- Four initial regressions failed against the old behavior and then passed.
+  Seven policy cases now cover duplicate refresh, ancestor replay across multiple
+  rotations, other-device isolation, a delayed winning response after revocation,
+  malformed/forged/wrong-owner tokens, expired ancestors, and acknowledgment
+  failure before/after commit. Existing logout/password-change/revocation cases
+  remain retained.
+- All 210 framework/spec tests and 46 reference app tests pass with temporary
+  MongoDB/Redis and no skips. Coverage remains above unchanged floors: 81.89%
+  statements, 68.7% branches, 86.41% functions and 84.06% lines.
+- Package and test typechecks pass. The reference typecheck found a mock overload
+  mismatch when inspecting driver options; moving the assertion to the recorded
+  mock call fixed it. The corrected acknowledgment case and reference types pass.
+  Builds and generated/reference module/test/config/nginx/browser/agent-guide
+  parity pass.
+- Packed production passes all 46 generated tests, generated types, deterministic
+  offline specs with connections denied, runtime specs, backend/shutdown, worker
+  and isolated PM2 HTTP self-restart checks. Workspace/generated audits pass the
+  existing severity gates.
+- Evidence: ignored `reports/s08k-{red,green,edges,integration,app,types,test-types,app-types,ack,artifacts,parity,packed,audit}.log`,
+  `reports/s08k-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux/Node matrix CI and replica-set failover are not established by these
+  local standalone-MongoDB results.
+
+The planned cookie/CSRF and refresh-policy review items are now locally complete.
+The next retained S08 backlog item is open-stream authorization revalidation:
+role, credential or session revocation must terminate an already-open log stream
+within a documented bound. Stream shutdown signaling before framework HTTP
+draining follows separately. Both were identified in S08h and remain unimplemented.
+New follow-up evidence gaps: replica-set failover under uncertain refresh writes
+and application incident alerts. Theft without reuse is not detected; expired
+ancestors are rejected without family revocation. Already authorized requests and
+streams are not cancelled by this session update. No deployment, publication or
+provider extraction is included.
+
+
+### S08l — Revalidate authorization throughout log streaming
+
+Resumed the unfinished stream-access change set and completed its production
+scaffold, HTTP regressions and migration guidance. A captured access identity now
+reloads live session ownership/expiry, credential version, token revocation and
+current user/role authorization for `settings:logs` before SSE/file access and
+throughout the stream. Missing ACL authority fails closed.
+
+Checks begin once per second and have a one-second timeout. A decision expires
+two seconds from the check's start, so a delayed success cannot extend stale
+permission from its completion time. Idle streams close on failed verification;
+all writes check the lease too. Opening denial returns 403, opening failure returns
+sanitized 503, and background failure ends SSE without driver details. Existing
+output/lifetime/backpressure limits remain effective.
+
+Only one check runs per stream. Cancellation aborts cooperative callbacks and
+holds the stream's capacity until any pending underlying check settles. This
+bounds reconnect-driven outstanding work to four checks per controller, two per
+account. A permanently stalled driver can exhaust that local capacity; this
+change does not claim to cancel arbitrary driver work or provide shared replica
+leases. Timing assumes a responsive event loop and reads reflecting committed
+authority; already-buffered bytes and the separate one-second socket flush bound
+are outside the authorization decision's two-second limit.
+
+Locally verified on 2026-09-11, Node 24.14.0/macOS:
+
+- All 217 framework/spec tests and 54 reference app tests passed with disposable
+  MongoDB/Redis and no skips. The 13 stream/lease cases include opening rejection,
+  background failure, idle revocation, initial/background stalls, disconnect while
+  opening, reserved pending capacity and delayed-decision expiry.
+- Eight new real HTTP cases retain role removal, user deletion, session deletion,
+  session expiry, individual access revocation, logout, password replacement and
+  refresh reuse. Each observes an open SSE response before the authority change,
+  requires bounded EOF, rejects subsequent delivery and checks another account
+  can still open a stream.
+- Coverage floors passed unchanged: 81.89% statements, 68.7% branches, 86.41%
+  functions and 84.06% lines. Package/test/reference typechecks and builds passed.
+  Reference typechecking caught optional `ctx.acl` access; the corrected helper
+  denies absent ACL and passes reference types and the packed generated suite.
+- Generated/reference module, test, config, nginx, browser-guide and agent-guide
+  parity passed. Packed production passed all 54 generated tests, generated types,
+  deterministic offline specs with connections denied, runtime specs, backend
+  shutdown, worker and isolated PM2 HTTP self-restart checks.
+- Workspace/runtime and generated dependency audits passed existing severity
+  gates. The moderate cron-parser maintenance notice remains visible.
+- Evidence: ignored `reports/s08l-{stream,app-stream,integration,app,test-types,types,sync,app-types,artifacts,parity,packed,audit}.log`,
+  `reports/s08l-workspace-runtime.jsonl` and `reports/scaffold-production/`.
+  Linux/supported Node matrix CI and replica-set failover remain external gates;
+  these are local checks against the working tree, not published release evidence.
+
+### S08m — Signal streams before HTTP draining
+
+Status: implemented and locally verified on 2026-09-11. The following acceptance
+criteria guided this lifecycle change set:
+
+- Provide a lifecycle signal at the start of shutdown while models/queues needed
+  by in-flight work are still available; retain the existing cleanup ownership,
+  idempotence and overall timeout semantics.
+- Make the settings stream controller reject new openings and close existing SSE
+  tails/timers in response to that signal, including an authorization check still
+  pending. Do not await uncooperative work indefinitely.
+- Retain real HTTP tests for active/idle streams, an opening/check racing shutdown,
+  repeated shutdown, other in-flight requests and cleanup failures. A healthy log
+  stream must no longer force the normal HTTP drain deadline to expire.
+- Mirror the lifecycle contract and settings wiring in generated output, retain
+  runtime/offline parity and update migration instructions.
+- Run required types/coverage, reference tests, parity and packed production
+  lifecycle checks; record local evidence separately from Linux/Node matrix CI.
+
+Before closing S08, reconcile cumulative changelog/security documentation with
+S08a–S08m and carry remaining deployment evidence into the program backlog:
+live nginx topology, cross-replica/load tuning, replica-set failover under uncertain
+refresh writes, audit retention/archival and application incident alerts. Cookie
+adaptation remains conditional on choosing cookie authentication. Provider
+extraction stays in Sprint 03. No deployment, publication or visibility change
+was performed by S08l.
+
+
+### S08-report — Detailed sprint task breakdown
+
+Completed on 2026-09-11 after S08l commit `2d23433`, at the user's request.
+The [task report](production-readiness-task-report.md) records completed work,
+remaining Sprint 01/02 gates, the existing Sprint 03 provider scope and a proposed
+Sprint 04–06 allocation for later adapters, packaging and the production pilot.
+Each workstream includes tasks, dependencies, acceptance evidence and ownership;
+optional package splits and cookie adaptation remain conditional.
+
+Validation: checked relative document/file links, task identifiers, whitespace,
+status against this tracker and S08l local test/packed evidence. This documentation
+increment changes no runtime behavior and does not establish new CI, deployment
+or release results. S08m was the next implementation task at that checkpoint.
+
+
+### S08m — Implementation and local evidence
+
+Verified on 2026-09-11, Node 24.14.0/macOS:
+
+- Core collects optional `onDrain` exports during config validation. Notifications
+  start in reverse module order before HTTP/socket/worker drain actions, and then
+  progress concurrently with those drains under the existing total deadline.
+  Errors/timeouts are aggregated; disposal hooks and infrastructure cleanup remain
+  after drain attempts. Repeated/reentrant shutdown shares one operation.
+- Settings shares a log-stream manager per boot Environment and drains it from
+  the new module hook. It preserves app-level settings config, closes idle/active
+  SSE, aborts pending checks without awaiting uncooperative work, and returns
+  sanitized 503 `LOG_STREAMS_DRAINING` for pending/late openings. A late result or
+  controller cannot reopen that manager; another boot receives a fresh instance.
+- Three corrected initial regressions failed against the prior core, including
+  a real idle SSE causing `http timed out`. Final cases cover concurrent ordinary
+  requests, invalid/failing/stuck hooks, failed boot, a hook-only module, repeated/
+  reentrant shutdown, idle/active streams and pending initial/background checks.
+  The existing live worker case now also retains early notification while jobs
+  and disposal hooks preserve their dependencies.
+- All 225 framework/spec tests and 55 reference app tests passed with temporary
+  MongoDB/Redis, no skips. Coverage passed unchanged floors: 82.01% statements,
+  68.7% branches, 86.74% functions and 84.14% lines. Package/test/reference types,
+  sync, builds and generated/reference module/test/config/guide parity passed.
+- Packed production passed all 55 generated tests, deterministic offline specs
+  with connections denied, runtime specs, backend/worker shutdown and isolated
+  PM2 HTTP self-restart. Packed minimal passed without application services.
+  Workspace/runtime and generated audits passed the existing severity gates.
+- Evidence: ignored `reports/s08m-{red,focused,app-drain,integration,app,test-types,types,sync,app-types,artifacts,parity,packed,minimal,audit}.log`,
+  `reports/s08m-workspace-runtime.jsonl` and `reports/scaffold-*/`. These local
+  working-tree results do not establish Linux/Node matrix CI or deployment results.
+
+The optional hook's contract and template migration are documented in core's
+README/MIGRATING/changelog and the security model. Healthy streams no longer force
+HTTP drain timeout; blocked event loops, uncooperative hooks/driver work and slow
+peers retain the existing deadline/supervisor limitations. No provider extraction
+or release action is included.
+
+### S08-readability — Make tests readable
+
+Requested by the user during S08m. Expand compressed test code and add visual
+separation between setup, actions, assertions and cleanup across framework/spec
+and reference-app tests. Keep generated starter tests in parity, preserve behavior
+and fixture data, and validate types, tests and generated output. Do not add a new
+test framework or change assertions solely to obtain formatting. Commit the
+verified readability change separately. Sprint 02 documentation/evidence closeout
+(02-C1–C5 in the task report) follows; CI/deployment gaps remain explicit.
+
+
+Readability implementation, 2026-09-11:
+
+- Reformatted all 26 tracked framework/spec/reference test and helper files with
+  expanded calls/objects/cleanup blocks and blank lines between distinct steps.
+  Short related declarations, environment setup and assertions remain grouped.
+- Mirrored reference formatting in the production test generator and formatted
+  minimal starter tests too. The generator now selects two complete readable test
+  templates, avoiding interleaved conditional fragments inside the common prelude.
+  Test names, assertions, ordering, comments and literal fixture values are retained.
+- Compared parsed programs against the S08m commit with position/format metadata
+  excluded: all 26 files are equivalent. Generated production/minimal strings
+  exactly match their formatted reference outputs. No formatter dependency was
+  added to the repository; testing documentation records the readability convention.
+- All 225 framework/spec and 55 reference-app tests passed with disposable
+  MongoDB/Redis and no skips. Test/reference types, package builds, whitespace and
+  generated/reference module/test/config/guide parity passed. Packed minimal passed.
+  Packed production also passed all 55 generated tests, deterministic offline/
+  runtime specs, backend/worker shutdown, isolated PM2 restart and dependency audits.
+  Coverage was not rerun for this formatting-only change; S08m's retained coverage
+  evidence remains the runtime baseline. CI/platform and release results remain
+  separate from these local checks.
+- Evidence: ignored `reports/s08-readability-{format,integration,app,test-types,app-types,artifacts,parity,minimal,packed}.log`.
+
+Next implementation/documentation task: Sprint 02 closeout, 02-C1–C5 in the task
+report. Reconcile cumulative behavior summaries and evidence, then explicitly
+assign the remaining deployment gaps before marking the sprint complete. Provider
+extraction remains Sprint 03; no release, push or deployment was performed here.
+
+
+### 02-C1–C5 — Cumulative documentation and local evidence closeout
+
+Completed locally on 2026-09-11 against runtime/test source `1be808c`:
+
+- **02-C1 complete:** reconciled the cumulative changelog, security model and
+  migration overview through S08m. Added the missing S08f–S08i security summaries
+  and S08f–S08l changelog entries; replaced superseded response, limiter and stream
+  backlog wording while preserving dated change-set evidence.
+- **02-C2 complete:** the [evidence map](production-readiness-02-evidence.md) links
+  each review topic to implementation, retained abuse scenarios, local results and
+  the CI jobs still required. HTTP transport tests remain distinct from browser
+  enforcement; documented policy and deployment assumptions are explicit.
+- **02-C3 locally verified, CI pending:** all 225 framework/spec and 55 reference
+  tests passed with disposable MongoDB/Redis and no skips. Unchanged coverage floors
+  passed (82.01% statements, 68.7% branches, 86.74% functions, 84.14% lines).
+  Package/test/reference types, sync, builds, parity and audits passed. Both packed
+  presets and separate production offline-only passed, including 55 generated
+  production tests, runtime/offline documents and real PM2 HTTP self-restart.
+- **02-C4 complete as backlog assignment:** remaining deployment evidence is mapped
+  to S15.1–S16.7 with accountable roles and required results. Actual pilot personnel
+  remain to be named under S15.1. Cookie adaptation remains conditional.
+- **02-C5 pending final acceptance:** the tracker is reconciled, but Sprint 02 is
+  not marked fully complete because GitHub returned no workflow runs for this
+  source commit. The engineer/release maintainer must attach the candidate's
+  supported matrix and packed workflow results before final closure.
+
+Evidence: ignored `reports/s08-closeout-{integration,app,test-types,types,sync,app-types,artifacts,parity,audit,minimal,offline,packed}.log`,
+`reports/s08-closeout-workspace-runtime.jsonl`, `reports/s08-closeout-ci.json`
+and `reports/scaffold-*/`. Archive digests and the exact baseline are retained in
+the evidence map; archives include this change set's package documentation and
+are local working-tree artifacts, not clean-source release attestations.
+
+Relative links/anchors and whitespace passed. This coherent closeout changes
+only documentation. Remaining action: candidate CI and final 02-C3/02-C5 acceptance;
+no push, deployment, publication or provider extraction is included.
+
+
+### 02-C3 / 02-C5 — CI evidence and final sprint acceptance
+
+Completed on 2026-09-11 after the user authorized the remaining CI gate.
+Branch `feat/sprint-02-native-routers` was pushed at `37dbca7`; all seven jobs in
+[run 34632402765](https://github.com/kemora13conf/bp-backend-express/actions/runs/34632402765)
+passed. The Ubuntu 24.04 matrix ran Node 24.0.0 and 24.20.0, with 225 tests per
+job and no skips. Coverage remained 82.01% statements, 68.7% branches, 86.74%
+functions and 84.14% lines against unchanged floors; types and agent-guide parity
+passed on both versions.
+
+CI also passed package builds, archive/audit and generated-reference parity;
+service-free minimal packed checks on Ubuntu and macOS; production offline-only;
+and full production with 55 generated tests, runtime/offline specs, backend/worker
+shutdown and actual PM2 HTTP self-restart preserving unrelated PIDs. Downloaded
+archives passed local identity/content/digest verification against the CI manifest.
+The [evidence map](production-readiness-02-evidence.md#ci-acceptance--passed-on-2026-09-11)
+records every job link, source commit and archive digest. Raw copies are retained
+in ignored `reports/s08-ci-34632402765/`.
+
+02-C3 and 02-C5 are now complete. This acceptance record changes repository
+documentation only; tested runtime/templates/package bytes remain unchanged.
+Relative links/anchors and whitespace were checked before committing. Sprint 03
+is the next planned workstream. S15–S16 deployment evidence and release gates
+remain separate; no merge, deployment, npm publication or visibility change occurred.

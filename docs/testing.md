@@ -12,6 +12,13 @@ yarn test:types
 production builds include only `src/`. The compiler checks test code and
 `context.test-d.ts` with `@ts-expect-error` assertions for invalid phase access.
 
+Keep test code readable: expand long calls, objects and cleanup blocks over
+multiple lines, and separate setup, actions, assertions and cleanup with blank
+lines. Keep short related declarations or assertions together. Preserve comments
+that explain ordering, races and resource ownership. Apply the same formatting to
+reference tests and the starter test templates; literal fixture contents should
+only change when the test scenario itself requires it.
+
 Database and queue integration tests are skipped unless their respective test
 URLs are supplied. Use dedicated local services and a test-only Redis database:
 
@@ -67,5 +74,34 @@ dedicated PM2_HOME. Logs and dependency reports live in ignored `reports/`.
 Temporary directories and process handles are cleaned up after checks.
 
 The production starter's own suite exercises concurrent refresh and logout via
-HTTP. The reference test is identical to generated code. Use test-only databases;
-application data must never be supplied to this suite.
+HTTP. Duplicate concurrent refreshes have one winner, but the replay expires
+that device family, so the winning pair must also fail subsequent authentication.
+The suite retains multi-generation reuse, other-device isolation, invalid/expired
+token rejection, a delayed response after revocation and write-acknowledgment
+failures before and after commit. The reference tests match generated code. Use
+test-only databases; application data must never be supplied to this suite.
+
+## Offline inspection
+
+`yarn test packages/core/tests/inspection.test.ts` exercises offline loading and
+runtime route/schema parity. It includes the production starter with connections
+denied and secrets absent. Its runtime HTTP assertions need local port access.
+Both starter app suites retain the same parity assertion against a real boot.
+
+```sh
+node scripts/scaffold-smoke.mjs .artifacts production --offline-only
+```
+
+This installs and typechecks a packed production starter, then generates specs in
+two independent processes with socket connections denied, invalid service URLs
+and empty runtime secrets. It requires package-registry access for installation
+and audit, but no application services. CI runs it in a separate service-free job.
+
+
+## Sprint 02 review traceability
+
+The [Sprint 02 evidence map](sprints/production-readiness-02-evidence.md) links each
+security/offline topic to its implementation and retained scenarios, records the
+latest local candidate checks, and lists required CI jobs and deployment owners.
+Preserve those scenarios during later provider extraction; local results cannot
+substitute for the supported runtime/platform matrix or pilot evidence.

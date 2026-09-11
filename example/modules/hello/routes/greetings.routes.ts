@@ -1,38 +1,26 @@
 import { Router } from "express";
-import type { BackendCtx } from "@tulipes/core/boot";
+import { defineRoutes } from "@tulipes/core/http";
+import { apiPrefix } from "../../../config/routes.js";
 
-import { GreetingsController } from "../controllers/greetings.controllers.js";
-
-/**
- * A module may ship several routes files; each is discovered and mounted
- * independently. This one shows the database and the queue.
- */
-export default function greetingsRoutes(ctx: BackendCtx): Router {
-  const { rai } = ctx;
+export default defineRoutes(({ app, rai, routes, runtime }) => {
   const router = Router();
-  const greetings = new GreetingsController(ctx);
-  const base = String(ctx.config.api?.prefix ?? "");
+  const greetings = runtime(async ctx => {
+    const { GreetingsController } = await import("../controllers/greetings.controllers.js");
+    return new GreetingsController(ctx);
+  });
 
-  router.get(
-    `${base}/greetings`,
-    rai({
+  router.get("/greetings", rai({
       id: "hello:list-greetings",
       name: "List greetings",
       description: "Reads the seeded rows, clamped by the shared bounds",
-    }),
-    greetings.list(),
-  );
+    }), greetings(value => value.list()));
 
-  router.post(
-    `${base}/greetings/:name/use`,
-    rai({
+  router.post("/greetings/:name/use", rai({
       id: "hello:use-greeting",
       status: 202,
       name: "Use a greeting",
       description: "Queues a job that counts the use",
-    }),
-    greetings.use(),
-  );
+    }), greetings(value => value.use()));
 
-  return router;
-}
+  routes.mount(app, apiPrefix, router);
+});

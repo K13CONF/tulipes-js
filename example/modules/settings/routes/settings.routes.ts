@@ -1,7 +1,6 @@
 import { Router } from "express";
-import type { BackendCtx } from "@tulipes/core/boot";
-
-import { SettingsController } from "../controllers/settings.controllers.js";
+import { defineRoutes } from "@tulipes/core/http";
+import { apiPrefix } from "../../../config/routes.js";
 import {
   localeParams,
   logQuery,
@@ -12,18 +11,17 @@ import {
   variableValue,
 } from "../schemas.js";
 
-/**
- * The infrastructure console. Every id is `settings:*`, granted only to
- * `sysadmin` — see module.acl.ts.
- */
-export default function settingsRoutes(ctx: BackendCtx): Router {
-  const { rai } = ctx;
+export default defineRoutes(({ app, rai, routes, runtime }) => {
   const router = Router();
-  const settings = new SettingsController(ctx);
-  const base = `${String(ctx.config.api?.prefix ?? "")}/settings`;
+  const settings = runtime(async (ctx) => {
+    const { SettingsController } = await import(
+      "../controllers/settings.controllers.js"
+    );
+    return new SettingsController(ctx);
+  });
 
   router.get(
-    `${base}/modules`,
+    "/modules",
     rai({
       id: "settings:read",
       name: "Describe every module",
@@ -31,11 +29,11 @@ export default function settingsRoutes(ctx: BackendCtx): Router {
         "Manifest, declared variables with their full spec and resolved source, config, i18n and routes",
       folder: "settings",
     }),
-    settings.modules(),
+    settings((value) => value.modules()),
   );
 
   router.get(
-    `${base}/variables/:name`,
+    "/variables/:name",
     rai({
       id: "settings:variable-read",
       name: "Read one variable",
@@ -44,11 +42,11 @@ export default function settingsRoutes(ctx: BackendCtx): Router {
       params: variableName,
       query: revealQuery,
     }),
-    settings.variable(),
+    settings((value) => value.variable()),
   );
 
   router.put(
-    `${base}/variables/:name`,
+    "/variables/:name",
     rai({
       id: "settings:variable-write",
       name: "Set a variable",
@@ -57,47 +55,50 @@ export default function settingsRoutes(ctx: BackendCtx): Router {
       params: variableName,
       body: variableValue,
     }),
-    settings.setVariable(),
+    settings((value) => value.setVariable()),
   );
 
   router.get(
-    `${base}/i18n/:module/:locale`,
+    "/i18n/:module/:locale",
     rai({
       id: "settings:i18n-read",
       name: "Read a module's translations",
       folder: "settings",
       params: localeParams,
     }),
-    settings.translations(),
+    settings((value) => value.translations()),
   );
 
   router.put(
-    `${base}/i18n/:module/:locale`,
+    "/i18n/:module/:locale",
     rai({
       id: "settings:i18n-write",
       name: "Replace a module's translations",
-      description: "New keys are accepted — filling the recorded gaps is the point",
+      description:
+        "New keys are accepted — filling the recorded gaps is the point",
       folder: "settings",
       params: localeParams,
       body: translationsBody,
     }),
-    settings.setTranslations(),
+    settings((value) => value.setTranslations()),
   );
 
   router.post(
-    `${base}/reboot`,
+    "/reboot",
     rai({
       id: "settings:reboot",
+      status: 202,
       name: "Restart the app",
-      description: "Applies written values. Requires PM2; 503 when unsupervised",
+      description:
+        "Accepts verified targets; restarts begin after the response is written. Requires PM2",
       folder: "settings",
       body: rebootBody,
     }),
-    settings.reboot(),
+    settings((value) => value.reboot()),
   );
 
   router.get(
-    `${base}/logs/stream`,
+    "/logs/stream",
     rai({
       id: "settings:logs",
       name: "Stream logs",
@@ -105,8 +106,8 @@ export default function settingsRoutes(ctx: BackendCtx): Router {
       folder: "settings",
       query: logQuery,
     }),
-    settings.logStream(),
+    settings((value) => value.logStream()),
   );
 
-  return router;
-}
+  routes.mount(app, `${apiPrefix}/settings`, router);
+});

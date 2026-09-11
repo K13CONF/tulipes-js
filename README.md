@@ -17,7 +17,7 @@ reference app they are developed against.
 | | |
 |---|---|
 | [`packages/core`](./packages/core) | `@tulipes/core` — the framework and the `tulipes` CLI |
-| [`packages/spec`](./packages/spec) | `@tulipes/spec` — OpenAPI 3.1 and Postman from a booted app's routes |
+| [`packages/spec`](./packages/spec) | `@tulipes/spec` — OpenAPI 3.1 and Postman from shared route declarations |
 | [`example`](./example) | the reference application: six modules, exercising every contract |
 
 Start with **[packages/core/README.md](./packages/core/README.md)** — that is

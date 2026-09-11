@@ -14,8 +14,17 @@ test("extracts mounted paths, statuses and custom authorization from the inspect
       };
     `,
   });
+
   const handle = await app.boot({ inspect: true });
-  expect(extract(handle.ctx).routes).toEqual([expect.objectContaining({
-    path: "/catalog/items", method: "POST", status: 201, authorization: "dynamic", roles: [], public: false,
-  })]);
+
+  expect(extract(handle.ctx).routes).toEqual([
+    expect.objectContaining({
+      path: "/catalog/items",
+      method: "POST",
+      status: 201,
+      authorization: "dynamic",
+      roles: [],
+      public: false,
+    }),
+  ]);
 });

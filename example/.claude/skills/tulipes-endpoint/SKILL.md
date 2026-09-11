@@ -5,7 +5,7 @@ description: Use when adding or changing an HTTP endpoint in a Tulipes app, writ
 
 # Adding an endpoint
 
-Two files: a controller class holding the work, and a routes file wiring
+Two files: a controller class holding the work, and a shared declaration file wiring
 it up. Every route declares a RAI — a Resource Access Identifier — and the
 app refuses to boot if one is missing.
 
@@ -36,25 +36,36 @@ the handlers that use them without threading ctx through every signature.
 `modules/billing/routes/billing.routes.ts`:
 
 ```ts
-export default function billingRoutes(ctx: Ctx): Router {
-  const { rai } = ctx;
+import { Router } from "express";
+import { defineRoutes } from "@tulipes/core/http";
+
+export default defineRoutes(({ app, rai, routes, runtime }) => {
   const router = Router();
-  const billing = new BillingController(ctx);
-  const base = String(ctx.config.api?.prefix ?? "");
-
-  router.get(
-    `${base}/invoices/:id`,
-    rai({
-      id: "invoices:read",
-      name: "Read an invoice",
-      description: "Returns one invoice by id",
-    }),
-    billing.show(),
-  );
-
-  return router;
-}
+  const billing = runtime(async ctx => {
+    const { BillingController } = await import("../controllers/billing.controllers.js");
+    return new BillingController(ctx);
+  });
+  router.get("/:id", rai({ id: "billing:read", name: "Read an invoice" }),
+    billing(value => value.show()));
+  routes.mount(app, "/invoices", router);
+});
 ```
+
+Set tulipes.offline: true in the module manifest. runtime() acquires each controller
+once at boot, and its binder selects callbacks before listening. Offline inspection
+builds real routers without running acquisition functions or callback selectors.
+Keep service-dependent imports inside runtime(). Pure callbacks need no binding.
+
+Use router.use for shared middleware, router.param for parameter callbacks, and
+router.route for chained method registrations. The same binder supports all
+callback kinds, including error handlers. Preserve native registration order.
+Parameter callbacks run before endpoint RAI; authorization-sensitive loading
+belongs after rai() or behind an appropriate earlier authorization check.
+
+Use routes.mount for nested/shared prefixes, including named parameters. Set
+Router({mergeParams:true}) on children needing inherited parameter values.
+Existing RoutesFn factories remain supported with --runtime. After changes run
+the app tests, tulipes routes --offline and yarn spec; inspect generated diffs.
 
 ## The RAI is not optional
 
@@ -75,7 +86,7 @@ This exists because the pipeline authenticates rather than rejects: an
 undeclared route is not merely undocumented, it is reachable by `guest`.
 Grant the id in `module.acl.ts` — to `guest` if the endpoint is public.
 
-`tulipes routes` lists every declared endpoint with the roles that reach
+`tulipes routes --offline` lists every declared endpoint with the roles that reach
 it.
 
 ## Responses and errors
@@ -115,6 +126,7 @@ errorHandler       framework — terminal
 
 - **Middleware for every request** → a sys-tier module's routes file,
   mounted on `ctx.app` (that file returns nothing).
-- **Middleware for one feature** → `router.use(...)` in that module.
+- **Middleware for one router** → router.use before its endpoints.
+- **Middleware for one endpoint** → put callbacks after its rai() handler.
 - Never mount middleware in `app.ts`, and never reorder by moving
   `app.use` calls — ordering is `tier` + `priority`.
