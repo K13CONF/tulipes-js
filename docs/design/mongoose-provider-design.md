@@ -348,6 +348,23 @@ with the real driver (S09.9).
 | Three archives (S09.8) | `artifacts.mjs` inventory `core, spec, mongoose`; provider archive verified to carry no `dependencies` and a `mongoose` peer; `artifacts.test.ts` updated | pass |
 | Whole suite | 236 core/spec/mongoose tests with services (`REQUIRE_INTEGRATION_TESTS=1`), coverage 84/72/87/86, `test:types`, workspace typecheck, example 55 tests, generated/reference and template parity, packed minimal smoke, packed production offline and runtime (backend, worker, login, PM2) smokes | pass |
 
+### 9.3 Failure and omission matrix with the real driver (S09.9; 2026-09-11)
+
+`packages/mongoose/tests/provider-matrix.integration.test.ts` (8 tests, local
+Mongo, gated like the other integration tests) plus the four moved tests:
+
+| Scenario | Outcome asserted |
+|---|---|
+| `MONGO_URI` set, provider installed, **not declared** | no connection created, `ctx.models` undefined, `handle.providers` empty |
+| Declared, `MONGO_URI` unset | `providers` phase error naming the variable; no open connection |
+| Declared, database unreachable | `database connection failed (MONGO_URI)` from the provider; connection released |
+| Consumer module with `requires: ["models"]` and no model files | acquires; empty store; `get()` lists "known: none"; banner status `mongodb://…` ready |
+| Bootstrap-only module | refused without a declaration (`has bootstrap/ files`); with it, skipped in `script`, run in backend |
+| Two boots in one process with an app global plugin | distinct connections and models; the plugin applies once per (ESM-cached) schema, present in both boots and multiplied in neither; closing one leaves the other querying |
+| Bootstrap task throws | `[probe] bootstrap task …explode.bootstrap.js threw: seed exploded`; connection released |
+| Duplicate model name across modules | `[other] model "Shared" is already registered by module "probe"`; the dependent module's bootstrap never runs; connection released |
+| Registration failure / schema throw outside the report / inspection skips bootstrap / forced cleanup bounded | the four moved tests |
+
 Core-only type proof: with the provider out of the repository tests' program
 `requireModels(ctx).get` stopped compiling (observed during the move); the
 shared test program includes `packages/mongoose/tests`, so that assertion

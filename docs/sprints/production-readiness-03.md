@@ -497,7 +497,8 @@ required by this plan.
 | S09.3 | Complete | 2026-09-11: no consumer of model metadata exists; documented as unsupported in the spec README and offline-inspection guide, route schemas remain the only source |
 | S09.4, S09.5, S09.6, S09.8 | Complete | 2026-09-11, one change set (inseparable for CI): `packages/mongoose` holds the runtime; core drops the dependency and its declarations are verified Mongoose-free at pack time; generator, example and `new module` migrated; three archives with a core-only smoke launcher and a packed resolve probe proving minimal absence — [design §9.2](../design/mongoose-provider-design.md#92-extraction-evidence-s094s096-s098-2026-09-11) |
 | S09.7 | Complete | 2026-09-11: breaking-prerelease path with a migration stub at `@tulipes/core/db`; `scripts/upgrade-smoke.mjs` + CI job `upgrade` take the published 0.9.0-rc.3 production starter through the expected diagnostics and the documented migration — [design §9.2](../design/mongoose-provider-design.md#92-extraction-evidence-s094s096-s098-2026-09-11) |
-| S09.9, S09.10 | Not started | Failure/omission matrix with the real driver (two-boot plugin identity); before/after measurements on the committed harness |
+| S09.9 | Complete | 2026-09-11: eight real-driver scenarios in `packages/mongoose/tests/provider-matrix.integration.test.ts` (selection semantics, requirement shapes, two-boot plugin identity, bootstrap/duplicate failures with release) plus the four moved tests; core-only and packed-absence proofs in the smokes — [design §9.3](../design/mongoose-provider-design.md#93-failure-and-omission-matrix-with-the-real-driver-s099-2026-09-11) |
+| S09.10 | Not started | Before/after measurements on the committed harness; migration docs; release decision |
 
 Stop inventory/design expansion once their exit criteria are met. Record unrelated
 issues in the backlog, commit the coherent verified outputs and proceed to the
