@@ -289,3 +289,27 @@ describes the new async helper contract, timing and operational limits.
 S08h/S08k descriptions of streams retaining their opening authority are superseded
 by this increment. Signaling streams before framework HTTP draining remains the
 separate S08m backlog item; cross-replica leases and deployment tuning remain open.
+
+
+## S08m — Signal streams when shutdown begins
+
+Settings now exports `onDrain`, an optional core lifecycle hook invoked before
+HTTP/socket/worker drain actions. Async notifications and traffic draining share
+the existing cleanup deadline; failures are aggregated and later cleanup is still
+attempted. Resource disposal remains in `onShutdown` after drain attempts.
+
+One log-stream manager belongs to each boot Environment. Draining permanently
+stops admission for that boot, closes idle/active responses, stops tails/timers and
+aborts cooperative authorization. Openings already waiting on authorization and
+late arrivals return sanitized 503 `LOG_STREAMS_DRAINING`; checks that later settle
+cannot resume output. Shutdown does not wait for an uncooperative query. A fresh
+boot uses a fresh manager even if the module remains imported.
+
+Retained tests cover real SSE plus ordinary request draining, invalid/failing/stuck
+hooks, startup failure, repeated/reentrant shutdown, queue-resource availability,
+late opens and pending checks. The reference/packed app tests also retain fresh
+admission after another boot. Healthy streams no longer cause the HTTP drain
+timeout. A blocked event loop, slow socket or uncooperative application/driver work
+still needs the existing deadlines and supervisor; no new global cancellation or
+cross-replica coordination guarantee is introduced. This completes the S08h/S08l
+pre-drain signaling backlog; production topology/load evidence remains separate.

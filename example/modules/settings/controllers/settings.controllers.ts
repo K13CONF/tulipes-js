@@ -15,7 +15,7 @@ import {
   writeSettingsFile,
 } from "../helpers/files.js";
 import { writeVariable } from "../helpers/env-file.js";
-import { LogStreams } from "../helpers/log-stream.js";
+import { configuredLogStreams, type LogStreams } from "../helpers/log-stream.js";
 import { isSupervised, restartAfterResponse } from "../helpers/pm2.js";
 
 /**
@@ -28,8 +28,11 @@ import { isSupervised, restartAfterResponse } from "../helpers/pm2.js";
  * console cannot describe an app different from the one running.
  */
 export class SettingsController {
-  readonly #logStreams = new LogStreams();
-  constructor(private readonly ctx: Ctx) {}
+  readonly #logStreams: LogStreams;
+
+  constructor(private readonly ctx: Ctx) {
+    this.#logStreams = configuredLogStreams(ctx.Environment);
+  }
 
   /** Every module, with everything the framework knows about it. */
   modules(): RequestHandler {

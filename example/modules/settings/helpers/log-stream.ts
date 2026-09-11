@@ -1,4 +1,5 @@
 import type { Response } from "express";
+import type { Environment } from "@tulipes/core/env";
 import { HttpError } from "@tulipes/core/http";
 import { AccessLease } from "./access-lease.js";
 import { tailLogs, type Tail } from "./log-tail.js";
@@ -36,9 +37,23 @@ const LEVELS: Record<string, number> = {
   fatal: 60,
 };
 
-/** One controller/boot owns its slots. Replicas each enforce this local resource cap. */
+const instances = new WeakMap<Environment, LogStreams>();
+
+/** Keep the stopped instance until the boot is collected; late requests cannot reopen it. */
+export function configuredLogStreams(environment: Environment): LogStreams {
+  let streams = instances.get(environment);
+  if (!streams) {
+    streams = new LogStreams();
+    instances.set(environment, streams);
+  }
+  return streams;
+}
+
+/** One boot owns its slots. Replicas each enforce this local resource cap. */
 export class LogStreams {
   readonly #active = new Map<string, number>();
+  readonly #closeStreams = new Set<() => void>();
+  #draining = false;
   #count = 0;
   readonly #limits: StreamLimits;
 
@@ -57,7 +72,18 @@ export class LogStreams {
     }
   }
 
+  /** Stop admission and output now; never wait for an uncooperative authorization query. */
+  drain(): void {
+    this.#draining = true;
+    for (const close of this.#closeStreams) close();
+  }
+
   async open(res: Response, options: StreamOptions): Promise<void> {
+    const unavailable = () => new HttpError(503, "logStreamsDraining", {
+      code: "LOG_STREAMS_DRAINING",
+      defaultMessage: "Log streams are unavailable during shutdown",
+    });
+    if (this.#draining) throw unavailable();
     const lifetime = Math.min(
       this.#limits.durationMs,
       options.expiresAt - Date.now(),
@@ -109,6 +135,7 @@ export class LogStreams {
       if (closed) return;
 
       closed = true;
+      this.#closeStreams.delete(close);
       clearTimeout(deadline);
       clearInterval(heartbeat);
       tail?.close();
@@ -178,10 +205,12 @@ export class LogStreams {
 
     res.once("close", disconnected);
     res.once("error", disconnected);
+    this.#closeStreams.add(close);
 
     try {
       // Recheck before file access or SSE headers, closing the opening-request gap.
       await authorization.start();
+      if (this.#draining && !res.destroyed && !res.headersSent) throw unavailable();
       if (closed) return;
 
       tail = tailLogs({

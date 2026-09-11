@@ -11,6 +11,46 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — early shutdown notification for long-lived responses
+
+Modules may export `onDrain(ctx)` from `module.config.ts`. Core invokes these
+hooks at the start of shutdown in reverse module load order, before starting its
+HTTP/socket/worker drain actions. Hooks and traffic draining then progress
+concurrently within the existing total `shutdownTimeoutMs` deadline. Async hook
+completion is not ordered across modules. Stop admitting long-lived work and
+signal existing responses to end here; keep shared dependencies alive.
+
+`onShutdown(ctx)` still disposes application resources after those drain attempts.
+Queues/producers and the database close afterward. A thrown or rejected drain hook
+is reported with its module name; a pending hook times out under the same overall
+budget. Neither prevents other drain actions or later cleanup from being attempted.
+Shutdown remains one operation across repeated/reentrant calls. Notifications may
+run during failed boot and in script/runtime inspection cleanup, so tolerate
+uninitialized resources. Offline `inspectRoutes()` imports no config and runs no
+lifecycle hooks. Non-function `onDrain` exports fail config validation.
+
+Do not block the event loop, wait for the entire shutdown from inside `onDrain`,
+or use it to close resources still needed by regular requests/jobs. Timeouts bound
+waiting, not arbitrary JavaScript execution. A callback that ignores shutdown can
+continue after its deadline; process supervision remains responsible for final
+termination. Existing modules without this optional hook keep their cleanup order.
+
+The production starter adds settings' `module.config.ts` and shares its log-stream
+manager per boot Environment. Merge that file with the updated controller and
+`helpers/log-stream.ts`, preserving custom settings config and existing hooks.
+Deploy the updated core alongside these files: older cores do not invoke
+`onDrain`. The module preserves app-level `config.settings` values.
+
+Settings drains reject new/late openings with sanitized 503 `LOG_STREAMS_DRAINING`,
+end established SSE responses, stop tails/timers and abort cooperative access
+checks. An opening paused in authorization also gets 503 without SSE headers;
+a late authorization result cannot restart output. Outstanding checks keep their
+capacity until they settle, but shutdown does not await that work. The stopped
+manager remains associated with that Environment so a late-created controller
+cannot reopen it; another boot has its own fresh manager. Slow/non-draining peers
+retain the one-second forced socket-close fallback and the framework's overall
+HTTP deadline. Healthy log streams no longer force the HTTP drain timeout.
+
 ## Unreleased — refresh reuse expires the device family
 
 Deploy the updated auth token helper and controller together on every backend,
@@ -175,10 +215,10 @@ capacity and make new streams return 429 until the queries settle or the process
 restarts. Custom callbacks must respect the signal and avoid detached work.
 
 These limits are local to each controller; shared replica leases and load tuning
-remain deployment work. The framework drains HTTP before module shutdown hooks: a stream
-still open at its shutdown deadline is force-closed by the existing HTTP cleanup
-and that timeout is reported. Gracefully signaling streams before HTTP drain is
-recorded separately in the sprint backlog. See [Node response backpressure and close events](https://nodejs.org/docs/latest-v24.x/api/http.html).
+remain deployment work. The settings `onDrain` hook described above now signals
+streams before HTTP waits for completion; disposal hooks still follow draining.
+A peer that remains open at the HTTP deadline is force-closed and the timeout is
+reported. See [Node response backpressure and close events](https://nodejs.org/docs/latest-v24.x/api/http.html).
 
 ## Unreleased — constrained settings file access
 

@@ -92,7 +92,7 @@ delete what this feature does not need.
 modules/billing/
 ├── package.json              name + "tulipes" ordering key
 ├── meta.variables.json       this module's environment contract
-├── module.config.ts          config factory + onReady / onShutdown
+├── module.config.ts          config factory + onReady / onDrain / onShutdown
 ├── module.acl.ts             permission grants
 ├── routes/*.routes.ts        native Router factories, optionally wrapped in defineRoutes
 ├── controllers/              the work; handler factories import it lazily
@@ -305,11 +305,15 @@ call site without core knowing anything about your models.
     worker           one BullMQ worker per registered processor
     script           start nothing; the caller owns the process
 10  onReady          hooks in load order → startup banner
-    shutdown         SIGTERM → stop/drain http + sockets + workers →
+    shutdown         SIGTERM → onDrain + stop/drain http + sockets + workers →
                      onShutdown in REVERSE order → queues → redis → mongo
 ```
 
 Each phase crashes with its own aggregate report before the next begins.
+`onDrain` hooks start in reverse module order before traffic drain actions;
+asynchronous hooks and traffic drain concurrently under the same shutdown deadline.
+Keep dependencies available until `onShutdown`. Failed/timed-out notifications are
+aggregated and do not prevent later cleanup attempts.
 
 <details>
 <summary><b>Contracts — what each file exports</b></summary>
@@ -335,7 +339,8 @@ export default function billingConfig({ Environment }: Ctx) {
   return { trialDays: Environment.get("BILLING_TRIAL_DAYS") };
 }
 export async function onReady(ctx: Ctx) {}
-export async function onShutdown(ctx: Ctx) {}    // reverse load order
+export async function onDrain(ctx: Ctx) {}       // signal long-lived work to stop
+export async function onShutdown(ctx: Ctx) {}    // dispose after draining, reverse order
 
 // routes/*.routes.ts — every route declares a RAI, or the boot fails
 export default function billingRoutes(ctx: Ctx): Router {

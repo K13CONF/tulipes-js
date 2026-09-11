@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add optional `onDrain` module hooks at the start of shutdown, sharing the traffic
+  drain deadline and aggregate cleanup errors. Production settings use the hook
+  to stop log streams, reject late openings and abort pending authorization before
+  resource disposal; a subsequent boot gets fresh stream admission.
+
 - Add explicit production proxy IP/CIDR trust with direct-peer defaults and
   forwarded-header regressions. Update single-ingress nginx templates to overwrite
   forwarded IP/host/protocol headers and remove blanket-trust guidance.

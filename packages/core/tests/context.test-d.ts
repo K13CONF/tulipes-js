@@ -1,4 +1,4 @@
-import type { ConfigCtx, BackendCtx, ModuleConfigFn, RoutesFn } from "../src/boot/index.js";
+import type { ConfigCtx, BackendCtx, ModuleConfigFn, RoutesFn, ModuleLifecycle } from "../src/boot/index.js";
 import { requireModels, requireQueues } from "../src/boot/index.js";
 import type { InspectionContext } from "../src/boot/index.js";
 import { defineRoutes } from "../src/http/index.js";
@@ -49,3 +49,9 @@ const configFactory: ModuleConfigFn = ctx => {
 };
 const routes: RoutesFn = ctx => { ctx.app.disable("x-powered-by"); };
 void configFactory; void routes;
+
+const lifecycle = {
+  module: "probe",
+  onDrain: async (ctx) => { void ctx.models; },
+} satisfies ModuleLifecycle;
+void lifecycle;
