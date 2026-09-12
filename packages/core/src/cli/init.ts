@@ -96,6 +96,9 @@ const json = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
 
 function renderProject(name: string, coreVersion: string): [string, string][] {
   const core = `^${coreVersion}`;
+  // The models provider ships separately from core; the app owns mongoose
+  // itself (a peer of the provider) so schemas and provider share one copy.
+  const mongooseProvider = "^0.1.0-rc.1";
   // The generator ships its own version line; it only has to be recent
   // enough to understand the RouteInfo schemas this core declares.
   const specVersion = "^0.3.0-rc.3";
@@ -108,6 +111,10 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       name,
       private: true,
       type: "module",
+      // The one line that selects a database: modules with models/ or
+      // bootstrap/ directories require it, and nothing else — not an
+      // installed package, not a MONGO_URI — connects one.
+      tulipes: { providers: { models: "@tulipes/mongoose" } },
       // Pins yarn 4 through corepack; without it a global classic yarn
       // would handle the workspaces and produce a v1 lockfile.
       packageManager: "yarn@4.18.0",
@@ -136,7 +143,9 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       },
       dependencies: {
         "@tulipes/core": core,
+        "@tulipes/mongoose": mongooseProvider,
         express: "^5",
+        mongoose: "^8",
         // Route schemas: validated by rai(), described by `yarn spec`.
         // The v4 subpath is what `z.toJSONSchema` understands.
         zod: "^3.25",
@@ -2693,7 +2702,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
 
     ["modules/auth/models/credential.model.ts", [
       `import { Schema } from "mongoose";`,
-      `import type { ModelDef } from "@tulipes/core/db";`,
+      `import type { ModelDef } from "@tulipes/mongoose";`,
       `import { baseSchemaOptions } from "@app/core";`,
       ``,
       `/**`,
@@ -2728,7 +2737,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
 
     ["modules/auth/models/session.model.ts", [
       `import { Schema } from "mongoose";`,
-      `import type { ModelDef } from "@tulipes/core/db";`,
+      `import type { ModelDef } from "@tulipes/mongoose";`,
       `import { baseSchemaOptions } from "@app/core";`,
       ``,
       `/**`,
@@ -2774,7 +2783,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
 
     ["modules/auth/models/revoked-token.model.ts", [
       `import { Schema } from "mongoose";`,
-      `import type { ModelDef } from "@tulipes/core/db";`,
+      `import type { ModelDef } from "@tulipes/mongoose";`,
       ``,
       `/**`,
       ` * Access tokens are stateless, so logging out cannot un-issue one. This is`,
@@ -2857,6 +2866,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         bcryptjs: "^3",
         express: "^5",
         jsonwebtoken: "^9",
+        "@tulipes/mongoose": mongooseProvider,
         mongoose: "^8",
         passport: "^0.7",
         "passport-jwt": "^4",
@@ -2872,7 +2882,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
 
     ["modules/users/models/user.model.ts", [
       `import { Schema } from "mongoose";`,
-      `import type { ModelDef } from "@tulipes/core/db";`,
+      `import type { ModelDef } from "@tulipes/mongoose";`,
       `// Cross-module import by package name, never a relative path out of the`,
       `// module — the dependency is declared in package.json, so it is visible.`,
       `import { baseSchemaOptions } from "@app/core";`,
@@ -3237,6 +3247,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         "@app/auth": "workspace:*",
         "@app/core": "workspace:*",
         express: "^5",
+        "@tulipes/mongoose": mongooseProvider,
         mongoose: "^8",
       },
     })],
@@ -3300,7 +3311,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
 
     ["modules/settings/models/audit-event.model.ts", [
       `import { Schema } from "mongoose";`,
-      `import type { ModelDef } from "@tulipes/core/db";`,
+      `import type { ModelDef } from "@tulipes/mongoose";`,
       ``,
       `/** Requested actions, acknowledged before their side effect. No values or bodies. */`,
       `const auditEventSchema = new Schema({`,
@@ -4983,6 +4994,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         "@app/core": "workspace:*",
         express: "^5",
         dotenv: "^16.4.7",
+        "@tulipes/mongoose": mongooseProvider,
         mongoose: "^8",
         zod: "^3.25",
       },
@@ -5903,6 +5915,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         "@app/auth": "workspace:*",
         "@app/core": "workspace:*",
         express: "^5",
+        "@tulipes/mongoose": mongooseProvider,
         mongoose: "^8",
       },
     })],
@@ -6082,7 +6095,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
   files.push(
       ["modules/hello/models/greeting.model.ts", [
         `import { Schema } from "mongoose";`,
-        `import type { ModelDef } from "@tulipes/core/db";`,
+        `import type { ModelDef } from "@tulipes/mongoose";`,
         ``,
         `// Cross-module import by package name, never a relative path out`,
         `// of the module — the dependency is declared in package.json.`,

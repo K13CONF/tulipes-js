@@ -61,9 +61,13 @@ test("offline composes routers without importing runtime dependencies or resolvi
       ],
     }),
     ".envs/.env.production": "MONGO_URI=invalid\n",
+    // Declared, so the module's models/ requirement is met offline; the
+    // provider file itself must never be imported by inspection.
+    "package.json": JSON.stringify({ type: "module", tulipes: { providers: { models: "./providers/models.js" } } }),
   };
 
   for (const path of [
+    "providers/models.js",
     "config/app.config.js",
     "modules/probe/module.config.js",
     "modules/probe/controllers/runtime.js",

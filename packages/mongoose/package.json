@@ -1,0 +1,54 @@
+{
+  "name": "@tulipes/mongoose",
+  "version": "0.1.0-rc.1",
+  "description": "Mongoose models provider for Tulipes apps: connection, model registration and bootstrap behind core's models capability",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "prepack": "yarn build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@tulipes/core": ">=0.9.0-rc.3 <1",
+    "mongoose": "^8"
+  },
+  "devDependencies": {
+    "@tulipes/core": "workspace:*",
+    "@types/node": "^24.2.0",
+    "mongoose": "^8",
+    "typescript": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kemora13conf/bp-backend-express.git",
+    "directory": "packages/mongoose"
+  },
+  "keywords": [
+    "tulipes",
+    "mongoose",
+    "mongodb",
+    "express"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "homepage": "https://github.com/kemora13conf/bp-backend-express/tree/master/packages/mongoose#readme",
+  "bugs": {
+    "url": "https://github.com/kemora13conf/bp-backend-express/issues"
+  }
+}

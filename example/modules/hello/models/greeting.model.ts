@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import type { ModelDef } from "@tulipes/core/db";
+import type { ModelDef } from "@tulipes/mongoose";
 
 // Cross-module import by package name, never a relative path out
 // of the module — the dependency is declared in package.json.

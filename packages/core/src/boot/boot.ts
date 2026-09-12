@@ -1,6 +1,5 @@
 import { Cleanup } from "./cleanup.js";
 import { createServer, type Server } from "node:http";
-import type { Connection } from "mongoose";
 import { join } from "node:path";
 import express, { type Express } from "express";
 
@@ -11,7 +10,6 @@ import { sortModules } from "../modules/graph.js";
 import { exploreModules, type ModuleFiles } from "../modules/explorer.js";
 import { buildGlobalConfig } from "../config/build-config.js";
 import { loadAcl } from "../acl/load-acl.js";
-import { initDatabase } from "../db/database.js";
 import { initQueues } from "../queues/load-queues.js";
 import { initSockets } from "../sockets/load-sockets.js";
 import { errorHandler, notFoundHandler } from "../http/error-handler.js";
@@ -22,6 +20,14 @@ import { scanRoutes } from "../http/route-scan.js";
 import { loadRoutes } from "./load-routes.js";
 import { loadAppConfigSeed } from "./app-files.js";
 import { printStartupBanner } from "./banner.js";
+import {
+  acquireProviders,
+  checkRequirements,
+  disposeProviders,
+  providerStatuses,
+  readProviderDeclarations,
+  type AcquiredProvider,
+} from "./providers.js";
 import type { BackendCtx, Ctx, ModuleLifecycle } from "./contracts.js";
 
 /**
@@ -61,7 +67,8 @@ export interface BootHandle {
   ctx: Ctx;
   /** Translations: the locales served and the module namespaces loaded. */
   i18n: I18n;
-  connection?: Connection;
+  /** Every declared provider, with its banner status, in acquisition order. */
+  providers: readonly { capability: string; provider: string; label: string; ready: boolean }[];
   app?: Express;
   server?: Server;
   shutdown: () => Promise<void>;
@@ -97,6 +104,15 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   // Phase 5 — exploration (no failure modes)
   const explored = exploreModules(order);
 
+  // Phase 5b — provider declarations. Static, read from the app's own
+  // package.json, checked against every module's requirements BEFORE any
+  // module code is imported: a module that needs models in an app with no
+  // models provider never gets as far as importing a schema.
+  const providerReport = new BootReport();
+  const declaredProviders = readProviderDeclarations(options.rootDir, providerReport);
+  checkRequirements(explored, declaredProviders, providerReport);
+  providerReport.throwIfAny("providers");
+
   // Phase 6 — global config: app-level seed first, then module factories
   // The registry exists before any module runs, so a routes file can
   // declare into it the moment it is called.
@@ -128,12 +144,15 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   let lifecycles: ModuleLifecycle[] = [];
   let shutdownPromise: Promise<void> | undefined;
   const signalHandlers = new Map<NodeJS.Signals, () => void>();
+  // Per boot, never module-global: two handles in one process own two sets.
+  const acquiredProviders: AcquiredProvider[] = [];
   const handle: BootHandle = {
     mode, env, ctx, i18n,
+    providers: [],
     shutdown: () => {
       if (!shutdownPromise) {
         for (const [signal, handler] of signalHandlers) process.removeListener(signal, handler);
-        shutdownPromise = shutdown(handle, lifecycles, shutdownTimeoutMs);
+        shutdownPromise = shutdown(handle, lifecycles, acquiredProviders, shutdownTimeoutMs);
       }
       return shutdownPromise;
     },
@@ -161,13 +180,18 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     ctx.acl = await loadAcl(explored, aclReport);
     aclReport.throwIfAny("acl");
 
-    // Phase 8 — DB + models + bootstrap
-    const dbReport = new BootReport();
-    await initDatabase(explored, ctx, dbReport, {
+    // Phase 8 — declared providers (models today). A provider registers
+    // ownership through own() before it awaits anything, so the failure path
+    // below can always dispose what was created. Only the app's declaration
+    // selects a provider: an installed package or a MONGO_URI on its own
+    // acquires nothing.
+    const acquireReport = new BootReport();
+    acquiredProviders.push(...await acquireProviders(declaredProviders, {
+      ctx, rootDir: options.rootDir, files: explored,
       runBootstrap: mode !== "script" && !options.inspect,
-      onConnection: connection => { handle.connection = connection; },
-    });
-    dbReport.throwIfAny("database");
+    }, acquireReport));
+    handle.providers = providerStatuses(acquiredProviders);
+    acquireReport.throwIfAny("providers");
 
     // Phase 9 — queues register in both modes (producers everywhere; the
     // worker branch additionally starts consuming below).
@@ -320,6 +344,7 @@ async function startBackend(
 async function shutdown(
   handle: BootHandle,
   lifecycles: readonly ModuleLifecycle[],
+  providers: readonly AcquiredProvider[],
   timeoutMs: number,
 ): Promise<void> {
   const cleanup = new Cleanup(timeoutMs);
@@ -345,6 +370,6 @@ async function shutdown(
     await cleanup.run(`${module} onShutdown`, () => onShutdown?.(handle.ctx));
   }
   await cleanup.run("queues", () => handle.ctx.queues?.close(), () => handle.ctx.queues?.disconnect());
-  await cleanup.run("database", () => handle.connection?.close(), () => handle.connection?.destroy(true));
+  await disposeProviders(providers, cleanup);
   cleanup.finish();
 }

@@ -11,6 +11,26 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **Breaking:** the Mongoose provider moved to `@tulipes/mongoose` (S09.4–S09.6).
+  Core no longer depends on, imports or declares anything from `mongoose`;
+  `ModelDef`, `BootstrapFn` and `ModelStore` are imported from the provider
+  package, and `@tulipes/core/db` is a migration stub whose only export is a
+  provider that reports the move. A packed minimal app cannot resolve
+  `mongoose`, `mongodb`, `bson` or `@tulipes/mongoose`; the smoke asserts it.
+  `tulipes new module` emits model/bootstrap files only when the app declares a
+  models provider (`--model` / `--no-model` override). Release tooling packs and
+  verifies three archives and refuses a core declaration that imports mongoose.
+- Add the provider seam (S09.2): an app selects its database with
+  `"tulipes": { "providers": { "models": "@tulipes/mongoose" } }` in its root
+  `package.json`; modules with `models/` or `bootstrap/` files, or a manifest
+  `requires: ["models"]`, are refused before any module code is imported when
+  no provider is declared. `ctx.models` is typed as an augmentable
+  `ModelsCapability`; `BootHandle.connection` is replaced by
+  `BootHandle.providers` statuses and `ctx.models.connection`. A `MONGO_URI`
+  without a declaration no longer connects; a declared provider without one is
+  a boot error. Offline inspection validates declarations without importing
+  the provider. `@tulipes/core/boot` exports the `Provider` contract.
+
 ## [0.9.0-rc.3] — 2026-09-11
 
 Released with `@tulipes/spec@0.3.0-rc.3`; both candidates use `next`.
