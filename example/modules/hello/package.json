@@ -15,6 +15,7 @@
   "dependencies": {
     "@app/auth": "workspace:*",
     "@app/core": "workspace:*",
+    "@tulipes/bullmq": "workspace:*",
     "@tulipes/core": "workspace:*",
     "@tulipes/mongoose": "workspace:*",
     "express": "^5",

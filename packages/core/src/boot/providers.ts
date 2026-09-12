@@ -32,11 +32,26 @@ export interface AcquiredResource {
   forceDispose?(): unknown | Promise<unknown>;
   /** Shown in the startup banner; must never contain credentials. */
   status(): ProviderStatus;
+  /**
+   * Worker mode only, after every provider is acquired: start consuming and
+   * return how many consumers run. Core refuses a worker whose providers
+   * together serve nothing.
+   */
+  serve?(report: BootReport): number | Promise<number>;
+  /**
+   * First shutdown phase, concurrently with the HTTP drain and module onDrain
+   * hooks: stop long-lived consumption while everything a draining request
+   * or job may still need — models, producers — stays available. Disposal
+   * follows module onShutdown.
+   */
+  drain?(): unknown | Promise<unknown>;
 }
 
 export interface ProviderStatus {
   label: string;
   ready: boolean;
+  /** Secondary banner text, e.g. "2 queue(s) · 1 processor(s)". */
+  detail?: string;
 }
 
 /** What a provider is handed: the live boot context as it stands after ACL (phase 7). */
@@ -111,6 +126,7 @@ export function readProviderDeclarations(rootDir: string, report: BootReport): P
 export function effectiveRequirements(files: ModuleFiles): ProviderCapability[] {
   const required = new Set<ProviderCapability>(files.module.requires);
   if (files.modelFiles.length > 0 || files.bootstrapFiles.length > 0) required.add("models");
+  if (files.queueFiles.length > 0) required.add("queues");
   return [...required];
 }
 
@@ -128,7 +144,7 @@ export function checkRequirements(
       if (declared[capability]) continue;
       const why = files.module.requires.includes(capability)
         ? "declares it in tulipes.requires"
-        : `has ${files.modelFiles.length ? "models/" : "bootstrap/"} files`;
+        : `has ${capability === "queues" ? "queues/" : files.modelFiles.length ? "models/" : "bootstrap/"} files`;
       report.add({
         scope: "providers",
         module: files.module.name,
@@ -223,6 +239,19 @@ function validateProvider(value: unknown, capability: ProviderCapability, specif
   return candidate as Provider;
 }
 
+/** Worker mode: every provider that can serve does; the total decides whether the worker may run. */
+export async function serveProviders(acquired: readonly AcquiredProvider[], report: BootReport): Promise<number> {
+  let consumers = 0;
+  for (const { resource } of acquired) if (resource?.serve) consumers += await resource.serve(report);
+  return consumers;
+}
+
+/** Drain phase: stop consumption while dependencies remain; run concurrently by the caller. */
+export function drainProviders(acquired: readonly AcquiredProvider[], cleanup: Cleanup): Promise<void>[] {
+  return acquired.flatMap(({ provider, resource }) =>
+    resource?.drain ? [cleanup.run(`provider ${provider} drain`, () => resource.drain!())] : []);
+}
+
 /** Reverse acquisition order, each under the shared deadline with its forced path. */
 export async function disposeProviders(acquired: readonly AcquiredProvider[], cleanup: Cleanup): Promise<void> {
   for (const { provider, resource } of [...acquired].reverse()) {
@@ -231,8 +260,13 @@ export async function disposeProviders(acquired: readonly AcquiredProvider[], cl
   }
 }
 
+export interface AcquiredStatus extends ProviderStatus {
+  capability: string;
+  provider: string;
+}
+
 /** Banner rows; safe to call before or after acquisition. */
-export function providerStatuses(acquired: readonly AcquiredProvider[]): { capability: string; provider: string; label: string; ready: boolean }[] {
+export function providerStatuses(acquired: readonly AcquiredProvider[]): AcquiredStatus[] {
   return acquired.map(({ capability, provider, resource }) => {
     const status = resource?.status() ?? { label: "not acquired", ready: false };
     return { capability, provider, ...status };

@@ -298,15 +298,16 @@ call site without core knowing anything about your models.
  4  Global config    config/app.config.ts seed → each module.config.ts factory
  5  Translations     modules/*/i18n/*.json, one namespace per module
  6  ACL              module.acl.ts in load order
- 7  Database         connect → model store → bootstrap tasks
- 8  Queues           every *.queues.ts registers, in all modes
- 9  ── fork ──
+ 7  Providers        the app's declared providers, in order: models
+                     (@tulipes/mongoose: connect → model store → bootstrap),
+                     queues (@tulipes/bullmq: every *.queues.ts registers)
+ 8  ── fork ──
     backend          module routers → 404 → error handler → listen
-    worker           one BullMQ worker per registered processor
+    worker           each provider serves: one BullMQ worker per processor
     script           start nothing; the caller owns the process
-10  onReady          hooks in load order → startup banner
-    shutdown         SIGTERM → onDrain + stop/drain http + sockets + workers →
-                     onShutdown in REVERSE order → queues → redis → mongo
+ 9  onReady          hooks in load order → startup banner
+    shutdown         SIGTERM → onDrain + stop/drain http + sockets + provider drain →
+                     onShutdown in REVERSE order → providers disposed in reverse
 ```
 
 Each phase crashes with its own aggregate report before the next begins.
@@ -329,7 +330,7 @@ interface Ctx {
   i18n: I18nextInstance;    // the instance underneath
   acl?: Acl;                // after phase 6
   models?: ModelsCapability; // after phase 8, when package.json declares a models provider
-  queues?: QueueManager;    // after phase 8
+  queues?: QueuesCapability; // after phase 7, when package.json declares a queues provider
   sockets?: SocketManager;  // backend only
   app?: Express;            // backend only
 }
@@ -363,7 +364,8 @@ export default { name: "Invoice", schema } satisfies ModelDef; // ModelDef from 
 // bootstrap/*.bootstrap.ts — runs in every process, so make it idempotent
 export default async function seed({ models }: Ctx) {}
 
-// queues/*.queues.ts — ONE file, both sides; the process mode decides
+// queues/*.queues.ts — ONE file, both sides; the process mode decides.
+// Needs "tulipes": { "providers": { "queues": "@tulipes/bullmq" } }; QueueRegistry from @tulipes/bullmq
 export default function billingQueues(ctx: Ctx, queues: QueueRegistry) {
   queues.define("billing.send-invoice");                     // producers, always
   queues.process("billing.send-invoice", async (job) => {}); // consumed in worker
@@ -474,7 +476,7 @@ middleware belongs, and how to read an aggregate boot report.
 | `@tulipes/core/http` | `HttpError`, `notFoundHandler`, `errorHandler` |
 | `@tulipes/core/acl` | `Acl`, `AclBuilder`, `AclFn` |
 | `@tulipes/core/db` | migration stub only — the Mongoose provider, `ModelStore`, `ModelDef` and `BootstrapFn` live in [`@tulipes/mongoose`](https://www.npmjs.com/package/@tulipes/mongoose) |
-| `@tulipes/core/queues` | `QueueManager`, `QueueRegistry`, `QueuesFn` |
+| `@tulipes/core/queues` | migration stub only — the BullMQ provider, `QueueManager`, `QueueRegistry` and `QueuesFn` live in [`@tulipes/bullmq`](https://www.npmjs.com/package/@tulipes/bullmq) |
 | `@tulipes/core/sockets` | `SocketManager`, `SocketRegistry`, `SocketsFn` |
 | `@tulipes/core/modules` | module graph, explorer, manifest schema |
 | `@tulipes/core/config` | `GlobalConfig` (codegen target), config builder |

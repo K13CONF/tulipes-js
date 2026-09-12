@@ -99,6 +99,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
   // The models provider ships separately from core; the app owns mongoose
   // itself (a peer of the provider) so schemas and provider share one copy.
   const mongooseProvider = "^0.1.0-rc.1";
+  const bullmqProvider = "^0.1.0-rc.1";
   // The generator ships its own version line; it only has to be recent
   // enough to understand the RouteInfo schemas this core declares.
   const specVersion = "^0.3.0-rc.4";
@@ -114,7 +115,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       // The one line that selects a database: modules with models/ or
       // bootstrap/ directories require it, and nothing else — not an
       // installed package, not a MONGO_URI — connects one.
-      tulipes: { providers: { models: "@tulipes/mongoose" } },
+      tulipes: { providers: { models: "@tulipes/mongoose", queues: "@tulipes/bullmq" } },
       // Pins yarn 4 through corepack; without it a global classic yarn
       // would handle the workspaces and produce a v1 lockfile.
       packageManager: "yarn@4.18.0",
@@ -143,6 +144,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       },
       dependencies: {
         "@tulipes/core": core,
+        "@tulipes/bullmq": bullmqProvider,
         "@tulipes/mongoose": mongooseProvider,
         express: "^5",
         mongoose: "^8",
@@ -3087,7 +3089,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
 
     ["modules/users/queues/users.queues.ts", [
       `import type { Ctx } from "@tulipes/core/boot";`,
-      `import type { QueueRegistry } from "@tulipes/core/queues";`,
+      `import type { QueueRegistry } from "@tulipes/bullmq";`,
       ``,
       `import { moduleLogger } from "@app/core";`,
       ``,
@@ -3247,6 +3249,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         "@app/auth": "workspace:*",
         "@app/core": "workspace:*",
         express: "^5",
+        "@tulipes/bullmq": bullmqProvider,
         "@tulipes/mongoose": mongooseProvider,
         mongoose: "^8",
       },
@@ -5915,6 +5918,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         "@app/auth": "workspace:*",
         "@app/core": "workspace:*",
         express: "^5",
+        "@tulipes/bullmq": bullmqProvider,
         "@tulipes/mongoose": mongooseProvider,
         mongoose: "^8",
       },
@@ -6153,7 +6157,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
 
       ["modules/hello/queues/hello.queues.ts", [
         `import type { Ctx } from "@tulipes/core/boot";`,
-        `import type { QueueRegistry } from "@tulipes/core/queues";`,
+        `import type { QueueRegistry } from "@tulipes/bullmq";`,
         ``,
         `import { moduleLogger } from "@app/core";`,
         ``,

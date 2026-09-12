@@ -11,6 +11,37 @@ what makes it work under nvm.
 
 ---
 
+<a id="unreleased--declare-the-queues-provider"></a>
+
+## Unreleased — declare the queues provider
+
+Queues follow the same path models took in 0.10.0-rc.1. For every app with
+`queues/` files:
+
+1. `yarn add @tulipes/bullmq@next` in the app root and in every module that
+   owns a `queues/` file. Modules keep their own `ioredis` only if they use it
+   themselves (the reference app's cache and rate limiter do).
+2. Add the declaration next to the models one:
+
+   ```jsonc
+   { "tulipes": { "providers": { "models": "@tulipes/mongoose", "queues": "@tulipes/bullmq" } } }
+   ```
+
+3. Replace `from "@tulipes/core/queues"` with `from "@tulipes/bullmq"` for
+   `QueueRegistry`, `QueuesFn` and `QueueManager`. The old subpath exports only
+   a provider that stops the boot with this instruction.
+
+- Without the declaration, a module with a `queues/` file is refused in the
+  `providers` phase; a `REDIS_URL` on its own starts no queue. With it, a
+  missing `REDIS_URL` is a boot error.
+- `ctx.queues`, `requireQueues(ctx)`, `queues.define/process`, `ctx.queues.add`
+  and the worker's zero-processor refusal are unchanged. `handle.consumers`
+  reports how many consumers the worker serves.
+- Apps without queues change nothing and stop installing BullMQ and the
+  ioredis copy core carried.
+
+---
+
 <a id="unreleased--declare-the-models-provider"></a>
 <a id="0100-rc1--declare-the-models-provider"></a>
 
