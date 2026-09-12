@@ -15,7 +15,7 @@ Core 0.9.0-rc.3 adds the native-router `--offline` interface: both
 migrated presets generate specs without MongoDB, Redis or runtime secrets.
 See the [offline inspection guide](../../docs/offline-inspection.md).
 
-Version 0.3.0-rc.4 supports core `^0.9.0-rc.3 || ^0.10.0-rc.1`. Install the candidate
+Version 0.3.0-rc.5 supports core `^0.9.0-rc.3 || ^0.10.0-rc.1`. Install the candidate
 with `yarn add -D @tulipes/spec@next`. See the core
 [migration guide](https://github.com/kemora13conf/bp-backend-express/blob/v0.9.0-rc.3/packages/core/MIGRATING.md#090-rc3--production-security-upgrade-overview)
 when upgrading from an earlier release.
@@ -161,6 +161,11 @@ dependencies, so this package never pins a second copy of either.
 <div align="center">
 <sub>Part of <a href="https://www.npmjs.com/package/@tulipes/core">Tulipes</a></sub>
 </div>
+
+## 0.3.0-rc.5 release notes
+
+No source change; republished with core 0.10.0-rc.2 because the packed manifest
+records the workspace core version it was built against.
 
 ## 0.3.0-rc.4 release notes
 

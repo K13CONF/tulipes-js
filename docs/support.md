@@ -16,14 +16,15 @@ currently claimed as supported. Node upgrades require expanding CI first.
 
 ## Pre-1.0 policy
 
-Candidate line: core 0.10.0-rc.1, spec 0.3.0-rc.4 and the first provider
-`@tulipes/mongoose` 0.1.0-rc.1, released under `next`. Spec rc.4 admits core
-`^0.9.0-rc.3 || ^0.10.0-rc.1`; the provider requires core `^0.10.0-rc.1` and the
-app's own `mongoose ^8`. Core 0.10 no longer installs Mongoose: apps with models
-select the provider in `package.json` (Sprint 03); Sprint 02 offline inspection
-and security controls are included; production-pilot acceptance remains later
-work. The previous candidate pair, core 0.9.0-rc.3 / spec 0.3.0-rc.3, stays
-installable under its own versions.
+Candidate line: core 0.10.0-rc.2, spec 0.3.0-rc.5 and the providers
+`@tulipes/mongoose` 0.1.0-rc.2, `@tulipes/bullmq` 0.1.0-rc.1 and
+`@tulipes/socket.io` 0.1.0-rc.1, released under `next`. Spec rc.4 admits core
+`^0.9.0-rc.3 || ^0.10.0-rc.1`; mongoose requires core `^0.10.0-rc.1` and the
+app's own `mongoose ^8`; bullmq and socket.io require core `^0.10.0-rc.2`. Core
+0.10 installs no database, queue or socket driver: apps select providers in
+`package.json` (Sprints 03–04); Sprint 02 offline inspection and security
+controls are included; production-pilot acceptance remains later work. Earlier
+candidates stay installable under their own versions.
 Candidate fixes target the current triple; the stable support lines below remain
 in effect until a 0.x line becomes stable.
 

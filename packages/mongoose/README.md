@@ -65,6 +65,7 @@ ctx.models.connection;                                   // the boot's own mongo
 
 ## Versions
 
-`0.1.0-rc.1` requires core `^0.10.0-rc.1`, the candidate that introduced the
-provider seam; install both with `@next`. See core's
+`0.1.0-rc.2` (no source change since rc.1; republished with core 0.10.0-rc.2)
+requires core `^0.10.0-rc.1`, the candidate that introduced the provider seam;
+install both with `@next`. See core's
 [MIGRATING.md](https://github.com/kemora13conf/bp-backend-express/blob/v0.10.0-rc.1/packages/core/MIGRATING.md#0100-rc1--declare-the-models-provider).

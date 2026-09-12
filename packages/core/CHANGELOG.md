@@ -11,6 +11,19 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.10.0-rc.2] — 2026-09-12
+
+Released with the first `@tulipes/bullmq@0.1.0-rc.1` and `@tulipes/socket.io@0.1.0-rc.1`,
+plus `@tulipes/spec@0.3.0-rc.5` and `@tulipes/mongoose@0.1.0-rc.2` (no source
+change; republished because packed manifests record the core version they were
+built against). All candidates use `next`. Apps with queues or sockets must
+follow [MIGRATING.md](./MIGRATING.md#0100-rc2--declare-the-queues-provider);
+apps without them change nothing and stop installing BullMQ, ioredis and
+Socket.IO through core.
+
+- `@tulipes/bullmq`: producers and consumers observe driver errors instead of
+  letting BullMQ's re-emitted "error" events crash the process; `close()` lets a
+  still-initializing queue finish before quitting its connection.
 - **Breaking:** the Socket.IO sockets provider moved to `@tulipes/socket.io`
   (Sprint 04, S11). Core no longer depends on `socket.io`; `SocketRegistry`,
   `SocketsFn` and `SocketManager` are imported from the provider,

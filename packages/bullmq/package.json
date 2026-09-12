@@ -27,7 +27,7 @@
     "ioredis": "^5"
   },
   "peerDependencies": {
-    "@tulipes/core": "^0.10.0-rc.1"
+    "@tulipes/core": "^0.10.0-rc.2"
   },
   "devDependencies": {
     "@tulipes/core": "workspace:*",
