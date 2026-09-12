@@ -11,6 +11,24 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-09-12
+
+The first stable release of the 0.10 line, published to `latest` with
+`@tulipes/cli@0.1.0`, `@tulipes/spec@0.3.0`, `@tulipes/mongoose@0.1.0`,
+`@tulipes/bullmq@0.1.0` and `@tulipes/socket.io@0.1.0`.
+
+It contains everything in the `0.10.0-rc.1`…`rc.3` candidates below — the
+provider seam and the extraction of Mongoose, BullMQ and Socket.IO out of core,
+the command line moving to `@tulipes/cli`, feature composition in the production
+preset — plus the three operational fixes listed under Unreleased above.
+Upgrading from 0.9.x means following every `0.10.0-rc.*` section of
+[MIGRATING.md](./MIGRATING.md) in order; they compose.
+
+Stable means the API of this line is settled and breaking changes wait for
+0.11: core installs 7.6 MB against 53 MB for 0.9, and the supported journeys
+are exercised by CI on every commit. It does **not** mean production-proven —
+no pilot deployment has run this yet; see [support.md](../../docs/support.md).
+
 - Accept a replica set's multi-host connection string in a `url` variable
   (`mongodb://a:27017,b:27017/db?replicaSet=rs0`). WHATWG URL parsing rejects
   that form, so declaring the most common self-hosted MongoDB topology made the
