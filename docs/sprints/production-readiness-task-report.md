@@ -3,11 +3,12 @@
 Prepared: 2026-09-11. Accepted Sprint 02 source: `37dbca7`.
 
 **Latest completed operation:** the
-[0.10.0-rc.1 candidate release](release-0.10.0-rc.1.md) — core `0.10.0-rc.1`,
-spec `0.3.0-rc.4` and the first `@tulipes/mongoose` `0.1.0-rc.1` are published
-under `next`; tag workflow, registry archive identity and fresh registry
-installs of both presets passed. Sprint 03 (S09.1–S09.10) is complete and
-merged (`21040d5`). Previously: [rc.3 candidate release](release-0.9.0-rc.3.md).
+[0.10.0-rc.2 candidate release](release-0.10.0-rc.2.md) — core `0.10.0-rc.2`,
+spec `0.3.0-rc.5`, mongoose `0.1.0-rc.2` and the first `@tulipes/bullmq` and
+`@tulipes/socket.io` `0.1.0-rc.1` are published under `next`; tag workflow,
+registry archive identity and fresh registry installs of both presets passed.
+Sprints 03 and 04 are complete and merged. Previously:
+[rc.1](release-0.10.0-rc.1.md), [rc.3](release-0.9.0-rc.3.md).
 
 **Current workstream: Sprint 04 delivered (S10 merged, S11 in review); Sprint 05 (packaging decisions) next.**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
