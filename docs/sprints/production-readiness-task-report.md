@@ -9,7 +9,7 @@ under `next`; tag workflow, registry archive identity and fresh registry
 installs of both presets passed. Sprint 03 (S09.1–S09.10) is complete and
 merged (`21040d5`). Previously: [rc.3 candidate release](release-0.9.0-rc.3.md).
 
-**Next planned workstream: Sprint 04, S10 (queues and Redis ownership), after the 0.10.0-rc.1 candidate ships.**
+**Current workstream: Sprint 04, S10 (queues and Redis ownership).**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
 register, measurement protocol, interface decisions, fixtures and delivery order.
 Sprint 02 implementation, local closeout and CI acceptance are complete.
@@ -295,18 +295,20 @@ must represent a passing coherent state; combine inseparable migrations when nee
 **Goal:** selecting no queues or sockets must remove their installation costs and
 runtime acquisition, while production backend/worker behavior remains reliable.
 
-**Status:** proposed allocation of the existing later adapter work. **Owner:**
+**Status:** S10 in execution since 2026-09-12 — see the
+[Sprint 04 plan](production-readiness-04.md) and the
+[queues provider design](../design/queues-provider-design.md). **Owner:**
 engineer. **Dependency:** S09 proves the capability/lifecycle pattern. Estimate
 queues and sockets separately after S09; do not assume both fit in one fixed sprint.
 If necessary, deliver queues first and schedule sockets as the next increment.
 
 ### S10 — Queue and Redis ownership
 
-- [ ] **S10.1 — Map Redis consumers.** Separate queue manager/worker connections,
+- [x] **S10.1 — Map Redis consumers.** Separate queue manager/worker connections,
   producer connections, application caching and the security rate limiter. The
   production app can still need Redis without selecting queues. Record ownership,
   namespaces, timeout policies and shutdown order for each consumer.
-- [ ] **S10.2 — Design queue capabilities by mode.** Specify producer access,
+- [x] **S10.2 — Design queue capabilities by mode.** Specify producer access,
   backend registration and worker consumption, absent-queue behavior and checked
   required-queue access. Preserve type narrowing and useful errors for modules
   needing an unavailable queue provider.
