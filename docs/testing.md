@@ -105,3 +105,13 @@ security/offline topic to its implementation and retained scenarios, records the
 latest local candidate checks, and lists required CI jobs and deployment owners.
 Preserve those scenarios during later provider extraction; local results cannot
 substitute for the supported runtime/platform matrix or pilot evidence.
+
+## Ingress (operator-facing)
+
+`node scripts/ingress-smoke.mjs <artifacts>` runs the committed production nginx
+template in a container in front of a packed production app and records what a
+client observes: forwarded identity, forged forwarding headers, the body-size
+boundary, SSE delivery and what reaching the backend port directly means. It
+needs Docker and dedicated `TEST_MONGO_URI` / `TEST_REDIS_URL` services, and is
+not part of CI — it is deployment evidence, rerun per topology. Results:
+[ingress evidence](design/ingress-evidence.md).
