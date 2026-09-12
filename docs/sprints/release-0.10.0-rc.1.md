@@ -1,7 +1,7 @@
 # Release — core 0.10.0-rc.1, spec 0.3.0-rc.4 and mongoose 0.1.0-rc.1
 
-Status: prepared on 2026-09-12; tag and publication pending the release owner's
-authorization. Owning item: Sprint 03 closeout, under
+Status: complete — published and registry-verified on 2026-09-12. Authorized by
+the user on 2026-09-12. Owning item: Sprint 03 closeout, under
 [the existing release procedure](../releasing.md). This is the first
 three-package candidate: it ships the provider extraction accepted in
 [PR #5](https://github.com/kemora13conf/bp-backend-express/pull/5) (`21040d5`).
@@ -48,9 +48,50 @@ authentication, stable/1.0 claims, deployment, repository visibility.
   upgrade smoke from the local rc.3 archive onto the three new archives; packed
   production runtime smoke (backend, worker, login, PM2). These local archives
   are validation only and are not uploaded.
-- Release preparation commit, PR, branch/PR CI, tag workflow, registry digests,
-  clean registry installation: to record as each gate completes.
+- Release preparation commit `c27f143`; [PR #6](https://github.com/kemora13conf/bp-backend-express/pull/6)
+  passed all eight verification jobs and merged as
+  `b2b7846687215cad65040c778a33f47eba76f565`. Annotated tag `v0.10.0-rc.1` points
+  to that merge. The [tag publication workflow](https://github.com/kemora13conf/bp-backend-express/actions/runs/34691032475)
+  passed all ten jobs (release-tag validation, eight verification jobs including
+  `upgrade`, publication) and published the verified archives without repacking.
+  Its `release-packages` artifact is retained in ignored `reports/rc1-release-artifacts/`;
+  its manifest commit is `b2b7846…`.
+- Registry verification at `2026-09-12T11:36:52.353Z`: for each package the
+  version metadata integrity and the downloaded tarball digest equal the tag
+  workflow's manifest, and `next` selects the new version. Propagation took
+  under a minute for core, about one minute for spec and about three minutes for
+  the provider's dist-tags; verification waited. `latest` remains core `0.8.0` /
+  spec `0.2.0`. **`@tulipes/mongoose` also carries `latest = 0.1.0-rc.1`**: npm
+  assigns `latest` to a package's first publish regardless of `--tag`, and there
+  is no stable version to move it to; the first stable provider release will
+  take it over. Raw results: `reports/rc1-registry-verification.json`.
+- Clean registry installation on Node `24.14.0` / macOS arm64 through the new
+  reusable `scripts/scaffold-smoke.mjs … --registry` mode (closing backlog
+  01-C4-registry-smoke): launcher and app installed from npm at exactly the
+  published versions with generated ranges untouched and no `file:` archive;
+  Yarn's release-age gate preapproved only the three verified versions.
+  Minimal: sync, types, tests, offline specs, backend/shutdown, and the absence
+  probe (`mongoose`, `mongodb`, `bson`, `@tulipes/mongoose` unresolvable from
+  app, core and launcher). Production offline: deterministic specs with
+  connections denied. Production runtime with dedicated local services: sync,
+  types, tests, specs, backend/shutdown, worker, PM2; the provider resolved
+  from the app, never through the launcher. Logs: `reports/scaffold-*-registry/`.
 
 ## Published archive identity
 
-To record from the tag workflow's manifest after publication.
+Source: `b2b7846687215cad65040c778a33f47eba76f565`, tag `v0.10.0-rc.1`.
+
+| Package | Registry archive bytes | SHA-512 integrity |
+|---|---:|---|
+| `@tulipes/core@0.10.0-rc.1` | 352895 | `sha512-1HbM473R4IkWRnSz75VTF/yRasxuo4bFKfHKMgfQKGGr/LrcsznLnxXCW0X3hfo0LsHvTwei70VBEvZN3+P0Aw==` |
+| `@tulipes/spec@0.3.0-rc.4` | 15312 | `sha512-ugxAPl9aI1skdPpPIlC7v6Pzbzc8t5I6wlWx9GvR/wIvml1S42hIKRCHVDrvYHQ5PQ2vtXaAIIk5uRiN4E6ZUw==` |
+| `@tulipes/mongoose@0.1.0-rc.1` | 7380 | `sha512-tK1JJacvmmO3Q4eF4RLLBbZP+8M7vUkcuWIUm+JDpEyKk1zeJV+n2EmQtlv/r+n24fRZVx5E9cTeCbtWKssAbA==` |
+
+## Follow-up backlog
+
+- [x] **01-C4-registry-smoke:** `scaffold-smoke.mjs --registry` is the reusable
+  command; it preapproves exactly the manifest's versions and refuses local
+  archives.
+- [ ] **release-first-publish-tag:** decide whether a first publish of a new
+  package should be followed by an explicit `npm dist-tag` correction (not
+  possible without a stable version) or simply documented, as here.
