@@ -40,31 +40,22 @@ export function printStartupBanner(
       `${cyan(`http://localhost:${port}`)}  ${dot(true)} ${green("listening")}`,
     ]);
   } else {
-    const workers = ctx.queues?.workerCount ?? 0;
     rows.push([
       "Worker",
-      `${dot(workers > 0)} ${green(`consuming ${workers} queue(s)`)}`,
+      `${dot(handle.consumers > 0)} ${green(`consuming ${handle.consumers} queue(s)`)}`,
     ]);
   }
 
-  for (const { capability, provider, label, ready } of handle.providers) {
+  for (const { capability, provider, label, ready, detail } of handle.providers) {
     rows.push([
       capability[0]!.toUpperCase() + capability.slice(1),
-      `${cyan(label)}  ${dot(ready)} ${ready ? green("ready") : red("not ready")}  ${dim("·")}  ${gray(provider)}`,
+      `${cyan(label)}  ${dot(ready)} ${ready ? green("ready") : red("not ready")}${detail ? `  ${dim("·")}  ${gray(detail)}` : ""}  ${dim("·")}  ${gray(provider)}`,
     ]);
   }
-  if (!handle.providers.some((p) => p.capability === "models")) {
-    rows.push(["Models", gray("no provider declared")]);
-  }
-
-  if (ctx.queues) {
-    const names = ctx.queues.names();
-    rows.push([
-      "Queues",
-      `${bold(String(names.length))} ${gray(`(${names.join(", ")})`)}  ${dim("·")}  ${gray(
-        `${ctx.queues.processorCount} processor(s) registered`,
-      )}`,
-    ]);
+  for (const capability of ["models", "queues"] as const) {
+    if (!handle.providers.some((p) => p.capability === capability)) {
+      rows.push([capability[0]!.toUpperCase() + capability.slice(1), gray("no provider declared")]);
+    }
   }
 
   if (ctx.sockets) {

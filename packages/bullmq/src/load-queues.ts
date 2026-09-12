@@ -1,7 +1,7 @@
-import { BootReport } from "../errors/boot-error.js";
-import { importFile } from "../boot/import-file.js";
-import type { Ctx } from "../boot/contracts.js";
-import type { ModuleFiles } from "../modules/explorer.js";
+import { importFile, type Ctx } from "@tulipes/core/boot";
+import type { BootReport } from "@tulipes/core/errors";
+import type { ModuleFiles } from "@tulipes/core/modules";
+
 import { QueueManager, type QueueRegistry } from "./queue-manager.js";
 
 /** Default export of `queues/*.queues.ts`. */
@@ -11,32 +11,32 @@ export type QueuesFn = (ctx: Ctx, queues: QueueRegistry) => void | Promise<void>
 const REDIS_URL = "REDIS_URL";
 
 /**
- * Phase 9: run every `*.queues.ts` in load order. Same skip/refuse logic as
- * the database: a queue-less app is fine, queue files without REDIS_URL are
- * a contradiction.
+ * Phase 8, run by the provider: run every `*.queues.ts` in load order so
+ * producers exist in every process and processors are registered for the
+ * worker to start. Reached only when the app declared the provider, so a
+ * missing connection string is a contradiction the boot must refuse.
  */
 export async function initQueues(
   explored: readonly ModuleFiles[],
   ctx: Ctx,
   report: BootReport,
+  onManager?: (manager: QueueManager) => void,
 ): Promise<QueueManager | undefined> {
-  const hasQueueFiles = explored.some((files) => files.queueFiles.length > 0);
   const url = ctx.Environment.store.has(REDIS_URL)
     ? String(ctx.Environment.get(REDIS_URL))
     : undefined;
 
   if (!url) {
-    if (hasQueueFiles) {
-      report.add({
-        scope: "boot",
-        message: `modules declare queues but "${REDIS_URL}" is not declared/set — redis is required`,
-      });
-    }
+    report.add({
+      scope: "providers",
+      message: `provider "bullmq" is selected but "${REDIS_URL}" is not declared/set — declare it in a sys module's meta.variables.json and set it`,
+    });
     return undefined;
   }
-  if (!hasQueueFiles) return undefined;
 
   const manager = new QueueManager(url);
+  // Owned before any queue file runs: a define() opens a connection.
+  onManager?.(manager);
   ctx.queues = manager;
 
   for (const { module, queueFiles } of explored) {

@@ -14,7 +14,7 @@ consumer. Never duplicate the definition.
 
 ```ts
 import type { Ctx } from "@tulipes/core/boot";
-import type { QueueRegistry } from "@tulipes/core/queues";
+import type { QueueRegistry } from "@tulipes/bullmq";
 
 export default function invoiceQueues({ models }: Ctx, queues: QueueRegistry): void {
   queues.define("billing.send-invoice");
@@ -44,8 +44,14 @@ nothing processes them — that is the correct behaviour, not a bug.
   duplicates crash the boot naming both modules.
 - A processor registered for a queue nobody defined is a boot error; call
   `define()` in the same file.
-- Requires `REDIS_URL` declared (sys `core` module) and set. Queue files
-  without it are a boot refusal.
+- The app selects its queue provider once, in its root `package.json`:
+  `"tulipes": { "providers": { "queues": "@tulipes/bullmq" } }`. A module with a
+  `queues/` file in an app without that line is a boot refusal before any
+  module is imported; a module that only produces declares
+  `"tulipes": { "requires": ["queues"] }` in its own manifest.
+- The provider needs `REDIS_URL` declared (sys `core` module) and set;
+  selected without a value is a boot refusal. The app's own Redis users
+  (cache, rate limiter) keep their own connections and their own `ioredis`.
 - Worker mode with zero processors refuses to start: a consumer with
   nothing to consume is a misconfigured deployment.
 

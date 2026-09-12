@@ -599,19 +599,31 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@tulipes/bullmq@workspace:packages/bullmq":
+  version: 0.0.0-use.local
+  resolution: "@tulipes/bullmq@workspace:packages/bullmq"
+  dependencies:
+    "@tulipes/core": "workspace:*"
+    "@types/node": "npm:^24.2.0"
+    bullmq: "npm:^5"
+    ioredis: "npm:^5"
+    typescript: "npm:^7.0.2"
+  peerDependencies:
+    "@tulipes/core": ^0.10.0-rc.1
+  languageName: unknown
+  linkType: soft
+
 "@tulipes/core@workspace:*, @tulipes/core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@tulipes/core@workspace:packages/core"
   dependencies:
     "@types/express": "npm:^5"
     "@types/node": "npm:^24.2.0"
-    bullmq: "npm:^5"
     colorette: "npm:^2"
     dotenv: "npm:^16.4.7"
     express: "npm:^5"
     i18next: "npm:^26.4.2"
     i18next-fs-backend: "npm:^2.6.7"
-    ioredis: "npm:^5"
     socket.io: "npm:^4"
     tsx: "npm:^4"
     typescript: "npm:^7.0.2"

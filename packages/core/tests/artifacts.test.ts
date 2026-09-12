@@ -33,6 +33,12 @@ test("artifact verification rejects changed archives before any publication", as
             file: "mongoose.tgz",
             integrity: "sha512-original",
           },
+          {
+            name: "@tulipes/bullmq",
+            version: "0.1.0",
+            file: "bullmq.tgz",
+            integrity: "sha512-original",
+          },
         ],
       }),
     );

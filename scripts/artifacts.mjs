@@ -5,7 +5,7 @@ import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 // Every published package, in release order; core first because its version names the tag.
-const packages = ['core', 'spec', 'mongoose'];
+const packages = ['core', 'spec', 'mongoose', 'bullmq'];
 const digest = file => 'sha512-' + createHash('sha512').update(readFileSync(file)).digest('base64');
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: 'inherit', ...options });
 const readJson = file => JSON.parse(readFileSync(file, 'utf8'));
@@ -30,12 +30,13 @@ function verify(dir, expectedCommit) {
     if (listing.some(path => /\/(?:node_modules|tests|\.envs)\//.test(path))) throw new Error('Unexpected private/test content in archive');
     // Core must not carry a driver — not as a dependency, and not through an
     // emitted declaration that a consumer's typecheck would need to resolve.
-    if (name === 'core' && packed.dependencies?.mongoose) throw new Error('Core must not depend on mongoose');
+    const extracted = ['mongoose', 'bullmq', 'ioredis'];
     if (name === 'core') {
+      for (const dep of extracted) if (packed.dependencies?.[dep]) throw new Error(`Core must not depend on ${dep}`);
       const declarations = listing.filter(path => path.endsWith('.d.ts'));
       const leaking = execFileSync('tar', ['-xOf', file, ...declarations], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-        .split('\n').filter(line => /from ["']mongoose["']/.test(line));
-      if (leaking.length) throw new Error('Core declarations import mongoose: ' + leaking.join(' | '));
+        .split('\n').filter(line => new RegExp(`from ["'](${extracted.join('|')})["']`).test(line));
+      if (leaking.length) throw new Error('Core declarations import an extracted driver: ' + leaking.join(' | '));
     }
     if (name === 'mongoose' && (packed.dependencies?.mongoose || !packed.peerDependencies?.mongoose)) throw new Error('The provider must declare mongoose as a peer dependency only');
   }
