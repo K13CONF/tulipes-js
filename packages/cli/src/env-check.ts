@@ -1,5 +1,5 @@
-import { Environment } from "../env/environment.js";
-import { TulipesBootError } from "../errors/boot-error.js";
+import { Environment } from "@tulipes/core/env";
+import { TulipesBootError } from "@tulipes/core/errors";
 
 /**
  * `tulipes env:check` — boot phases 1–3 and nothing else: validate the

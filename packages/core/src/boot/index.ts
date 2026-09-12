@@ -17,6 +17,7 @@ export type {
 } from "./contracts.js";
 export {
   PROVIDER_CONTRACT,
+  readProviderDeclarations,
   type AcquiredResource,
   type Provider,
   type ProviderContext,

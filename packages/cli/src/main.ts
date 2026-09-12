@@ -6,7 +6,7 @@ import { runDev } from "./dev.js";
 import { runUpdate } from "./update.js";
 import { runRoutes } from "./routes.js";
 import { runSpec } from "./spec.js";
-import { appCoreVersion, coreVersion } from "./package-info.js";
+import { appCoreVersion, cliVersion, coreVersion } from "./package-info.js";
 
 /**
  * The `tulipes` CLI. Deliberately dependency-free argument handling — a
@@ -89,10 +89,10 @@ export async function main(argv: readonly string[]): Promise<void> {
     case "version": {
       const cli = coreVersion();
       const app = appCoreVersion(rootDir);
-      // The CLI on your PATH and the copy an app installs are separate
+      // The core this CLI bundles and the copy an app installs are separate
       // installs. Printing one number would hide a mismatch that explains
       // otherwise baffling behaviour, so say both whenever they differ.
-      console.log(app && app !== cli ? `cli ${cli}\napp ${app}` : cli);
+      console.log(`cli ${cliVersion()} (core ${cli})${app && app !== cli ? `\napp core ${app}` : ""}`);
       return;
     }
     case undefined:

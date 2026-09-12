@@ -1,6 +1,6 @@
 import { appBoot, importFromApp, registerTypeScript } from "./app-core.js";
-import { inspectRoutes, type InspectionContext } from "../boot/inspect.js";
-import type { Environment } from "../env/environment.js";
+import { inspectRoutes, type InspectionContext } from "@tulipes/core/boot";
+import type { Environment } from "@tulipes/core/env";
 
 /** Shared CLI lifetime; offline inspection acquires no application resources. */
 export async function inspectApp(rootDir: string, offline = false): Promise<{

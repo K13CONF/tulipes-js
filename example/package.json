@@ -30,6 +30,7 @@
     "zod": "^3.25"
   },
   "devDependencies": {
+    "@tulipes/cli": "workspace:*",
     "@tulipes/spec": "workspace:*",
     "pm2": "^7.0.4",
     "socket.io-client": "^4",

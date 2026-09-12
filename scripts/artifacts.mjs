@@ -5,7 +5,7 @@ import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 // Every published package, in release order; core first because its version names the tag.
-const packages = ['core', 'spec', 'mongoose', 'bullmq', 'socket.io'];
+const packages = ['core', 'spec', 'mongoose', 'bullmq', 'socket.io', 'cli'];
 const digest = file => 'sha512-' + createHash('sha512').update(readFileSync(file)).digest('base64');
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: 'inherit', ...options });
 const readJson = file => JSON.parse(readFileSync(file, 'utf8'));
@@ -21,16 +21,17 @@ function verify(dir, expectedCommit) {
     if (digest(file) !== pkg.integrity) throw new Error(`Archive digest mismatch: ${pkg.name}`);
     const packed = JSON.parse(execFileSync('tar', ['-xOf', file, 'package/package.json'], { encoding: 'utf8' }));
     if (packed.name !== pkg.name || packed.version !== pkg.version || packed.license !== 'MIT') throw new Error('Packed identity/license mismatch');
-    if (packed.exports['.'] !== './dist/index.js') throw new Error('Packed exports must point to compiled JavaScript');
+    if (!/^\.\/dist\/[a-z]+\.js$/.test(packed.exports?.['.'] ?? '')) throw new Error('Packed exports must point to compiled JavaScript');
     const listing = execFileSync('tar', ['-tzf', file], { encoding: 'utf8' }).split('\n');
-    for (const required of ['package/LICENSE', 'package/dist/index.js']) {
+    for (const required of ['package/LICENSE', 'package/' + packed.exports['.'].slice(2)]) {
       if (!listing.includes(required)) throw new Error(`Missing packed file: ${required}`);
     }
-    if (name === 'core' && (packed.bin.tulipes !== './dist/cli/bin.js' || !listing.includes('package/dist/cli/bin.js'))) throw new Error('Missing compiled CLI');
+    if (name === 'cli' && (packed.bin?.tulipes !== './dist/bin.js' || !listing.includes('package/dist/bin.js') || !listing.includes('package/templates/CLAUDE.md'))) throw new Error('Missing compiled CLI or templates');
+    if (name === 'core' && (packed.bin || listing.some(path => /^package\/(dist\/cli|templates)\//.test(path)))) throw new Error('Core must not ship the CLI or templates');
     if (listing.some(path => /\/(?:node_modules|tests|\.envs)\//.test(path))) throw new Error('Unexpected private/test content in archive');
     // Core must not carry a driver — not as a dependency, and not through an
     // emitted declaration that a consumer's typecheck would need to resolve.
-    const extracted = ['mongoose', 'bullmq', 'ioredis', 'socket.io'];
+    const extracted = ['mongoose', 'bullmq', 'ioredis', 'socket.io', 'tsx'];
     if (name === 'core') {
       for (const dep of extracted) if (packed.dependencies?.[dep]) throw new Error(`Core must not depend on ${dep}`);
       const declarations = listing.filter(path => path.endsWith('.d.ts'));

@@ -2,8 +2,8 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { boot as bundledBoot } from "../boot/boot.js";
-import type { BootHandle, BootOptions } from "../boot/boot.js";
+import { boot as bundledBoot } from "@tulipes/core/boot";
+import type { BootHandle, BootOptions } from "@tulipes/core/boot";
 
 export type BootFn = (options: BootOptions) => Promise<BootHandle>;
 

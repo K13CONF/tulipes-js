@@ -2,7 +2,7 @@ import { renderMinimalProject, starterTests } from "./minimal.js";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
-import { coreVersion, packageRoot } from "./package-info.js";
+import { cliVersion, coreVersion, packageRoot } from "./package-info.js";
 
 /**
  * `tulipes init [dir]` — scaffold a complete application.
@@ -30,7 +30,7 @@ export async function runInit(rootDir: string, target?: string, preset: InitPres
   }
 
   const version = coreVersion();
-  const files = preset === "minimal" ? renderMinimalProject(name, version) : renderProject(name, version);
+  const files = preset === "minimal" ? renderMinimalProject(name, version, cliVersion()) : renderProject(name, version, cliVersion());
 
   for (const [relPath, content] of files) {
     const filePath = join(dir, relPath);
@@ -94,8 +94,11 @@ function sanitizeName(raw: string): string {
 
 const json = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
 
-function renderProject(name: string, coreVersion: string): [string, string][] {
+function renderProject(name: string, coreVersion: string, cliVersion: string): [string, string][] {
   const core = `^${coreVersion}`;
+  // The command line is a separate package: the app depends on it so `yarn
+  // dev`, `yarn sync` and `yarn tulipes …` resolve without a global install.
+  const cli = `^${cliVersion}`;
   // The models provider ships separately from core; the app owns mongoose
   // itself (a peer of the provider) so schemas and provider share one copy.
   const mongooseProvider = "^0.1.0-rc.2";
@@ -155,6 +158,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         zod: "^3.25",
       },
       devDependencies: {
+        "@tulipes/cli": cli,
         "@types/express": "^5",
         "@types/node": "^24",
         // Only needed to generate documents, never to run the app.
