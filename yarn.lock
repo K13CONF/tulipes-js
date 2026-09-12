@@ -615,7 +615,7 @@ __metadata:
     ioredis: "npm:^5"
     typescript: "npm:^7.0.2"
   peerDependencies:
-    "@tulipes/core": ^0.10.0-rc.1
+    "@tulipes/core": ^0.10.0-rc.2
   languageName: unknown
   linkType: soft
 
@@ -661,7 +661,7 @@ __metadata:
     socket.io: "npm:^4"
     typescript: "npm:^7.0.2"
   peerDependencies:
-    "@tulipes/core": ^0.10.0-rc.1
+    "@tulipes/core": ^0.10.0-rc.2
   languageName: unknown
   linkType: soft
 

@@ -2143,7 +2143,7 @@ export function renderMinimalProject(name: string, coreVersion: string): [string
       scripts: { dev: "tulipes dev", start: "tsx app.ts", sync: "tulipes sync", check: "tulipes env:check",
         typecheck: "tsc --noEmit", test: "vitest run", spec: "tulipes spec --offline --openapi docs/openapi.json --postman docs/collection.json" },
       dependencies: { "@tulipes/core": core, express: "^5", zod: "^3.25" },
-      devDependencies: { "@tulipes/spec": "^0.3.0-rc.4", "@types/express": "^5", "@types/node": "^24", tsx: "^4", typescript: "^7", vitest: "^5.0.0", vite: "^8.2.2" },
+      devDependencies: { "@tulipes/spec": "^0.3.0-rc.5", "@types/express": "^5", "@types/node": "^24", tsx: "^4", typescript: "^7", vitest: "^5.0.0", vite: "^8.2.2" },
     })],
     ["tsconfig.json", json({ compilerOptions: { target: "ES2023", module: "NodeNext", moduleResolution: "NodeNext", strict: true,
       noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, skipLibCheck: true, noEmit: true }, include: ["app.ts", "modules", "types", "config", "tests"] })],
