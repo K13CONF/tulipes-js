@@ -215,12 +215,13 @@ function install(keys) {
       root, app: built.app,
       install_ms: timings,
       installed,
-      mongoose_graph: mongooseGraph(join(built.app, 'node_modules')),
+      mongoose_graph: dependencyGraph(join(built.app, 'node_modules'), 'mongoose'),
+      graphs: Object.fromEntries(GRAPH_ROOTS.map(root => [root, dependencyGraph(join(built.app, 'node_modules'), root)])),
       resolve: resolveOutcomes(built.app, root),
       du_kb: Number(spawnSync('du', ['-sk', join(built.app, 'node_modules')], { encoding: 'utf8' }).stdout.split('\t')[0]) || null,
     };
     writeJson(join(out, 'install.json'), { ...(existsSync(join(out, 'install.json')) ? readJson(join(out, 'install.json')) : {}), ...results });
-    console.log(`  ${installed.unique.length} unique packages, ${installed.copies} physical copies, ${(installed.bytes / 1024 / 1024).toFixed(1)} MiB; mongoose ${results[key].resolve.app.mongoose ? 'resolvable' : 'absent'}`);
+    console.log(`  ${installed.unique.length} unique packages, ${installed.copies} physical copies, ${(installed.bytes / 1024 / 1024).toFixed(1)} MiB; ${GRAPH_ROOTS.map(root => `${root} ${results[key].graphs[root].present ? 'present' : 'absent'}`).join(', ')}`);
   }
 }
 
@@ -253,12 +254,15 @@ function isPackageRoot(file) {
   return depth === 2 || (depth === 3 && parts[i + 1].startsWith('@'));
 }
 
-/** Dependencies reachable from mongoose, resolved the way Node would. */
-function mongooseGraph(modulesDir) {
-  const start = join(modulesDir, 'mongoose', 'package.json');
+/** Roots whose reachable graphs are attributed separately: the extracted drivers. */
+const GRAPH_ROOTS = ['mongoose', 'bullmq', 'ioredis', 'socket.io'];
+
+/** Dependencies reachable from one root package, resolved the way Node would. */
+function dependencyGraph(modulesDir, root) {
+  const start = join(modulesDir, root, 'package.json');
   if (!existsSync(start)) return { present: false };
   const seen = new Map();
-  const queue = [['mongoose', join(modulesDir, 'mongoose')]];
+  const queue = [[root, join(modulesDir, root)]];
   while (queue.length) {
     const [name, dir] = queue.shift();
     if (seen.has(name)) continue;
@@ -273,7 +277,7 @@ function mongooseGraph(modulesDir) {
   // Attribute shared packages: anything in the graph that a non-graph package
   // also depends on would survive extraction and must not be counted as saved.
   for (const copy of inventory(modulesDir).copy_list) {
-    if (seen.has(copy.name) || copy.name === '@tulipes/core') continue; // core is the coupling under study, not a sharer
+    if (seen.has(copy.name) || copy.name.startsWith('@tulipes/')) continue; // the framework packages are the coupling under study, not sharers
     const pkg = readJson(join(modulesDir, copy.path, 'package.json'));
     for (const dep of Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies })) if (seen.has(dep)) (seen.get(dep).shared_with ??= []).push(copy.name);
   }
@@ -295,7 +299,7 @@ function dirBytes(dir) {
 function resolveOutcomes(app, root) {
   const probe = `
     import { createRequire } from 'node:module';
-    const targets = ['mongoose', 'mongodb', 'bson', '@tulipes/core', '@tulipes/core/db', '@tulipes/core/boot'];
+    const targets = ['mongoose', 'mongodb', 'bson', 'bullmq', 'ioredis', 'socket.io', '@tulipes/core', '@tulipes/core/db', '@tulipes/core/boot'];
     const from = (label, anchor) => [label, Object.fromEntries(targets.map(t => { try { return [t, createRequire(anchor).resolve(t)]; } catch (e) { return [t, null]; } }))];
     const result = Object.fromEntries([
       from('app', process.argv[1]),
@@ -375,6 +379,8 @@ function summary() {
       const g = r.mongoose_graph.present ? `${r.mongoose_graph.count} / ${r.mongoose_graph.bytes} (${r.mongoose_graph.exclusive_count} / ${r.mongoose_graph.exclusive_bytes})` : 'absent';
       lines.push(`| ${key} — ${r.title} | ${r.installed.unique.length} | ${r.installed.copies} | ${r.installed.duplicated.length} | ${r.installed.bytes} | ${r.du_kb ?? '—'} | ${g} | ${r.resolve.app.mongoose ? 'yes' : 'no'} / ${r.resolve.core.mongoose ? 'yes' : 'no'} | ${r.install_ms.fresh.map(v => v.toFixed(0)).join(', ')} | ${r.install_ms.warm.map(v => v.toFixed(0)).join(', ')} |`);
     }
+    lines.push('', '## Driver graphs (pkgs / bytes, exclusive in parentheses)', '', `| Fixture | ${GRAPH_ROOTS.join(' | ')} |`, `|---|${GRAPH_ROOTS.map(() => '---').join('|')}|`);
+    for (const [key, r] of Object.entries(install)) lines.push(`| ${key} | ${GRAPH_ROOTS.map(root => { const g = r.graphs?.[root]; return !g ? '—' : g.present ? `${g.count} / ${g.bytes} (${g.exclusive_count} / ${g.exclusive_bytes})` : 'absent'; }).join(' | ')} |`);
     lines.push('');
     for (const [key, r] of Object.entries(install)) if (r.installed.duplicated.length) lines.push(`- ${key}: duplicated ${r.installed.duplicated.map(d => `${d.name} (${d.versions.join(', ')})`).join('; ')}`);
     lines.push('');
