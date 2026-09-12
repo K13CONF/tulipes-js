@@ -42,5 +42,5 @@ dependency ranges follow the core this CLI bundles.
 
 ## Versions
 
-`0.1.0` bundles core `0.10.0` and scaffolds for it. See core's
+`0.1.1` bundles core `0.10.1` and scaffolds for it. See core's
 [MIGRATING.md](https://github.com/kemora13conf/bp-backend-express/blob/master/packages/core/MIGRATING.md#unreleased--install-the-cli-package).
