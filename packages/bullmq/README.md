@@ -59,5 +59,6 @@ await requireQueues(ctx).add("billing.send-invoice", "send", { invoiceId });
 
 ## Versions
 
-`0.1.0-rc.1` requires core `^0.10.0-rc.1`. See core's
-[MIGRATING.md](https://github.com/kemora13conf/bp-backend-express/blob/master/packages/core/MIGRATING.md#unreleased--declare-the-queues-provider).
+`0.1.0-rc.1` requires core `^0.10.0-rc.2`, the candidate that added the `serve`/`drain`
+hooks; install both with `@next`. See core's
+[MIGRATING.md](https://github.com/kemora13conf/bp-backend-express/blob/v0.10.0-rc.2/packages/core/MIGRATING.md#0100-rc2--declare-the-queues-provider).

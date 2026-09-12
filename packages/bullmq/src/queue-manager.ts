@@ -47,9 +47,25 @@ export class QueueManager implements QueuesCapability {
   >();
   readonly #workers: Worker[] = [];
   readonly #connections: Redis[] = [];
+  #closing = false;
 
   constructor(redisUrl: string) {
     this.#url = redisUrl;
+  }
+
+  /**
+   * BullMQ re-emits every driver error on its Queue and Worker instances and
+   * Node turns an unhandled "error" event into a crash — including the reply
+   * that a QUIT cuts short during shutdown. Producers and consumers therefore
+   * always carry a listener: during shutdown the error is expected and dropped,
+   * otherwise it is surfaced on stderr, since a lost job is a job BullMQ will
+   * retry and a dead process would lose the whole queue.
+   */
+  #observe(name: string, emitter: { on(event: "error", listener: (error: Error) => void): unknown }): void {
+    emitter.on("error", (error) => {
+      if (this.#closing) return;
+      console.error(`[tulipes/bullmq] queue "${name}": ${error.message}`);
+    });
   }
 
   /**
@@ -77,6 +93,7 @@ export class QueueManager implements QueuesCapability {
     const existing = this.#queues.get(name);
     if (existing) return existing.owner;
     const queue = new Queue(name, { ...options, connection: this.#connect() });
+    this.#observe(name, queue);
     this.#queues.set(name, { queue, owner });
     return undefined;
   }
@@ -138,30 +155,36 @@ export class QueueManager implements QueuesCapability {
         });
         continue;
       }
-      this.#workers.push(
-        new Worker(name, handler, { ...options, connection: this.#connect() }),
-      );
+      const worker = new Worker(name, handler, { ...options, connection: this.#connect() });
+      this.#observe(name, worker);
+      this.#workers.push(worker);
     }
     return this.#workers.length;
   }
 
   /** Stop consumers and finish active jobs while producers remain available. */
   async drain(): Promise<void> {
+    // The first shutdown signal this manager receives; errors are expected from here on.
+    this.#closing = true;
     const results = await Promise.allSettled(this.#workers.map((worker) => worker.close()));
     throwFailures(results);
   }
 
   /** Emergency connection teardown after the graceful shutdown deadline. */
   disconnect(): void {
+    this.#closing = true;
     for (const worker of this.#workers) void worker.disconnect().catch(() => {});
     for (const connection of this.#connections) connection.disconnect();
   }
 
   /** Drain order: stop consuming, then producers, then raw connections. */
   async close(): Promise<void> {
+    this.#closing = true;
     const results = await Promise.allSettled([this.drain()]);
+    // A queue still initializing (its meta write is issued once the client is
+    // ready) must finish before its connection is quit, or that reply is lost.
     results.push(...await Promise.allSettled(
-      [...this.#queues.values()].map(({ queue }) => queue.close()),
+      [...this.#queues.values()].map(async ({ queue }) => { await queue.waitUntilReady().catch(() => {}); await queue.close(); }),
     ));
     results.push(...await Promise.allSettled(this.#connections.map(async (connection) => {
       try { await connection.quit(); } finally { connection.disconnect(); }

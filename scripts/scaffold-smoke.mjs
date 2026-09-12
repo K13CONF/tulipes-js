@@ -154,5 +154,7 @@ try {
     console.log(`${preset}: ${registry ? 'registry' : 'packed'} install, generated types, tests, specs, backend/shutdown${preset === 'production' ? ' and worker' : ''} passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   }
 } finally {
-  rmSync(workspace, { recursive: true, force: true });
+  // TULIPES_SMOKE_KEEP=1 leaves the generated app behind for a post-mortem.
+  if (process.env.TULIPES_SMOKE_KEEP) console.error('kept ' + workspace);
+  else rmSync(workspace, { recursive: true, force: true });
 }
