@@ -7,7 +7,6 @@ import type { Acl } from "../acl/acl.js";
 import type { RouteInfo, RouteRegistry } from "../http/rai.js";
 import type { ModuleManifest } from "../modules/manifest.js";
 import type { I18nextInstance, TFunction } from "../i18n/index.js";
-import type { SocketManager } from "../sockets/socket-manager.js";
 
 /**
  * The context object threaded through every module-authored function.
@@ -40,7 +39,8 @@ export interface Ctx {
   models?: ModelsCapability;
   /** Set by the "queues" provider (`tulipes.providers.queues`); augmented like models. */
   queues?: QueuesCapability;
-  sockets?: SocketManager;
+  /** Set by the "sockets" provider in the backend process only; augmented like models. */
+  sockets?: SocketsCapability;
   app?: Express;
   /**
    * Declares an endpoint and gates it. `id` is the Resource Access
@@ -129,10 +129,14 @@ export interface ModelsCapability {}
 /** Same shape for background work: empty here, augmented by the queues provider. */
 export interface QueuesCapability {}
 
+/** Realtime transport: empty here, augmented by the sockets provider. */
+export interface SocketsCapability {}
+
 /** Capability name → the value a provider hands to ctx. */
 export interface ProviderCapabilities {
   models: ModelsCapability;
   queues: QueuesCapability;
+  sockets: SocketsCapability;
 }
 
 /** Bootstrap tasks only run with a registered model store. */

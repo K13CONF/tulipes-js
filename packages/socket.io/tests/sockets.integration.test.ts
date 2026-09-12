@@ -1,9 +1,12 @@
 import { io } from "socket.io-client";
 import { expect, test } from "vitest";
-import { fixture, url } from "./fixture.js";
+import { fixture, url } from "../../core/tests/fixture.js";
+
+const declared = JSON.stringify({ type: "module", tulipes: { providers: { sockets: "@tulipes/socket.io" } } });
 
 test("shutdown disconnects Socket.IO clients and releases the HTTP listener", async () => {
   const app = await fixture({
+    "package.json": declared,
     "modules/probe/sockets/probe.sockets.js": `
       export default (ctx, sockets) => sockets.namespace('/probe', nsp => {
         nsp.on('connection', socket => socket.emit('ready', { message: 'ready' }));
@@ -44,6 +47,7 @@ test("shutdown disconnects Socket.IO clients and releases the HTTP listener", as
 
 test("inspection skips socket setup and readiness hooks", async () => {
   const app = await fixture({
+    "package.json": declared,
     "modules/probe/module.config.js": `
       export default () => ({});
       export function onReady() { throw new Error('must not run during inspection'); }
@@ -54,5 +58,6 @@ test("inspection skips socket setup and readiness hooks", async () => {
   const handle = await app.boot({ inspect: true });
 
   expect(handle.ctx.sockets).toBeUndefined();
+  expect(handle.providers).toEqual([expect.objectContaining({ capability: "sockets", skipped: "inspect" })]);
   expect(handle.server!.listening).toBe(false);
 });

@@ -1,5 +1,5 @@
 import type { Ctx } from "@tulipes/core/boot";
-import type { SocketRegistry } from "@tulipes/core/sockets";
+import type { SocketRegistry } from "@tulipes/socket.io";
 
 /**
  * Backend mode only. A namespace is claimed by exactly one module; emit

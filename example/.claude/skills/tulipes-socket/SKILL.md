@@ -11,7 +11,7 @@ no socket files starts no Socket.IO server at all.
 
 ```ts
 import type { Ctx } from "@tulipes/core/boot";
-import type { SocketRegistry } from "@tulipes/core/sockets";
+import type { SocketRegistry } from "@tulipes/socket.io";
 
 export default function billingSockets({ config }: Ctx, sockets: SocketRegistry): void {
   sockets.namespace("/billing", (nsp) => {
@@ -35,6 +35,11 @@ ctx.sockets!.of("/billing").to(`invoice:${id}`).emit("invoice:paid", payload);
 
 ## Rules
 
+- The app selects its socket provider once, in its root `package.json`:
+  `"tulipes": { "providers": { "sockets": "@tulipes/socket.io" } }`. A module
+  with a `sockets/` file in an app without that line is a boot refusal before
+  any module is imported; a module that only emits declares
+  `"tulipes": { "requires": ["sockets"] }`.
 - **Namespaces are claimed once.** A second module claiming `/billing`
   crashes the boot naming both.
 - `sockets.of()` throws on a namespace nobody claimed. Socket.IO's raw

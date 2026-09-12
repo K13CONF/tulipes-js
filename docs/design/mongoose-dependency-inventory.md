@@ -393,6 +393,29 @@ off minimal readiness and offline `spec` on top of S09's gains. What remains
 in fixture A is `socket.io` (4.9 MB exclusive), `tsx`, `express`, `i18next`
 and `zod`.
 
+### 4.6 After the sockets extraction (Sprint 04, S11)
+
+Fixtures A and B on `5bba0b3`, same harness and host. Raw data:
+`reports/s09-inventory/5bba0b3/`. Production is unaffected by construction
+(it keeps every provider) and was not re-measured.
+
+| Fixture | Metric | After S10 (`3cec33c`) | After S11 (`5bba0b3`) | Change | Since S09 baseline (`b42bd00`) |
+|---|---|---|---|---|---|
+| A — core only | unique packages | 117 | **99** | −18 | 151 → 99 (−34%) |
+| A | installed bytes | 31,900,402 | **26,950,827** | −4,949,575 (−15.5%) | 52,960,060 → 26,950,827 (**−49.1%**) |
+| A | duplicated names | 5 | 1 | the express-5 vs socket.io duplicates (`mime-*`, `negotiator`, `accepts`) are gone | |
+| A | every extracted driver resolvable | socket.io only | **none** | | |
+| A | `import_boot` median | 89 ms | **75 ms** | −16% | 229 → 75 ms (−67%) |
+| B — minimal | unique packages / bytes | 166 / 116,063,812 | 150 / 106,157,244 | −16 / −8.5% | 137,095,845 → 106,157,244 (−22.6%) |
+| B | `import_boot` / `import_boot_tsx` | 90 / 125 ms | 74 / 101 ms | −18% / −19% | 232 / 335 → 74 / 101 ms |
+| B | `offline_spec` median | 285 ms | 273 ms | noise | 599 → 273 ms (−54%) |
+| B | `backend_readiness` median / p95 | 247 / 248 ms | 232 / 264 ms | within noise | 455 → 232 ms (−49%) |
+| B | RSS at readiness | 95,536 KiB | 96,256 KiB | noise | 146,016 → 96,256 KiB (−34%) |
+
+Core's remaining runtime dependencies: `colorette`, `dotenv`, `express`,
+`i18next`, `i18next-fs-backend`, `tsx`, `zod`. The next measurable step is
+S12 (whether `tsx` and the CLI belong in the runtime package at all).
+
 ## 5. Affected-file extraction checklist
 
 Grouped by downstream task; each item references a register row. Items for

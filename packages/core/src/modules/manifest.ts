@@ -21,7 +21,7 @@ export const DEFAULT_PRIORITY = 100;
  * own package.json (`tulipes.providers`). Kept as an enum so a misspelt
  * requirement is a manifest error, not a silently unmet one.
  */
-export const providerCapabilities = ["models", "queues"] as const;
+export const providerCapabilities = ["models", "queues", "sockets"] as const;
 export type ProviderCapability = (typeof providerCapabilities)[number];
 
 /**
@@ -39,7 +39,7 @@ export const tulipesManifestSchema = z
     offline: z.boolean().optional(),
     /**
      * Provider capabilities this module consumes without owning files that
-     * imply them (`models/` or `bootstrap/` imply "models", `queues/` implies "queues").
+     * imply them (`models/` or `bootstrap/` imply "models", `queues/` "queues", `sockets/` "sockets").
      */
     requires: z.array(z.enum(providerCapabilities)).default([]),
   })

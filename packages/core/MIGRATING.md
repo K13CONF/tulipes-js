@@ -11,6 +11,30 @@ what makes it work under nvm.
 
 ---
 
+<a id="unreleased--declare-the-sockets-provider"></a>
+
+## Unreleased — declare the sockets provider
+
+For every app with `sockets/` files:
+
+1. `yarn add @tulipes/socket.io@next` in the app root and in every module that
+   owns a `sockets/` file.
+2. Declare it with the others:
+
+   ```jsonc
+   { "tulipes": { "providers": { "models": "@tulipes/mongoose", "queues": "@tulipes/bullmq", "sockets": "@tulipes/socket.io" } } }
+   ```
+
+3. Replace `from "@tulipes/core/sockets"` with `from "@tulipes/socket.io"` for
+   `SocketRegistry`, `SocketsFn` and `SocketManager`.
+
+- `ctx.sockets`, `sockets.namespace(...)`, `ctx.sockets.of(...)` and the
+  backend-only behavior are unchanged; worker, script and inspection boots list
+  the provider as "not used" instead of acquiring it.
+- Apps without sockets change nothing and stop installing Socket.IO.
+
+---
+
 <a id="unreleased--declare-the-queues-provider"></a>
 
 ## Unreleased — declare the queues provider

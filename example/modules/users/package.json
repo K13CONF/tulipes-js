@@ -18,6 +18,7 @@
     "@tulipes/bullmq": "workspace:*",
     "@tulipes/core": "workspace:*",
     "@tulipes/mongoose": "workspace:*",
+    "@tulipes/socket.io": "workspace:*",
     "express": "^5",
     "mongoose": "^8"
   }

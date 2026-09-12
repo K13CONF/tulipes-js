@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { Server as HttpServer } from "node:http";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -45,7 +46,15 @@ export interface AcquiredResource {
    * follows module onShutdown.
    */
   drain?(): unknown | Promise<unknown>;
+  /**
+   * Backend only, once the HTTP server exists and before it listens: bind a
+   * transport to it. Never called during inspection.
+   */
+  attach?(server: HttpServer): unknown | Promise<unknown>;
 }
+
+/** Where a provider is acquired at all. Inspection is its own situation. */
+export type ProviderSituation = "backend" | "worker" | "script" | "inspect";
 
 export interface ProviderStatus {
   label: string;
@@ -58,6 +67,8 @@ export interface ProviderStatus {
 export interface ProviderContext {
   /** Read it, run bootstrap tasks against it; core alone assigns the capability slot. */
   ctx: Ctx;
+  /** Which of the provider's declared situations this boot is. */
+  situation: ProviderSituation;
   rootDir: string;
   /** Discovered files for every module in load order; the provider decides what to import. */
   files: readonly ModuleFiles[];
@@ -71,6 +82,12 @@ export interface Provider<Capability extends ProviderCapability = ProviderCapabi
   capability: Capability;
   /** Short name for the banner and diagnostics, e.g. "mongoose". */
   name: string;
+  /**
+   * Situations in which core acquires this provider; default all. A
+   * transport that needs the HTTP server declares ["backend"]: it is then
+   * skipped — not failed — in worker/script processes and during inspection.
+   */
+  situations?: readonly ProviderSituation[];
   /**
    * Acquire the capability. Call `own()` synchronously after creating any
    * resource and BEFORE awaiting anything that can fail or hang, so a failed
@@ -127,6 +144,7 @@ export function effectiveRequirements(files: ModuleFiles): ProviderCapability[] 
   const required = new Set<ProviderCapability>(files.module.requires);
   if (files.modelFiles.length > 0 || files.bootstrapFiles.length > 0) required.add("models");
   if (files.queueFiles.length > 0) required.add("queues");
+  if (files.socketFiles.length > 0) required.add("sockets");
   return [...required];
 }
 
@@ -144,7 +162,7 @@ export function checkRequirements(
       if (declared[capability]) continue;
       const why = files.module.requires.includes(capability)
         ? "declares it in tulipes.requires"
-        : `has ${capability === "queues" ? "queues/" : files.modelFiles.length ? "models/" : "bootstrap/"} files`;
+        : `has ${capability === "queues" ? "queues/" : capability === "sockets" ? "sockets/" : files.modelFiles.length ? "models/" : "bootstrap/"} files`;
       report.add({
         scope: "providers",
         module: files.module.name,
@@ -158,6 +176,8 @@ export interface AcquiredProvider {
   capability: ProviderCapability;
   provider: string;
   resource?: AcquiredResource;
+  /** Set when the provider's situations exclude this boot; nothing was acquired. */
+  skipped?: ProviderSituation;
 }
 
 /**
@@ -199,6 +219,11 @@ export async function acquireProviders(
     }
     entry.provider = provider.name;
 
+    if (provider.situations && !provider.situations.includes(context.situation)) {
+      entry.skipped = context.situation;
+      continue;
+    }
+
     const own = (resource: AcquiredResource): void => {
       if (entry.resource) {
         report.add({ scope: "providers", message: `provider "${provider.name}" called own() twice — one resource per acquisition` });
@@ -239,6 +264,18 @@ function validateProvider(value: unknown, capability: ProviderCapability, specif
   return candidate as Provider;
 }
 
+/** Backend, before listen: transports bind to the server that will serve them. */
+export async function attachProviders(acquired: readonly AcquiredProvider[], server: HttpServer, report: BootReport): Promise<void> {
+  for (const { provider, resource } of acquired) {
+    if (!resource?.attach) continue;
+    try {
+      await resource.attach(server);
+    } catch (error) {
+      report.add({ scope: "providers", message: `provider "${provider}" failed to attach to the HTTP server: ${(error as Error).message}` });
+    }
+  }
+}
+
 /** Worker mode: every provider that can serve does; the total decides whether the worker may run. */
 export async function serveProviders(acquired: readonly AcquiredProvider[], report: BootReport): Promise<number> {
   let consumers = 0;
@@ -263,11 +300,14 @@ export async function disposeProviders(acquired: readonly AcquiredProvider[], cl
 export interface AcquiredStatus extends ProviderStatus {
   capability: string;
   provider: string;
+  /** The provider declared it is not used in this situation. */
+  skipped?: ProviderSituation;
 }
 
 /** Banner rows; safe to call before or after acquisition. */
 export function providerStatuses(acquired: readonly AcquiredProvider[]): AcquiredStatus[] {
-  return acquired.map(({ capability, provider, resource }) => {
+  return acquired.map(({ capability, provider, resource, skipped }) => {
+    if (skipped) return { capability, provider, skipped, label: `not used in ${skipped === "inspect" ? "inspection" : `${skipped} mode`}`, ready: true };
     const status = resource?.status() ?? { label: "not acquired", ready: false };
     return { capability, provider, ...status };
   });

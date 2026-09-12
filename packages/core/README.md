@@ -300,13 +300,14 @@ call site without core knowing anything about your models.
  6  ACL              module.acl.ts in load order
  7  Providers        the app's declared providers, in order: models
                      (@tulipes/mongoose: connect → model store → bootstrap),
-                     queues (@tulipes/bullmq: every *.queues.ts registers)
+                     queues (@tulipes/bullmq: every *.queues.ts registers),
+                     sockets (@tulipes/socket.io, backend only: namespaces claimed)
  8  ── fork ──
-    backend          module routers → 404 → error handler → listen
+    backend          module routers → 404 → error handler → providers attach → listen
     worker           each provider serves: one BullMQ worker per processor
     script           start nothing; the caller owns the process
  9  onReady          hooks in load order → startup banner
-    shutdown         SIGTERM → onDrain + stop/drain http + sockets + provider drain →
+    shutdown         SIGTERM → onDrain + stop/drain http + provider drain →
                      onShutdown in REVERSE order → providers disposed in reverse
 ```
 
@@ -331,7 +332,7 @@ interface Ctx {
   acl?: Acl;                // after phase 6
   models?: ModelsCapability; // after phase 8, when package.json declares a models provider
   queues?: QueuesCapability; // after phase 7, when package.json declares a queues provider
-  sockets?: SocketManager;  // backend only
+  sockets?: SocketsCapability; // backend only, when package.json declares a sockets provider
   app?: Express;            // backend only
 }
 
@@ -371,7 +372,8 @@ export default function billingQueues(ctx: Ctx, queues: QueueRegistry) {
   queues.process("billing.send-invoice", async (job) => {}); // consumed in worker
 }
 
-// sockets/*.sockets.ts — a namespace is claimed by exactly one module
+// sockets/*.sockets.ts — a namespace is claimed by exactly one module.
+// Needs "tulipes": { "providers": { "sockets": "@tulipes/socket.io" } }; SocketRegistry from @tulipes/socket.io
 export default function billingSockets(ctx: Ctx, sockets: SocketRegistry) {
   sockets.namespace("/billing", (nsp) => nsp.on("connection", () => {}));
 }
@@ -477,7 +479,7 @@ middleware belongs, and how to read an aggregate boot report.
 | `@tulipes/core/acl` | `Acl`, `AclBuilder`, `AclFn` |
 | `@tulipes/core/db` | migration stub only — the Mongoose provider, `ModelStore`, `ModelDef` and `BootstrapFn` live in [`@tulipes/mongoose`](https://www.npmjs.com/package/@tulipes/mongoose) |
 | `@tulipes/core/queues` | migration stub only — the BullMQ provider, `QueueManager`, `QueueRegistry` and `QueuesFn` live in [`@tulipes/bullmq`](https://www.npmjs.com/package/@tulipes/bullmq) |
-| `@tulipes/core/sockets` | `SocketManager`, `SocketRegistry`, `SocketsFn` |
+| `@tulipes/core/sockets` | migration stub only — the Socket.IO provider, `SocketManager`, `SocketRegistry` and `SocketsFn` live in [`@tulipes/socket.io`](https://www.npmjs.com/package/@tulipes/socket.io) |
 | `@tulipes/core/modules` | module graph, explorer, manifest schema |
 | `@tulipes/core/config` | `GlobalConfig` (codegen target), config builder |
 | `@tulipes/core/errors` | `TulipesBootError`, `BootReport` |

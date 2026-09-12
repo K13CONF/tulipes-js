@@ -39,6 +39,12 @@ test("artifact verification rejects changed archives before any publication", as
             file: "bullmq.tgz",
             integrity: "sha512-original",
           },
+          {
+            name: "@tulipes/socket.io",
+            version: "0.1.0",
+            file: "socket.io.tgz",
+            integrity: "sha512-original",
+          },
         ],
       }),
     );

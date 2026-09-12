@@ -12,6 +12,7 @@ export type {
   ModuleLifecycle,
   ProviderCapabilities,
   QueuesCapability,
+  SocketsCapability,
   RoutesFn,
 } from "./contracts.js";
 export {

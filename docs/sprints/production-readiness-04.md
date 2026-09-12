@@ -1,9 +1,8 @@
 # Sprint 04 — Queues and sockets as optional providers
 
-Status: S10 (queues) complete on branch `feat/sprint-04-s10-queues` on 2026-09-12,
-started from `6f4923d` (core 0.10.0-rc.1 / spec 0.3.0-rc.4 / mongoose
-0.1.0-rc.1 published). S11 (sockets) follows as its own increment once S10 is
-accepted; the two are estimated separately as the program requires.
+Status: S10 (queues) merged as PR #8 (`199dc39`); S11 (sockets) delivered on
+`feat/sprint-04-s11-sockets` on 2026-09-12 — [sockets design](../design/sockets-provider-design.md).
+The sprint acceptance matrix (04-C1–C3) is recorded in §5.
 
 Program: [Sprint 04 task definitions](production-readiness-task-report.md#5-sprint-04--make-queues-and-sockets-independently-optional).
 Prerequisite: [Sprint 03](production-readiness-03.md) — the provider seam
@@ -58,5 +57,28 @@ what a queue is.
 | S10.3, S10.5 | Complete | 2026-09-12: `packages/bullmq` holds the manager and loader; core drops `bullmq` and `ioredis`, gains `serve`/`drain` hooks and `BootHandle.consumers`; generator, example, `new module`, skills migrated; four archives, absence probe covers `bullmq`, `ioredis`, `@tulipes/bullmq`; upgrade smoke applies both migrations — [design §6](../design/queues-provider-design.md#6-evidence) |
 | S10.4 | Complete | 2026-09-12: fake-provider `serve`/`drain` contract tests in core, six real-Redis scenarios plus the two moved tests in the provider — [design §6.2](../design/queues-provider-design.md#62-failure-and-omission-matrix-s104-2026-09-12) |
 | S10 measure | Complete | [inventory §4.5](../design/mongoose-dependency-inventory.md#45-after-the-queues-extraction-sprint-04-s10): core-only −24.0%, minimal readiness −33%, remaining app-owned ioredis reported |
-| S11 | Not started | Own increment after S10 acceptance; `socket.io` is 4.9 MB exclusive in the core-only fixture |
-| 04-C1–C3 | Not started | Combination matrix is run when both providers exist; S10 records the queue-relevant rows |
+| S11.1–S11.4 | Complete | 2026-09-12: `situations` and `attach` added to the contract, `@tulipes/socket.io` extracted, consumers migrated, absence and live behavior proven — [sockets design §4](../design/sockets-provider-design.md#4-evidence-s113-s114-2026-09-12) |
+| 04-C1–C3 | See §5 | |
+
+## 5. Sprint acceptance (04-C1–C3)
+
+| Combination (04-C1) | Where it runs | Result |
+|---|---|---|
+| core only | fixture A of the inventory harness; minimal smoke's launcher | boots, no driver resolvable |
+| models only | `packages/mongoose` integration tests (declared models, no queues/sockets) | pass |
+| queues with a worker | `packages/bullmq` integration tests; packed production worker | pass |
+| sockets with HTTP | `packages/socket.io` integration test (live client, shutdown) | pass |
+| production with all providers | packed production runtime smoke, example suite | pass |
+| rate limiting without queues | `packages/bullmq` "app-owned Redis client survives" test; the limiter's own client is independent of the provider (design §1 A2) | pass |
+
+04-C2 (offline per selection): `inspectRoutes` validates every declaration
+without importing a provider (core `providers.test.ts`, `inspection.test.ts`
+with throwing provider files for all three capabilities); the production
+offline smoke runs with sockets denied; inspection skips the sockets provider
+by situation rather than by special case.
+
+04-C3 (installed-artifact and migration evidence): five verified archives;
+`artifacts.mjs verify` refuses a core depending on or declaring from any
+extracted driver; the upgrade smoke migrates the published rc.3 starter across
+all three providers; per-mode disappearance is recorded in the inventory
+(§4.4 mongoose, §4.5 bullmq/ioredis, §4.6 socket.io).

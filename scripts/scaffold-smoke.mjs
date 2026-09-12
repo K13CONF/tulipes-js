@@ -85,7 +85,7 @@ try {
   // installed core, resolve the driver at all? Minimal must say no everywhere.
   const probe = run(process.execPath, ['--input-type=module', '-e', `
     import { createRequire } from 'node:module';
-    const targets = ['mongoose', 'mongodb', 'bson', '@tulipes/mongoose', 'bullmq', '@tulipes/bullmq', 'ioredis'];
+    const targets = ['mongoose', 'mongodb', 'bson', '@tulipes/mongoose', 'bullmq', '@tulipes/bullmq', 'ioredis', 'socket.io', '@tulipes/socket.io'];
     const from = anchor => Object.fromEntries(targets.map(t => { try { createRequire(anchor).resolve(t); return [t, true]; } catch { return [t, false]; } }));
     console.log(JSON.stringify({ app: from(process.argv[1]), core: from(createRequire(process.argv[1]).resolve('@tulipes/core')), cli: from(process.argv[2]) }));
   `, pkgFile, bin], app, env);
