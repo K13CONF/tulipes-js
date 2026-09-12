@@ -118,3 +118,21 @@ test.each([
     expect(() => report.throwIfAny("modules")).toThrow(error);
   },
 );
+
+test("a url variable accepts a replica set's host list and still rejects a malformed one", async () => {
+  const { coerceValue } = await import("../src/env/coerce.js");
+  const spec = { name: "MONGO_URI", type: "url", description: "Database" } as const;
+  const accepts = (value: string) => coerceValue(spec, value).ok;
+
+  // Every self-hosted replica set is addressed this way; WHATWG URL parsing
+  // rejects it outright, which used to make such a deployment unbootable.
+  expect(accepts("mongodb://a:27017,b:27017,c:27017/db?replicaSet=rs0")).toBe(true);
+  expect(accepts("mongodb://user:pw@a:27017,b:27017/db?replicaSet=rs0")).toBe(true);
+  expect(accepts("mongodb://127.0.0.1:27017/db")).toBe(true);
+  expect(accepts("mongodb+srv://cluster.example.net/db")).toBe(true);
+
+  expect(accepts("mongodb://a:27017,not a host/db")).toBe(false);
+  expect(accepts("mongodb://a:27017,/db")).toBe(false);
+  expect(accepts("not a url")).toBe(false);
+  expect(accepts("://a,b")).toBe(false);
+});

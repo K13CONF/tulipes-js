@@ -61,3 +61,15 @@ test("inspection skips socket setup and readiness hooks", async () => {
   expect(handle.providers).toEqual([expect.objectContaining({ capability: "sockets", skipped: "inspect" })]);
   expect(handle.server!.listening).toBe(false);
 });
+
+test("a boot that fails before the server attaches still reports its own failure", async () => {
+  const app = await fixture({
+    "package.json": declared,
+    "modules/probe/sockets/probe.sockets.js": `export default (ctx, sockets) => sockets.namespace('/probe', () => {});`,
+    // Fails in a later phase, after the sockets provider is acquired and before
+    // anything attaches: cleanup must not bury this message under a TypeError.
+    "modules/probe/queues/work.queues.js": `export default () => {};`,
+  });
+
+  await expect(app.boot({ listen: false })).rejects.toThrow(/requires capability "queues"/);
+});
