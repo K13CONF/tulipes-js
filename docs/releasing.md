@@ -51,6 +51,14 @@ package is skipped, and any byte mismatch stops the run. Repacking on a rerun
 can change bytes; when the original archive cannot be recovered, release new
 versions. npm has no transaction spanning the packages.
 
+After publication, verify each package's registry integrity and downloaded
+tarball digest against the tag workflow's manifest and check the dist-tags,
+then run `node scripts/scaffold-smoke.mjs <downloaded artifacts> minimal --registry`
+and the production variants: they install from npm at exactly the manifest's
+versions, preapprove only those versions for Yarn's release-age gate, and refuse
+any local archive. A package's first publish receives `latest` from npm
+regardless of `--tag`; record it.
+
 Do not bypass failed audits, digest checks or smoke tests to meet a release date.
 Review moderate/low findings in retained reports; no high/critical exceptions
 are currently configured.

@@ -2,12 +2,12 @@
 
 Prepared: 2026-09-11. Accepted Sprint 02 source: `37dbca7`.
 
-**Latest completed operation:** Sprint 03 merged as PR #5; the
-[0.10.0-rc.1 candidate release](release-0.10.0-rc.1.md) is in preparation.
-Previously: [rc.3 candidate release](release-0.9.0-rc.3.md)
-under 01-C4. Core `0.9.0-rc.3` / spec `0.3.0-rc.3` are published under `next`;
-release CI, registry archive identity and fresh installed smokes passed.
-Sprint 03 (S09.1–S09.10) is complete and merged (`21040d5`).
+**Latest completed operation:** the
+[0.10.0-rc.1 candidate release](release-0.10.0-rc.1.md) — core `0.10.0-rc.1`,
+spec `0.3.0-rc.4` and the first `@tulipes/mongoose` `0.1.0-rc.1` are published
+under `next`; tag workflow, registry archive identity and fresh registry
+installs of both presets passed. Sprint 03 (S09.1–S09.10) is complete and
+merged (`21040d5`). Previously: [rc.3 candidate release](release-0.9.0-rc.3.md).
 
 **Next planned workstream: Sprint 04, S10 (queues and Redis ownership), after the 0.10.0-rc.1 candidate ships.**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
