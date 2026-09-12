@@ -13,6 +13,19 @@ import type { QueueManager } from "../src/index.js";
 const redisUrl = process.env.TEST_REDIS_URL;
 const integration = test.skipIf(!redisUrl);
 
+// DIAGNOSTIC (temporary): map a rejected ioredis command promise back to the
+// call site that issued it, so an unhandled "Connection is closed." names its owner.
+const issued = new WeakMap<object, string>();
+const sendCommand = (Redis.prototype as unknown as { sendCommand: (...args: unknown[]) => unknown }).sendCommand;
+(Redis.prototype as unknown as { sendCommand: (...args: unknown[]) => unknown }).sendCommand = function (this: unknown, ...args: unknown[]) {
+  const command = args[0] as { name?: string; args?: unknown[]; promise?: object };
+  if (command?.promise) issued.set(command.promise, `${command.name} ${JSON.stringify(command.args?.slice(0, 3))}\n${new Error("issued at").stack}`);
+  return sendCommand.apply(this, args);
+};
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[diag] unhandled rejection", (reason as Error)?.message, "\n[diag] command:", issued.get(promise as object) ?? "(not an ioredis command promise)");
+});
+
 const declared = JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } });
 const redisMeta = JSON.stringify({ variables: [{ name: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" }] });
 const queueFile = (name: string) => `
