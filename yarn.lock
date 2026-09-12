@@ -591,6 +591,7 @@ __metadata:
   resolution: "@tulipes-example/app@workspace:example"
   dependencies:
     "@tulipes/bullmq": "workspace:*"
+    "@tulipes/cli": "workspace:*"
     "@tulipes/core": "workspace:*"
     "@tulipes/mongoose": "workspace:*"
     "@tulipes/socket.io": "workspace:*"
@@ -619,7 +620,20 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@tulipes/core@workspace:*, @tulipes/core@workspace:packages/core":
+"@tulipes/cli@workspace:*, @tulipes/cli@workspace:packages/cli":
+  version: 0.0.0-use.local
+  resolution: "@tulipes/cli@workspace:packages/cli"
+  dependencies:
+    "@tulipes/core": "workspace:^"
+    "@types/node": "npm:^24.2.0"
+    tsx: "npm:^4"
+    typescript: "npm:^7.0.2"
+  bin:
+    tulipes: ./bin/tulipes.js
+  languageName: unknown
+  linkType: soft
+
+"@tulipes/core@workspace:*, @tulipes/core@workspace:^, @tulipes/core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@tulipes/core@workspace:packages/core"
   dependencies:
@@ -630,11 +644,8 @@ __metadata:
     express: "npm:^5"
     i18next: "npm:^26.4.2"
     i18next-fs-backend: "npm:^2.6.7"
-    tsx: "npm:^4"
     typescript: "npm:^7.0.2"
     zod: "npm:^3.24.1"
-  bin:
-    tulipes: ./bin/tulipes.js
   languageName: unknown
   linkType: soft
 

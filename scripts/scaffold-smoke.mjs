@@ -33,23 +33,24 @@ try {
   const manifest = JSON.parse(readFileSync(join(artifacts, 'manifest.json'), 'utf8'));
   const resolutions = Object.fromEntries(manifest.packages.map(pkg => [pkg.name, registry ? pkg.version : 'file:' + join(artifacts, pkg.file)]));
   const preapproval = registry ? '\nnpmPreapprovedPackages:\n' + manifest.packages.map(pkg => `  - "${pkg.name}@${pkg.version}"\n`).join('') : '';
-  // The launcher installs core alone: a global `tulipes` never carries a
-  // provider, and an all-archive launcher would hoist one next to the app and
-  // hide a missing dependency. Everything else resolves from the app.
+  // The launcher installs the CLI alone (which brings the core it bundles): a
+  // global `tulipes` never carries a provider, and an all-archive launcher
+  // would hoist one next to the app and hide a missing dependency. Everything
+  // else resolves from the app — including its own @tulipes/cli devDependency.
   const cliRoot = join(workspace, 'cli');
   mkdirSync(cliRoot);
-  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'yarn@4.18.0', dependencies: { '@tulipes/core': resolutions['@tulipes/core'] } }));
+  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'yarn@4.18.0', dependencies: { '@tulipes/cli': resolutions['@tulipes/cli'] }, resolutions: { '@tulipes/core': resolutions['@tulipes/core'] } }));
   writeFileSync(join(cliRoot, '.yarnrc.yml'), 'nodeLinker: node-modules\n' + preapproval);
   // Fresh generated projects intentionally create their first lockfile, even
   // when the outer runner sets CI=true. Repository installs stay immutable.
   run('yarn', ['install'], cliRoot, { ...process.env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
-  const bin = join(cliRoot, 'node_modules/@tulipes/core/dist/cli/bin.js');
+  const bin = join(cliRoot, 'node_modules/@tulipes/cli/dist/bin.js');
   const app = join(workspace, 'app');
   run(process.execPath, [bin, 'init', app, '--preset', preset], workspace);
   if (preset === 'production') {
     // The installed generator must carry the browser policy with its auth code.
     const guide = readFileSync(join(app, 'docs/browser-auth.md'), 'utf8');
-    const template = readFileSync(join(cliRoot, 'node_modules/@tulipes/core/templates/browser-auth.md'), 'utf8');
+    const template = readFileSync(join(cliRoot, 'node_modules/@tulipes/cli/templates/browser-auth.md'), 'utf8');
     if (guide !== template) throw new Error('Generated browser authentication guide differs from the packed template');
   }
 
@@ -86,8 +87,11 @@ try {
   const probe = run(process.execPath, ['--input-type=module', '-e', `
     import { createRequire } from 'node:module';
     const targets = ['mongoose', 'mongodb', 'bson', '@tulipes/mongoose', 'bullmq', '@tulipes/bullmq', 'ioredis', 'socket.io', '@tulipes/socket.io'];
+    const tooling = ['tsx', 'esbuild', '@tulipes/cli'];
     const from = anchor => Object.fromEntries(targets.map(t => { try { createRequire(anchor).resolve(t); return [t, true]; } catch { return [t, false]; } }));
-    console.log(JSON.stringify({ app: from(process.argv[1]), core: from(createRequire(process.argv[1]).resolve('@tulipes/core')), cli: from(process.argv[2]) }));
+    const coreEntry = createRequire(process.argv[1]).resolve('@tulipes/core');
+    const fromCore = Object.fromEntries(tooling.map(t => { try { createRequire(coreEntry).resolve(t); return [t, true]; } catch { return [t, false]; } }));
+    console.log(JSON.stringify({ app: from(process.argv[1]), core: from(coreEntry), cli: from(process.argv[2]), tooling_from_core: fromCore }));
   `, pkgFile, bin], app, env);
   const resolved = JSON.parse(probe.trim().split('\n').at(-1));
   writeFileSync(join(logs, 'resolve.json'), JSON.stringify(resolved, null, 2));
@@ -100,6 +104,9 @@ try {
       if (found !== expected) throw new Error(`${target} ${found ? 'resolves' : 'does not resolve'} from ${anchor} in the ${preset} preset; see ${join(logs, 'resolve.json')}`);
     }
   }
+  // Tooling (tsx, esbuild, the CLI) is the app's devDependency, so a generated
+  // app's core directory sees it by hoisting; `tooling_from_core` is recorded
+  // for the report, and the core-only absence proof is the inventory harness.
   run(process.execPath, [join(scripts, 'audit.mjs'), join(logs, 'dependencies.jsonl')], app, env);
   for (const script of ['sync', 'typecheck']) run('yarn', [script], app, env);
   const guard = join(app, 'offline-guard.mjs');

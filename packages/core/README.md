@@ -34,7 +34,7 @@ Requires Node 24.x and Corepack. Tulipes is experimental; see the
 [compatibility policy](../../docs/support.md).
 
 ```sh
-npm install -g @tulipes/core@next
+npm install -g @tulipes/cli@next
 tulipes init my-api
 cd my-api
 corepack enable
@@ -402,6 +402,12 @@ only in development.
 
 ## The CLI
 
+The command line is its own package, [`@tulipes/cli`](https://www.npmjs.com/package/@tulipes/cli):
+install it globally to scaffold, and generated apps also list it in
+`devDependencies` so `yarn dev`, `yarn sync` and `yarn tulipes …` need no
+global install. Core itself ships no binary, no templates and no TypeScript
+loader — a running app installs only the HTTP runtime.
+
 | Command | What it does |
 |---|---|
 | `tulipes init [dir] [--minimal \| --preset minimal \| --preset production]` | scaffold an application; no services |
@@ -414,9 +420,9 @@ only in development.
 | `tulipes update` | upgrade the global CLI and, inside an app, the app itself |
 | `tulipes -v` | print the CLI version, and the app's when they differ |
 
-`update` handles two separate installs: the global `tulipes` on your PATH, and
-the `@tulipes/core` an app depends on — including every module, since modules
-declare it themselves. It reinstalls the CLI into the prefix it already lives
+`update` handles two separate installs: the global `@tulipes/cli` on your PATH,
+and the `@tulipes/core` an app depends on — including every module, since
+modules declare it themselves — plus the app's own `@tulipes/cli`. It reinstalls the CLI into the prefix it already lives
 in, which is what makes it work under nvm, where a plain `npm install -g` may
 target a different Node version than the one holding your binary.
 

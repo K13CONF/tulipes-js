@@ -174,7 +174,7 @@ function buildStarter(root, preset) {
   const cli = join(root, 'cli');
   writeManifest(cli, { private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions });
   run('yarn', ['install'], { cwd: cli, env: yarnEnv(join(root, 'cache-cli')), log: join(root, 'cli-install.log') });
-  const bin = join(cli, 'node_modules/@tulipes/core/dist/cli/bin.js');
+  const bin = join(cli, 'node_modules/@tulipes/cli/dist/bin.js');
   const app = join(root, 'app');
   run(process.execPath, [bin, 'init', app, '--preset', preset], { cwd: root, env: cleanEnv(), log: join(root, 'init.log') });
   const pkgFile = join(app, 'package.json');
@@ -446,7 +446,7 @@ async function startup(keys) {
     if (record.resolve.app.mongoose) scenarios.import_mongoose = await timed(async () => importTiming(record.app, 'mongoose'));
     if (record.root && existsSync(join(record.root, 'cli'))) {
       scenarios.import_boot_tsx = await timed(async () => importTiming(record.app, '@tulipes/core/boot', ['--import', 'tsx']));
-      const bin = join(record.root, 'cli/node_modules/@tulipes/core/dist/cli/bin.js');
+      const bin = join(record.root, 'cli/node_modules/@tulipes/cli/dist/bin.js');
       const env = appEnv(key, services);
       scenarios.offline_spec = await timed(async () => offlineTiming(record.app, bin, env));
       scenarios.backend_readiness = await timed(() => spawnUntil(process.execPath, ['--import', 'tsx', 'app.ts'], { cwd: record.app, env: { ...env, PORT: '0' } }, readyByBanner(key === 'C' ? ['/api/v1/hello'] : ['/health', '/api/v1/hello'])));

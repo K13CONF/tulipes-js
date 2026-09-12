@@ -2,9 +2,9 @@ import { spawnSync } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
-import { fixture } from "./fixture.js";
+import { fixture } from "../../core/tests/fixture.js";
 
-const cli = resolve("packages/core/src/cli/bin.ts");
+const cli = resolve("packages/cli/src/bin.ts");
 
 function init(rootDir: string, args: string[]) {
   return spawnSync(
