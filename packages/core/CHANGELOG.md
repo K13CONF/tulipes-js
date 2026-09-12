@@ -11,6 +11,12 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- `tulipes init --preset production` accepts `--no-queues` and `--no-sockets`
+  (Sprint 05, S14): the generated app omits that provider's declaration,
+  dependencies, files and worker process, and its controllers do the work
+  in-request instead. Both flags are rejected with the minimal preset before
+  any file is written. The packed smoke runs the variants.
+
 - **Breaking:** the command line moved to `@tulipes/cli` (Sprint 05, S12).
   Core ships no `tulipes` binary, no `templates/` and no `tsx`; its runtime
   dependencies are express, zod, i18next, i18next-fs-backend, dotenv and
