@@ -32,7 +32,9 @@ tulipes init my-api          # --preset production for the full application
 | [`example`](./example) | the reference application: six modules, exercising every contract |
 
 Start with **[packages/core/README.md](./packages/core/README.md)** — that is
-the documentation. This file only says where things live.
+the documentation. This file only says where things live, and
+[AGENTS.md](./AGENTS.md) says how to work in here (coding agents read it by
+convention; it is worth a human's time too).
 
 An app installs the runtime and declares the infrastructure it wants; core
 itself pulls in no database, queue or socket driver.
