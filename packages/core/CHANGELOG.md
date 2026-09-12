@@ -11,6 +11,18 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.10.0-rc.3] — 2026-09-12
+
+Released with the first `@tulipes/cli@0.1.0-rc.1`, plus `@tulipes/spec@0.3.0-rc.6`,
+`@tulipes/mongoose@0.1.0-rc.3`, `@tulipes/bullmq@0.1.0-rc.2` and
+`@tulipes/socket.io@0.1.0-rc.2`; all use `next`. Every app must install the CLI
+package — see [MIGRATING.md](./MIGRATING.md#0100-rc3--install-the-cli-package).
+
+- `@tulipes/bullmq`: a consumer that is still connecting settles before it is
+  closed, so a graceful shutdown cannot die of an unhandled "Connection is
+  closed." rejection from its offline command queue; raw connections carry an
+  error listener.
+
 - `tulipes init --preset production` accepts `--no-queues` and `--no-sockets`
   (Sprint 05, S14): the generated app omits that provider's declaration,
   dependencies, files and worker process, and its controllers do the work
