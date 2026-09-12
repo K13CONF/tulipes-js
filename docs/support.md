@@ -16,26 +16,35 @@ currently claimed as supported. Node upgrades require expanding CI first.
 
 ## Pre-1.0 policy
 
-Candidate line: core 0.10.0-rc.3, the command line `@tulipes/cli` 0.1.0-rc.1,
-spec 0.3.0-rc.6 and the providers `@tulipes/mongoose` 0.1.0-rc.3,
-`@tulipes/bullmq` 0.1.0-rc.2 and `@tulipes/socket.io` 0.1.0-rc.2, released
-under `next`. The `tulipes` command now ships in its own package: install it
-globally and as an app devDependency. Spec rc.4 admits core
-`^0.9.0-rc.3 || ^0.10.0-rc.1`; mongoose requires core `^0.10.0-rc.1` and the
-app's own `mongoose ^8`; bullmq and socket.io require core `^0.10.0-rc.2`. Core
-0.10 installs no database, queue or socket driver: apps select providers in
-`package.json` (Sprints 03–04); Sprint 02 offline inspection and security
-controls are included; production-pilot acceptance remains later work. Earlier
-candidates stay installable under their own versions.
-Candidate fixes target the current triple; the stable support lines below remain
-in effect until a 0.x line becomes stable.
+Current stable line, published to `latest`: core 0.10.0, `@tulipes/cli` 0.1.0,
+`@tulipes/spec` 0.3.0, and the providers `@tulipes/mongoose`, `@tulipes/bullmq`
+and `@tulipes/socket.io` at 0.1.0. The `tulipes` command ships in its own
+package: install it globally and as an app devDependency. Each provider
+requires core `^0.10.0`; spec also accepts the 0.9 candidate line.
 
-The current released lines are core 0.8.x and spec 0.2.x. Normal fixes target
-these lines. Critical security fixes for the previous core minor (0.7.x, with
-spec 0.1.x) are evaluated until the next core minor is released; where a safe
-backport is impractical, the advisory must explain the required upgrade. This
-is a best-effort maintenance commitment, with no guaranteed response time.
-Update this table of maintained lines in each release PR.
+**Stable is a statement about the API, not about production hours.** The 0.10
+contracts are settled and breaking changes wait for 0.11; every supported
+journey is exercised by CI on each commit, and the operational harnesses in
+`scripts/` cover real nginx ingress and MongoDB/Redis failure. No production
+pilot has run this framework yet: there is no load, backup-restore or
+multi-replica evidence, and no independent security review. Sprint 06 of the
+[production readiness programme](sprints/production-readiness-06.md) lists
+exactly what is missing. Choose it accordingly.
+
+Core 0.10 installs no database, queue or socket driver: an app declares the
+providers it wants in `package.json`, and the app's own `mongoose ^8` stays its
+dependency. Sprint 02's offline inspection and security controls are included.
+
+Maintained lines, to be updated in each release PR:
+
+| Line | Status |
+|---|---|
+| core 0.10.x, cli 0.1.x, spec 0.3.x, providers 0.1.x | current; normal fixes target these |
+| core 0.9.x | candidates only (`next`); superseded by 0.10.0 — upgrade rather than expecting fixes |
+| core 0.8.x, spec 0.2.x | previous stable; critical security fixes evaluated until the next core minor ships, where a safe backport is practical |
+| core 0.7.x and older | unmaintained |
+
+This is a best-effort maintenance commitment with no guaranteed response time.
 
 Patch releases preserve documented behavior except for clearly documented
 security corrections. A 0.x minor may change public contracts and must include
