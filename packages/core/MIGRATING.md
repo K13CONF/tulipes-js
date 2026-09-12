@@ -12,8 +12,13 @@ what makes it work under nvm.
 ---
 
 <a id="unreleased--declare-the-models-provider"></a>
+<a id="0100-rc1--declare-the-models-provider"></a>
 
-## Unreleased — declare the models provider
+## 0.10.0-rc.1 — declare the models provider
+
+Upgrade core, spec and the new provider together: core `0.10.0-rc.1`, spec
+`0.3.0-rc.4` (its peer range admits both core lines) and `@tulipes/mongoose`
+`0.1.0-rc.1` (peer `@tulipes/core ^0.10.0-rc.1`, `mongoose ^8`).
 
 The database is now selected by the app, not by the presence of `MONGO_URI`,
 and the Mongoose implementation lives in its own package. For every app that

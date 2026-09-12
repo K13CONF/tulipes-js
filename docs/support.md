@@ -16,15 +16,16 @@ currently claimed as supported. Node upgrades require expanding CI first.
 
 ## Pre-1.0 policy
 
-Candidate line: core 0.9.0-rc.3 and spec 0.3.0-rc.3, released under `next`.
-Spec rc.3 requires core `^0.9.0-rc.3`; upgrade the pair together. The candidate
-includes Sprint 02 offline inspection and security controls; provider extraction
-and production-pilot acceptance remain later work.
-Candidate fixes target this pair; the stable support lines below remain in
-effect until 0.9.0 becomes stable. The workspace additionally carries the
-unreleased `@tulipes/mongoose` provider (Sprint 03): the next candidate ships
-it as a third package, with the core/provider/spec ranges set in that release
-PR, and core stops installing Mongoose from that version on.
+Candidate line: core 0.10.0-rc.1, spec 0.3.0-rc.4 and the first provider
+`@tulipes/mongoose` 0.1.0-rc.1, released under `next`. Spec rc.4 admits core
+`^0.9.0-rc.3 || ^0.10.0-rc.1`; the provider requires core `^0.10.0-rc.1` and the
+app's own `mongoose ^8`. Core 0.10 no longer installs Mongoose: apps with models
+select the provider in `package.json` (Sprint 03); Sprint 02 offline inspection
+and security controls are included; production-pilot acceptance remains later
+work. The previous candidate pair, core 0.9.0-rc.3 / spec 0.3.0-rc.3, stays
+installable under its own versions.
+Candidate fixes target the current triple; the stable support lines below remain
+in effect until a 0.x line becomes stable.
 
 The current released lines are core 0.8.x and spec 0.2.x. Normal fixes target
 these lines. Critical security fixes for the previous core minor (0.7.x, with

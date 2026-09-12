@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/core",
-  "version": "0.9.0-rc.3",
+  "version": "0.10.0-rc.1",
   "description": "Module-based Express framework: convention-driven boot pipeline, env contracts, ACL, queues, sockets and CLI",
   "type": "module",
   "bin": {
