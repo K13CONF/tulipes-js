@@ -488,12 +488,15 @@ edit:
 
 ## Built for AI-assisted work
 
-`tulipes init` also writes a `CLAUDE.md` and eight task-scoped skills under
-`.claude/skills/` — module, environment variable, endpoint, model, queue,
-socket, permissions, and reading boot errors. They encode the conventions an
-agent would otherwise guess wrong: declaring variables instead of reaching for
-`process.env`, why `mongoose.model()` is never called directly, where global
-middleware belongs, and how to read an aggregate boot report.
+`tulipes init` also writes an **`AGENTS.md`** — the cross-tool convention every
+coding agent reads — plus a short `CLAUDE.md` pointing at it and eight
+task-scoped skills under `.claude/skills/`: module, environment variable,
+endpoint, model, queue, socket, permissions, and reading boot errors. They
+encode the conventions an agent would otherwise guess wrong: declaring
+variables instead of reaching for `process.env`, why `mongoose.model()` is
+never called directly, where global middleware belongs, and how to read an
+aggregate boot report. The skills are plain markdown, so an agent without skill
+support can read them directly.
 
 <details>
 <summary><b>Subpath exports</b></summary>
