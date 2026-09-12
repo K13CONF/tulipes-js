@@ -5,10 +5,14 @@ import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 const [artifactPath, preset = 'minimal', ...flags] = process.argv.slice(2);
-if (!artifactPath || !['minimal', 'production'].includes(preset) || flags.some(flag => !['--offline-only', '--registry'].includes(flag))) {
-  throw new Error('Usage: scaffold-smoke.mjs <artifacts> minimal|production [--offline-only] [--registry]');
+if (!artifactPath || !['minimal', 'production'].includes(preset) || flags.some(flag => !['--offline-only', '--registry', '--no-queues', '--no-sockets'].includes(flag))) {
+  throw new Error('Usage: scaffold-smoke.mjs <artifacts> minimal|production [--offline-only] [--registry] [--no-queues] [--no-sockets]');
 }
 const offlineOnly = flags.includes('--offline-only');
+// Feature composition (S14): the production preset without one of its optional providers.
+const features = { queues: !flags.includes('--no-queues'), sockets: !flags.includes('--no-sockets') };
+const initFlags = [...(features.queues ? [] : ['--no-queues']), ...(features.sockets ? [] : ['--no-sockets'])];
+const variant = preset + (features.queues ? '' : '-no-queues') + (features.sockets ? '' : '-no-sockets');
 // --registry: the manifest names published versions; everything installs from
 // npm at exactly those versions and no local archive may be used. Yarn's
 // release-age gate is lifted only for the exact versions whose bytes the
@@ -18,7 +22,7 @@ const artifacts = resolve(artifactPath);
 const workspace = mkdtempSync(join(tmpdir(), 'tulipes-packed-'));
 const scripts = import.meta.dirname;
 const started = Date.now();
-const logs = resolve('reports', 'scaffold-' + preset + (offlineOnly ? '-offline' : '') + (registry ? '-registry' : ''));
+const logs = resolve('reports', 'scaffold-' + variant + (offlineOnly ? '-offline' : '') + (registry ? '-registry' : ''));
 mkdirSync(logs, { recursive: true });
 let step = 0;
 function run(command, args, cwd, env = process.env) {
@@ -46,7 +50,7 @@ try {
   run('yarn', ['install'], cliRoot, { ...process.env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
   const bin = join(cliRoot, 'node_modules/@tulipes/cli/dist/bin.js');
   const app = join(workspace, 'app');
-  run(process.execPath, [bin, 'init', app, '--preset', preset], workspace);
+  run(process.execPath, [bin, 'init', app, '--preset', preset, ...initFlags], workspace);
   if (preset === 'production') {
     // The installed generator must carry the browser policy with its auth code.
     const guide = readFileSync(join(app, 'docs/browser-auth.md'), 'utf8');
@@ -99,9 +103,12 @@ try {
   // launcher. Production: present for the app (its modules and providers own
   // them), never through the launcher; core's directory sees them only by hoisting.
   const expectations = preset === 'minimal' ? { app: false, core: false, cli: false } : { app: true, cli: false };
+  // A production variant without a provider must not carry that provider's driver either.
+  const omitted = new Set([...(features.queues ? [] : ['bullmq', '@tulipes/bullmq']), ...(features.sockets ? [] : ['socket.io', '@tulipes/socket.io'])]);
   for (const [anchor, expected] of Object.entries(expectations)) {
     for (const [target, found] of Object.entries(resolved[anchor])) {
-      if (found !== expected) throw new Error(`${target} ${found ? 'resolves' : 'does not resolve'} from ${anchor} in the ${preset} preset; see ${join(logs, 'resolve.json')}`);
+      const want = anchor === 'app' && omitted.has(target) ? false : expected;
+      if (found !== want) throw new Error(`${target} ${found ? 'resolves' : 'does not resolve'} from ${anchor} in the ${variant} preset; see ${join(logs, 'resolve.json')}`);
     }
   }
   // Tooling (tsx, esbuild, the CLI) is the app's devDependency, so a generated
@@ -126,7 +133,7 @@ try {
   const spec = JSON.parse(readFileSync(join(app, 'docs/openapi.json'), 'utf8'));
   if (!spec.paths['/api/v1/hello']) throw new Error('Quick-start endpoint missing from generated specification');
   if (offlineOnly) {
-    console.log(`${preset}: ${registry ? 'registry' : 'packed'} offline declarations, typecheck and deterministic specs passed with network connections denied`);
+    console.log(`${variant}: ${registry ? 'registry' : 'packed'} offline declarations, typecheck and deterministic specs passed with network connections denied`);
   } else {
     // Runtime checks live in a file inside the installed application; no source
     // workspace module can satisfy its imports.
@@ -138,8 +145,9 @@ try {
       try {
         const base = 'http://127.0.0.1:' + backend.server.address().port;
         assert.equal((await fetch(base + '/api/v1/hello')).status, 200);
-        ${preset === 'production' ? `worker = await boot({ rootDir: import.meta.dirname, mode: 'worker', appEnv: 'production', handleSignals: false });
-        assert.ok(worker.ctx.queues.workerCount > 0);
+        ${preset === 'production' ? `${features.queues ? `worker = await boot({ rootDir: import.meta.dirname, mode: 'worker', appEnv: 'production', handleSignals: false });
+        assert.ok(worker.ctx.queues.workerCount > 0);` : `assert.equal(backend.ctx.queues, undefined);`}
+        ${features.sockets ? `assert.ok(backend.ctx.sockets);` : `assert.equal(backend.ctx.sockets, undefined);`}
         const login = await fetch(base + '/api/v1/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: process.env.AUTH_ADMIN_EMAIL, password: process.env.AUTH_ADMIN_PASSWORD }) });
         assert.equal(login.status, 200);
         const token = (await login.json()).data.access_token;
@@ -158,7 +166,7 @@ try {
       copyFileSync(join(scripts, 'pm2-smoke.mjs'), join(app, 'pm2-smoke.mjs'));
       run(process.execPath, ['--import', 'tsx', 'pm2-smoke.mjs'], app, { ...env, PM2_HOME: join(workspace, 'pm2') });
     }
-    console.log(`${preset}: ${registry ? 'registry' : 'packed'} install, generated types, tests, specs, backend/shutdown${preset === 'production' ? ' and worker' : ''} passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+    console.log(`${variant}: ${registry ? 'registry' : 'packed'} install, generated types, tests, specs, backend/shutdown${preset === 'production' && features.queues ? ' and worker' : ''} passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   }
 } finally {
   // TULIPES_SMOKE_KEEP=1 leaves the generated app behind for a post-mortem.

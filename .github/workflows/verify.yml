@@ -119,6 +119,27 @@ jobs:
         with:
           name: production-offline-smoke
           path: reports/
+  composition:
+    needs: pack
+    runs-on: ubuntu-latest
+    # The production preset without its optional providers must still typecheck
+    # and describe itself offline from the same archives.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-packages
+          path: .artifacts
+      - run: node scripts/scaffold-smoke.mjs .artifacts production --no-queues --no-sockets --offline-only
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: composition-smoke
+          path: reports/
   upgrade:
     needs: pack
     runs-on: ubuntu-latest

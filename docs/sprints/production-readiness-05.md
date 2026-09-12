@@ -17,4 +17,4 @@ every remaining dependency.
 | S12.3 | Complete | 2026-09-12: `@tulipes/cli` holds commands, templates and tests; core ships runtime only — [CLI design §5](../design/cli-package-design.md#5-evidence-s123-s124-2026-09-12) |
 | S12.4 | Complete | packed journeys for both presets, module generation, upgrade and parity through the split; core-only install 26.95 MB → 7.58 MB (−71.9%) |
 | S13.1–S13.4 | Complete | 2026-09-12: retain i18next as the always-available guarantee (1.2 MB, 16% of the runtime install; every preset translates; no provider-free journey exists); no extraction (S13.3 not justified); retained-behavior suite `packages/core/tests/i18n.test.ts` — [translation contract](../design/translation-contract.md) |
-| S14 | Not started | Own increment |
+| S14.1–S14.5 | Complete | 2026-09-12: presets kept, `--no-queues`/`--no-sockets` for production validated before writing, generation composes only selected features, auth/settings stay generated code (deferral recorded), combination rows executable in packed smokes and a `composition` CI job — [feature composition](../design/feature-composition.md) |

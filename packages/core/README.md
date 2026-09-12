@@ -410,7 +410,7 @@ loader — a running app installs only the HTTP runtime.
 
 | Command | What it does |
 |---|---|
-| `tulipes init [dir] [--minimal \| --preset minimal \| --preset production]` | scaffold an application; no services |
+| `tulipes init [dir] [--minimal \| --preset minimal \| --preset production] [--no-queues] [--no-sockets]` | scaffold an application; no services; the opt-outs compose the production preset without that provider |
 | `tulipes dev [entry]` | regenerate types, then run under tsx watch |
 | `tulipes sync` | regenerate `types/config.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting — a CI gate |
