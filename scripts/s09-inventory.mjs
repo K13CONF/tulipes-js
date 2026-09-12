@@ -86,6 +86,13 @@ function baseline() {
     pkg.archive_bytes = statSync(file).size;
     pkg.unpacked_bytes = listing.reduce((sum, line) => sum + Number(line.trim().split(/\s+/)[4] ?? 0), 0);
     pkg.files = listing.length;
+    // Composition: which part of the archive is runtime, CLI or scaffold material.
+    pkg.composition = {};
+    for (const line of listing) {
+      const parts = line.trim().split(/\s+/); const size = Number(parts[4] ?? 0); const path = parts.at(-1) ?? '';
+      const area = /^package\/dist\/cli\//.test(path) ? 'dist/cli' : /^package\/dist\//.test(path) ? 'dist/runtime' : /^package\/(templates|assets)\//.test(path) ? path.split('/')[1] : 'other';
+      pkg.composition[area] = (pkg.composition[area] ?? 0) + size;
+    }
     pkg.dts_mongoose = run('tar', ['-xOf', file, ...listing.map(l => l.trim().split(/\s+/).at(-1)).filter(p => p.endsWith('.d.ts'))]).stdout
       .split('\n').filter(line => /from ["']mongoose["']/.test(line)).length;
   }
@@ -255,7 +262,7 @@ function isPackageRoot(file) {
 }
 
 /** Roots whose reachable graphs are attributed separately: the extracted drivers. */
-const GRAPH_ROOTS = ['mongoose', 'bullmq', 'ioredis', 'socket.io'];
+const GRAPH_ROOTS = ['mongoose', 'bullmq', 'ioredis', 'socket.io', 'tsx', 'node-gyp', 'express', 'i18next', 'i18next-fs-backend', 'zod', 'dotenv', 'colorette', 'typescript', 'vitest', 'vite', '@tulipes/spec'];
 
 /** Dependencies reachable from one root package, resolved the way Node would. */
 function dependencyGraph(modulesDir, root) {
@@ -268,7 +275,8 @@ function dependencyGraph(modulesDir, root) {
     if (seen.has(name)) continue;
     const pkg = readJson(join(dir, 'package.json'));
     seen.set(name, { version: pkg.version, bytes: dirBytes(dir), path: relative(modulesDir, dir) });
-    for (const dep of Object.keys(pkg.dependencies ?? {})) {
+    // Optional dependencies count when installed: esbuild's platform binary is one.
+    for (const dep of Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies })) {
       // Nested copy first, then hoisted — the same lookup order as require().
       const nested = join(dir, 'node_modules', dep), hoisted = join(modulesDir, dep);
       if (existsSync(nested)) queue.push([dep, nested]); else if (existsSync(hoisted)) queue.push([dep, hoisted]);
