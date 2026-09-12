@@ -1,6 +1,6 @@
 # Sprint 05 — Packaging decisions and feature composition
 
-Status: S12 merged as PR #12 (`eaaef83`); S13 decided on 2026-09-12 (retain);
+Status: S12 merged as PR #12 (`eaaef83`); S13 merged as PR #13 (`f9b89ed`);
 S14 (feature composition) follows as its own increment.
 
 Program: [Sprint 05 task definitions](production-readiness-task-report.md#6-sprint-05--packaging-decisions-and-feature-composition).
