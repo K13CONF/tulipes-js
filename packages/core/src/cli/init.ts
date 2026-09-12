@@ -98,12 +98,12 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
   const core = `^${coreVersion}`;
   // The models provider ships separately from core; the app owns mongoose
   // itself (a peer of the provider) so schemas and provider share one copy.
-  const mongooseProvider = "^0.1.0-rc.1";
+  const mongooseProvider = "^0.1.0-rc.2";
   const bullmqProvider = "^0.1.0-rc.1";
   const socketProvider = "^0.1.0-rc.1";
   // The generator ships its own version line; it only has to be recent
   // enough to understand the RouteInfo schemas this core declares.
-  const specVersion = "^0.3.0-rc.4";
+  const specVersion = "^0.3.0-rc.5";
 
   const files: [string, string][] = [
     // Ship browser policy as an editable document alongside the auth modules.

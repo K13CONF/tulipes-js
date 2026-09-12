@@ -6,9 +6,13 @@ No release is created just by merging a feature PR.
 1. Update versions of every changed published package, changelog, migration notes
    and supported lines. Update generated dependency ranges and spec's core peer
    range when necessary. Three packages are packed and published together —
-   `@tulipes/core`, `@tulipes/spec` and `@tulipes/mongoose`; every one whose
-   bytes changed needs a new version before publication, and the provider's
-   core peer range must admit the core it ships with.
+   `@tulipes/core`, `@tulipes/spec`, `@tulipes/mongoose`, `@tulipes/bullmq` and
+   `@tulipes/socket.io`; every one whose bytes changed needs a new version
+   before publication, and each provider's core peer range must admit the core
+   it ships with. Note that `yarn pack` rewrites `workspace:*` devDependencies to
+   the concrete core version, so **every workspace package's archive changes
+   whenever core's version does**: bump them all with core, even without source
+   changes, or the immutable-version preflight refuses the repack.
 2. Open and merge a reviewed PR with passing CI. For structural changes, choose
    a prerelease version first (for example `0.9.0-rc.1`) and compatible spec
    dependencies. RC versions publish to `next`, stable versions to `latest`.
