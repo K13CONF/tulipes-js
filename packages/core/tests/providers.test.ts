@@ -197,3 +197,81 @@ test("offline inspection validates declarations without resolving or importing t
 
   await expect(inspectRoutes({ rootDir: unmet.rootDir })).rejects.toThrow(/\[probe\] requires capability "models"/);
 });
+
+/** A provider whose resource can serve and drain, logging the order of events. */
+const servingProvider = (options: { consumers?: number; serve?: boolean } = {}) => `
+  import { appendFileSync } from 'node:fs';
+  const log = line => appendFileSync(new URL('./log.txt', import.meta.url), line + '\\n');
+  export default {
+    contract: 1, capability: 'queues', name: 'fake-queues',
+    async acquire({ ctx }, report, own) {
+      own({
+        ${options.serve === false ? "" : `serve: () => { log('serve mode=' + ctx.mode); return ${options.consumers ?? 1}; },`}
+        drain: async () => { await new Promise(r => setTimeout(r, 5)); log('drain'); },
+        dispose: () => log('dispose'),
+        status: () => ({ label: 'fake-queues', ready: true, detail: 'x' }),
+      });
+      return { produce: () => 'ok' };
+    },
+  };
+`;
+
+test("serve() runs in worker mode only and its count gates the worker", async () => {
+  const app = await fixture({
+    "package.json": declare({ queues: "./providers/queues.js" }),
+    "providers/queues.js": servingProvider({ consumers: 2 }),
+  });
+
+  const backend = await app.boot({ listen: false });
+  expect(backend.consumers).toBe(0);
+  expect(await readLog(app.rootDir)).toEqual([]);
+  await backend.shutdown();
+
+  const worker = await app.boot({ mode: "worker" });
+  expect(worker.consumers).toBe(2);
+  expect(await readLog(app.rootDir)).toEqual(["drain", "dispose", "serve mode=worker"]);
+  await worker.shutdown();
+
+  const idle = await fixture({
+    "package.json": declare({ queues: "./providers/queues.js" }),
+    "providers/queues.js": servingProvider({ consumers: 0 }),
+  });
+  await expect(idle.boot({ mode: "worker" })).rejects.toThrow(/worker mode started with zero processors/);
+
+  const cannotServe = await fixture({
+    "package.json": declare({ queues: "./providers/queues.js" }),
+    "providers/queues.js": servingProvider({ serve: false }),
+  });
+  await expect(cannotServe.boot({ mode: "worker" })).rejects.toThrow(/zero processors/);
+  // The refusal still disposed what was acquired.
+  expect(await readLog(cannotServe.rootDir)).toEqual(["drain", "dispose"]);
+});
+
+test("drain() runs before module onShutdown and dispose() after it, in one shutdown", async () => {
+  const app = await fixture({
+    "package.json": declare({ queues: "./providers/queues.js" }),
+    "providers/queues.js": servingProvider(),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["queues"] } }),
+    "modules/probe/module.config.js": `
+      import { appendFileSync } from 'node:fs';
+      const log = line => appendFileSync(new URL('../../providers/log.txt', import.meta.url), line + '\\n');
+      export default () => ({});
+      export function onDrain() { log('module onDrain'); }
+      export function onShutdown(ctx) { log('module onShutdown queues=' + (ctx.queues ? 'available' : 'gone')); }
+    `,
+  });
+
+  const handle = await app.boot({ mode: "script" });
+  await handle.shutdown();
+
+  const log = await readLog(app.rootDir);
+  // onDrain and drain run concurrently; both precede onShutdown, which precedes dispose.
+  expect(log.slice(0, 2).sort()).toEqual(["drain", "module onDrain"]);
+  expect(log.slice(2)).toEqual(["module onShutdown queues=available", "dispose"]);
+});
+
+test("a queues/ directory implies the queues requirement", async () => {
+  const app = await fixture({ "modules/probe/queues/work.queues.js": `throw new Error('queue code imported');` });
+
+  await expect(app.boot({ mode: "script" })).rejects.toThrow(/\[probe\] requires capability "queues" \(has queues\/ files\)/);
+});

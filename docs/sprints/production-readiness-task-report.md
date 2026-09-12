@@ -315,7 +315,7 @@ If necessary, deliver queues first and schedule sockets as the next increment.
 - [x] **S10.3 — Extract queues.** Move BullMQ and queue-owned Redis dependencies
   behind explicit provider selection. Keep connection ownership unambiguous;
   closing a worker must not close an unrelated rate-limit/cache connection.
-- [ ] **S10.4 — Retain runtime and failure cases.** Test real enqueue/consume,
+- [x] **S10.4 — Retain runtime and failure cases.** Test real enqueue/consume,
   registration errors, reconnect failures, worker drain, failed startup, repeated
   shutdown and cleanup with active work. Test one connection owner's failure
   without silently disabling an unrelated Redis consumer.

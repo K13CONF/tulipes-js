@@ -206,6 +206,8 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
       // to consume is a misconfigured deployment, not a valid idle state.
       const workerReport = new BootReport();
       handle.consumers = await serveProviders(acquiredProviders, workerReport);
+      // Serving changes what a provider reports (consumers now running).
+      handle.providers = providerStatuses(acquiredProviders);
       workerReport.throwIfAny("workers");
       if (handle.consumers === 0) {
         throw new Error(
