@@ -178,3 +178,32 @@ integration("driver errors on producers and consumers never escape as unhandled 
   const observer = new Redis(redisUrl!);
   try { await observer.del(`bull:${name}:meta`); } finally { await observer.quit(); }
 });
+
+integration("shutting down while a consumer is still connecting rejects nothing", async () => {
+  const name = `probe.${randomUUID()}`;
+  const app = await fixture({
+    "package.json": declared,
+    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/module.config.js": `export default () => ({});`,
+    "modules/probe/queues/work.queues.js": queueFile(name),
+  });
+
+  const rejections: unknown[] = [];
+  const collect = (reason: unknown) => rejections.push(reason);
+  process.on("unhandledRejection", collect);
+
+  try {
+    // Shut down immediately: the consumer may still be connecting, and its
+    // offline-queued startup commands must not reject into nobody.
+    const worker = await app.boot({ mode: "worker" });
+    await worker.shutdown();
+
+    // Give any stray rejection a turn to surface before asserting.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(rejections).toEqual([]);
+  } finally {
+    process.off("unhandledRejection", collect);
+    const observer = new Redis(redisUrl!);
+    try { await observer.del(`bull:${name}:meta`); } finally { await observer.quit(); }
+  }
+});

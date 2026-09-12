@@ -1,4 +1,4 @@
-import { runInit, type InitPreset } from "./init.js";
+import { FULL_FEATURES, runInit, type InitFeatures, type InitPreset } from "./init.js";
 import { runSync } from "./sync.js";
 import { runEnvCheck } from "./env-check.js";
 import { runNewModule } from "./new-module.js";
@@ -18,6 +18,7 @@ const HELP = `tulipes — module-based express framework
 Usage:
   tulipes init [dir]           scaffold a minimal API (no mongo/redis)
                                  --minimal | --preset minimal | --preset production
+                                 --no-queues | --no-sockets  (production only) leave a provider out
   tulipes dev [entry]          run with tsx in watch mode (default entry: app.ts), sync first
   tulipes sync                 regenerate types/config.d.ts and .env.example
   tulipes env:check            validate env against every meta.variables.json (CI-friendly)
@@ -43,8 +44,8 @@ export async function main(argv: readonly string[]): Promise<void> {
   switch (command) {
     case "init": {
       try {
-        const { target, preset } = initArguments(rest);
-        return await runInit(rootDir, target, preset);
+        const { target, preset, features } = initArguments(rest);
+        return await runInit(rootDir, target, preset, features);
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
         process.exitCode = 2;
@@ -126,9 +127,10 @@ function inspectionArguments(args: readonly string[], command: "routes" | "spec"
 }
 
 /** Validate the complete init invocation before creating any files. */
-function initArguments(args: readonly string[]): { target?: string; preset: InitPreset } {
+function initArguments(args: readonly string[]): { target?: string; preset: InitPreset; features: InitFeatures } {
   let target: string | undefined;
   let preset: InitPreset | undefined;
+  const features: InitFeatures = { ...FULL_FEATURES };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
     if (arg === "--minimal" || arg === "--preset") {
@@ -136,11 +138,18 @@ function initArguments(args: readonly string[]): { target?: string; preset: Init
       if (value !== "minimal" && value !== "production") throw new Error("--preset requires minimal or production");
       if (preset && preset !== value) throw new Error("Conflicting init presets");
       preset = value;
+    } else if (arg === "--no-queues" || arg === "--no-sockets") {
+      features[arg === "--no-queues" ? "queues" : "sockets"] = false;
     } else if (arg.startsWith("-")) {
       throw new Error(`Unknown init option: ${arg}`);
     } else if (target !== undefined) {
       throw new Error("init accepts only one target directory");
     } else target = arg;
   }
-  return { target, preset: preset ?? "minimal" };
+  // Validated before any file is written: the minimal preset has no
+  // providers to leave out, so the flag would silently mean nothing.
+  if ((preset ?? "minimal") === "minimal" && (!features.queues || !features.sockets)) {
+    throw new Error("--no-queues and --no-sockets apply to --preset production only");
+  }
+  return { target, preset: preset ?? "minimal", features };
 }

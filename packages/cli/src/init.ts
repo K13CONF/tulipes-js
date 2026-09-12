@@ -19,7 +19,24 @@ import { cliVersion, coreVersion, packageRoot } from "./package-info.js";
  */
 export type InitPreset = "minimal" | "production";
 
-export async function runInit(rootDir: string, target?: string, preset: InitPreset = "minimal"): Promise<void> {
+/**
+ * What the production preset composes. Models are not optional there: auth,
+ * users and settings own models, so the preset without a database is a
+ * different application, not a feature toggle. Queues and sockets are.
+ */
+export interface InitFeatures {
+  queues: boolean;
+  sockets: boolean;
+}
+
+export const FULL_FEATURES: InitFeatures = { queues: true, sockets: true };
+
+export async function runInit(
+  rootDir: string,
+  target?: string,
+  preset: InitPreset = "minimal",
+  features: InitFeatures = FULL_FEATURES,
+): Promise<void> {
   const dir = resolve(rootDir, target ?? ".");
   const name = sanitizeName(basename(dir));
 
@@ -30,7 +47,7 @@ export async function runInit(rootDir: string, target?: string, preset: InitPres
   }
 
   const version = coreVersion();
-  const files = preset === "minimal" ? renderMinimalProject(name, version, cliVersion()) : renderProject(name, version, cliVersion());
+  const files = preset === "minimal" ? renderMinimalProject(name, version, cliVersion()) : renderProject(name, version, cliVersion(), features);
 
   for (const [relPath, content] of files) {
     const filePath = join(dir, relPath);
@@ -53,8 +70,10 @@ export async function runInit(rootDir: string, target?: string, preset: InitPres
     "  → http://localhost:3000/api/v1/hello",
     "",
     preset === "production" ? "Needs mongo and redis running — see MONGO_URI / REDIS_URL in" : "No MongoDB or Redis required. Health: http://localhost:3000/health",
-    preset === "production" ? ".envs/.env.development. Run `yarn worker` in a second terminal to" : undefined,
-    preset === "production" ? "consume queued jobs." : undefined,
+    preset === "production" ? `.envs/.env.development.${features.queues ? " Run `yarn worker` in a second terminal to" : ""}` : undefined,
+    preset === "production" && features.queues ? "consume queued jobs." : undefined,
+    preset === "production" && !features.queues ? "Generated without queues: no worker process, no @tulipes/bullmq." : undefined,
+    preset === "production" && !features.sockets ? "Generated without sockets: no Socket.IO namespaces, no @tulipes/socket.io." : undefined,
   ].filter((line) => line !== undefined).join("\n"));
 }
 
@@ -94,8 +113,15 @@ function sanitizeName(raw: string): string {
 
 const json = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
 
-function renderProject(name: string, coreVersion: string, cliVersion: string): [string, string][] {
+function renderProject(name: string, coreVersion: string, cliVersion: string, features: InitFeatures): [string, string][] {
+  return renderProductionFiles(name, coreVersion, cliVersion, features).filter(([path]) =>
+    (features.queues || !(path === "worker.ts" || /\/queues\//.test(path))) &&
+    (features.sockets || !/\/sockets\//.test(path)));
+}
+
+function renderProductionFiles(name: string, coreVersion: string, cliVersion: string, features: InitFeatures): [string, string][] {
   const core = `^${coreVersion}`;
+  const { queues, sockets } = features;
   // The command line is a separate package: the app depends on it so `yarn
   // dev`, `yarn sync` and `yarn tulipes …` resolve without a global install.
   const cli = `^${cliVersion}`;
@@ -119,7 +145,7 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
       // The one line that selects a database: modules with models/ or
       // bootstrap/ directories require it, and nothing else — not an
       // installed package, not a MONGO_URI — connects one.
-      tulipes: { providers: { models: "@tulipes/mongoose", queues: "@tulipes/bullmq", sockets: "@tulipes/socket.io" } },
+      tulipes: { providers: { models: "@tulipes/mongoose", ...(queues && { queues: "@tulipes/bullmq" }), ...(sockets && { sockets: "@tulipes/socket.io" }) } },
       // Pins yarn 4 through corepack; without it a global classic yarn
       // would handle the workspaces and produce a v1 lockfile.
       packageManager: "yarn@4.18.0",
@@ -131,7 +157,7 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
         dev: "tulipes dev",
         start: "tsx app.ts",
         test: "vitest run",
-        worker: "tsx worker.ts",
+        ...(queues && { worker: "tsx worker.ts" }),
         sync: "tulipes sync",
         check: "tulipes env:check",
         typecheck: "tsc --noEmit",
@@ -148,9 +174,9 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
       },
       dependencies: {
         "@tulipes/core": core,
-        "@tulipes/bullmq": bullmqProvider,
+        ...(queues && { "@tulipes/bullmq": bullmqProvider }),
         "@tulipes/mongoose": mongooseProvider,
-        "@tulipes/socket.io": socketProvider,
+        ...(sockets && { "@tulipes/socket.io": socketProvider }),
         express: "^5",
         mongoose: "^8",
         // Route schemas: validated by rai(), described by `yarn spec`.
@@ -188,7 +214,7 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
         forceConsistentCasingInFileNames: true,
         noEmit: true,
       },
-      include: ["app.ts", "worker.ts", "types", "modules", "config", "scripts", "tests"],
+      include: ["app.ts", ...(queues ? ["worker.ts"] : []), "types", "modules", "config", "scripts", "tests"],
     })],
 
     ["ecosystem.config.cjs", [
@@ -242,6 +268,7 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
       `      out_file: "logs/backend-out.log",`,
       `      ...modes("backend"),`,
       `    },`,
+      ...(queues ? [
       `    {`,
       `      ...common,`,
       `      name: ${JSON.stringify(name + "-worker")},`,
@@ -250,6 +277,7 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
       `      out_file: "logs/worker-out.log",`,
       `      ...modes("worker"),`,
       `    },`,
+      ] : []),
       `  ],`,
       `};`,
       ``,
@@ -3009,6 +3037,7 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
       `      if (!email) throw new HttpError(422, "emailRequired", { field: "email" });`,
       ``,
       `      await this.ctx.models!.get("User").create({ email });`,
+      ...(queues ? [
       `      // The locale travels with the job: the worker has no request to`,
       `      // negotiate from, so whoever queues the work owns that decision.`,
       `      await this.ctx.queues!.add("users.welcome", "welcome", {`,
@@ -3017,6 +3046,10 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
       `      });`,
       ``,
       `      res.respond({ status: 201, data: { email, welcome_queued: true } });`,
+      ] : [
+      ``,
+      `      res.respond({ status: 201, data: { email } });`,
+      ]),
       `    };`,
       `  }`,
       ``,
@@ -3255,9 +3288,9 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
         "@app/auth": "workspace:*",
         "@app/core": "workspace:*",
         express: "^5",
-        "@tulipes/bullmq": bullmqProvider,
+        ...(queues && { "@tulipes/bullmq": bullmqProvider }),
         "@tulipes/mongoose": mongooseProvider,
-        "@tulipes/socket.io": socketProvider,
+        ...(sockets && { "@tulipes/socket.io": socketProvider }),
         mongoose: "^8",
       },
     })],
@@ -5925,9 +5958,9 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
         "@app/auth": "workspace:*",
         "@app/core": "workspace:*",
         express: "^5",
-        "@tulipes/bullmq": bullmqProvider,
+        ...(queues && { "@tulipes/bullmq": bullmqProvider }),
         "@tulipes/mongoose": mongooseProvider,
-        "@tulipes/socket.io": socketProvider,
+        ...(sockets && { "@tulipes/socket.io": socketProvider }),
         mongoose: "^8",
       },
     })],
@@ -6198,7 +6231,7 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
 
       ["modules/hello/controllers/greetings.controllers.ts", [
         `import type { Request, RequestHandler, Response } from "express";`,
-        `import { requireModels, requireQueues, type Ctx } from "@tulipes/core/boot";`,
+        `import { requireModels${queues ? ", requireQueues" : ""}, type Ctx } from "@tulipes/core/boot";`,
         `import { HttpError } from "@tulipes/core/http";`,
         ``,
         `export class GreetingsController {`,
@@ -6226,13 +6259,19 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
         `  use(): RequestHandler {`,
         `    return async (req: Request, res: Response) => {`,
         `      const { name } = req.params;`,
-        `      const greeting = await requireModels(this.ctx).get("Greeting").findOne({ name }).lean();`,
+        `      const greeting = await requireModels(this.ctx).get<{ message: string }>("Greeting").findOne({ name }).lean();`,
         `      if (!greeting) throw new HttpError(404, "noSuchGreeting", { vars: { name } });`,
+        ...(queues ? [
         ``,
         `      // Slow or retryable work belongs in a job, not in the request. Run`,
         `      // \`yarn worker\` in another terminal to see it processed.`,
         `      await requireQueues(this.ctx).add("hello.count-greeting", "count", { name });`,
         `      res.respond({ status: 202, data: { name, queued: true } });`,
+        ] : [
+        `      // Without a queues provider the count is updated in the request itself.`,
+        `      await requireModels(this.ctx).get("Greeting").updateOne({ name }, { $inc: { times_used: 1 } });`,
+        `      res.respond({ data: { name, message: greeting.message } });`,
+        ]),
         `    };`,
         `  }`,
         `}`,
@@ -6297,17 +6336,17 @@ function renderProject(name: string, coreVersion: string, cliVersion: string): [
       `| \`controllers/\` | the work; acquired once through runtime() |`,
       `| \`helpers/\` | pure logic, no framework |`,
       `| \`i18n/<locale>.json\` | this module's strings — the module is the namespace |`,
-      `| \`sockets/*.sockets.ts\` | a claimed Socket.IO namespace |`,
+      ...(sockets ? [`| \`sockets/*.sockets.ts\` | a claimed Socket.IO namespace |`] : []),
       `| \`models/*.model.ts\` | a schema declaration for the model store |`,
       `| \`bootstrap/*.bootstrap.ts\` | idempotent seeding, before traffic |`,
-      `| \`queues/*.queues.ts\` | a job definition and its processor |`,
+      ...(queues ? [`| \`queues/*.queues.ts\` | a job definition and its processor |`] : []),
       ``,
       `## Daily commands`,
       ``,
       `| command | does |`,
       `|---|---|`,
       `| \`yarn dev\` | regenerate types, run backend process under tsx watch |`,
-      `| \`yarn worker\` | run the queue-consumer process (needs a queue first) |`,
+      ...(queues ? [`| \`yarn worker\` | run the queue-consumer process (needs a queue first) |`] : []),
       `| \`yarn sync\` | regenerate \`types/config.d.ts\` + \`.env.example\` |`,
       `| \`yarn check\` | validate env against every module contract — CI gate |`,
       `| \`yarn tulipes new module <name>\` | scaffold a module |`,
