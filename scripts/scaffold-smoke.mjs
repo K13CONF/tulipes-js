@@ -25,10 +25,17 @@ const started = Date.now();
 const logs = resolve('reports', 'scaffold-' + variant + (offlineOnly ? '-offline' : '') + (registry ? '-registry' : ''));
 mkdirSync(logs, { recursive: true });
 let step = 0;
-function run(command, args, cwd, env = process.env) {
+function run(command, args, cwd, env = process.env, attempt = 1) {
   const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout: 180_000 });
   const file = join(logs, `${String(++step).padStart(2, '0')}-${command.split('/').at(-1)}.log`);
-  writeFileSync(file, (result.stdout ?? '') + (result.stderr ?? ''));
+  const output = (result.stdout ?? '') + (result.stderr ?? '');
+  writeFileSync(file, output);
+  // Yarn 4.18 occasionally aborts a fetch with an internal p-cancelable error
+  // on hosted runners; one retry of the install alone, never of a check.
+  if (result.status !== 0 && attempt === 1 && command === 'yarn' && args[0] === 'install' && output.includes('onCancel')) {
+    console.error(`yarn install hit a Yarn-internal cancellation (see ${file}); retrying once`);
+    return run(command, args, cwd, env, 2);
+  }
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed; see ${file}\n${result.error ?? ''}\n${result.stderr ?? ''}`);
   return result.stdout;
 }
