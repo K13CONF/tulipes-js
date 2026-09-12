@@ -1,0 +1,59 @@
+{
+  "name": "@tulipes/cli",
+  "version": "0.1.0-rc.1",
+  "description": "The tulipes command line: scaffold, sync, inspect, describe and run Tulipes apps",
+  "type": "module",
+  "bin": {
+    "tulipes": "./bin/tulipes.js"
+  },
+  "exports": {
+    ".": "./src/main.ts"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "prepack": "yarn build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "bin": {
+      "tulipes": "./dist/bin.js"
+    },
+    "exports": {
+      ".": "./dist/main.js"
+    }
+  },
+  "dependencies": {
+    "@tulipes/core": "workspace:^",
+    "tsx": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.0",
+    "typescript": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kemora13conf/bp-backend-express.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "tulipes",
+    "cli",
+    "scaffold",
+    "express"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "homepage": "https://github.com/kemora13conf/bp-backend-express/tree/master/packages/cli#readme",
+  "bugs": {
+    "url": "https://github.com/kemora13conf/bp-backend-express/issues"
+  }
+}

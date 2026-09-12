@@ -2,9 +2,10 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 
-import { appCoreVersion, coreVersion, packageRoot } from "./package-info.js";
+import { appCoreVersion, cliVersion, packageRoot } from "./package-info.js";
 
 const PACKAGE = "@tulipes/core";
+const CLI = "@tulipes/cli";
 const REGISTRY = "https://registry.npmjs.org";
 
 interface Manifest {
@@ -14,14 +15,18 @@ interface Manifest {
 }
 
 /**
- * `tulipes update` — move to the latest published core.
+ * `tulipes update` — move to the latest published CLI and core.
  *
  * There are two things that can be out of date, and they are genuinely
  * separate installs:
  *
- *   the CLI    the globally installed `tulipes` on your PATH
+ *   the CLI    the globally installed `tulipes` on your PATH (@tulipes/cli)
  *   the app    @tulipes/core in the app root and in every module, since
- *              modules are workspace packages that declare it themselves
+ *              modules are workspace packages that declare it themselves,
+ *              plus the app's own @tulipes/cli devDependency
+ *
+ * Provider packages (@tulipes/mongoose, /bullmq, /socket.io) follow their
+ * own lines and are not rewritten here; MIGRATING.md lists the pairing.
  *
  * Updating only the app leaves you typing an old CLI against a new
  * framework; updating only the CLI leaves the app behind. This does both,
@@ -29,11 +34,12 @@ interface Manifest {
  * app, where it upgrades just the CLI.
  */
 export async function runUpdate(rootDir: string): Promise<void> {
-  const current = coreVersion();
+  const current = cliVersion();
 
   let latest: string;
+  let latestCli: string;
   try {
-    latest = await fetchLatest();
+    [latest, latestCli] = await Promise.all([fetchLatest(PACKAGE), fetchLatest(CLI)]);
   } catch (error) {
     console.error(`could not reach the npm registry: ${(error as Error).message}`);
     process.exitCode = 1;
@@ -53,10 +59,10 @@ export async function runUpdate(rootDir: string): Promise<void> {
 
   if (cliIsGlobal) {
     didSomething = true;
-    if (current === latest) {
-      console.log(`cli already on ${latest}`);
+    if (current === latestCli) {
+      console.log(`cli already on ${latestCli}`);
     } else {
-      await updateGlobalCli(cliRoot, current, latest);
+      await updateGlobalCli(cliRoot, current, latestCli);
     }
   }
 
@@ -66,7 +72,7 @@ export async function runUpdate(rootDir: string): Promise<void> {
     // The app's installed version, not the CLI's — they are separate
     // installs, and reporting one as the other is how this whole confusion
     // started.
-    await updateApp(rootDir, manifests, appCoreVersion(rootDir), latest);
+    await updateApp(rootDir, manifests, appCoreVersion(rootDir), latest, latestCli);
   }
 
   if (!didSomething) {
@@ -93,12 +99,12 @@ async function updateGlobalCli(
   console.log(`cli: ${current} → ${latest}`);
 
   const prefix = globalPrefixOf(cliRoot);
-  const args = ["install", "-g", ...(prefix ? ["--prefix", prefix] : []), `${PACKAGE}@${latest}`];
+  const args = ["install", "-g", ...(prefix ? ["--prefix", prefix] : []), `${CLI}@${latest}`];
 
   const code = await run("npm", args, cliRoot);
   if (code !== 0) {
     console.error(
-      `\ncould not update the global cli — try: npm install -g ${PACKAGE}@${latest}`,
+      `\ncould not update the global cli — try: npm install -g ${CLI}@${latest}`,
     );
     process.exitCode = code === -1 ? 1 : code;
     return;
@@ -106,7 +112,7 @@ async function updateGlobalCli(
   console.log(`cli updated — the next \`tulipes\` invocation runs ${latest}\n`);
 }
 
-/** `<prefix>/lib/node_modules/@tulipes/core` → `<prefix>`, for npm layouts. */
+/** `<prefix>/lib/node_modules/@tulipes/cli` → `<prefix>`, for npm layouts. */
 function globalPrefixOf(cliRoot: string): string | undefined {
   const marker = `${sep}lib${sep}node_modules${sep}`;
   const index = cliRoot.indexOf(marker);
@@ -120,9 +126,13 @@ async function updateApp(
   manifests: { path: string }[],
   current: string | undefined,
   latest: string,
+  latestCli: string,
 ): Promise<void> {
   const range = `^${latest}`;
   const changed = manifests.filter(({ path }) => rewrite(path, range));
+  // The app's own CLI devDependency moves with it, so `yarn dev` and friends
+  // keep matching the framework they generate for.
+  if (rewrite(join(rootDir, "package.json"), `^${latestCli}`, CLI)) changed.push({ path: join(rootDir, "package.json") });
 
   if (changed.length === 0) {
     console.log(`app already on ${PACKAGE}@${range}`);
@@ -184,9 +194,9 @@ function minorOf(version: string | undefined): number | undefined {
   return major === 0 && Number.isInteger(minor) ? minor : undefined;
 }
 
-async function fetchLatest(): Promise<string> {
+async function fetchLatest(name: string): Promise<string> {
   // The scoped name has to be encoded for the registry's document route.
-  const response = await fetch(`${REGISTRY}/${PACKAGE.replace("/", "%2f")}/latest`);
+  const response = await fetch(`${REGISTRY}/${name.replace("/", "%2f")}/latest`);
   if (!response.ok) {
     throw new Error(`registry responded ${response.status}`);
   }
@@ -227,14 +237,14 @@ function dependsOnCore(path: string): boolean {
 }
 
 /** Returns true when the file actually changed. */
-function rewrite(path: string, range: string): boolean {
+function rewrite(path: string, range: string, name: string = PACKAGE): boolean {
   const manifest = JSON.parse(readFileSync(path, "utf8")) as Manifest;
 
   let touched = false;
   for (const field of ["dependencies", "devDependencies"] as const) {
     const deps = manifest[field];
-    if (deps?.[PACKAGE] !== undefined && deps[PACKAGE] !== range) {
-      deps[PACKAGE] = range;
+    if (deps?.[name] !== undefined && deps[name] !== range) {
+      deps[name] = range;
       touched = true;
     }
   }

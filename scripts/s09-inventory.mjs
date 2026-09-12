@@ -86,6 +86,13 @@ function baseline() {
     pkg.archive_bytes = statSync(file).size;
     pkg.unpacked_bytes = listing.reduce((sum, line) => sum + Number(line.trim().split(/\s+/)[4] ?? 0), 0);
     pkg.files = listing.length;
+    // Composition: which part of the archive is runtime, CLI or scaffold material.
+    pkg.composition = {};
+    for (const line of listing) {
+      const parts = line.trim().split(/\s+/); const size = Number(parts[4] ?? 0); const path = parts.at(-1) ?? '';
+      const area = /^package\/dist\/cli\//.test(path) ? 'dist/cli' : /^package\/dist\//.test(path) ? 'dist/runtime' : /^package\/(templates|assets)\//.test(path) ? path.split('/')[1] : 'other';
+      pkg.composition[area] = (pkg.composition[area] ?? 0) + size;
+    }
     pkg.dts_mongoose = run('tar', ['-xOf', file, ...listing.map(l => l.trim().split(/\s+/).at(-1)).filter(p => p.endsWith('.d.ts'))]).stdout
       .split('\n').filter(line => /from ["']mongoose["']/.test(line)).length;
   }
@@ -157,7 +164,7 @@ function buildCoreOnly(root) {
 /** D: the smoke launcher — CLI installed with every archive, no app. */
 function buildLauncher(root) {
   const resolutions = artifactResolutions();
-  writeManifest(root, { name: 'fixture-d', private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions });
+  writeManifest(root, { name: 'fixture-d', private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions, resolutions });
   return { app: root, hasApp: false };
 }
 
@@ -165,9 +172,11 @@ function buildLauncher(root) {
 function buildStarter(root, preset) {
   const resolutions = artifactResolutions();
   const cli = join(root, 'cli');
-  writeManifest(cli, { private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions });
+  // Pin every archive for the launcher too: the CLI depends on a core range the
+  // registry may not serve yet (or quarantines by age).
+  writeManifest(cli, { private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions, resolutions });
   run('yarn', ['install'], { cwd: cli, env: yarnEnv(join(root, 'cache-cli')), log: join(root, 'cli-install.log') });
-  const bin = join(cli, 'node_modules/@tulipes/core/dist/cli/bin.js');
+  const bin = join(cli, 'node_modules/@tulipes/cli/dist/bin.js');
   const app = join(root, 'app');
   run(process.execPath, [bin, 'init', app, '--preset', preset], { cwd: root, env: cleanEnv(), log: join(root, 'init.log') });
   const pkgFile = join(app, 'package.json');
@@ -255,7 +264,7 @@ function isPackageRoot(file) {
 }
 
 /** Roots whose reachable graphs are attributed separately: the extracted drivers. */
-const GRAPH_ROOTS = ['mongoose', 'bullmq', 'ioredis', 'socket.io'];
+const GRAPH_ROOTS = ['mongoose', 'bullmq', 'ioredis', 'socket.io', 'tsx', 'node-gyp', 'express', 'i18next', 'i18next-fs-backend', 'zod', 'dotenv', 'colorette', 'typescript', 'vitest', 'vite', '@tulipes/spec'];
 
 /** Dependencies reachable from one root package, resolved the way Node would. */
 function dependencyGraph(modulesDir, root) {
@@ -268,7 +277,8 @@ function dependencyGraph(modulesDir, root) {
     if (seen.has(name)) continue;
     const pkg = readJson(join(dir, 'package.json'));
     seen.set(name, { version: pkg.version, bytes: dirBytes(dir), path: relative(modulesDir, dir) });
-    for (const dep of Object.keys(pkg.dependencies ?? {})) {
+    // Optional dependencies count when installed: esbuild's platform binary is one.
+    for (const dep of Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies })) {
       // Nested copy first, then hoisted — the same lookup order as require().
       const nested = join(dir, 'node_modules', dep), hoisted = join(modulesDir, dep);
       if (existsSync(nested)) queue.push([dep, nested]); else if (existsSync(hoisted)) queue.push([dep, hoisted]);
@@ -438,7 +448,7 @@ async function startup(keys) {
     if (record.resolve.app.mongoose) scenarios.import_mongoose = await timed(async () => importTiming(record.app, 'mongoose'));
     if (record.root && existsSync(join(record.root, 'cli'))) {
       scenarios.import_boot_tsx = await timed(async () => importTiming(record.app, '@tulipes/core/boot', ['--import', 'tsx']));
-      const bin = join(record.root, 'cli/node_modules/@tulipes/core/dist/cli/bin.js');
+      const bin = join(record.root, 'cli/node_modules/@tulipes/cli/dist/bin.js');
       const env = appEnv(key, services);
       scenarios.offline_spec = await timed(async () => offlineTiming(record.app, bin, env));
       scenarios.backend_readiness = await timed(() => spawnUntil(process.execPath, ['--import', 'tsx', 'app.ts'], { cwd: record.app, env: { ...env, PORT: '0' } }, readyByBanner(key === 'C' ? ['/api/v1/hello'] : ['/health', '/api/v1/hello'])));

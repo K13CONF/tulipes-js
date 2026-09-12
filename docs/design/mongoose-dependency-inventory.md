@@ -416,6 +416,23 @@ Core's remaining runtime dependencies: `colorette`, `dotenv`, `express`,
 `i18next`, `i18next-fs-backend`, `tsx`, `zod`. The next measurable step is
 S12 (whether `tsx` and the CLI belong in the runtime package at all).
 
+### 4.7 After the CLI split (Sprint 05, S12)
+
+Fixtures A and B on `5f787cb`. Raw data: `reports/s09-inventory/5f787cb/`.
+
+| Fixture | Metric | After S11 (`5bba0b3`) | After S12 (`5f787cb`) | Since S09 baseline |
+|---|---|---|---|---|
+| A — core only | unique packages / bytes | 99 / 26,950,827 | **75 / 7,578,707** | 151 / 52,960,060 → **−85.7%** |
+| A | loader chain (`tsx`, esbuild, `node-gyp`) | 24 pkgs / 18,720,850 B | absent | |
+| A | `import_boot` median | 75 ms | 77 ms | 229 → 77 ms |
+| B — minimal (dev install) | unique / bytes | 150 / 106,157,244 | 151 / 106,168,527 | unchanged by design (tsx now via `@tulipes/cli`) |
+| B | `backend_readiness` / `offline_spec` | 232 / 273 ms | 215 / 254 ms | 455 / 599 → 215 / 254 ms |
+
+Core's runtime install is now the HTTP runtime (express 2.2 MB, zod 3.6 MB,
+i18next 1.2 MB, dotenv, colorette) plus core itself (0.46 MB). The remaining
+attributable item is `zod` at 47% of that — a policy question for S13/S14
+rather than an extraction.
+
 ## 5. Affected-file extraction checklist
 
 Grouped by downstream task; each item references a register row. Items for

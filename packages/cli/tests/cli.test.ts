@@ -2,10 +2,10 @@ import { access, readFile } from "node:fs/promises";
 import { expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
-import { runNewModule } from "../src/cli/new-module.js";
-import { runSync } from "../src/cli/sync.js";
-import { runInit } from "../src/cli/init.js";
-import { fixture } from "./fixture.js";
+import { runNewModule } from "../src/new-module.js";
+import { runSync } from "../src/sync.js";
+import { runInit } from "../src/init.js";
+import { fixture } from "../../core/tests/fixture.js";
 
 test("a generated kebab-case module produces valid TypeScript configuration declarations", async () => {
   const app = await fixture({

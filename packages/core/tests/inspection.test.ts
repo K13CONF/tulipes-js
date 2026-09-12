@@ -411,7 +411,7 @@ test("production routers generate deterministic documents with connections denie
   expect(connect).not.toHaveBeenCalled();
 });
 
-const cli = resolve("packages/core/src/cli/bin.ts");
+const cli = resolve("packages/cli/src/bin.ts");
 
 test.each([
   ["routes", "--offline", "--runtime"],

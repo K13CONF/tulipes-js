@@ -11,6 +11,25 @@ what makes it work under nvm.
 
 ---
 
+<a id="unreleased--install-the-cli-package"></a>
+
+## Unreleased — install the CLI package
+
+The `tulipes` command moved out of core into `@tulipes/cli`. For every app:
+
+```sh
+yarn add -D @tulipes/cli@next
+```
+
+Scripts (`tulipes dev`, `tulipes sync`, `tulipes spec …`, `yarn tulipes new
+module …`) need no change — Yarn resolves the binary from the devDependency.
+Replace a global `@tulipes/core` install with `npm i -g @tulipes/cli@next`;
+`tulipes update` keeps both in step from then on. Core no longer depends on
+`tsx`: an app that runs `tsx app.ts` already lists `tsx` itself (generated apps
+do), and nothing else changes.
+
+---
+
 <a id="unreleased--declare-the-sockets-provider"></a>
 <a id="0100-rc2--declare-the-sockets-provider"></a>
 

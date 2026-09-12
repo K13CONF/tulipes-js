@@ -10,7 +10,7 @@ registry archive identity and fresh registry installs of both presets passed.
 Sprints 03 and 04 are complete and merged. Previously:
 [rc.1](release-0.10.0-rc.1.md), [rc.3](release-0.9.0-rc.3.md).
 
-**Current workstream: Sprint 04 delivered (S10 merged, S11 in review); Sprint 05 (packaging decisions) next.**
+**Current workstream: Sprint 05 — S12 (CLI split) in execution; see the [Sprint 05 plan](production-readiness-05.md).**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
 register, measurement protocol, interface decisions, fixtures and delivery order.
 Sprint 02 implementation, local closeout and CI acceptance are complete.
@@ -365,25 +365,26 @@ security controls or turn application Redis needs into hidden core dependencies.
 and scaffolding experience. A package split is useful only when it reduces cost
 or clarifies ownership enough to justify its migration and release burden.
 
-**Status:** proposed, with conditional implementation. **Owners:** engineer and
-maintainer for API/support decisions. **Dependency:** completed provider extraction
+**Status:** S12 measured and decided on 2026-09-12 — see the
+[Sprint 05 plan](production-readiness-05.md) and [CLI design](../design/cli-package-design.md).
+**Owners:** engineer and maintainer for API/support decisions. **Dependency:** completed provider extraction
 measurements. Set effort only after the go/no-go decisions below.
 
 ### S12 — Decide whether to separate CLI/tooling
 
-- [ ] **S12.1 — Measure remaining runtime cost.** Attribute installed packages and
+- [x] **S12.1 — Measure remaining runtime cost.** Attribute installed packages and
   startup imports to the HTTP runtime, scaffold templates, TypeScript execution,
   development tools and spec tooling. Compare an app running compiled JavaScript
   with one using the current development/start scripts.
-- [ ] **S12.2 — Record the decision and command contract.** Decide whether the CLI
+- [x] **S12.2 — Record the decision and command contract.** Decide whether the CLI
   remains in core or gets a separate package. Specify installation, executable
   lookup, core/spec compatibility, template location and update behavior. Keep a
   migration path for documented `tulipes` commands.
-- [ ] **S12.3 — Implement only the selected path.** If separated, move executable,
+- [x] **S12.3 — Implement only the selected path.** If separated, move executable,
   templates and tooling dependencies, update ranges/exports and archive checks.
   If retained, document measured reasons and any smaller dependency improvements;
   do not create an empty package just to satisfy a proposed package list.
-- [ ] **S12.4 — Verify user journeys.** Run install → init → sync → check → types
+- [x] **S12.4 — Verify user journeys.** Run install → init → sync → check → types
   → tests → start → specs from fresh packed artifacts. Test both presets, module
   generation and upgrade behavior without workspace symlinks.
 

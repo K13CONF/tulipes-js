@@ -44,7 +44,8 @@ try {
   const provider = manifest.packages.find(pkg => pkg.name === '@tulipes/mongoose');
   const queues = manifest.packages.find(pkg => pkg.name === '@tulipes/bullmq');
   const sockets = manifest.packages.find(pkg => pkg.name === '@tulipes/socket.io');
-  if (!provider || !queues || !sockets) throw new Error('The artifacts under test must include the mongoose, bullmq and socket.io providers');
+  const cli = manifest.packages.find(pkg => pkg.name === '@tulipes/cli');
+  if (!provider || !queues || !sockets || !cli) throw new Error('The artifacts under test must include the mongoose, bullmq and socket.io providers and the cli');
 
   // 1. The old world: the last published core generates a production app.
   const oldRoot = join(workspace, 'old-cli');
@@ -57,7 +58,7 @@ try {
   writeJson(join(oldRoot, 'package.json'), { private: true, packageManager: 'yarn@4.18.0', dependencies: { '@tulipes/core': 'file:' + resolve(oldCore) } });
   writeFileSync(join(oldRoot, '.yarnrc.yml'), 'nodeLinker: node-modules\n');
   install(oldRoot);
-  const oldBin = join(oldRoot, 'node_modules/@tulipes/core/dist/cli/bin.js');
+  const oldBin = join(oldRoot, 'node_modules/@tulipes/core/dist/cli/bin.js'); // pre-split core still ships the CLI
   const generatedBy = readJson(join(oldRoot, 'node_modules/@tulipes/core/package.json')).version;
   const app = join(workspace, 'app');
   run(process.execPath, [oldBin, 'init', app, '--preset', 'production'], workspace);
@@ -68,14 +69,16 @@ try {
     throw new Error('The old starter does not use the pre-extraction contract this fixture upgrades from');
   }
 
-  // 2. New core installed under the old app, nothing else changed.
-  writeJson(pkgFile, { ...before, resolutions: { ...before.resolutions, ...resolutions } });
+  // 2. New core installed under the old app, nothing else changed — except the
+  // CLI devDependency, which the split makes a prerequisite for every app
+  // command and which MIGRATING.md lists as step one.
+  writeJson(pkgFile, { ...before, devDependencies: { ...before.devDependencies, '@tulipes/cli': '^' + cli.version }, resolutions: { ...before.resolutions, ...resolutions } });
   const env = { ...process.env, APP_ENV: 'production', LOG_FILE: 'false', LOG_CONSOLE: 'false', PORT: '0',
     MONGO_URI: 'mongodb://127.0.0.1:1/unreachable', REDIS_URL: 'redis://127.0.0.1:1',
     JWT_ACCESS_SECRET: randomBytes(32).toString('hex'), JWT_REFRESH_SECRET: randomBytes(32).toString('hex'),
     AUTH_ADMIN_EMAIL: 'upgrade@example.test', AUTH_ADMIN_PASSWORD: randomBytes(32).toString('hex') };
   install(app, env);
-  const newBin = join(app, 'node_modules/@tulipes/core/dist/cli/bin.js');
+  const newBin = join(app, 'node_modules/@tulipes/cli/dist/bin.js'); // installed by the migration below
   const guard = join(app, 'offline-guard.mjs');
   writeFileSync(guard, `import { Socket } from 'node:net';\nSocket.prototype.connect = function () { throw new Error('a connection was attempted'); };\n`);
   writeFileSync(join(app, 'try-boot.mjs'), `
