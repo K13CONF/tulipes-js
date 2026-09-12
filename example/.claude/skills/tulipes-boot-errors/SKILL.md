@@ -39,6 +39,9 @@ problems the report has not reached yet.
 | `providers` | `[x] requires capability "queues" … declares no provider for it` | A module has a `queues/` file (or `requires: ["queues"]`) but the app's `package.json` has no `"tulipes": { "providers": { "queues": "@tulipes/bullmq" } }`. Add that line. |
 | `providers` | `provider "bullmq" is selected but "REDIS_URL" is not declared/set` | Add the variable to the sys `core` module's meta file and set it. |
 | `providers` | `"@tulipes/core/queues" no longer contains the BullMQ provider` | Install `@tulipes/bullmq`, declare it, and import `QueueRegistry`/`QueuesFn` from it. |
+| `providers` | `[x] requires capability "sockets" … declares no provider for it` | A module has a `sockets/` file (or `requires: ["sockets"]`) but the app's `package.json` has no `"tulipes": { "providers": { "sockets": "@tulipes/socket.io" } }`. Add that line. |
+| `providers` | `"@tulipes/core/sockets" no longer contains the Socket.IO provider` | Install `@tulipes/socket.io`, declare it, and import `SocketRegistry`/`SocketsFn` from it. |
+| `providers` | `provider "socket.io" failed to attach to the HTTP server` | The transport could not bind to the server core created; the message carries the driver's reason. |
 | `providers` | `provider "mongoose" is selected but "MONGO_URI" is not declared/set` | Add the variable to the sys `core` module's meta file and set it. |
 | `providers` | `database connection failed` | Mongo unreachable or `MONGO_URI` wrong. Check the service is running. |
 | `providers` | `package.json "tulipes" key: providers — Unrecognized key` | Typo in the capability name; only `models` exists. |

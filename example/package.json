@@ -3,7 +3,8 @@
   "tulipes": {
     "providers": {
       "models": "@tulipes/mongoose",
-      "queues": "@tulipes/bullmq"
+      "queues": "@tulipes/bullmq",
+      "sockets": "@tulipes/socket.io"
     }
   },
   "private": true,
@@ -23,6 +24,7 @@
     "@tulipes/bullmq": "workspace:*",
     "@tulipes/core": "workspace:*",
     "@tulipes/mongoose": "workspace:*",
+    "@tulipes/socket.io": "workspace:*",
     "ioredis": "^5",
     "mongoose": "^8",
     "zod": "^3.25"

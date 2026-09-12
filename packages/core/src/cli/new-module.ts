@@ -22,7 +22,7 @@ import { coreVersion } from "./package-info.js";
 export async function runNewModule(
   rootDir: string,
   name: string,
-  options: { models?: boolean; queues?: boolean } = {},
+  options: { models?: boolean; queues?: boolean; sockets?: boolean } = {},
 ): Promise<void> {
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     console.error(`module name "${name}" is invalid — lowercase kebab-case required`);
@@ -43,8 +43,9 @@ export async function runNewModule(
   const declared = readProviderDeclarations(rootDir, new BootReport());
   const models = options.models ?? declared.models !== undefined;
   const queues = options.queues ?? declared.queues !== undefined;
+  const sockets = options.sockets ?? declared.sockets !== undefined;
 
-  for (const [relPath, content] of renderModule(name, scope, locales, models, queues)) {
+  for (const [relPath, content] of renderModule(name, scope, locales, models, queues, sockets)) {
     const filePath = join(dir, relPath);
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, content);
@@ -76,6 +77,13 @@ export async function runNewModule(
              '  "tulipes": { "providers": { "queues": "@tulipes/bullmq" } } and install it, or the boot will refuse this module.']
         : ["", "No queues/ file: package.json declares no queues provider.",
            "To add background work, declare \"tulipes\": { \"providers\": { \"queues\": \"@tulipes/bullmq\" } } and install it."]),
+      ...(sockets
+        ? declared.sockets
+          ? []
+          : ["", "--sockets was given but package.json declares no sockets provider: add",
+             '  "tulipes": { "providers": { "sockets": "@tulipes/socket.io" } } and install it, or the boot will refuse this module.']
+        : ["", "No sockets/ file: package.json declares no sockets provider.",
+           "To add realtime namespaces, declare \"tulipes\": { \"providers\": { \"sockets\": \"@tulipes/socket.io\" } } and install it."]),
     ].join("\n"),
   );
 }
@@ -88,6 +96,7 @@ function renderModule(
   locales: readonly string[],
   models: boolean,
   queues: boolean,
+  sockets: boolean,
 ): [string, string][] {
   const fn = camel(name);
   const Model = pascal(name);
@@ -119,6 +128,7 @@ function renderModule(
         express: "^5",
         ...(models && { "@tulipes/mongoose": "^0.1.0-rc.1", mongoose: "^8" }),
         ...(queues && { "@tulipes/bullmq": "^0.1.0-rc.1" }),
+        ...(sockets && { "@tulipes/socket.io": "^0.1.0-rc.1" }),
       },
     })],
 
@@ -293,7 +303,7 @@ function renderModule(
 
     [`sockets/${name}.sockets.ts`, [
       `import type { Ctx } from "@tulipes/core/boot";`,
-      `import type { SocketRegistry } from "@tulipes/core/sockets";`,
+      `import type { SocketRegistry } from "@tulipes/socket.io";`,
       ``,
       `/**`,
       ` * Backend mode only. A namespace is claimed by exactly one module;`,
@@ -312,7 +322,8 @@ function renderModule(
 
   return files.filter(([path]) =>
     (models || (!path.startsWith("models/") && !path.startsWith("bootstrap/"))) &&
-    (queues || !path.startsWith("queues/")));
+    (queues || !path.startsWith("queues/")) &&
+    (sockets || !path.startsWith("sockets/")));
 }
 
 /**

@@ -1,30 +1,25 @@
-import type { Server as HttpServer } from "node:http";
+import { importFile, type Ctx } from "@tulipes/core/boot";
+import type { BootReport } from "@tulipes/core/errors";
+import type { ModuleFiles } from "@tulipes/core/modules";
 
-import { BootReport } from "../errors/boot-error.js";
-import { importFile } from "../boot/import-file.js";
-import type { Ctx } from "../boot/contracts.js";
-import type { ModuleFiles } from "../modules/explorer.js";
 import { SocketManager, type SocketRegistry } from "./socket-manager.js";
 
 /** Default export of `sockets/*.sockets.ts` (backend branch only). */
 export type SocketsFn = (ctx: Ctx, sockets: SocketRegistry) => void | Promise<void>;
 
 /**
- * Phase 11b: attach Socket.IO to the http server and run every
- * `*.sockets.ts` in load order. No socket files → no Socket.IO server at
- * all; websockets are opt-in per app, not a standing cost.
+ * Run by the provider in the backend process: create the Socket.IO server
+ * and run every `*.sockets.ts` in load order so namespaces are claimed and
+ * wired before core attaches the server and listens.
  */
 export async function initSockets(
   explored: readonly ModuleFiles[],
   ctx: Ctx,
-  httpServer: HttpServer,
   report: BootReport,
-): Promise<SocketManager | undefined> {
-  if (!explored.some((files) => files.socketFiles.length > 0)) {
-    return undefined;
-  }
-
-  const manager = new SocketManager(httpServer);
+  onManager?: (manager: SocketManager) => void,
+): Promise<SocketManager> {
+  const manager = new SocketManager();
+  onManager?.(manager);
   ctx.sockets = manager;
 
   for (const { module, socketFiles } of explored) {

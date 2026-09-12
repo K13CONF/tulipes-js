@@ -43,7 +43,8 @@ try {
   const resolutions = Object.fromEntries(manifest.packages.map(pkg => [pkg.name, 'file:' + join(artifacts, pkg.file)]));
   const provider = manifest.packages.find(pkg => pkg.name === '@tulipes/mongoose');
   const queues = manifest.packages.find(pkg => pkg.name === '@tulipes/bullmq');
-  if (!provider || !queues) throw new Error('The artifacts under test must include @tulipes/mongoose and @tulipes/bullmq');
+  const sockets = manifest.packages.find(pkg => pkg.name === '@tulipes/socket.io');
+  if (!provider || !queues || !sockets) throw new Error('The artifacts under test must include the mongoose, bullmq and socket.io providers');
 
   // 1. The old world: the last published core generates a production app.
   const oldRoot = join(workspace, 'old-cli');
@@ -86,16 +87,17 @@ try {
 
   // 2a. No declaration: refused before any module code is imported, never connecting.
   let output = tryBoot();
-  for (const expected of ['Boot aborted during "providers"', '[auth] requires capability "models" (has models/ files)', '[users] requires capability "models"', '[users] requires capability "queues" (has queues/ files)', 'declares no provider for it']) {
+  for (const expected of ['Boot aborted during "providers"', '[auth] requires capability "models" (has models/ files)', '[users] requires capability "models"', '[users] requires capability "queues" (has queues/ files)', '[users] requires capability "sockets" (has sockets/ files)', 'declares no provider for it']) {
     if (!output.includes(expected)) throw new Error(`Unmigrated app did not report: ${expected}\n${output}`);
   }
   if (output.includes('a connection was attempted')) throw new Error('Unmigrated app attempted a connection');
 
   // 2b. The old subpath declared as the provider: told where it went.
-  writeJson(pkgFile, { ...readJson(pkgFile), tulipes: { providers: { models: '@tulipes/core/db', queues: '@tulipes/core/queues' } } });
+  writeJson(pkgFile, { ...readJson(pkgFile), tulipes: { providers: { models: '@tulipes/core/db', queues: '@tulipes/core/queues', sockets: '@tulipes/core/sockets' } } });
   output = tryBoot();
   if (!output.includes('"@tulipes/core/db" no longer contains the Mongoose provider') || !output.includes('@tulipes/mongoose')) throw new Error('Old subpath declaration did not get the migration diagnostic\n' + output);
   if (!output.includes('"@tulipes/core/queues" no longer contains the BullMQ provider') || !output.includes('@tulipes/bullmq')) throw new Error('Old queues subpath declaration did not get the migration diagnostic\n' + output);
+  if (!output.includes('"@tulipes/core/sockets" no longer contains the Socket.IO provider')) throw new Error('Old sockets subpath declaration did not get the migration diagnostic\n' + output);
   if (output.includes('a connection was attempted')) throw new Error('Old subpath declaration attempted a connection');
 
   // 2c. The old type import fails to typecheck with a message naming the
@@ -105,30 +107,32 @@ try {
   if (!/Module '"@tulipes\/core\/db"' has no exported member 'ModelDef'/.test(output)) throw new Error('Old ModelDef import did not fail with "no exported member"\n' + output);
   if (!/Property 'get' does not exist on type 'ModelsCapability'/.test(output)) throw new Error('Core-only ModelsCapability unexpectedly exposes get()\n' + output);
   if (!/Module '"@tulipes\/core\/queues"' has no exported member 'QueueRegistry'/.test(output)) throw new Error('Old QueueRegistry import did not fail with "no exported member"\n' + output);
+  if (!/Module '"@tulipes\/core\/sockets"' has no exported member 'SocketRegistry'/.test(output)) throw new Error('Old SocketRegistry import did not fail with "no exported member"\n' + output);
 
   // 3. Apply MIGRATING.md, step by step.
   const migrated = readJson(pkgFile);
-  migrated.tulipes = { providers: { models: '@tulipes/mongoose', queues: '@tulipes/bullmq' } };
-  migrated.dependencies = { ...migrated.dependencies, '@tulipes/mongoose': '^' + provider.version, '@tulipes/bullmq': '^' + queues.version };
+  migrated.tulipes = { providers: { models: '@tulipes/mongoose', queues: '@tulipes/bullmq', sockets: '@tulipes/socket.io' } };
+  migrated.dependencies = { ...migrated.dependencies, '@tulipes/mongoose': '^' + provider.version, '@tulipes/bullmq': '^' + queues.version, '@tulipes/socket.io': '^' + sockets.version };
   writeJson(pkgFile, migrated);
   let rewrittenImports = 0, rewrittenManifests = 0;
   for (const module of readdirSync(join(app, 'modules'))) {
     const dir = join(app, 'modules', module);
-    for (const sub of ['models', 'bootstrap', 'queues']) {
+    for (const sub of ['models', 'bootstrap', 'queues', 'sockets']) {
       if (!existsSync(join(dir, sub))) continue;
       for (const file of readdirSync(join(dir, sub))) {
         const path = join(dir, sub, file);
         const source = readFileSync(path, 'utf8');
-        const next = source.replaceAll('from "@tulipes/core/db"', 'from "@tulipes/mongoose"').replaceAll('from "@tulipes/core/queues"', 'from "@tulipes/bullmq"');
+        const next = source.replaceAll('from "@tulipes/core/db"', 'from "@tulipes/mongoose"').replaceAll('from "@tulipes/core/queues"', 'from "@tulipes/bullmq"').replaceAll('from "@tulipes/core/sockets"', 'from "@tulipes/socket.io"');
         if (next !== source) { writeFileSync(path, next); rewrittenImports++; }
       }
     }
     const needsModels = existsSync(join(dir, 'models')) || existsSync(join(dir, 'bootstrap'));
     const needsQueues = existsSync(join(dir, 'queues'));
-    if (needsModels || needsQueues) {
+    const needsSockets = existsSync(join(dir, 'sockets'));
+    if (needsModels || needsQueues || needsSockets) {
       const file = join(dir, 'package.json');
       const pkg = readJson(file);
-      pkg.dependencies = { ...pkg.dependencies, ...(needsModels && { '@tulipes/mongoose': '^' + provider.version }), ...(needsQueues && { '@tulipes/bullmq': '^' + queues.version }) };
+      pkg.dependencies = { ...pkg.dependencies, ...(needsModels && { '@tulipes/mongoose': '^' + provider.version }), ...(needsQueues && { '@tulipes/bullmq': '^' + queues.version }), ...(needsSockets && { '@tulipes/socket.io': '^' + sockets.version }) };
       writeJson(file, pkg);
       rewrittenManifests++;
     }
