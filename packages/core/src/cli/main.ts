@@ -28,6 +28,7 @@ Usage:
   tulipes new module <name>    scaffold a module under ./modules
                                  --model | --no-model    force model/bootstrap files on or off
                                  --queues | --no-queues  force the queues file on or off
+                                 --sockets | --no-sockets  force the sockets file on or off
                                  (default: on when package.json declares that provider)
   tulipes update               upgrade the global cli and, inside an app, the app itself
   --offline loads shared declarations without services or runtime secrets.
@@ -68,8 +69,8 @@ export async function main(argv: readonly string[]): Promise<void> {
     case "update":
       return runUpdate(rootDir);
     case "new":
-      if (rest[0] !== "module" || !rest[1] || rest.slice(2).some((flag) => !["--model", "--no-model", "--queues", "--no-queues"].includes(flag))) {
-        console.error('Usage: tulipes new module <name> [--model | --no-model] [--queues | --no-queues]');
+      if (rest[0] !== "module" || !rest[1] || rest.slice(2).some((flag) => !["--model", "--no-model", "--queues", "--no-queues", "--sockets", "--no-sockets"].includes(flag))) {
+        console.error('Usage: tulipes new module <name> [--model | --no-model] [--queues | --no-queues] [--sockets | --no-sockets]');
         process.exitCode = 2;
         return;
       }
@@ -78,6 +79,8 @@ export async function main(argv: readonly string[]): Promise<void> {
         ...(rest.includes("--no-model") && { models: false }),
         ...(rest.includes("--queues") && { queues: true }),
         ...(rest.includes("--no-queues") && { queues: false }),
+        ...(rest.includes("--sockets") && { sockets: true }),
+        ...(rest.includes("--no-sockets") && { sockets: false }),
       });
     case "dev":
       return runDev(rootDir, rest[0] ?? "app.ts");

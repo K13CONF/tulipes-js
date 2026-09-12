@@ -11,6 +11,19 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **Breaking:** the Socket.IO sockets provider moved to `@tulipes/socket.io`
+  (Sprint 04, S11). Core no longer depends on `socket.io`; `SocketRegistry`,
+  `SocketsFn` and `SocketManager` are imported from the provider,
+  `@tulipes/core/sockets` is a migration stub, and an app selects sockets with
+  `"tulipes": { "providers": { "sockets": "@tulipes/socket.io" } }`. A `sockets/`
+  file implies the requirement. Providers may declare `situations`
+  (`backend`, `worker`, `script`, `inspect`) and are skipped — reported, not
+  failed — elsewhere; resources gain `attach(server)`, called in the backend
+  after routes mount and before listen, never during inspection. `ctx.sockets`
+  is an augmentable `SocketsCapability`. With models, queues and sockets all
+  extracted, core's runtime dependencies are express, i18next, zod, dotenv,
+  colorette and tsx.
+
 - **Breaking:** the BullMQ queues provider moved to `@tulipes/bullmq` (Sprint 04,
   S10). Core no longer depends on `bullmq` or `ioredis`; `QueueRegistry`,
   `QueuesFn` and `QueueManager` are imported from the provider, `@tulipes/core/queues`

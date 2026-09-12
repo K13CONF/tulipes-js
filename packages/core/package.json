@@ -59,7 +59,6 @@
     "express": "^5",
     "i18next": "^26.4.2",
     "i18next-fs-backend": "^2.6.7",
-    "socket.io": "^4",
     "tsx": "^4",
     "zod": "^3.24.1"
   },

@@ -5,7 +5,7 @@ import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 // Every published package, in release order; core first because its version names the tag.
-const packages = ['core', 'spec', 'mongoose', 'bullmq'];
+const packages = ['core', 'spec', 'mongoose', 'bullmq', 'socket.io'];
 const digest = file => 'sha512-' + createHash('sha512').update(readFileSync(file)).digest('base64');
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: 'inherit', ...options });
 const readJson = file => JSON.parse(readFileSync(file, 'utf8'));
@@ -30,7 +30,7 @@ function verify(dir, expectedCommit) {
     if (listing.some(path => /\/(?:node_modules|tests|\.envs)\//.test(path))) throw new Error('Unexpected private/test content in archive');
     // Core must not carry a driver — not as a dependency, and not through an
     // emitted declaration that a consumer's typecheck would need to resolve.
-    const extracted = ['mongoose', 'bullmq', 'ioredis'];
+    const extracted = ['mongoose', 'bullmq', 'ioredis', 'socket.io'];
     if (name === 'core') {
       for (const dep of extracted) if (packed.dependencies?.[dep]) throw new Error(`Core must not depend on ${dep}`);
       const declarations = listing.filter(path => path.endsWith('.d.ts'));

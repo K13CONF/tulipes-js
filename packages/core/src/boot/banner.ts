@@ -46,20 +46,18 @@ export function printStartupBanner(
     ]);
   }
 
-  for (const { capability, provider, label, ready, detail } of handle.providers) {
+  for (const { capability, provider, label, ready, detail, skipped } of handle.providers) {
     rows.push([
       capability[0]!.toUpperCase() + capability.slice(1),
-      `${cyan(label)}  ${dot(ready)} ${ready ? green("ready") : red("not ready")}${detail ? `  ${dim("·")}  ${gray(detail)}` : ""}  ${dim("·")}  ${gray(provider)}`,
+      skipped
+        ? `${gray(label)}  ${dim("·")}  ${gray(provider)}`
+        : `${cyan(label)}  ${dot(ready)} ${ready ? green("ready") : red("not ready")}${detail ? `  ${dim("·")}  ${gray(detail)}` : ""}  ${dim("·")}  ${gray(provider)}`,
     ]);
   }
-  for (const capability of ["models", "queues"] as const) {
+  for (const capability of ["models", "queues", "sockets"] as const) {
     if (!handle.providers.some((p) => p.capability === capability)) {
       rows.push([capability[0]!.toUpperCase() + capability.slice(1), gray("no provider declared")]);
     }
-  }
-
-  if (ctx.sockets) {
-    rows.push(["Sockets", cyan(ctx.sockets.namespaces().join(", ") || "—")]);
   }
 
   rows.push([

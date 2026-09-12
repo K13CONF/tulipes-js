@@ -275,3 +275,68 @@ test("a queues/ directory implies the queues requirement", async () => {
 
   await expect(app.boot({ mode: "script" })).rejects.toThrow(/\[probe\] requires capability "queues" \(has queues\/ files\)/);
 });
+
+/** A backend-only transport provider: attaches to the HTTP server before listen. */
+const transportProvider = `
+  import { appendFileSync } from 'node:fs';
+  const log = line => appendFileSync(new URL('./log.txt', import.meta.url), line + '\\n');
+  export default {
+    contract: 1, capability: 'sockets', name: 'fake-sockets', situations: ['backend'],
+    async acquire({ ctx, situation }, report, own) {
+      log('acquire situation=' + situation);
+      own({
+        attach: server => log('attach listening=' + server.listening),
+        drain: () => log('drain'),
+        dispose: () => log('dispose'),
+        status: () => ({ label: '/probe', ready: true }),
+      });
+      return { of: () => 'namespace' };
+    },
+  };
+`;
+
+test("a backend-only provider attaches before listen and is skipped elsewhere without failing", async () => {
+  const app = await fixture({
+    "package.json": declare({ sockets: "./providers/sockets.js" }),
+    "providers/sockets.js": transportProvider,
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["sockets"] } }),
+  });
+
+  const backend = await app.boot();
+  expect(backend.ctx.sockets).toBeDefined();
+  expect(backend.providers).toEqual([expect.objectContaining({ capability: "sockets", label: "/probe", ready: true })]);
+  expect(await readLog(app.rootDir)).toEqual(["acquire situation=backend", "attach listening=false"]);
+  await backend.shutdown();
+  expect(await readLog(app.rootDir)).toEqual(["acquire situation=backend", "attach listening=false", "drain", "dispose"]);
+
+  for (const [options, situation] of [[{ mode: "worker" as const }, "worker"], [{ mode: "script" as const }, "script"], [{ inspect: true }, "inspect"]] as const) {
+    const before = (await readLog(app.rootDir)).length;
+    const handle = options.mode === "worker"
+      ? await app.boot({ ...options, listen: false }).catch((error: Error) => error)
+      : await app.boot(options);
+    // Worker mode refuses for lack of consumers, but the skipped provider is not the reason.
+    if (handle instanceof Error) expect(handle.message).toMatch(/zero processors/);
+    else {
+      expect(handle.ctx.sockets).toBeUndefined();
+      expect(handle.providers).toEqual([expect.objectContaining({ capability: "sockets", skipped: situation, ready: true })]);
+      await handle.shutdown();
+    }
+    expect((await readLog(app.rootDir)).length).toBe(before); // never acquired, attached or disposed
+  }
+});
+
+test("an attach failure is reported as a provider issue and the acquired resource is disposed", async () => {
+  const app = await fixture({
+    "package.json": declare({ sockets: "./providers/sockets.js" }),
+    "providers/sockets.js": transportProvider.replace("attach: server => log('attach listening=' + server.listening)", "attach: () => { throw new Error('port busy'); }"),
+  });
+
+  await expect(app.boot()).rejects.toThrow(/provider "fake-sockets" failed to attach to the HTTP server: port busy/);
+  expect(await readLog(app.rootDir)).toEqual(["acquire situation=backend", "drain", "dispose"]);
+});
+
+test("a sockets/ directory implies the sockets requirement", async () => {
+  const app = await fixture({ "modules/probe/sockets/live.sockets.js": `throw new Error('socket code imported');` });
+
+  await expect(app.boot({ mode: "script" })).rejects.toThrow(/\[probe\] requires capability "sockets" \(has sockets\/ files\)/);
+});
