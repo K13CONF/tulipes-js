@@ -78,10 +78,16 @@ export async function runInit(
 }
 
 /**
- * Instructions for AI coding agents working in the generated app: an
- * always-loaded CLAUDE.md plus task-scoped skills. They ship as real
- * markdown in the package (templates/) rather than string literals here,
- * so they stay editable and reviewable as documents.
+ * Instructions for AI coding agents working in the generated app.
+ *
+ * AGENTS.md is the canonical file — the cross-tool convention every coding
+ * agent reads — and CLAUDE.md is a short bridge to it, because Claude Code
+ * loads that name automatically. The skills under `.claude/skills/` are
+ * task-scoped guides AGENTS.md points at by name; they are plain markdown, so
+ * an agent without skill support can still read them.
+ *
+ * All of it ships as real markdown in the package (templates/) rather than
+ * string literals here, so it stays editable and reviewable as documents.
  *
  * The source tree uses `claude/` and is written out as `.claude/`: npm
  * has a long history of mangling dot-prefixed paths inside published
@@ -91,10 +97,11 @@ function copyAgentGuides(dir: string): void {
   const templates = join(packageRoot(), "templates");
   if (!existsSync(templates)) return; // tolerate a stripped install
 
-  const claudeMd = join(templates, "CLAUDE.md");
-  if (existsSync(claudeMd)) {
-    cpSync(claudeMd, join(dir, "CLAUDE.md"));
-    console.log("  create CLAUDE.md");
+  for (const file of ["AGENTS.md", "CLAUDE.md"]) {
+    const source = join(templates, file);
+    if (!existsSync(source)) continue;
+    cpSync(source, join(dir, file));
+    console.log(`  create ${file}`);
   }
 
   const skills = join(templates, "claude");

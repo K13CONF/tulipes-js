@@ -11,6 +11,12 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- Generated apps get an **`AGENTS.md`** — the cross-tool convention coding
+  agents read — carrying the project rules that used to live only in
+  `CLAUDE.md`. `CLAUDE.md` remains as a short bridge to it, so Claude Code
+  still picks the instructions up automatically, and the task-scoped skills
+  under `.claude/skills/` are unchanged.
+
 ## [0.10.0] — 2026-09-12
 
 The first stable release of the 0.10 line, published to `latest` with

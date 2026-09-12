@@ -37,7 +37,7 @@ jobs:
       - run: yarn test:types
       - run: yarn test:coverage
       - run: yarn workspace @tulipes-example/app sync && yarn workspace @tulipes-example/app typecheck
-      - run: diff packages/cli/templates/CLAUDE.md example/CLAUDE.md && diff -r packages/cli/templates/claude example/.claude
+      - run: diff packages/cli/templates/AGENTS.md example/AGENTS.md && diff packages/cli/templates/CLAUDE.md example/CLAUDE.md && diff -r packages/cli/templates/claude example/.claude
       - uses: actions/upload-artifact@v4
         if: always()
         with:
