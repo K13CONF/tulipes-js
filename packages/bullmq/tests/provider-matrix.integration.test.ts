@@ -1,0 +1,151 @@
+import { randomUUID } from "node:crypto";
+import { Redis } from "ioredis";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { fixture } from "../../core/tests/fixture.js";
+import type { QueueManager } from "../src/index.js";
+
+/**
+ * S10.4 — the queues provider with a real Redis: selection semantics,
+ * requirement shapes, worker consumption and the boundary with the
+ * application's own Redis clients.
+ */
+
+const redisUrl = process.env.TEST_REDIS_URL;
+const integration = test.skipIf(!redisUrl);
+
+const declared = JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } });
+const redisMeta = JSON.stringify({ variables: [{ name: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" }] });
+const queueFile = (name: string) => `
+  export default (ctx, queues) => {
+    queues.define(${JSON.stringify(name)});
+    queues.process(${JSON.stringify(name)}, async (job) => { ctx.config.probe.handled = (ctx.config.probe.handled ?? 0) + 1; return job.data; });
+  };
+`;
+
+beforeEach(() => {
+  if (redisUrl) vi.stubEnv("REDIS_URL", redisUrl);
+});
+
+/** Connections opened against the test Redis by this process, by client name. */
+async function clientNames(): Promise<string[]> {
+  const probe = new Redis(redisUrl!);
+  try {
+    const list = await probe.client("LIST");
+    return String(list).split("\n").filter(Boolean).map((line) => /name=(\S*)/.exec(line)?.[1] ?? "");
+  } finally {
+    await probe.quit();
+  }
+}
+
+integration("a REDIS_URL without a declaration starts nothing, even with the provider installed", async () => {
+  const app = await fixture({ "modules/probe/meta.variables.json": redisMeta });
+  const before = (await clientNames()).length;
+
+  const handle = await app.boot({ mode: "script" });
+
+  expect(handle.ctx.queues).toBeUndefined();
+  expect(handle.providers).toEqual([]);
+  expect((await clientNames()).length).toBe(before);
+});
+
+integration("a declared provider without REDIS_URL is a boot error naming the variable", async () => {
+  vi.stubEnv("REDIS_URL", undefined);
+  const app = await fixture({ "package.json": declared });
+
+  await expect(app.boot({ mode: "script" })).rejects.toThrow(/provider "bullmq" is selected but "REDIS_URL" is not declared\/set/);
+});
+
+integration("a queues file without a declaration is refused before it is imported", async () => {
+  const app = await fixture({
+    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/queues/work.queues.js": `throw new Error('queue file imported');`,
+  });
+
+  await expect(app.boot({ mode: "script" })).rejects.toThrow(/\[probe\] requires capability "queues" \(has queues\/ files\)/);
+});
+
+integration("a producer-only module declares the requirement and can enqueue into another module's queue", async () => {
+  const name = `probe.${randomUUID()}`;
+  const app = await fixture({
+    "package.json": declared,
+    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/queues/work.queues.js": queueFile(name),
+    "modules/producer/package.json": JSON.stringify({ name: "@test/producer", type: "module", tulipes: { dependsOn: ["probe"], requires: ["queues"] } }),
+    "modules/producer/module.config.js": `
+      export default () => ({});
+      export async function onReady(ctx) { await ctx.queues.add(${JSON.stringify(name)}, 'hello', { from: 'producer' }); }
+    `,
+  });
+
+  const backend = await app.boot({ listen: false });
+  const queues = backend.ctx.queues as QueueManager;
+
+  expect(queues.names()).toEqual([name]);
+  expect(backend.consumers).toBe(0);
+  expect(backend.providers).toEqual([expect.objectContaining({ capability: "queues", provider: "bullmq", ready: true, detail: "1 processor(s) registered" })]);
+
+  await queues.add(name, "hello", { from: "test" });
+  expect(await queues.queue(name).getWaitingCount()).toBe(1);
+
+  await queues.queue(name).obliterate({ force: true });
+  await backend.shutdown();
+});
+
+integration("the worker serves every processor and reports it; a queue-free worker is refused", async () => {
+  const name = `probe.${randomUUID()}`;
+  const app = await fixture({
+    "package.json": declared,
+    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/module.config.js": `export default () => ({});`,
+    "modules/probe/queues/work.queues.js": queueFile(name),
+  });
+
+  const worker = await app.boot({ mode: "worker" });
+  const queues = worker.ctx.queues as QueueManager;
+
+  expect(worker.consumers).toBe(1);
+  expect(worker.providers[0]?.detail).toBe("1 processor(s) registered, 1 consuming");
+
+  await queues.add(name, "job", { n: 1 });
+  await expect.poll(() => (worker.ctx.config.probe as { handled?: number }).handled, { timeout: 5_000 }).toBe(1);
+
+  await queues.queue(name).obliterate({ force: true });
+  await worker.shutdown();
+
+  const idle = await fixture({ "package.json": declared, "modules/probe/meta.variables.json": redisMeta });
+  await expect(idle.boot({ mode: "worker" })).rejects.toThrow(/worker mode started with zero processors/);
+});
+
+integration("disposing the provider leaves the application's own Redis client connected", async () => {
+  const name = `probe.${randomUUID()}`;
+  const app = await fixture({
+    "package.json": declared,
+    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/module.config.js": `
+      import { Redis } from 'ioredis';
+      const mine = new Redis(process.env.REDIS_URL, { connectionName: 'app-owned' });
+      export default () => ({ mine });
+      export async function onShutdown(ctx) { ctx.config.probe.pingAfterDrain = await mine.ping(); }
+    `,
+    "modules/probe/queues/work.queues.js": queueFile(name),
+  });
+
+  const worker = await app.boot({ mode: "worker" });
+  await expect.poll(async () => (await clientNames()).includes("app-owned"), { timeout: 2_000 }).toBe(true);
+
+  await worker.shutdown();
+
+  const state = worker.ctx.config.probe as { mine: Redis; pingAfterDrain?: string };
+  // The module's hook ran after the provider drained and still used its own client.
+  expect(state.pingAfterDrain).toBe("PONG");
+  expect(await state.mine.ping()).toBe("PONG");
+  expect((await clientNames()).includes("app-owned")).toBe(true);
+
+  await state.mine.quit();
+  const observer = new Redis(redisUrl!);
+  try {
+    await observer.del(`bull:${name}:meta`);
+  } finally {
+    await observer.quit();
+  }
+});

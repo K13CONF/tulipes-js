@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Queue } from "bullmq";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "./fixture.js";
+import { fixture } from "../../core/tests/fixture.js";
+import type { QueueManager } from "../src/index.js";
 
 const redisUrl = process.env.TEST_REDIS_URL;
 const integration = test.skipIf(!redisUrl);
@@ -16,6 +17,7 @@ integration(
     const name = `probe.${randomUUID()}`;
 
     const app = await fixture({
+      "package.json": JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } }),
       "modules/probe/meta.variables.json": JSON.stringify({
         variables: [
           {
@@ -56,7 +58,7 @@ integration(
 
     afterEach(() => state.release?.());
 
-    await handle.ctx.queues!.add(name, "work", {});
+    await (handle.ctx.queues as QueueManager).add(name, "work", {});
 
     await expect.poll(() => state.started).toBe(true);
 
@@ -93,8 +95,8 @@ integration(
 integration(
   "releases Redis connections even if a queue fails to close",
   async () => {
-    const { QueueManager } = await import("../src/queues/queue-manager.js");
-    const { BootReport } = await import("../src/errors/boot-error.js");
+    const { QueueManager } = await import("../src/queue-manager.js");
+    const { BootReport } = await import("@tulipes/core/errors");
     const manager = new QueueManager(redisUrl!);
     const name = `probe.${randomUUID()}`;
 

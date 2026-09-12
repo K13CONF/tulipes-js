@@ -1,0 +1,57 @@
+{
+  "name": "@tulipes/bullmq",
+  "version": "0.1.0-rc.1",
+  "description": "BullMQ queues provider for Tulipes apps: producers in every process, consumers in the worker, behind core's queues capability",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "prepack": "yarn build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "bullmq": "^5",
+    "ioredis": "^5"
+  },
+  "peerDependencies": {
+    "@tulipes/core": "^0.10.0-rc.1"
+  },
+  "devDependencies": {
+    "@tulipes/core": "workspace:*",
+    "@types/node": "^24.2.0",
+    "typescript": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kemora13conf/bp-backend-express.git",
+    "directory": "packages/bullmq"
+  },
+  "keywords": [
+    "tulipes",
+    "bullmq",
+    "redis",
+    "queues",
+    "express"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "homepage": "https://github.com/kemora13conf/bp-backend-express/tree/master/packages/bullmq#readme",
+  "bugs": {
+    "url": "https://github.com/kemora13conf/bp-backend-express/issues"
+  }
+}

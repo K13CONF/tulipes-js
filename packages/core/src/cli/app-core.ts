@@ -30,8 +30,8 @@ export async function importFromApp<T>(rootDir: string, specifier: string): Prom
 /**
  * The `boot` belonging to the app, falling back to this CLI's own.
  *
- * Booting through the app's own `@tulipes/core` is what keeps ioredis and
- * every other shared singleton to ONE copy, and what makes the app's
+ * Booting through the app's own `@tulipes/core` is what keeps every shared
+ * singleton to ONE copy, and what makes the app's
  * declared providers (`tulipes.providers`) resolve from the app rather than
  * from wherever the CLI happens to be installed.
  *

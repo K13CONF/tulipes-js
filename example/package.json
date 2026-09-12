@@ -2,7 +2,8 @@
   "name": "@tulipes-example/app",
   "tulipes": {
     "providers": {
-      "models": "@tulipes/mongoose"
+      "models": "@tulipes/mongoose",
+      "queues": "@tulipes/bullmq"
     }
   },
   "private": true,
@@ -19,6 +20,7 @@
     "start": "tsx app.ts"
   },
   "dependencies": {
+    "@tulipes/bullmq": "workspace:*",
     "@tulipes/core": "workspace:*",
     "@tulipes/mongoose": "workspace:*",
     "ioredis": "^5",

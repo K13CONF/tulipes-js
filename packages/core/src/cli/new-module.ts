@@ -22,7 +22,7 @@ import { coreVersion } from "./package-info.js";
 export async function runNewModule(
   rootDir: string,
   name: string,
-  options: { models?: boolean } = {},
+  options: { models?: boolean; queues?: boolean } = {},
 ): Promise<void> {
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     console.error(`module name "${name}" is invalid — lowercase kebab-case required`);
@@ -40,10 +40,11 @@ export async function runNewModule(
 
   const scope = detectScope(modulesDir) ?? "@app";
   const locales = detectLocales(modulesDir);
-  const declared = readProviderDeclarations(rootDir, new BootReport()).models;
-  const models = options.models ?? declared !== undefined;
+  const declared = readProviderDeclarations(rootDir, new BootReport());
+  const models = options.models ?? declared.models !== undefined;
+  const queues = options.queues ?? declared.queues !== undefined;
 
-  for (const [relPath, content] of renderModule(name, scope, locales, models)) {
+  for (const [relPath, content] of renderModule(name, scope, locales, models, queues)) {
     const filePath = join(dir, relPath);
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, content);
@@ -61,13 +62,20 @@ export async function runNewModule(
       "",
       `Delete unused files; keep route files wrapped in defineRoutes for offline inspection.`,
       ...(models
-        ? declared
+        ? declared.models
           ? []
           : ["", "--model was given but package.json declares no models provider: add",
              '  "tulipes": { "providers": { "models": "@tulipes/mongoose" } } and install it, or the boot will refuse this module.']
         : ["", "No models/ or bootstrap/ files: package.json declares no models provider.",
            "To add a database, declare \"tulipes\": { \"providers\": { \"models\": \"@tulipes/mongoose\" } }, install it,",
            `then \`tulipes new module ${name} --model\` in a scratch app to copy the model template.`]),
+      ...(queues
+        ? declared.queues
+          ? []
+          : ["", "--queues was given but package.json declares no queues provider: add",
+             '  "tulipes": { "providers": { "queues": "@tulipes/bullmq" } } and install it, or the boot will refuse this module.']
+        : ["", "No queues/ file: package.json declares no queues provider.",
+           "To add background work, declare \"tulipes\": { \"providers\": { \"queues\": \"@tulipes/bullmq\" } } and install it."]),
     ].join("\n"),
   );
 }
@@ -79,6 +87,7 @@ function renderModule(
   scope: string,
   locales: readonly string[],
   models: boolean,
+  queues: boolean,
 ): [string, string][] {
   const fn = camel(name);
   const Model = pascal(name);
@@ -109,6 +118,7 @@ function renderModule(
         [`${scope}/core`]: "workspace:*",
         express: "^5",
         ...(models && { "@tulipes/mongoose": "^0.1.0-rc.1", mongoose: "^8" }),
+        ...(queues && { "@tulipes/bullmq": "^0.1.0-rc.1" }),
       },
     })],
 
@@ -257,7 +267,7 @@ function renderModule(
 
     [`queues/${name}.queues.ts`, [
       `import type { Ctx } from "@tulipes/core/boot";`,
-      `import type { QueueRegistry } from "@tulipes/core/queues";`,
+      `import type { QueueRegistry } from "@tulipes/bullmq";`,
       ``,
       `/**`,
       ` * ONE file describes both sides. The backend process registers the`,
@@ -300,7 +310,9 @@ function renderModule(
     ].join("\n")],
   ];
 
-  return models ? files : files.filter(([path]) => !path.startsWith("models/") && !path.startsWith("bootstrap/"));
+  return files.filter(([path]) =>
+    (models || (!path.startsWith("models/") && !path.startsWith("bootstrap/"))) &&
+    (queues || !path.startsWith("queues/")));
 }
 
 /**

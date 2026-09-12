@@ -10,7 +10,6 @@ import { sortModules } from "../modules/graph.js";
 import { exploreModules, type ModuleFiles } from "../modules/explorer.js";
 import { buildGlobalConfig } from "../config/build-config.js";
 import { loadAcl } from "../acl/load-acl.js";
-import { initQueues } from "../queues/load-queues.js";
 import { initSockets } from "../sockets/load-sockets.js";
 import { errorHandler, notFoundHandler } from "../http/error-handler.js";
 import { createRai, RouteRegistry } from "../http/rai.js";
@@ -24,9 +23,12 @@ import {
   acquireProviders,
   checkRequirements,
   disposeProviders,
+  drainProviders,
   providerStatuses,
   readProviderDeclarations,
+  serveProviders,
   type AcquiredProvider,
+  type AcquiredStatus,
 } from "./providers.js";
 import type { BackendCtx, Ctx, ModuleLifecycle } from "./contracts.js";
 
@@ -68,7 +70,9 @@ export interface BootHandle {
   /** Translations: the locales served and the module namespaces loaded. */
   i18n: I18n;
   /** Every declared provider, with its banner status, in acquisition order. */
-  providers: readonly { capability: string; provider: string; label: string; ready: boolean }[];
+  providers: readonly AcquiredStatus[];
+  /** Worker mode: consumers started by the providers' serve() hooks. */
+  consumers: number;
   app?: Express;
   server?: Server;
   shutdown: () => Promise<void>;
@@ -149,6 +153,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   const handle: BootHandle = {
     mode, env, ctx, i18n,
     providers: [],
+    consumers: 0,
     shutdown: () => {
       if (!shutdownPromise) {
         for (const [signal, handler] of signalHandlers) process.removeListener(signal, handler);
@@ -180,7 +185,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     ctx.acl = await loadAcl(explored, aclReport);
     aclReport.throwIfAny("acl");
 
-    // Phase 8 — declared providers (models today). A provider registers
+    // Phase 8 — declared providers, in capability order (models, queues). A provider registers
     // ownership through own() before it awaits anything, so the failure path
     // below can always dispose what was created. Only the app's declaration
     // selects a provider: an installed package or a MONGO_URI on its own
@@ -193,21 +198,18 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     handle.providers = providerStatuses(acquiredProviders);
     acquireReport.throwIfAny("providers");
 
-    // Phase 9 — queues register in both modes (producers everywhere; the
-    // worker branch additionally starts consuming below).
-    const queueReport = new BootReport();
-    await initQueues(explored, ctx, queueReport);
-    queueReport.throwIfAny("queues");
-
     if (mode === "backend") {
       await startBackend(handle, explored, options.listen !== false && !options.inspect, options.inspect);
     } else if (mode === "worker") {
+      // Phase 9 (worker) — every acquired provider that can serve starts
+      // consuming. Consumers hold the event loop open; a worker with nothing
+      // to consume is a misconfigured deployment, not a valid idle state.
       const workerReport = new BootReport();
-      const started = ctx.queues?.startWorkers(workerReport) ?? 0;
+      handle.consumers = await serveProviders(acquiredProviders, workerReport);
+      // Serving changes what a provider reports (consumers now running).
+      handle.providers = providerStatuses(acquiredProviders);
       workerReport.throwIfAny("workers");
-      // BullMQ workers hold the event loop open; a worker with nothing to
-      // consume is a misconfigured deployment, not a valid idle state.
-      if (started === 0) {
+      if (handle.consumers === 0) {
         throw new Error(
           "worker mode started with zero processors — no module registered queue work",
         );
@@ -363,13 +365,12 @@ async function shutdown(
       }
     }, () => handle.server?.closeAllConnections()),
     cleanup.run("sockets", () => handle.ctx.sockets?.close()),
-    cleanup.run("workers", () => handle.ctx.queues?.drain()),
+    ...drainProviders(providers, cleanup),
   ]);
 
   for (const { module, onShutdown } of [...lifecycles].reverse()) {
     await cleanup.run(`${module} onShutdown`, () => onShutdown?.(handle.ctx));
   }
-  await cleanup.run("queues", () => handle.ctx.queues?.close(), () => handle.ctx.queues?.disconnect());
   await disposeProviders(providers, cleanup);
   cleanup.finish();
 }

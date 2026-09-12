@@ -7,7 +7,6 @@ import type { Acl } from "../acl/acl.js";
 import type { RouteInfo, RouteRegistry } from "../http/rai.js";
 import type { ModuleManifest } from "../modules/manifest.js";
 import type { I18nextInstance, TFunction } from "../i18n/index.js";
-import type { QueueManager } from "../queues/queue-manager.js";
 import type { SocketManager } from "../sockets/socket-manager.js";
 
 /**
@@ -39,7 +38,8 @@ export interface Ctx {
    * provider's declarations augment ModelsCapability with the real methods.
    */
   models?: ModelsCapability;
-  queues?: QueueManager;
+  /** Set by the "queues" provider (`tulipes.providers.queues`); augmented like models. */
+  queues?: QueuesCapability;
   sockets?: SocketManager;
   app?: Express;
   /**
@@ -126,9 +126,13 @@ export interface BackendCtx extends RuntimeCtx {
  */
 export interface ModelsCapability {}
 
-/** Capability name → the value a provider hands to ctx. Augmented with ModelsCapability. */
+/** Same shape for background work: empty here, augmented by the queues provider. */
+export interface QueuesCapability {}
+
+/** Capability name → the value a provider hands to ctx. */
 export interface ProviderCapabilities {
   models: ModelsCapability;
+  queues: QueuesCapability;
 }
 
 /** Bootstrap tasks only run with a registered model store. */
@@ -146,7 +150,11 @@ export function requireModels(ctx: Pick<Ctx, "models">): ModelsCapability {
   return ctx.models;
 }
 
-export function requireQueues(ctx: Pick<Ctx, "queues">): QueueManager {
-  if (!ctx.queues) throw new Error("This module requires a queue manager");
+export function requireQueues(ctx: Pick<Ctx, "queues">): QueuesCapability {
+  if (!ctx.queues) {
+    throw new Error(
+      'This module requires a queue manager — no "queues" provider is declared in package.json ("tulipes.providers.queues")',
+    );
+  }
   return ctx.queues;
 }

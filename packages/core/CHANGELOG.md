@@ -11,6 +11,19 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **Breaking:** the BullMQ queues provider moved to `@tulipes/bullmq` (Sprint 04,
+  S10). Core no longer depends on `bullmq` or `ioredis`; `QueueRegistry`,
+  `QueuesFn` and `QueueManager` are imported from the provider, `@tulipes/core/queues`
+  is a migration stub, and an app selects queues with
+  `"tulipes": { "providers": { "queues": "@tulipes/bullmq" } }`. A `queues/` file
+  implies the requirement; `REDIS_URL` alone starts nothing. `ctx.queues` is an
+  augmentable `QueuesCapability`; `BootHandle.consumers` counts what the worker
+  serves. Providers gain optional `serve()` (worker mode) and `drain()`
+  (first shutdown phase) hooks; the shutdown order is unchanged. The
+  application's own Redis clients (cache, rate limiter) are untouched and keep
+  their own `ioredis`. `tulipes new module` emits the queues file only when a
+  queues provider is declared (`--queues` / `--no-queues`).
+
 ## [0.10.0-rc.1] — 2026-09-12
 
 Released with `@tulipes/spec@0.3.0-rc.4` and the first `@tulipes/mongoose@0.1.0-rc.1`;
