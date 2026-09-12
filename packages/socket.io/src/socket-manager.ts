@@ -1,23 +1,44 @@
 import type { Server as HttpServer } from "node:http";
 import { Server, type Namespace, type ServerOptions } from "socket.io";
 
-import { BootReport } from "../errors/boot-error.js";
+import type { SocketsCapability } from "@tulipes/core/boot";
+import type { BootReport } from "@tulipes/core/errors";
 
 /**
- * Wraps the process-wide Socket.IO server (backend branch only, phase 11b).
+ * What `ctx.sockets` is once this provider is in the compilation. Core's
+ * SocketsCapability is empty; an app that imports anything from this package
+ * (its socket files do, for SocketRegistry) sees these members typed.
+ */
+declare module "@tulipes/core/boot" {
+  interface SocketsCapability {
+    readonly io: Server;
+    of(name: string): Namespace;
+    namespaces(): string[];
+  }
+}
+
+/**
+ * Wraps the process-wide Socket.IO server (backend branch only). Created
+ * unattached during provider acquisition so modules can claim namespaces;
+ * core hands it the HTTP server through attach() just before listen().
  *
  * Namespaces are the socket-side equivalent of route prefixes, and get the
  * same ownership rule as everything else in Tulipes: a module claims its
  * namespace ("/users") exactly once, and emitting into a namespace nobody
  * claimed throws instead of silently broadcasting to nothing.
  */
-export class SocketManager {
+export class SocketManager implements SocketsCapability {
   readonly #io: Server;
   /** namespace name → owning module */
   readonly #namespaces = new Map<string, string>();
 
-  constructor(httpServer: HttpServer, options?: Partial<ServerOptions>) {
-    this.#io = new Server(httpServer, options);
+  constructor(options?: Partial<ServerOptions>) {
+    this.#io = new Server(options);
+  }
+
+  /** Bind to the server that will accept the upgrades; once, before it listens. */
+  attach(httpServer: HttpServer): void {
+    this.#io.attach(httpServer);
   }
 
   /** Escape hatch for advanced use — prefer `of()` for claimed namespaces. */

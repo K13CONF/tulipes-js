@@ -1,5 +1,5 @@
 import type { Ctx } from "@tulipes/core/boot";
-import type { SocketRegistry } from "@tulipes/core/sockets";
+import type { SocketRegistry } from "@tulipes/socket.io";
 
 export default function usersSockets({ config }: Ctx, sockets: SocketRegistry): void {
   sockets.namespace("/users", (nsp) => {

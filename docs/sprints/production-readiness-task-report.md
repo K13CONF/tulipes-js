@@ -9,7 +9,7 @@ under `next`; tag workflow, registry archive identity and fresh registry
 installs of both presets passed. Sprint 03 (S09.1–S09.10) is complete and
 merged (`21040d5`). Previously: [rc.3 candidate release](release-0.9.0-rc.3.md).
 
-**Current workstream: Sprint 04 — S10 (queues) delivered; S11 (sockets) next.**
+**Current workstream: Sprint 04 delivered (S10 merged, S11 in review); Sprint 05 (packaging decisions) next.**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
 register, measurement protocol, interface decisions, fixtures and delivery order.
 Sprint 02 implementation, local closeout and CI acceptance are complete.
@@ -326,30 +326,30 @@ If necessary, deliver queues first and schedule sockets as the next increment.
 
 ### S11 — Socket provider
 
-- [ ] **S11.1 — Define attachment and availability.** Specify when the socket
+- [x] **S11.1 — Define attachment and availability.** Specify when the socket
   provider can attach to the HTTP server, the capability visible to modules and
   behavior in worker/inspection modes. Define authorization and application
   callback ownership without replacing existing application policy.
-- [ ] **S11.2 — Extract implementation and types.** Move Socket.IO-specific
+- [x] **S11.2 — Extract implementation and types.** Move Socket.IO-specific
   runtime/types/dependencies behind explicit selection. Preserve the shared HTTP
   server's ownership; provider cleanup must not independently destroy it too early.
-- [ ] **S11.3 — Retain live socket behavior.** Exercise connection, event handling,
+- [x] **S11.3 — Retain live socket behavior.** Exercise connection, event handling,
   configured authorization, connection failure and shutdown with active clients.
   Test failed partial setup and repeated cleanup; compare existing public examples.
-- [ ] **S11.4 — Migrate generation and verify absence.** Update starter features,
+- [x] **S11.4 — Migrate generation and verify absence.** Update starter features,
   socket examples, generated types and upgrade notes. Prove a socket-free packed
   app cannot resolve Socket.IO and still boots, serves HTTP and generates specs.
 
 ### Sprint acceptance and matrix
 
-- [ ] **04-C1 — Run targeted combinations.** At minimum: core only; models only;
+- [x] **04-C1 — Run targeted combinations.** At minimum: core only; models only;
   queues with a worker; sockets with HTTP; production with all selected providers;
   and rate limiting without queues. Select combinations for real ownership risks,
   rather than promising every theoretical feature permutation.
-- [ ] **04-C2 — Verify offline paths for each selection.** Services and runtime
+- [x] **04-C2 — Verify offline paths for each selection.** Services and runtime
   secrets remain unnecessary for declarations/spec generation. Provider imports
   must not run application lifecycle hooks during inspection.
-- [ ] **04-C3 — Retain installed-artifact and migration evidence.** Test exact
+- [x] **04-C3 — Retain installed-artifact and migration evidence.** Test exact
   archives, public type contracts, generated/reference parity, audits and supported
   CI targets. Record which packages/dependencies disappeared in each mode.
 

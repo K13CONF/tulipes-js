@@ -100,6 +100,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
   // itself (a peer of the provider) so schemas and provider share one copy.
   const mongooseProvider = "^0.1.0-rc.1";
   const bullmqProvider = "^0.1.0-rc.1";
+  const socketProvider = "^0.1.0-rc.1";
   // The generator ships its own version line; it only has to be recent
   // enough to understand the RouteInfo schemas this core declares.
   const specVersion = "^0.3.0-rc.4";
@@ -115,7 +116,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
       // The one line that selects a database: modules with models/ or
       // bootstrap/ directories require it, and nothing else — not an
       // installed package, not a MONGO_URI — connects one.
-      tulipes: { providers: { models: "@tulipes/mongoose", queues: "@tulipes/bullmq" } },
+      tulipes: { providers: { models: "@tulipes/mongoose", queues: "@tulipes/bullmq", sockets: "@tulipes/socket.io" } },
       // Pins yarn 4 through corepack; without it a global classic yarn
       // would handle the workspaces and produce a v1 lockfile.
       packageManager: "yarn@4.18.0",
@@ -146,6 +147,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         "@tulipes/core": core,
         "@tulipes/bullmq": bullmqProvider,
         "@tulipes/mongoose": mongooseProvider,
+        "@tulipes/socket.io": socketProvider,
         express: "^5",
         mongoose: "^8",
         // Route schemas: validated by rai(), described by `yarn spec`.
@@ -3120,7 +3122,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
 
     ["modules/users/sockets/users.sockets.ts", [
       `import type { Ctx } from "@tulipes/core/boot";`,
-      `import type { SocketRegistry } from "@tulipes/core/sockets";`,
+      `import type { SocketRegistry } from "@tulipes/socket.io";`,
       ``,
       `export default function usersSockets({ config }: Ctx, sockets: SocketRegistry): void {`,
       `  sockets.namespace("/users", (nsp) => {`,
@@ -3251,6 +3253,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         express: "^5",
         "@tulipes/bullmq": bullmqProvider,
         "@tulipes/mongoose": mongooseProvider,
+        "@tulipes/socket.io": socketProvider,
         mongoose: "^8",
       },
     })],
@@ -5920,6 +5923,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
         express: "^5",
         "@tulipes/bullmq": bullmqProvider,
         "@tulipes/mongoose": mongooseProvider,
+        "@tulipes/socket.io": socketProvider,
         mongoose: "^8",
       },
     })],
@@ -6069,7 +6073,7 @@ function renderProject(name: string, coreVersion: string): [string, string][] {
 
     ["modules/hello/sockets/hello.sockets.ts", [
       `import type { Ctx } from "@tulipes/core/boot";`,
-      `import type { SocketRegistry } from "@tulipes/core/sockets";`,
+      `import type { SocketRegistry } from "@tulipes/socket.io";`,
       ``,
       `/**`,
       ` * Backend mode only. A namespace is claimed by exactly one module; emit`,

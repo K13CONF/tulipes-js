@@ -10,7 +10,6 @@ import { sortModules } from "../modules/graph.js";
 import { exploreModules, type ModuleFiles } from "../modules/explorer.js";
 import { buildGlobalConfig } from "../config/build-config.js";
 import { loadAcl } from "../acl/load-acl.js";
-import { initSockets } from "../sockets/load-sockets.js";
 import { errorHandler, notFoundHandler } from "../http/error-handler.js";
 import { createRai, RouteRegistry } from "../http/rai.js";
 import { bindRespond, warnOnRawResponse } from "../http/respond.js";
@@ -21,6 +20,7 @@ import { loadAppConfigSeed } from "./app-files.js";
 import { printStartupBanner } from "./banner.js";
 import {
   acquireProviders,
+  attachProviders,
   checkRequirements,
   disposeProviders,
   drainProviders,
@@ -193,13 +193,14 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     const acquireReport = new BootReport();
     acquiredProviders.push(...await acquireProviders(declaredProviders, {
       ctx, rootDir: options.rootDir, files: explored,
+      situation: options.inspect ? "inspect" : mode,
       runBootstrap: mode !== "script" && !options.inspect,
     }, acquireReport));
     handle.providers = providerStatuses(acquiredProviders);
     acquireReport.throwIfAny("providers");
 
     if (mode === "backend") {
-      await startBackend(handle, explored, options.listen !== false && !options.inspect, options.inspect);
+      await startBackend(handle, explored, acquiredProviders, options.listen !== false && !options.inspect, options.inspect);
     } else if (mode === "worker") {
       // Phase 9 (worker) — every acquired provider that can serve starts
       // consuming. Consumers hold the event loop open; a worker with nothing
@@ -298,6 +299,7 @@ function resolveMode(override: ProcessMode | undefined): ProcessMode {
 async function startBackend(
   handle: BootHandle,
   explored: readonly ModuleFiles[],
+  providers: readonly AcquiredProvider[],
   listen = true,
   inspect = false,
 ): Promise<void> {
@@ -328,11 +330,12 @@ async function startBackend(
   const server = createServer(app);
   handle.server = server;
 
-  // Phase 11b — sockets attach before listen() so no client can connect
-  // to a namespace that isn't wired yet.
-  const socketReport = new BootReport();
-  if (!inspect) await initSockets(explored, handle.ctx, server, socketReport);
-  socketReport.throwIfAny("sockets");
+  // Phase 11b — transports attach before listen() so no client can connect
+  // to a namespace that isn't wired yet. Inspection never attaches.
+  const attachReport = new BootReport();
+  if (!inspect) await attachProviders(providers, server, attachReport);
+  handle.providers = providerStatuses(providers);
+  attachReport.throwIfAny("providers");
 
   if (!listen) return;
 
@@ -364,7 +367,6 @@ async function shutdown(
         });
       }
     }, () => handle.server?.closeAllConnections()),
-    cleanup.run("sockets", () => handle.ctx.sockets?.close()),
     ...drainProviders(providers, cleanup),
   ]);
 
