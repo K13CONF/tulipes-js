@@ -10,7 +10,7 @@ registry archive identity and fresh registry installs of both presets passed.
 Sprints 03 and 04 are complete and merged. Previously:
 [rc.1](release-0.10.0-rc.1.md), [rc.3](release-0.9.0-rc.3.md).
 
-**Current workstream: Sprint 05 — S12 merged, S13 decided; S14 (feature composition) next; see the [Sprint 05 plan](production-readiness-05.md).**
+**Current workstream: Sprint 05 delivered (S12 merged, S13 decided, S14 in review); a candidate release with the CLI package and Sprint 06 (production pilot) follow.**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
 register, measurement protocol, interface decisions, fixtures and delivery order.
 Sprint 02 implementation, local closeout and CI acceptance are complete.
@@ -406,23 +406,23 @@ measurements. Set effort only after the go/no-go decisions below.
 
 ### S14 — Compose supported starter features
 
-- [ ] **S14.1 — Define supported combinations and prerequisites.** Preserve
+- [x] **S14.1 — Define supported combinations and prerequisites.** Preserve
   minimal and production as named presets. Write down requirements such as auth
   needing models, settings needing auth/core, workers needing queues and sockets
   needing HTTP. Decide whether additional flags are worth supporting now.
-- [ ] **S14.2 — Reject invalid input before writing files.** Extend CLI parsing
+- [x] **S14.2 — Reject invalid input before writing files.** Extend CLI parsing
   and feature validation only for selected combinations. Cover unknown/missing/
   conflicting flags, unavailable dependencies and non-empty target directories.
-- [ ] **S14.3 — Generate the complete dependency graph.** Emit only selected
+- [x] **S14.3 — Generate the complete dependency graph.** Emit only selected
   modules, package dependencies, environment declarations, capabilities, scripts
   and operational examples. Update generated tests and offline route declarations
   together; do not generate imports of absent features.
-- [ ] **S14.4 — Decide auth/settings ownership.** Keep these as editable generated
+- [x] **S14.4 — Decide auth/settings ownership.** (deferred as generated application code — see [feature composition §4](../design/feature-composition.md#4-auth-and-settings-ownership-s144--deferred-recorded)) Keep these as editable generated
   application code by default. A library proposal must separately justify how
   applications customize credential, role, audit, file and restart policies and
   receive security updates without losing local changes. Deferring this split is
   a valid recorded outcome.
-- [ ] **S14.5 — Make compatibility executable.** Maintain a bounded combination
+- [x] **S14.5 — Make compatibility executable.** Maintain a bounded combination
   matrix, packed install tests and upgrade examples. Document which combinations
   are supported, what infrastructure they need and the tested package ranges.
 

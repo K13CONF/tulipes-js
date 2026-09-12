@@ -59,13 +59,16 @@ try {
     });
   }
   const before = await call("list");
-  assert.equal(before.length, 4);
+  // The app's own processes (backend, plus a worker when queues are generated)
+  // and the two foreign ones started above.
+  const expectedOwned = config.apps.length;
+  assert.equal(before.length, expectedOwned + 2);
   assert.ok(before.every((process) => process.pid > 0));
   const root = realpathSync(process.cwd());
   const owned = before.filter(
     (entry) => realpathSync(entry.pm2_env.pm_cwd) === root,
   );
-  assert.equal(owned.length, 2);
+  assert.equal(owned.length, expectedOwned);
   assert.equal(
     before.filter((entry) => entry.name === config.apps[0].name).length,
     2,

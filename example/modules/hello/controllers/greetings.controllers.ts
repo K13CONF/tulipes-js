@@ -27,7 +27,7 @@ export class GreetingsController {
   use(): RequestHandler {
     return async (req: Request, res: Response) => {
       const { name } = req.params;
-      const greeting = await requireModels(this.ctx).get("Greeting").findOne({ name }).lean();
+      const greeting = await requireModels(this.ctx).get<{ message: string }>("Greeting").findOne({ name }).lean();
       if (!greeting) throw new HttpError(404, "noSuchGreeting", { vars: { name } });
 
       // Slow or retryable work belongs in a job, not in the request. Run
