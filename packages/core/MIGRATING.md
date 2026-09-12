@@ -12,8 +12,9 @@ what makes it work under nvm.
 ---
 
 <a id="unreleased--install-the-cli-package"></a>
+<a id="0100-rc3--install-the-cli-package"></a>
 
-## Unreleased — install the CLI package
+## 0.10.0-rc.3 — install the CLI package
 
 The `tulipes` command moved out of core into `@tulipes/cli`. For every app:
 
