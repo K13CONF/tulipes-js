@@ -11,6 +11,18 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- Accept a replica set's multi-host connection string in a `url` variable
+  (`mongodb://a:27017,b:27017/db?replicaSet=rs0`). WHATWG URL parsing rejects
+  that form, so declaring the most common self-hosted MongoDB topology made the
+  app refuse to boot. Every host in the list must still parse on its own.
+- `@tulipes/socket.io`: closing a server that never attached is a no-op, so a
+  boot that failed before `listen()` reports its own failure instead of a
+  `TypeError` from Socket.IO's cleanup.
+- Generated apps: the Redis cache degrades instead of failing requests. It is
+  read from global middleware, so an outage used to surface as 500 on every
+  endpoint after a 20-retry stall; the client now fails fast and every cache
+  operation falls back to "no cache".
+
 ## [0.10.0-rc.3] — 2026-09-12
 
 Released with the first `@tulipes/cli@0.1.0-rc.1`, plus `@tulipes/spec@0.3.0-rc.6`,

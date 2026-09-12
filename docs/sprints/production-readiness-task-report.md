@@ -455,7 +455,7 @@ and publication remain separately authorized operations.
   the chosen hops. Test forwarded IP/host/protocol behavior, forged headers,
   backend-port isolation, request limits and SSE proxy buffering/timeouts. The
   existing Express/header tests do not establish deployed proxy correctness.
-- [ ] **S15.3 — Exercise service failure.** Use a disposable MongoDB replica set
+- [x] **S15.3 — Exercise service failure.** Use a disposable MongoDB replica set
   to test primary loss and uncertain refresh/audit acknowledgments before/after
   commit. Test Redis outage/recovery and limiter failure behavior across replicas.
   Record observed outcomes without claiming rollback from a missing acknowledgment.
