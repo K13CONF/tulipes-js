@@ -31,6 +31,7 @@ export class SocketManager implements SocketsCapability {
   readonly #io: Server;
   /** namespace name → owning module */
   readonly #namespaces = new Map<string, string>();
+  #attached = false;
 
   constructor(options?: Partial<ServerOptions>) {
     this.#io = new Server(options);
@@ -39,6 +40,7 @@ export class SocketManager implements SocketsCapability {
   /** Bind to the server that will accept the upgrades; once, before it listens. */
   attach(httpServer: HttpServer): void {
     this.#io.attach(httpServer);
+    this.#attached = true;
   }
 
   /** Escape hatch for advanced use — prefer `of()` for claimed namespaces. */
@@ -79,6 +81,11 @@ export class SocketManager implements SocketsCapability {
    * This also closes HTTP; boot starts and awaits HTTP draining alongside it.
    */
   close(): Promise<void> {
+    // Socket.IO's close() reaches into the engine that attach() creates. A boot
+    // that failed before the HTTP server existed still disposes this resource,
+    // and closing an unattached server would throw a TypeError on top of — and
+    // in place of — the failure that actually stopped the boot.
+    if (!this.#attached) return Promise.resolve();
     return new Promise((resolve) => {
       this.#io.close(() => resolve());
     });

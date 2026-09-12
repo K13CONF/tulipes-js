@@ -1,7 +1,8 @@
 # Sprint 06 — Production pilot, operational evidence and release
 
 Status: started 2026-09-12 from `40160ac` (core 0.10.0-rc.3 and the first
-`@tulipes/cli` published). S15.2 (ingress) is delivered; **the rest of S15, all
+`@tulipes/cli` published). S15.2 (ingress) and S15.3 (service failure) are
+delivered; **the rest of S15, all
 of S16 and S17.1 cannot start without inputs this repository does not contain**
 — see §2. S17.2–S17.6 follow the pilot.
 
@@ -75,7 +76,8 @@ app on the host; every other directive is used verbatim.
 |---|---|---|
 | S15.1 | Blocked | §3 sheet awaits the pilot owner |
 | S15.2 | Complete | [ingress evidence](../design/ingress-evidence.md); `reports/ingress-smoke/` |
-| S15.3–S15.5 | Blocked | §2 |
+| S15.3 | Complete | [failure evidence](../design/failure-evidence.md); three defects found and fixed (replica-set URI, masked boot failure, cache outage) |
+| S15.4–S15.5 | Blocked | §2 |
 | S16.1–S16.7 | Blocked | §2 |
 | S17.1 | Blocked | follows the pilot |
 | S17.2–S17.6 | Not started | after the pilot; the release procedure itself is exercised and documented |

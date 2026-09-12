@@ -60,8 +60,33 @@ export function coerceValue(spec: VariableSpec, raw: VariableValue): CoerceResul
         new URL(value);
         return { ok: true, value };
       } catch {
+        // A replica set is addressed by a comma-separated host list —
+        // `mongodb://a:27017,b:27017/db?replicaSet=rs0` — which is what every
+        // self-hosted MongoDB deployment uses and which WHATWG URL parsing
+        // rejects outright. Accept that one shape by checking a single host
+        // from the list, so the type still catches a typo'd scheme or an
+        // empty authority instead of waving the whole string through.
+        const multiHost = /^([a-z][a-z0-9+.-]*:\/\/)(?:([^@/?#]*)@)?([^/?#]*,[^/?#]*)([/?#].*)?$/i.exec(value);
+        if (multiHost) {
+          const [, scheme, userinfo, hosts = "", rest = ""] = multiHost;
+          const list = hosts.split(",");
+          const credentials = userinfo ? `${userinfo}@` : "";
+          if (list.every((host) => host.length > 0 && tryUrl(`${scheme}${credentials}${host}${rest}`))) {
+            return { ok: true, value };
+          }
+        }
         return { ok: false, reason: `"${value}" is not a valid URL` };
       }
     }
+  }
+}
+
+/** Does this parse as a URL at all? Used to validate one host of a list. */
+function tryUrl(value: string): boolean {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
   }
 }
