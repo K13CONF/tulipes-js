@@ -45,6 +45,7 @@ __metadata:
   dependencies:
     "@app/auth": "workspace:*"
     "@app/core": "workspace:*"
+    "@tulipes/bullmq": "workspace:*"
     "@tulipes/core": "workspace:*"
     "@tulipes/mongoose": "workspace:*"
     express: "npm:^5"
@@ -89,6 +90,7 @@ __metadata:
   dependencies:
     "@app/auth": "workspace:*"
     "@app/core": "workspace:*"
+    "@tulipes/bullmq": "workspace:*"
     "@tulipes/core": "workspace:*"
     "@tulipes/mongoose": "workspace:*"
     express: "npm:^5"
@@ -586,6 +588,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@tulipes-example/app@workspace:example"
   dependencies:
+    "@tulipes/bullmq": "workspace:*"
     "@tulipes/core": "workspace:*"
     "@tulipes/mongoose": "workspace:*"
     "@tulipes/spec": "workspace:*"
@@ -599,7 +602,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@tulipes/bullmq@workspace:packages/bullmq":
+"@tulipes/bullmq@workspace:*, @tulipes/bullmq@workspace:packages/bullmq":
   version: 0.0.0-use.local
   resolution: "@tulipes/bullmq@workspace:packages/bullmq"
   dependencies:
