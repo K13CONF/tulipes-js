@@ -85,15 +85,15 @@ try {
   // installed core, resolve the driver at all? Minimal must say no everywhere.
   const probe = run(process.execPath, ['--input-type=module', '-e', `
     import { createRequire } from 'node:module';
-    const targets = ['mongoose', 'mongodb', 'bson', '@tulipes/mongoose'];
+    const targets = ['mongoose', 'mongodb', 'bson', '@tulipes/mongoose', 'bullmq', '@tulipes/bullmq', 'ioredis'];
     const from = anchor => Object.fromEntries(targets.map(t => { try { createRequire(anchor).resolve(t); return [t, true]; } catch { return [t, false]; } }));
     console.log(JSON.stringify({ app: from(process.argv[1]), core: from(createRequire(process.argv[1]).resolve('@tulipes/core')), cli: from(process.argv[2]) }));
   `, pkgFile, bin], app, env);
   const resolved = JSON.parse(probe.trim().split('\n').at(-1));
   writeFileSync(join(logs, 'resolve.json'), JSON.stringify(resolved, null, 2));
   // Minimal: absent from the app, from core's own directory and from the
-  // launcher. Production: present for the app (its modules own it), never
-  // through the launcher; core's directory sees it only by hoisting.
+  // launcher. Production: present for the app (its modules and providers own
+  // them), never through the launcher; core's directory sees them only by hoisting.
   const expectations = preset === 'minimal' ? { app: false, core: false, cli: false } : { app: true, cli: false };
   for (const [anchor, expected] of Object.entries(expectations)) {
     for (const [target, found] of Object.entries(resolved[anchor])) {

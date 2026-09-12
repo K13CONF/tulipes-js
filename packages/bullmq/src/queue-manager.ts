@@ -8,7 +8,24 @@ import {
 } from "bullmq";
 import { Redis } from "ioredis";
 
-import { BootReport } from "../errors/boot-error.js";
+import type { QueuesCapability } from "@tulipes/core/boot";
+import type { BootReport } from "@tulipes/core/errors";
+
+/**
+ * What `ctx.queues` is once this provider is in the compilation. Core's
+ * QueuesCapability is empty; an app that imports anything from this package
+ * (its queue files do, for QueueRegistry) sees these members typed.
+ */
+declare module "@tulipes/core/boot" {
+  interface QueuesCapability {
+    /** Produce a job. The queue must have been defined by some module. */
+    add(queueName: string, jobName: string, data: unknown, options?: JobsOptions): Promise<void>;
+    queue(name: string): Queue;
+    names(): string[];
+    readonly processorCount: number;
+    readonly workerCount: number;
+  }
+}
 
 /**
  * One manager owns every queue in the process. The same `*.queues.ts` files
@@ -21,7 +38,7 @@ import { BootReport } from "../errors/boot-error.js";
  *
  * That symmetry is what lets a module describe its background work once.
  */
-export class QueueManager {
+export class QueueManager implements QueuesCapability {
   readonly #url: string;
   readonly #queues = new Map<string, { queue: Queue; owner: string }>();
   readonly #processors = new Map<
@@ -110,7 +127,7 @@ export class QueueManager {
     return stored.queue;
   }
 
-  /** Worker mode only — called by the boot driver, never by modules. */
+  /** Worker mode only — called by the provider's serve() hook, never by modules. */
   startWorkers(report: BootReport): number {
     for (const [name, { handler, owner, options }] of this.#processors) {
       if (!this.#queues.has(name)) {

@@ -312,14 +312,14 @@ If necessary, deliver queues first and schedule sockets as the next increment.
   backend registration and worker consumption, absent-queue behavior and checked
   required-queue access. Preserve type narrowing and useful errors for modules
   needing an unavailable queue provider.
-- [ ] **S10.3 — Extract queues.** Move BullMQ and queue-owned Redis dependencies
+- [x] **S10.3 — Extract queues.** Move BullMQ and queue-owned Redis dependencies
   behind explicit provider selection. Keep connection ownership unambiguous;
   closing a worker must not close an unrelated rate-limit/cache connection.
 - [ ] **S10.4 — Retain runtime and failure cases.** Test real enqueue/consume,
   registration errors, reconnect failures, worker drain, failed startup, repeated
   shutdown and cleanup with active work. Test one connection owner's failure
   without silently disabling an unrelated Redis consumer.
-- [ ] **S10.5 — Migrate and measure.** Update worker entrypoints, queue examples,
+- [x] **S10.5 — Migrate and measure.** Update worker entrypoints, queue examples,
   generated dependencies/types and migration docs. Verify production's actual
   worker through packed artifacts; prove a queue-free core install contains no
   BullMQ or queue-owned ioredis. Report the remaining app-owned Redis dependency.

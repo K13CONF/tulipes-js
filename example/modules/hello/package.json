@@ -16,6 +16,7 @@
     "@app/auth": "workspace:*",
     "@app/core": "workspace:*",
     "@tulipes/core": "workspace:*",
+    "@tulipes/bullmq": "workspace:*",
     "@tulipes/mongoose": "workspace:*",
     "express": "^5",
     "mongoose": "^8"

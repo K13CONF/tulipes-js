@@ -55,8 +55,7 @@ what a queue is.
 |---|---|---|
 | S10.1 | Complete | Consumer map in the [design doc §1](../design/queues-provider-design.md#1-redis-consumers-s101) |
 | S10.2 | Complete | [Design doc §2–§4](../design/queues-provider-design.md#2-capability-by-mode-s102) |
-| S10.3 | Not started | |
-| S10.4 | Not started | |
-| S10.5 | Not started | |
+| S10.3, S10.5 | Complete | 2026-09-12: `packages/bullmq` holds the manager and loader; core drops `bullmq` and `ioredis`, gains `serve`/`drain` hooks and `BootHandle.consumers`; generator, example, `new module`, skills migrated; four archives, absence probe covers `bullmq`, `ioredis`, `@tulipes/bullmq`; upgrade smoke applies both migrations — [design §6](../design/queues-provider-design.md#6-evidence) |
+| S10.4 | Not started | Real-driver matrix and fake-provider `serve`/`drain` tests |
 | S11 | Not started | Own increment after S10 acceptance |
 | 04-C1–C3 | Not started | Combination matrix is run when both providers exist; S10 records the queue-relevant rows |

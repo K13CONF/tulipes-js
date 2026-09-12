@@ -114,14 +114,13 @@ test("bounds a stuck cleanup hook and still attempts later cleanup", async () =>
 
 test("capability accessors reject missing infrastructure and preserve available services", async () => {
   const { requireModels, requireQueues } = await import("../src/boot/index.js");
-  const { QueueManager } = await import("../src/queues/queue-manager.js");
 
   expect(() => requireModels({})).toThrow(/tulipes\.providers\.models/);
-  expect(() => requireQueues({})).toThrow(/requires a queue/);
+  expect(() => requireQueues({})).toThrow(/tulipes\.providers\.queues/);
 
-  // Whatever the declared provider handed over: core only checks presence.
+  // Whatever the declared providers handed over: core only checks presence.
   const models = {} as import("../src/boot/index.js").ModelsCapability,
-    queues = new QueueManager("redis://127.0.0.1:1");
+    queues = {} as import("../src/boot/index.js").QueuesCapability;
 
   expect(requireModels({ models })).toBe(models);
   expect(requireQueues({ queues })).toBe(queues);

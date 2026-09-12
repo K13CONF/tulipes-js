@@ -131,4 +131,15 @@ drain; closing the provider leaves an app-owned ioredis connection open.
 
 ## 6. Evidence
 
-Appended as S10.3–S10.5 land.
+### 6.1 Extraction (S10.3, S10.5; 2026-09-12)
+
+| Claim | Evidence | Result |
+|---|---|---|
+| Runtime moved | `packages/bullmq/src/{queue-manager,load-queues,provider,index}.ts`; the manager is owned via `own()` before the first queue file runs; `serve` → `startWorkers`, `drain` → `drain`, `dispose` → `close`, `forceDispose` → `disconnect` | pass |
+| Core free of BullMQ/ioredis | packed core `dependencies`: colorette, dotenv, express, i18next, i18next-fs-backend, socket.io, tsx, zod; `artifacts.mjs verify` refuses core depending on or declaring from `mongoose`, `bullmq`, `ioredis` | pass |
+| Packed absence | minimal smoke probe: `bullmq`, `@tulipes/bullmq`, `ioredis` (and the S09 targets) unresolvable from app, core and launcher | pass |
+| Worker behavior preserved | packed production runtime smoke: worker boots through `serve()` (banner "consuming N queue(s)"), login, PM2; example suite 55 tests; moved integration tests (drain before `onShutdown`, producer usable from the hook, connection release on close failure) pass against local Redis | pass |
+| Consumers migrated | generator and reference app declare `queues: "@tulipes/bullmq"`, `users`/`hello` depend on it, two queue files import from it; parity diffs; `new module --queues/--no-queues` | pass |
+| Upgrade | `upgrade-smoke.mjs`: the rc.3 starter is refused for both missing capabilities, `@tulipes/core/queues` declared gets the "no longer contains" diagnostic, `QueueRegistry` import fails with "no exported member"; migrated app (8 imports, 4 manifests) installs, typechecks, describes itself offline | pass |
+| Suite | 244 tests with services, coverage 85/73/88/87, `test:types`, workspace typecheck, example typecheck, template parity | pass |
+

@@ -1,5 +1,5 @@
 import type { Ctx } from "@tulipes/core/boot";
-import type { QueueRegistry } from "@tulipes/core/queues";
+import type { QueueRegistry } from "@tulipes/bullmq";
 
 import { moduleLogger } from "@app/core";
 
