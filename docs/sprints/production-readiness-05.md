@@ -16,7 +16,7 @@ every remaining dependency.
 |---|---|---|
 | S12.1 | Complete | [CLI design §1](../design/cli-package-design.md#1-what-remains-in-a-core-only-install-s121): 69.5% of a core-only install is the TypeScript loader chain, 53% of the archive is CLI code |
 | S12.2 | Complete | [CLI design §2](../design/cli-package-design.md#2-decision-s122): split into `@tulipes/cli`, remove `tsx` from core; command contract recorded |
-| S12.3 | Not started | |
-| S12.4 | Not started | |
+| S12.3 | Complete | 2026-09-12: `@tulipes/cli` holds commands, templates and tests; core ships runtime only — [CLI design §5](../design/cli-package-design.md#5-evidence-s123-s124-2026-09-12) |
+| S12.4 | Complete | packed journeys for both presets, module generation, upgrade and parity through the split; core-only install 26.95 MB → 7.58 MB (−71.9%) |
 | S13 | Not started | Own increment |
 | S14 | Not started | Own increment |

@@ -379,11 +379,11 @@ measurements. Set effort only after the go/no-go decisions below.
   remains in core or gets a separate package. Specify installation, executable
   lookup, core/spec compatibility, template location and update behavior. Keep a
   migration path for documented `tulipes` commands.
-- [ ] **S12.3 — Implement only the selected path.** If separated, move executable,
+- [x] **S12.3 — Implement only the selected path.** If separated, move executable,
   templates and tooling dependencies, update ranges/exports and archive checks.
   If retained, document measured reasons and any smaller dependency improvements;
   do not create an empty package just to satisfy a proposed package list.
-- [ ] **S12.4 — Verify user journeys.** Run install → init → sync → check → types
+- [x] **S12.4 — Verify user journeys.** Run install → init → sync → check → types
   → tests → start → specs from fresh packed artifacts. Test both presets, module
   generation and upgrade behavior without workspace symlinks.
 

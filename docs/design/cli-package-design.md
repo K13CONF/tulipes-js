@@ -99,6 +99,18 @@ install is unchanged in size (tsx moves from core to the CLI it already needs).
 - Upgrade smoke: the rc.3 starter's migration adds `@tulipes/cli` and keeps
   every script working.
 
-## 5. Evidence
+## 5. Evidence (S12.3, S12.4; 2026-09-12)
 
-Appended as S12.3/S12.4 land.
+| Claim | Evidence | Result |
+|---|---|---|
+| Split | `packages/cli` (`@tulipes/cli` 0.1.0-rc.1: commands, templates, tests; deps `@tulipes/core`, `tsx`); core without `bin`, `templates/`, `src/cli`, `tsx`; `readProviderDeclarations` public | done |
+| Core archive | 203,453 B compressed / 464,742 B unpacked (was 350,663 / 1,111,149): `dist/` runtime 272,726 B, assets 91,991 B, docs; no `dist/cli`, no templates — `artifacts.mjs verify` refuses either, and a core depending on `tsx` | pass |
+| Core-only install (fixture A, `5f787cb`) | **7,578,707 B, 75 packages** (was 26,951,757 / 99): `tsx`, esbuild and `node-gyp` absent, `tsx` unresolvable from core's directory | −71.9%; −85.7% since the Sprint 03 baseline (52,960,060 B / 151) |
+| Minimal dev install (fixture B) | 106,168,527 B / 151 packages (was 106,157,244 / 150): unchanged — tsx moved from core to the `@tulipes/cli` devDependency the app already carries | as designed |
+| Startup (fixture B) | `import_boot` 76 ms, `offline_spec` 254 ms (was 273), `backend_readiness` 215 ms (was 232), RSS 96 MiB | within noise to slightly better |
+| User journeys (S12.4), packed | minimal: launcher = `@tulipes/cli` only → `init` → install → `sync` → `typecheck` → `routes --offline` → `spec --offline` → tests → boot/shutdown → `start`; production offline; production runtime (backend, worker, login, PM2); upgrade from the published rc.3 starter with `@tulipes/cli` added as the migration's first step; `new module` flags; generator/reference and template parity via the CLI's tsx shim | pass |
+| Suite | 257 tests with services, coverage 86/77/89/88, `test:types`, workspace and example typechecks, `yarn install --immutable` | pass |
+
+The compiled-JavaScript comparison stays deferred to S14 (the generated app
+has no build step); the loader cost now sits entirely in the app's own
+devDependency, which is where a build step would remove it from.
