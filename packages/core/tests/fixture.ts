@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { afterEach, vi } from "vitest";
+import { onTestFinished, vi } from "vitest";
 import { boot, type BootHandle, type BootOptions } from "../src/boot/boot.js";
 
 export async function fixture(files: Record<string, string> = {}) {
@@ -37,7 +37,10 @@ export async function fixture(files: Record<string, string> = {}) {
   }))
     await write(file, contents);
 
-  afterEach(async () => {
+  // onTestFinished, not afterEach: fixture() is called from inside a test, and
+  // a hook registered there never runs — every fixture leaked its temp
+  // directory, thousands of them over a day of test runs.
+  onTestFinished(async () => {
     await Promise.allSettled(handles.map((handle) => handle.shutdown()));
 
     await rm(rootDir, { recursive: true, force: true });
