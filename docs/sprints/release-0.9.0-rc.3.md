@@ -105,7 +105,7 @@ Source: `9d2a50cfef39b63f364f77ca6e6918a2f931dd6c`, tag `v0.9.0-rc.3`.
 
 ## Follow-up backlog
 
-- [ ] **01-C4-registry-smoke:** retain a reusable registry smoke command with
+- [x] **01-C4-registry-smoke** (closed by the 0.10.0-rc.1 release: `scaffold-smoke.mjs --registry`): retain a reusable registry smoke command with
   exact-version fixture preapproval for newly published, digest-verified packages.
   Document Yarn's release-age gate for immediate candidate installs. Current
   release verification uses ignored `reports/rc3-registry-*.{mjs,py}`; reusable

@@ -1,17 +1,24 @@
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
-const [artifactPath, preset = 'minimal', mode] = process.argv.slice(2);
-if (!artifactPath || !['minimal', 'production'].includes(preset) || (mode && mode !== '--offline-only')) throw new Error('Usage: scaffold-smoke.mjs <artifacts> minimal|production [--offline-only]');
-const offlineOnly = mode === '--offline-only';
+const [artifactPath, preset = 'minimal', ...flags] = process.argv.slice(2);
+if (!artifactPath || !['minimal', 'production'].includes(preset) || flags.some(flag => !['--offline-only', '--registry'].includes(flag))) {
+  throw new Error('Usage: scaffold-smoke.mjs <artifacts> minimal|production [--offline-only] [--registry]');
+}
+const offlineOnly = flags.includes('--offline-only');
+// --registry: the manifest names published versions; everything installs from
+// npm at exactly those versions and no local archive may be used. Yarn's
+// release-age gate is lifted only for the exact versions whose bytes the
+// caller has already verified against the manifest (artifacts.mjs verify).
+const registry = flags.includes('--registry');
 const artifacts = resolve(artifactPath);
 const workspace = mkdtempSync(join(tmpdir(), 'tulipes-packed-'));
 const scripts = import.meta.dirname;
 const started = Date.now();
-const logs = resolve('reports', 'scaffold-' + preset + (offlineOnly ? '-offline' : ''));
+const logs = resolve('reports', 'scaffold-' + preset + (offlineOnly ? '-offline' : '') + (registry ? '-registry' : ''));
 mkdirSync(logs, { recursive: true });
 let step = 0;
 function run(command, args, cwd, env = process.env) {
@@ -24,14 +31,15 @@ function run(command, args, cwd, env = process.env) {
 try {
   run(process.execPath, [join(scripts, 'artifacts.mjs'), 'verify', artifacts], workspace);
   const manifest = JSON.parse(readFileSync(join(artifacts, 'manifest.json'), 'utf8'));
-  const resolutions = Object.fromEntries(manifest.packages.map(pkg => [pkg.name, 'file:' + join(artifacts, pkg.file)]));
+  const resolutions = Object.fromEntries(manifest.packages.map(pkg => [pkg.name, registry ? pkg.version : 'file:' + join(artifacts, pkg.file)]));
+  const preapproval = registry ? '\nnpmPreapprovedPackages:\n' + manifest.packages.map(pkg => `  - "${pkg.name}@${pkg.version}"\n`).join('') : '';
   // The launcher installs core alone: a global `tulipes` never carries a
   // provider, and an all-archive launcher would hoist one next to the app and
   // hide a missing dependency. Everything else resolves from the app.
   const cliRoot = join(workspace, 'cli');
   mkdirSync(cliRoot);
   writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'yarn@4.18.0', dependencies: { '@tulipes/core': resolutions['@tulipes/core'] } }));
-  writeFileSync(join(cliRoot, '.yarnrc.yml'), 'nodeLinker: node-modules\n');
+  writeFileSync(join(cliRoot, '.yarnrc.yml'), 'nodeLinker: node-modules\n' + preapproval);
   // Fresh generated projects intentionally create their first lockfile, even
   // when the outer runner sets CI=true. Repository installs stay immutable.
   run('yarn', ['install'], cliRoot, { ...process.env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
@@ -47,8 +55,11 @@ try {
 
   const pkgFile = join(app, 'package.json');
   const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'));
-  pkg.resolutions = { ...pkg.resolutions, ...resolutions };
+  // Packed: pin the app to the archives. Registry: keep the generated ranges
+  // untouched and let them resolve from npm, as a user's install would.
+  if (!registry) pkg.resolutions = { ...pkg.resolutions, ...resolutions };
   writeFileSync(pkgFile, JSON.stringify(pkg, null, 2));
+  if (preapproval) writeFileSync(join(app, '.yarnrc.yml'), readFileSync(join(app, '.yarnrc.yml'), 'utf8') + preapproval);
   const env = { ...process.env, APP_ENV: 'test', PORT: '0', LOG_FILE: 'false', LOG_CONSOLE: 'false' };
   if (preset === 'production' && !offlineOnly) {
     if (!env.TEST_MONGO_URI || !env.TEST_REDIS_URL) throw new Error('Production smoke requires dedicated test infrastructure');
@@ -61,6 +72,15 @@ try {
     for (const name of ['MONGO_URI', 'REDIS_URL', 'TEST_MONGO_URI', 'TEST_REDIS_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'AUTH_ADMIN_EMAIL', 'AUTH_ADMIN_PASSWORD']) delete env[name];
   }
   run('yarn', ['install'], app, { ...env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
+  if (registry) for (const installedRoot of [cliRoot, app]) {
+    for (const expected of manifest.packages) {
+      const installed = join(installedRoot, 'node_modules', expected.name, 'package.json');
+      if (!existsSync(installed)) continue; // the launcher holds core only; minimal holds no provider
+      const actual = JSON.parse(readFileSync(installed, 'utf8'));
+      if (actual.version !== expected.version) throw new Error(`Registry installed ${actual.name}@${actual.version}, expected ${expected.version}`);
+    }
+    if (/"@tulipes\/[a-z]+@file:/.test(readFileSync(join(installedRoot, 'yarn.lock'), 'utf8'))) throw new Error('Registry installation used a local archive');
+  }
   // Installation evidence, not runtime evidence: can the app, and can its
   // installed core, resolve the driver at all? Minimal must say no everywhere.
   const probe = run(process.execPath, ['--input-type=module', '-e', `
@@ -99,7 +119,7 @@ try {
   const spec = JSON.parse(readFileSync(join(app, 'docs/openapi.json'), 'utf8'));
   if (!spec.paths['/api/v1/hello']) throw new Error('Quick-start endpoint missing from generated specification');
   if (offlineOnly) {
-    console.log(`${preset}: packed offline declarations, typecheck and deterministic specs passed with network connections denied`);
+    console.log(`${preset}: ${registry ? 'registry' : 'packed'} offline declarations, typecheck and deterministic specs passed with network connections denied`);
   } else {
     // Runtime checks live in a file inside the installed application; no source
     // workspace module can satisfy its imports.
@@ -131,7 +151,7 @@ try {
       copyFileSync(join(scripts, 'pm2-smoke.mjs'), join(app, 'pm2-smoke.mjs'));
       run(process.execPath, ['--import', 'tsx', 'pm2-smoke.mjs'], app, { ...env, PM2_HOME: join(workspace, 'pm2') });
     }
-    console.log(`${preset}: packed install, generated types, tests, specs, backend/shutdown${preset === 'production' ? ' and worker' : ''} passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+    console.log(`${preset}: ${registry ? 'registry' : 'packed'} install, generated types, tests, specs, backend/shutdown${preset === 'production' ? ' and worker' : ''} passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   }
 } finally {
   rmSync(workspace, { recursive: true, force: true });
