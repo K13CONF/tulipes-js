@@ -12,7 +12,7 @@ Sprints 03, 04 and 05 are complete and merged. Previously:
 [rc.2](release-0.10.0-rc.2.md), [rc.1](release-0.10.0-rc.1.md),
 [0.9.0-rc.3](release-0.9.0-rc.3.md).
 
-**Current workstream: Sprint 06 (production pilot, operational evidence and release) is next; Sprints 03–05 are delivered and released.**
+**Current workstream: Sprint 06 — S15.2 (ingress) delivered; every other task is blocked on pilot inputs listed in the [Sprint 06 plan](production-readiness-06.md#2-blocked-on-inputs-what-to-provide).**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
 register, measurement protocol, interface decisions, fixtures and delivery order.
 Sprint 02 implementation, local closeout and CI acceptance are complete.
@@ -438,8 +438,10 @@ splits have a reasoned decision, not an assumed implementation commitment.
 **Goal:** validate a named deployment against agreed workload, recovery and
 security criteria, then prepare an accurately scoped release/support decision.
 
-**Status:** proposed. **Owners:** pilot/operator owner, engineer and release
-maintainer; assign actual people before execution. **Dependencies:** a chosen
+**Status:** started 2026-09-12 — S15.2 delivered, everything else blocked on
+inputs; see the [Sprint 06 plan](production-readiness-06.md). **Owners:**
+pilot/operator owner, engineer and release maintainer; assign actual people
+before execution. **Dependencies:** a chosen
 candidate with stable interfaces and an isolated staging environment. Deployment
 and publication remain separately authorized operations.
 
@@ -449,7 +451,7 @@ and publication remain separately authorized operations.
   workload, supported runtime/services, latency/error targets, resource budgets,
   recovery time and acceptable data loss. Use agreed numbers before load testing;
   do not invent a universal framework throughput target.
-- [ ] **S15.2 — Verify real ingress.** Run the actual nginx/TLS configuration for
+- [x] **S15.2 — Verify real ingress.** Run the actual nginx/TLS configuration for
   the chosen hops. Test forwarded IP/host/protocol behavior, forged headers,
   backend-port isolation, request limits and SSE proxy buffering/timeouts. The
   existing Express/header tests do not establish deployed proxy correctness.

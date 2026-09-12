@@ -211,8 +211,17 @@ loopback peer is trusted.
 Retained Express HTTP tests cover direct/untrusted peers, spoofed earlier entries,
 trusted intermediate hops, IPv6/mapped IPv4 and invalid configuration. The packed
 app test checks that session origins and audit records agree on the selected IP.
-S08f uses this IP policy for shared request limits. Live nginx deployment/topology
-validation remains an operator check.
+S08f uses this IP policy for shared request limits.
+
+The templates themselves are now exercised: `scripts/ingress-smoke.mjs` runs the
+committed production template in an nginx container in front of a packed
+production app and records what a client observes — forged `X-Forwarded-For`,
+`X-Forwarded-Proto` and `X-Forwarded-Host` are all overwritten, an oversized body
+dies at the proxy, and a client reaching the backend port directly does gain the
+forwarded identity that the loopback trust grants it. See the
+[ingress evidence](design/ingress-evidence.md). A pilot's own topology — extra
+hops, TLS, replicas — is still an operator check; that evidence belongs to
+[Sprint 06](sprints/production-readiness-06.md).
 
 
 ## S08f — Shared authentication and settings request limits
