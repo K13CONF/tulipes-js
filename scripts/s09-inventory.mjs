@@ -164,7 +164,7 @@ function buildCoreOnly(root) {
 /** D: the smoke launcher — CLI installed with every archive, no app. */
 function buildLauncher(root) {
   const resolutions = artifactResolutions();
-  writeManifest(root, { name: 'fixture-d', private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions });
+  writeManifest(root, { name: 'fixture-d', private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions, resolutions });
   return { app: root, hasApp: false };
 }
 
@@ -172,7 +172,9 @@ function buildLauncher(root) {
 function buildStarter(root, preset) {
   const resolutions = artifactResolutions();
   const cli = join(root, 'cli');
-  writeManifest(cli, { private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions });
+  // Pin every archive for the launcher too: the CLI depends on a core range the
+  // registry may not serve yet (or quarantines by age).
+  writeManifest(cli, { private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions, resolutions });
   run('yarn', ['install'], { cwd: cli, env: yarnEnv(join(root, 'cache-cli')), log: join(root, 'cli-install.log') });
   const bin = join(cli, 'node_modules/@tulipes/cli/dist/bin.js');
   const app = join(root, 'app');
