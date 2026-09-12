@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/mongoose",
-  "version": "0.1.0-rc.3",
+  "version": "0.1.0",
   "description": "Mongoose models provider for Tulipes apps: connection, model registration and bootstrap behind core's models capability",
   "type": "module",
   "exports": {
@@ -23,7 +23,7 @@
     }
   },
   "peerDependencies": {
-    "@tulipes/core": "^0.10.0-rc.1",
+    "@tulipes/core": "^0.10.0",
     "mongoose": "^8"
   },
   "devDependencies": {

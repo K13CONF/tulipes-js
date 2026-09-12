@@ -11,6 +11,28 @@ what makes it work under nvm.
 
 ---
 
+<a id="0100--upgrading-from-09x"></a>
+
+## 0.10.0 — upgrading from 0.9.x
+
+0.10.0 is the stable form of the three candidates below. Apply their sections
+oldest-first — they compose, and each one is small:
+
+1. [declare the models provider](#0100-rc1--declare-the-models-provider) —
+   `@tulipes/mongoose`, one line in `package.json`.
+2. [declare the queues provider](#0100-rc2--declare-the-queues-provider) and
+   [the sockets provider](#0100-rc2--declare-the-sockets-provider) —
+   `@tulipes/bullmq`, `@tulipes/socket.io`, if the app uses them.
+3. [install the CLI package](#0100-rc3--install-the-cli-package) —
+   `yarn add -D @tulipes/cli`, and replace a global `@tulipes/core` install.
+
+Install the stable line with plain `@latest`: `@tulipes/core@0.10`,
+`@tulipes/cli@0.1`, `@tulipes/spec@0.3`, and whichever providers the app
+declares at `0.1`. An app already on `0.10.0-rc.3` changes only its version
+ranges.
+
+---
+
 <a id="unreleased--install-the-cli-package"></a>
 <a id="0100-rc3--install-the-cli-package"></a>
 
