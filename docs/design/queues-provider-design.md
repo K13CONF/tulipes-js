@@ -143,3 +143,27 @@ drain; closing the provider leaves an app-owned ioredis connection open.
 | Upgrade | `upgrade-smoke.mjs`: the rc.3 starter is refused for both missing capabilities, `@tulipes/core/queues` declared gets the "no longer contains" diagnostic, `QueueRegistry` import fails with "no exported member"; migrated app (8 imports, 4 manifests) installs, typechecks, describes itself offline | pass |
 | Suite | 244 tests with services, coverage 85/73/88/87, `test:types`, workspace typecheck, example typecheck, template parity | pass |
 
+### 6.2 Failure and omission matrix (S10.4; 2026-09-12)
+
+Core, fake provider (`packages/core/tests/providers.test.ts`, no Redis):
+`serve()` runs in worker mode only and its sum becomes `handle.consumers`; a
+zero sum or a provider without `serve` refuses the worker and still disposes;
+`drain()` and module `onDrain` both precede module `onShutdown`, which still
+sees `ctx.queues`, and `dispose()` follows; a `queues/` directory implies the
+requirement before the file is imported.
+
+Provider, real Redis (`packages/bullmq/tests/provider-matrix.integration.test.ts`):
+
+| Scenario | Outcome asserted |
+|---|---|
+| `REDIS_URL` set, provider installed, not declared | no client opened (Redis `CLIENT LIST` unchanged), `ctx.queues` undefined |
+| Declared, `REDIS_URL` unset | `provider "bullmq" is selected but "REDIS_URL" is not declared/set` |
+| `queues/` file, no declaration | refused before the file is imported |
+| Producer-only module with `requires: ["queues"]` | enqueues into another module's queue; banner detail `1 processor(s) registered`; `consumers` 0 in backend |
+| Worker | `consumers` 1, detail `…, 1 consuming`, a job is processed; a declared provider with no processors refuses the worker |
+| App-owned Redis client | survives provider drain and dispose: the module's `onShutdown` pings it after the drain, and it answers after shutdown |
+| Moved tests | drain finishes the active job before `onShutdown` and the hook can still enqueue; connections released even when a queue fails to close |
+
+Statuses are refreshed after `serve()` so the banner and `handle.providers`
+report running consumers (found by this matrix).
+
