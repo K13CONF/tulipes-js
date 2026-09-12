@@ -20,8 +20,8 @@
     "start": "tsx app.ts"
   },
   "dependencies": {
-    "@tulipes/core": "workspace:*",
     "@tulipes/bullmq": "workspace:*",
+    "@tulipes/core": "workspace:*",
     "@tulipes/mongoose": "workspace:*",
     "ioredis": "^5",
     "mongoose": "^8",
