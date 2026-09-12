@@ -10,7 +10,7 @@ registry archive identity and fresh registry installs of both presets passed.
 Sprints 03 and 04 are complete and merged. Previously:
 [rc.1](release-0.10.0-rc.1.md), [rc.3](release-0.9.0-rc.3.md).
 
-**Current workstream: Sprint 05 — S12 (CLI split) in execution; see the [Sprint 05 plan](production-readiness-05.md).**
+**Current workstream: Sprint 05 — S12 merged, S13 decided; S14 (feature composition) next; see the [Sprint 05 plan](production-readiness-05.md).**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
 register, measurement protocol, interface decisions, fixtures and delivery order.
 Sprint 02 implementation, local closeout and CI acceptance are complete.
@@ -390,17 +390,17 @@ measurements. Set effort only after the go/no-go decisions below.
 
 ### S13 — Decide the translation contract
 
-- [ ] **S13.1 — Inventory translation usage.** Identify core error formatting,
+- [x] **S13.1 — Inventory translation usage.** Identify core error formatting,
   response helpers, module locale loading, always-available `ctx.t`, and concrete
   i18next types exposed publicly. Record what a locale-free minimal app needs.
-- [ ] **S13.2 — Choose a stable core guarantee.** Decide whether the translator
+- [x] **S13.2 — Choose a stable core guarantee.** Decide whether the translator
   stays always available, has a lightweight fallback, or requires a provider.
   Define missing-key/fallback/error behavior and ensure error handling cannot fail
   because translation is absent.
-- [ ] **S13.3 — Implement and migrate if justified.** Extract i18next dependencies
+- [x] **S13.3 — Implement and migrate if justified.** (decided: not justified — see the [translation contract](../design/translation-contract.md)) Extract i18next dependencies
   only if the selected design preserves a useful contract. Update declarations,
   generated examples, settings translation editing and migration guidance.
-- [ ] **S13.4 — Retain behavior.** Verify translated/default error envelopes,
+- [x] **S13.4 — Retain behavior.** Verify translated/default error envelopes,
   missing locales, module overrides, no-provider behavior and offline tooling;
   inspect emitted core declarations for concrete provider leakage.
 

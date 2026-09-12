@@ -1,9 +1,7 @@
 # Sprint 05 — Packaging decisions and feature composition
 
-Status: S12 in execution on branch `feat/sprint-05-s12-cli`, started 2026-09-12
-from `0cef22e` (core 0.10.0-rc.2 and all three providers published). S13
-(translation contract) and S14 (feature composition) follow as their own
-increments, each with its own go/no-go.
+Status: S12 merged as PR #12 (`eaaef83`); S13 decided on 2026-09-12 (retain);
+S14 (feature composition) follows as its own increment.
 
 Program: [Sprint 05 task definitions](production-readiness-task-report.md#6-sprint-05--packaging-decisions-and-feature-composition).
 Prerequisites: [Sprint 03](production-readiness-03.md) and [Sprint 04](production-readiness-04.md)
@@ -18,5 +16,5 @@ every remaining dependency.
 | S12.2 | Complete | [CLI design §2](../design/cli-package-design.md#2-decision-s122): split into `@tulipes/cli`, remove `tsx` from core; command contract recorded |
 | S12.3 | Complete | 2026-09-12: `@tulipes/cli` holds commands, templates and tests; core ships runtime only — [CLI design §5](../design/cli-package-design.md#5-evidence-s123-s124-2026-09-12) |
 | S12.4 | Complete | packed journeys for both presets, module generation, upgrade and parity through the split; core-only install 26.95 MB → 7.58 MB (−71.9%) |
-| S13 | Not started | Own increment |
+| S13.1–S13.4 | Complete | 2026-09-12: retain i18next as the always-available guarantee (1.2 MB, 16% of the runtime install; every preset translates; no provider-free journey exists); no extraction (S13.3 not justified); retained-behavior suite `packages/core/tests/i18n.test.ts` — [translation contract](../design/translation-contract.md) |
 | S14 | Not started | Own increment |
