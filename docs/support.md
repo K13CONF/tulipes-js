@@ -16,9 +16,11 @@ currently claimed as supported. Node upgrades require expanding CI first.
 
 ## Pre-1.0 policy
 
-Candidate line: core 0.10.0-rc.2, spec 0.3.0-rc.5 and the providers
-`@tulipes/mongoose` 0.1.0-rc.2, `@tulipes/bullmq` 0.1.0-rc.1 and
-`@tulipes/socket.io` 0.1.0-rc.1, released under `next`. Spec rc.4 admits core
+Candidate line: core 0.10.0-rc.3, the command line `@tulipes/cli` 0.1.0-rc.1,
+spec 0.3.0-rc.6 and the providers `@tulipes/mongoose` 0.1.0-rc.3,
+`@tulipes/bullmq` 0.1.0-rc.2 and `@tulipes/socket.io` 0.1.0-rc.2, released
+under `next`. The `tulipes` command now ships in its own package: install it
+globally and as an app devDependency. Spec rc.4 admits core
 `^0.9.0-rc.3 || ^0.10.0-rc.1`; mongoose requires core `^0.10.0-rc.1` and the
 app's own `mongoose ^8`; bullmq and socket.io require core `^0.10.0-rc.2`. Core
 0.10 installs no database, queue or socket driver: apps select providers in

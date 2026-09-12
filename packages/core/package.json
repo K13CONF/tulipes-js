@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/core",
-  "version": "0.10.0-rc.2",
+  "version": "0.10.0-rc.3",
   "description": "Module-based Express framework runtime: convention-driven boot pipeline, env contracts, ACL and the provider seam for models, queues and sockets",
   "type": "module",
   "exports": {
