@@ -71,3 +71,5 @@ export interface AcquiredStatus { /* … */ skipped?: ProviderSituation; }
 | Packed core | dependencies: colorette, dotenv, express, i18next, i18next-fs-backend, tsx, zod — no driver left | pass |
 | Consumers | parity diffs, `new module` flags, packed production runtime (clients not exercised there; the integration test covers them), upgrade smoke (10 imports, 4 manifests) | pass |
 | Suite | 256 tests with services, coverage 86/77/89/88, `test:types`, workspace and example typechecks, `yarn install --immutable` | pass |
+
+Measurements: [inventory §4.6](mongoose-dependency-inventory.md#46-after-the-sockets-extraction-sprint-04-s11) — core-only install −15.5% (−49.1% since the Sprint 03 baseline), 99 packages, one duplicated name left, `import @tulipes/core/boot` 75 ms.
