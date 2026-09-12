@@ -5,23 +5,37 @@
 **The Express framework that refuses to start when something is wrong.**
 
 [![npm](https://img.shields.io/npm/v/@tulipes/core?color=%23cb3837&label=%40tulipes%2Fcore)](https://www.npmjs.com/package/@tulipes/core)
+[![npm](https://img.shields.io/npm/v/@tulipes/cli?color=%23cb3837&label=%40tulipes%2Fcli)](https://www.npmjs.com/package/@tulipes/cli)
 [![npm](https://img.shields.io/npm/v/@tulipes/spec?color=%23cb3837&label=%40tulipes%2Fspec)](https://www.npmjs.com/package/@tulipes/spec)
 
 </div>
 
 ---
 
-This is the Tulipes monorepo — the framework, its spec generator, and the
-reference app they are developed against.
+This is the Tulipes monorepo — the runtime, the command line, the spec
+generator, the infrastructure providers, and the reference app they are all
+developed against.
+
+```sh
+npm install -g @tulipes/cli
+tulipes init my-api          # --preset production for the full application
+```
 
 | | |
 |---|---|
-| [`packages/core`](./packages/core) | `@tulipes/core` — the framework and the `tulipes` CLI |
+| [`packages/core`](./packages/core) | `@tulipes/core` — the runtime: boot pipeline, environment contract, ACL, routing, translations, the provider seam |
+| [`packages/cli`](./packages/cli) | `@tulipes/cli` — the `tulipes` command: scaffold, sync, inspect, describe, run |
 | [`packages/spec`](./packages/spec) | `@tulipes/spec` — OpenAPI 3.1 and Postman from shared route declarations |
+| [`packages/mongoose`](./packages/mongoose) | `@tulipes/mongoose` — the `models` provider |
+| [`packages/bullmq`](./packages/bullmq) | `@tulipes/bullmq` — the `queues` provider |
+| [`packages/socket.io`](./packages/socket.io) | `@tulipes/socket.io` — the `sockets` provider |
 | [`example`](./example) | the reference application: six modules, exercising every contract |
 
 Start with **[packages/core/README.md](./packages/core/README.md)** — that is
 the documentation. This file only says where things live.
+
+An app installs the runtime and declares the infrastructure it wants; core
+itself pulls in no database, queue or socket driver.
 
 ## Working in here
 
@@ -29,18 +43,33 @@ the documentation. This file only says where things live.
 corepack enable          # once per machine — activates the pinned yarn 4
 yarn install
 yarn typecheck           # every public workspace
+yarn test                # needs TEST_MONGO_URI and TEST_REDIS_URL
 yarn example             # boot the reference app (needs MongoDB and Redis)
 ```
 
 The example is not a demo kept alive by hand: CI scaffolds a fresh app with
-`tulipes init --preset production` and diffs its `modules/` against `example/modules/`, so the
-two cannot drift.
+`tulipes init --preset production` and diffs its `modules/` against
+`example/modules/`, so the two cannot drift.
+
+Beyond the test suite, `scripts/` holds the harnesses that produce operational
+evidence — packed and registry installs of both presets, the upgrade path from
+the previous line, the committed nginx template in front of a real app, and
+service failure against a three-node MongoDB replica set. They need Docker and
+disposable services; [Testing](docs/testing.md) says which is which.
 
 ## Quality and support
 
 Default `tulipes init my-api` creates a minimal API without MongoDB or Redis.
-Use `--preset production` for the full reference application. Node 24.x is the
-supported runtime. Both presets include Vitest tests.
+`--preset production` gives the full reference application, and `--no-queues` /
+`--no-sockets` compose it without those providers. Node 24.x is the supported
+runtime. Both presets include Vitest tests.
+
+The 0.10 line is stable: its API is settled and breaking changes wait for 0.11.
+It is not production-proven — no pilot deployment has run this framework, so
+there is no load, backup-restore or multi-replica evidence and no independent
+security review. [Support](docs/support.md) states that in full, and the
+[production readiness programme](docs/sprints/production-readiness-task-report.md)
+records what closing it would take.
 
 See [Testing](docs/testing.md), [Contributing](CONTRIBUTING.md),
 [Security](SECURITY.md), [Support](docs/support.md) and

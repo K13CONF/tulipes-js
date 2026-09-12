@@ -30,11 +30,13 @@ TulipesBootError: Boot aborted during "environment" — 3 issue(s):
 
 ## Quick start
 
-Requires Node 24.x and Corepack. Tulipes is experimental; see the
-[compatibility policy](../../docs/support.md).
+Requires Node 24.x and Corepack. The 0.10 line is stable — its API is settled
+and breaking changes wait for 0.11 — but no production pilot has run it yet;
+the [compatibility policy](../../docs/support.md) says exactly what that leaves
+unproven.
 
 ```sh
-npm install -g @tulipes/cli@next
+npm install -g @tulipes/cli
 tulipes init my-api
 cd my-api
 corepack enable
@@ -52,11 +54,31 @@ The default minimal preset contains core, security middleware and a hello
 module with tests. It requires no MongoDB, Redis or credentials. `--minimal`
 and `--preset minimal` select the same starter.
 
-For authentication, users, settings, database/queues, sockets and deployment
+For authentication, users, settings, database, queues, sockets and deployment
 examples, use `tulipes init my-api --preset production`. That preset requires
-MongoDB and Redis. Its generated README explains environment setup and tests.
-Core still installs infrastructure libraries in both presets; provider package
-extraction is planned separately.
+MongoDB and Redis; add `--no-queues` or `--no-sockets` to leave either provider
+out, and the generated app carries neither its dependencies nor its files. Its
+generated README explains environment setup and tests.
+
+Core itself installs no driver. An app declares the infrastructure it wants:
+
+```jsonc
+// package.json — the whole of the selection
+{ "tulipes": { "providers": {
+  "models":  "@tulipes/mongoose",
+  "queues":  "@tulipes/bullmq",
+  "sockets": "@tulipes/socket.io"
+} } }
+```
+
+A module that owns `models/`, `queues/` or `sockets/` files requires its
+provider automatically, and a module that only consumes one says so with
+`"tulipes": { "requires": ["models"] }`. Declaring nothing is the normal case
+for the minimal preset, and it is what the runtime cost measures: installing
+`@tulipes/core` alone brings 75 packages and 7.6 MB, against 151 packages and
+53 MB in 0.9, when every driver and the CLI came with the framework. A
+development install is larger in both — TypeScript, Vitest and the CLI are the
+app's own devDependencies.
 
 ## Why
 
@@ -434,8 +456,8 @@ config/route factories and shutdown hooks, while skipping bootstrap, sockets,
 listening and readiness. `--offline` builds opted-in native routers and loads ACL
 without services, runtime config or secrets. Both new presets use it in `yarn spec`.
 See [offline inspection](../../docs/offline-inspection.md) for migration and limits.
-This interface is available in core `0.9.0-rc.3` and later candidates; use
-`@tulipes/core@next` with `@tulipes/spec@next`.
+This interface is available from core `0.10.0`; use `@tulipes/core` with
+`@tulipes/spec` and the providers your app declares.
 
 ## What `tulipes init --preset production` gives you
 
@@ -556,7 +578,9 @@ For lifecycle timing changes and the more precise `ConfigCtx`, `BackendCtx` and
 
 ## Versioning
 
-`0.x`, and a minor bump may break — `0.2` through `0.5` each did. The
+`0.10` is the current stable line: its contracts are settled and a breaking
+change waits for `0.11`. Before it, `0.x` minors broke freely — `0.2` through
+`0.5` each did. The
 [CHANGELOG](./CHANGELOG.md) records what changed and
 [MIGRATING.md](./MIGRATING.md) gives the upgrade steps, including the one
 data migration that can lock users out of an app if it is skipped (the
@@ -566,12 +590,17 @@ data migration that can lock users out of an app if it is skipped (the
 
 ## Requirements
 
-Node.js ≥ 20.11 · Yarn workspaces · MongoDB and Redis when your modules use
-models or queues.
+Node.js 24.x · Yarn workspaces · MongoDB when an app declares the models
+provider, Redis when it declares queues (or uses Redis itself, as the
+production preset's cache and rate limiter do).
 
-The stack is deliberately opinionated in v1: **Express 5 · Mongoose 8 ·
-BullMQ 5 · ioredis 5 · Socket.IO 4 · Zod**. A framework that wires everything
-together can only do so by choosing.
+The stack is deliberately opinionated where it is not optional: **Express 5**
+and **Zod** in core, with **i18next** for the translation contract every app
+gets. Everything that talks to infrastructure is a provider you select —
+**Mongoose 8**, **BullMQ 5**, **Socket.IO 4** — and an app that selects none
+installs none of them. A framework that wires everything together can only do
+so by choosing; it does not have to make you install the choices you did not
+take.
 
 ---
 
