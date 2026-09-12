@@ -630,7 +630,7 @@ __metadata:
     mongoose: "npm:^8"
     typescript: "npm:^7.0.2"
   peerDependencies:
-    "@tulipes/core": ">=0.9.0-rc.3 <1"
+    "@tulipes/core": ^0.10.0-rc.1
     mongoose: ^8
   languageName: unknown
   linkType: soft
@@ -644,7 +644,7 @@ __metadata:
     typescript: "npm:^7.0.2"
     zod: "npm:^3.25"
   peerDependencies:
-    "@tulipes/core": ^0.9.0-rc.3
+    "@tulipes/core": ^0.9.0-rc.3 || ^0.10.0-rc.1
     zod: ^3.25 || ^4
   peerDependenciesMeta:
     zod:
