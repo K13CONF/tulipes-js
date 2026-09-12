@@ -149,3 +149,32 @@ integration("disposing the provider leaves the application's own Redis client co
     await observer.quit();
   }
 });
+
+integration("driver errors on producers and consumers never escape as unhandled events", async () => {
+  const name = `probe.${randomUUID()}`;
+  const app = await fixture({
+    "package.json": declared,
+    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/module.config.js": `export default () => ({});`,
+    "modules/probe/queues/work.queues.js": queueFile(name),
+  });
+
+  const worker = await app.boot({ mode: "worker" });
+  const queues = worker.ctx.queues as QueueManager;
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  // BullMQ re-emits driver errors here; without a listener this throws.
+  expect(() => queues.queue(name).emit("error", new Error("transient"))).not.toThrow();
+  expect(errors).toHaveBeenCalledWith(expect.stringMatching(/queue ".*": transient/));
+
+  const closing = worker.shutdown();
+  // Once the drain phase has started, the same event is expected and must stay silent.
+  await new Promise((resolve) => setImmediate(resolve));
+  errors.mockClear();
+  queues.queue(name).emit("error", new Error("Connection is closed."));
+  await closing;
+  expect(errors).not.toHaveBeenCalled();
+
+  const observer = new Redis(redisUrl!);
+  try { await observer.del(`bull:${name}:meta`); } finally { await observer.quit(); }
+});
