@@ -11,6 +11,13 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.10.0-rc.1] — 2026-09-12
+
+Released with `@tulipes/spec@0.3.0-rc.4` and the first `@tulipes/mongoose@0.1.0-rc.1`;
+all three use `next`. Apps with models must follow
+[MIGRATING.md](./MIGRATING.md#0100-rc1--declare-the-models-provider); apps
+without a database change nothing and stop installing Mongoose.
+
 - **Breaking:** the Mongoose provider moved to `@tulipes/mongoose` (S09.4–S09.6).
   Core no longer depends on, imports or declares anything from `mongoose`;
   `ModelDef`, `BootstrapFn` and `ModelStore` are imported from the provider
