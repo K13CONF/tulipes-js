@@ -12,8 +12,9 @@ what makes it work under nvm.
 ---
 
 <a id="unreleased--declare-the-sockets-provider"></a>
+<a id="0100-rc2--declare-the-sockets-provider"></a>
 
-## Unreleased — declare the sockets provider
+## 0.10.0-rc.2 — declare the sockets provider
 
 For every app with `sockets/` files:
 
@@ -36,8 +37,11 @@ For every app with `sockets/` files:
 ---
 
 <a id="unreleased--declare-the-queues-provider"></a>
+<a id="0100-rc2--declare-the-queues-provider"></a>
 
-## Unreleased — declare the queues provider
+## 0.10.0-rc.2 — declare the queues provider
+
+Upgrade core to `0.10.0-rc.2` first: both new providers require it.
 
 Queues follow the same path models took in 0.10.0-rc.1. For every app with
 `queues/` files:
