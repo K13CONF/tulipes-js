@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { BootReport } from "../errors/boot-error.js";
-import { readProviderDeclarations } from "../boot/providers.js";
+import { BootReport } from "@tulipes/core/errors";
+import { readProviderDeclarations } from "@tulipes/core/boot";
 import { coreVersion } from "./package-info.js";
 
 /**

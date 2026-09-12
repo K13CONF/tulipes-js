@@ -106,8 +106,8 @@ URLs.
 - [x] Supported nested routers produce complete URLs in both output formats.
 - [x] Unsupported paths and dynamic authorization policies produce clear diagnostics.
 
-**Relevant code:** `packages/core/src/cli/spec.ts`,
-`packages/core/src/cli/routes.ts`, `packages/core/src/boot/boot.ts`,
+**Relevant code:** `packages/cli/src/spec.ts` (then `packages/core/src/cli/`),
+`packages/cli/src/routes.ts`, `packages/core/src/boot/boot.ts`,
 `packages/core/src/http/route-scan.ts`, `packages/spec/src/extract.ts`.
 
 ## 4. Behavioral verification
@@ -163,7 +163,7 @@ distinguish a configuration factory from a backend route factory.
 - [x] Compile-time fixtures demonstrate both accepted and rejected usage.
 
 **Relevant code:** `packages/core/src/boot/contracts.ts`,
-`packages/core/src/boot/boot.ts`, `packages/core/src/cli/sync.ts`,
+`packages/core/src/boot/boot.ts`, `packages/cli/src/sync.ts`,
 `example/modules/hello/controllers/greetings.controllers.ts`.
 
 ## Delivery order

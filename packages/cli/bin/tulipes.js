@@ -4,5 +4,5 @@
 // drop this indirection.
 import { tsImport } from "tsx/esm/api";
 
-const { main } = await tsImport("../src/cli/main.ts", import.meta.url);
+const { main } = await tsImport("../src/main.ts", import.meta.url);
 await main(process.argv.slice(2));

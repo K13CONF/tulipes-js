@@ -11,6 +11,16 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **Breaking:** the command line moved to `@tulipes/cli` (Sprint 05, S12).
+  Core ships no `tulipes` binary, no `templates/` and no `tsx`; its runtime
+  dependencies are express, zod, i18next, i18next-fs-backend, dotenv and
+  colorette. Install the CLI globally (`npm i -g @tulipes/cli@next`) and add it
+  to an app's `devDependencies` — generated apps do — so `yarn dev`, `yarn sync`
+  and `yarn tulipes …` resolve as before. `tulipes update` upgrades the global
+  CLI and the app's core and CLI ranges. `readProviderDeclarations` is exported
+  from `@tulipes/core/boot`. Measured: a core-only install drops from 26.95 MB
+  to about 8 MB and the archive from 351 KB to 203 KB.
+
 ## [0.10.0-rc.2] — 2026-09-12
 
 Released with the first `@tulipes/bullmq@0.1.0-rc.1` and `@tulipes/socket.io@0.1.0-rc.1`,

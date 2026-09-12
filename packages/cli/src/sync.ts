@@ -1,12 +1,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
-import { BootReport } from "../errors/boot-error.js";
-import { discoverModuleMeta, type ModuleMeta } from "../env/meta-discovery.js";
-import { discoverModules } from "../modules/discovery.js";
-import { sortModules } from "../modules/graph.js";
-import { exploreModules } from "../modules/explorer.js";
-import type { VariableSpec } from "../env/spec.js";
+import { BootReport } from "@tulipes/core/errors";
+import { discoverModuleMeta, type ModuleMeta } from "@tulipes/core/env";
+import { discoverModules } from "@tulipes/core/modules";
+import { sortModules } from "@tulipes/core/modules";
+import { exploreModules } from "@tulipes/core/modules";
+import type { VariableSpec } from "@tulipes/core/env";
 
 /**
  * `tulipes sync` — everything derivable from the meta files, derived:

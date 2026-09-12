@@ -1,11 +1,8 @@
 {
   "name": "@tulipes/core",
   "version": "0.10.0-rc.2",
-  "description": "Module-based Express framework: convention-driven boot pipeline, env contracts, ACL, queues, sockets and CLI",
+  "description": "Module-based Express framework runtime: convention-driven boot pipeline, env contracts, ACL and the provider seam for models, queues and sockets",
   "type": "module",
-  "bin": {
-    "tulipes": "./bin/tulipes.js"
-  },
   "exports": {
     ".": "./src/index.ts",
     "./env": "./src/env/index.ts",
@@ -23,7 +20,6 @@
   "files": [
     "dist",
     "assets",
-    "templates",
     "CHANGELOG.md",
     "MIGRATING.md",
     "LICENSE"
@@ -35,9 +31,6 @@
   },
   "publishConfig": {
     "access": "public",
-    "bin": {
-      "tulipes": "./dist/cli/bin.js"
-    },
     "exports": {
       ".": "./dist/index.js",
       "./env": "./dist/env/index.js",
@@ -59,7 +52,6 @@
     "express": "^5",
     "i18next": "^26.4.2",
     "i18next-fs-backend": "^2.6.7",
-    "tsx": "^4",
     "zod": "^3.24.1"
   },
   "devDependencies": {
