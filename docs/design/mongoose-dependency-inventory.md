@@ -356,6 +356,43 @@ carries `bullmq`, `ioredis`, `socket.io` and `tsx` in core's dependencies
 (41.97 MB installed); the harness reports their graphs the same way once the
 `mongooseGraph` root is generalized.
 
+### 4.5 After the queues extraction (Sprint 04, S10)
+
+Same harness (now attributing every extracted driver's graph), policy and host
+on `3cec33c` (the S10 extraction plus tests; runtime source unchanged since
+`b6c893c`). Raw data: `reports/s09-inventory/3cec33c/`. "Before" is the S09
+after-state (`78bf4eb`, §4.4).
+
+| Fixture | Metric | Before S10 (`78bf4eb`) | After S10 (`3cec33c`) | Change |
+|---|---|---|---|---|
+| A — core only | unique packages | 134 | 117 | −17 |
+| A | installed bytes | 41,973,769 | 31,900,402 | **−10,073,367 (−24.0%)**; cumulative since S09 baseline −39.8% |
+| A | `bullmq` / `ioredis` graphs | 16 pkgs / 10,099,358 B; 9 / 1,057,038 B | absent | removed |
+| A | `socket.io` graph (S11 target) | 22 / 5,044,748 (16 exclusive / 4,928,038) | unchanged | the next removable cost |
+| A | `import_boot` median / p95 | 146 / 160 ms | **89 / 92 ms** | −39% |
+| B — minimal | unique packages / bytes | 182 / 126,110,245 | 166 / 116,063,812 | −16 / −8.0% |
+| B | `bullmq`, `ioredis`, `@tulipes/bullmq` resolvable | yes | **no** (app, core, launcher) | absence proven |
+| B | `import_boot` / `import_boot_tsx` | 158 / 245 ms | 90 / 125 ms | −43% / −49% |
+| B | `offline_spec` median | 441 ms | 285 ms | −35% |
+| B | `backend_readiness` median / p95 | 367 / 390 ms | **247 / 248 ms** | −33% |
+| B | RSS at readiness (median) | 119,120 KiB | 95,536 KiB | −20% (cumulative −35% since S09 baseline) |
+| C — production | unique packages / bytes | 329 / 168,459,228 | 330 / 168,479,614 | +1 (`@tulipes/bullmq`), +20 KB |
+| C | `bullmq` / `ioredis` graphs | 16 / 10.1 MB; 9 / 1.06 MB | identical; ioredis now shared by the provider **and** the app's own cache/limiter (6 exclusive pkgs, 149 KB) | app-owned, as designed |
+| C | `import_boot` median | 158 ms | 90 ms | −43% (drivers load in phase 8) |
+| C | `offline_spec` median | 467 ms | 304 ms | −35% |
+| C | `backend_readiness` / `worker_readiness` | 617 / 549 ms | 565 / 497 ms | −8% / −9%, within noise |
+| D — launcher (all archives) | unique packages / bytes | 136 / 42,046,377 | 137 / 42,066,677 | +1: the provider archive **does** carry bullmq/ioredis as dependencies, so a launcher that installs every archive resolves them — which is exactly why the smoke launcher installs core only |
+
+Fresh-cache install timings in this run were dominated by an unusually slow
+registry (A: 20.6 / 5.9 / 7.4 s) and are retained but not compared; warm
+installs are stable (A ≈ 0.5 s, B ≈ 0.85 s).
+
+Reading: BullMQ's graph is heavy (10.1 MB, larger than Mongoose's exclusive
+share) and its import was on every process's path; removing it took a third
+off minimal readiness and offline `spec` on top of S09's gains. What remains
+in fixture A is `socket.io` (4.9 MB exclusive), `tsx`, `express`, `i18next`
+and `zod`.
+
 ## 5. Affected-file extraction checklist
 
 Grouped by downstream task; each item references a register row. Items for
