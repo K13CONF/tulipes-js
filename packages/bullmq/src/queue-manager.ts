@@ -75,6 +75,11 @@ export class QueueManager implements QueuesCapability {
    */
   #connect(): Redis {
     const connection = new Redis(this.#url, { maxRetriesPerRequest: null });
+    // ioredis throws an uncaught exception on a connection error with no
+    // listener. Shutdown expects them; otherwise they belong on stderr.
+    connection.on("error", (error) => {
+      if (!this.#closing) console.error(`[tulipes/bullmq] redis connection: ${error.message}`);
+    });
     this.#connections.push(connection);
     return connection;
   }
@@ -166,7 +171,14 @@ export class QueueManager implements QueuesCapability {
   async drain(): Promise<void> {
     // The first shutdown signal this manager receives; errors are expected from here on.
     this.#closing = true;
-    const results = await Promise.allSettled(this.#workers.map((worker) => worker.close()));
+    const results = await Promise.allSettled(this.#workers.map(async (worker) => {
+      // A worker still connecting has its startup commands in ioredis's
+      // offline queue. Closing the socket rejects every one of them, and
+      // nothing awaits those promises — an unhandled rejection that takes
+      // the process down mid-shutdown. Let the connection settle first.
+      await worker.waitUntilReady().catch(() => {});
+      await worker.close();
+    }));
     throwFailures(results);
   }
 
