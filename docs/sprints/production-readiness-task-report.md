@@ -3,14 +3,16 @@
 Prepared: 2026-09-11. Accepted Sprint 02 source: `37dbca7`.
 
 **Latest completed operation:** the
-[0.10.0-rc.2 candidate release](release-0.10.0-rc.2.md) — core `0.10.0-rc.2`,
-spec `0.3.0-rc.5`, mongoose `0.1.0-rc.2` and the first `@tulipes/bullmq` and
-`@tulipes/socket.io` `0.1.0-rc.1` are published under `next`; tag workflow,
+[0.10.0-rc.3 candidate release](release-0.10.0-rc.3.md) — core `0.10.0-rc.3`,
+the first `@tulipes/cli` `0.1.0-rc.1`, spec `0.3.0-rc.6` and the providers
+`@tulipes/mongoose` `0.1.0-rc.3`, `@tulipes/bullmq` `0.1.0-rc.2` and
+`@tulipes/socket.io` `0.1.0-rc.2` are published under `next`; tag workflow,
 registry archive identity and fresh registry installs of both presets passed.
-Sprints 03 and 04 are complete and merged. Previously:
-[rc.1](release-0.10.0-rc.1.md), [rc.3](release-0.9.0-rc.3.md).
+Sprints 03, 04 and 05 are complete and merged. Previously:
+[rc.2](release-0.10.0-rc.2.md), [rc.1](release-0.10.0-rc.1.md),
+[0.9.0-rc.3](release-0.9.0-rc.3.md).
 
-**Current workstream: Sprint 05 delivered (S12 merged, S13 decided, S14 in review); a candidate release with the CLI package and Sprint 06 (production pilot) follow.**
+**Current workstream: Sprint 06 (production pilot, operational evidence and release) is next; Sprints 03–05 are delivered and released.**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
 register, measurement protocol, interface decisions, fixtures and delivery order.
 Sprint 02 implementation, local closeout and CI acceptance are complete.
