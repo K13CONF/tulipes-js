@@ -1,5 +1,10 @@
 {
   "name": "@tulipes-example/app",
+  "tulipes": {
+    "providers": {
+      "models": "@tulipes/mongoose"
+    }
+  },
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,6 +20,7 @@
   },
   "dependencies": {
     "@tulipes/core": "workspace:*",
+    "@tulipes/mongoose": "workspace:*",
     "ioredis": "^5",
     "mongoose": "^8",
     "zod": "^3.25"

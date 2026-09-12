@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import type { ModelDef } from "@tulipes/core/db";
+import type { ModelDef } from "@tulipes/mongoose";
 
 /**
  * Access tokens are stateless, so logging out cannot un-issue one. This is

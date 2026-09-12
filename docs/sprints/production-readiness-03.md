@@ -1,7 +1,8 @@
 # Sprint 03 — Dependency inventory and first provider design
 
-Status: planning complete; S09.1 inventory/measurements and S09.2 interface design
-are not yet complete. Prepared on 2026-09-11 against source `3d56aed`.
+Status: executed on 2026-09-11 — S09.1 through S09.10 delivered on
+`feat/sprint-03-s09-inventory` (see §9); the release decision and supported CI
+evidence on merged source remain open. Plan prepared against source `3d56aed`.
 This is the execution plan for those two items, followed by a handoff to the
 remaining Mongoose extraction tasks. It does not implement or release a provider.
 
@@ -491,9 +492,27 @@ required by this plan.
 | Item | Status | Evidence / remaining work |
 |---|---|---|
 | S09-plan | Complete | Source-grounded plan saved; 46 relative links/anchors across three documents, scope and whitespace validated; `reports/s09-plan-docs.log` |
-| S09.1 | Planned | Initial coupling map above; exhaustive register and numeric baseline still required |
-| S09.2 | Planned | Alternatives, decision checklist and fixtures specified; selected interface and executable proof still required |
-| S09.3–S09.10 | Not started | Handoff criteria above; execution follows completed inventory/design |
+| S09.1 | Complete | 2026-09-11: 41-row coupling register, behavior maps, harness `scripts/s09-inventory.mjs`, installation shapes A–D and startup baselines against `b42bd00`, reproduced at `9aba800` (inventory identical, timings within 4–11%) — [inventory](../design/mongoose-dependency-inventory.md); raw samples in ignored `reports/s09-inventory/{b42bd00,9aba800}/` |
+| S09.2 | Complete | 2026-09-11: candidate A selected (augmentable `ModelsCapability`, `package.json` `tulipes.providers`, manifest `requires`), B and a boot option rejected; contract implemented in core (`boot/providers.ts`), built-in loader exposed as the first provider at `@tulipes/core/db`, generator/example declare it; 10 runtime + type fixtures, full suite with services, packed minimal/production smokes — [provider design §9.1](../design/mongoose-provider-design.md#91-what-ran-s092b-2026-09-11) |
+| S09.3 | Complete | 2026-09-11: no consumer of model metadata exists; documented as unsupported in the spec README and offline-inspection guide, route schemas remain the only source |
+| S09.4, S09.5, S09.6, S09.8 | Complete | 2026-09-11, one change set (inseparable for CI): `packages/mongoose` holds the runtime; core drops the dependency and its declarations are verified Mongoose-free at pack time; generator, example and `new module` migrated; three archives with a core-only smoke launcher and a packed resolve probe proving minimal absence — [design §9.2](../design/mongoose-provider-design.md#92-extraction-evidence-s094s096-s098-2026-09-11) |
+| S09.7 | Complete | 2026-09-11: breaking-prerelease path with a migration stub at `@tulipes/core/db`; `scripts/upgrade-smoke.mjs` + CI job `upgrade` take the published 0.9.0-rc.3 production starter through the expected diagnostics and the documented migration — [design §9.2](../design/mongoose-provider-design.md#92-extraction-evidence-s094s096-s098-2026-09-11) |
+| S09.9 | Complete | 2026-09-11: eight real-driver scenarios in `packages/mongoose/tests/provider-matrix.integration.test.ts` (selection semantics, requirement shapes, two-boot plugin identity, bootstrap/duplicate failures with release) plus the four moved tests; core-only and packed-absence proofs in the smokes — [design §9.3](../design/mongoose-provider-design.md#93-failure-and-omission-matrix-with-the-real-driver-s099-2026-09-11) |
+| S09.10 | Complete | 2026-09-11: same harness on `78bf4eb` — core-only install −20.7% (−10,986,291 B, −17 packages), minimal −8.0%, mongoose unresolvable from A/B/D, `import_boot` −32–37%, minimal readiness −19%, production unchanged within noise — [inventory §4.4](../design/mongoose-dependency-inventory.md#44-after-extraction-s0910); MIGRATING/CHANGELOG/README/skills updated. Not done here: CI run on the merged source, version/range/dist-tag decision, publication |
+
+## 10. Supported CI evidence
+
+[PR #5](https://github.com/kemora13conf/bp-backend-express/pull/5), head
+`6249c592a741a6e49ddbacec752a9e0bbcbe51c1`, workflow run
+[34648822187](https://github.com/kemora13conf/bp-backend-express/actions/runs/34648822187)
+on 2026-09-11: all eight jobs passed — `tests (24)`, `tests (24.0.0)` with
+MongoDB 8 / Redis 7 services and `REQUIRE_INTEGRATION_TESTS=1`, `pack` (three
+verified archives, generator/reference parity), `minimal (ubuntu-latest)`,
+`minimal (macos-latest)` (both with the packed absence probe), `offline`,
+`upgrade` (published 0.9.0-rc.3 starter from the registry), `production`
+(packed backend, worker, login, PM2). The release decision — versions, the
+provider's core peer range, dist-tags — is a separate PR under
+[the release procedure](../releasing.md).
 
 Stop inventory/design expansion once their exit criteria are met. Record unrelated
 issues in the backlog, commit the coherent verified outputs and proceed to the

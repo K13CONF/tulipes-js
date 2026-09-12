@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import type { ModelDef } from "@tulipes/core/db";
+import type { ModelDef } from "@tulipes/mongoose";
 
 /** Requested actions, acknowledged before their side effect. No values or bodies. */
 const auditEventSchema = new Schema({

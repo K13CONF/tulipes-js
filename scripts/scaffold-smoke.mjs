@@ -25,9 +25,12 @@ try {
   run(process.execPath, [join(scripts, 'artifacts.mjs'), 'verify', artifacts], workspace);
   const manifest = JSON.parse(readFileSync(join(artifacts, 'manifest.json'), 'utf8'));
   const resolutions = Object.fromEntries(manifest.packages.map(pkg => [pkg.name, 'file:' + join(artifacts, pkg.file)]));
+  // The launcher installs core alone: a global `tulipes` never carries a
+  // provider, and an all-archive launcher would hoist one next to the app and
+  // hide a missing dependency. Everything else resolves from the app.
   const cliRoot = join(workspace, 'cli');
   mkdirSync(cliRoot);
-  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'yarn@4.18.0', dependencies: resolutions }));
+  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'yarn@4.18.0', dependencies: { '@tulipes/core': resolutions['@tulipes/core'] } }));
   writeFileSync(join(cliRoot, '.yarnrc.yml'), 'nodeLinker: node-modules\n');
   // Fresh generated projects intentionally create their first lockfile, even
   // when the outer runner sets CI=true. Repository installs stay immutable.
@@ -58,6 +61,25 @@ try {
     for (const name of ['MONGO_URI', 'REDIS_URL', 'TEST_MONGO_URI', 'TEST_REDIS_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'AUTH_ADMIN_EMAIL', 'AUTH_ADMIN_PASSWORD']) delete env[name];
   }
   run('yarn', ['install'], app, { ...env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
+  // Installation evidence, not runtime evidence: can the app, and can its
+  // installed core, resolve the driver at all? Minimal must say no everywhere.
+  const probe = run(process.execPath, ['--input-type=module', '-e', `
+    import { createRequire } from 'node:module';
+    const targets = ['mongoose', 'mongodb', 'bson', '@tulipes/mongoose'];
+    const from = anchor => Object.fromEntries(targets.map(t => { try { createRequire(anchor).resolve(t); return [t, true]; } catch { return [t, false]; } }));
+    console.log(JSON.stringify({ app: from(process.argv[1]), core: from(createRequire(process.argv[1]).resolve('@tulipes/core')), cli: from(process.argv[2]) }));
+  `, pkgFile, bin], app, env);
+  const resolved = JSON.parse(probe.trim().split('\n').at(-1));
+  writeFileSync(join(logs, 'resolve.json'), JSON.stringify(resolved, null, 2));
+  // Minimal: absent from the app, from core's own directory and from the
+  // launcher. Production: present for the app (its modules own it), never
+  // through the launcher; core's directory sees it only by hoisting.
+  const expectations = preset === 'minimal' ? { app: false, core: false, cli: false } : { app: true, cli: false };
+  for (const [anchor, expected] of Object.entries(expectations)) {
+    for (const [target, found] of Object.entries(resolved[anchor])) {
+      if (found !== expected) throw new Error(`${target} ${found ? 'resolves' : 'does not resolve'} from ${anchor} in the ${preset} preset; see ${join(logs, 'resolve.json')}`);
+    }
+  }
   run(process.execPath, [join(scripts, 'audit.mjs'), join(logs, 'dependencies.jsonl')], app, env);
   for (const script of ['sync', 'typecheck']) run('yarn', [script], app, env);
   const guard = join(app, 'offline-guard.mjs');

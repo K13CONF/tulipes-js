@@ -93,7 +93,12 @@ does not execute middleware, param callbacks, handlers or access checkers.
 
 It skips environment value resolution and env files, app/module config factories,
 models, controller acquisition through `runtime()`, translation initialization,
-MongoDB/Redis, queues, sockets and application lifecycle hooks. Runtime environment
+MongoDB/Redis, queues, sockets and application lifecycle hooks. Provider
+declarations (`tulipes.providers` in the root manifest, `requires` in module
+manifests) are validated for consistency, but the provider itself is never
+resolved or imported, so an uninstalled provider is not an offline error.
+Model metadata is not part of any generated document and is not an offline
+capability; see the [spec package](../packages/spec/README.md#where-the-content-comes-from). Runtime environment
 and credential validation remain strict. A runtime acquisition that changes
 endpoint structure or replaces the access checker fails boot; declare that
 structure in the router factory. Resource cleanup on acquisition failure remains

@@ -26,6 +26,8 @@ Usage:
                                  --openapi <file>  --postman <file>  --url <base>
                                  routes/spec: --offline | --runtime
   tulipes new module <name>    scaffold a module under ./modules
+                                 --model | --no-model  force model/bootstrap files on or off
+                                 (default: on when package.json declares a models provider)
   tulipes update               upgrade the global cli and, inside an app, the app itself
   --offline loads shared declarations without services or runtime secrets.
   routes/spec default to --runtime for legacy applications.
@@ -65,12 +67,15 @@ export async function main(argv: readonly string[]): Promise<void> {
     case "update":
       return runUpdate(rootDir);
     case "new":
-      if (rest[0] !== "module" || !rest[1]) {
-        console.error('Usage: tulipes new module <name>');
+      if (rest[0] !== "module" || !rest[1] || rest.slice(2).some((flag) => flag !== "--model" && flag !== "--no-model")) {
+        console.error('Usage: tulipes new module <name> [--model | --no-model]');
         process.exitCode = 2;
         return;
       }
-      return runNewModule(rootDir, rest[1]);
+      return runNewModule(rootDir, rest[1], {
+        ...(rest.includes("--model") && { models: true }),
+        ...(rest.includes("--no-model") && { models: false }),
+      });
     case "dev":
       return runDev(rootDir, rest[0] ?? "app.ts");
     case "-v":
