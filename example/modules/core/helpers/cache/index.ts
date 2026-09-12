@@ -21,7 +21,16 @@ export function appCache(environment: Environment): Cache {
   if (active) return active.cache;
 
   if (environment.store.has("REDIS_URL")) {
-    const redis = new Redis(String(environment.get("REDIS_URL")));
+    // Fail a command fast instead of queueing it and retrying for seconds: the
+    // cache is consulted on every request, so a redis outage must cost a miss,
+    // not a stalled request. RedisCache turns the rejection into that miss.
+    const redis = new Redis(String(environment.get("REDIS_URL")), {
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    });
+    // ioredis makes an unhandled "error" event an uncaught exception; the cache
+    // reports what it actually affects, when it affects it.
+    redis.on("error", () => {});
     active = { cache: new RedisCache(redis), redis };
   } else {
     active = { cache: new MemoryCache() };
