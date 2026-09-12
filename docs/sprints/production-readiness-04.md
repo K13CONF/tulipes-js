@@ -1,7 +1,7 @@
 # Sprint 04 — Queues and sockets as optional providers
 
-Status: S10 (queues) in execution on branch `feat/sprint-04-s10-queues`, started
-2026-09-12 from `6f4923d` (core 0.10.0-rc.1 / spec 0.3.0-rc.4 / mongoose
+Status: S10 (queues) complete on branch `feat/sprint-04-s10-queues` on 2026-09-12,
+started from `6f4923d` (core 0.10.0-rc.1 / spec 0.3.0-rc.4 / mongoose
 0.1.0-rc.1 published). S11 (sockets) follows as its own increment once S10 is
 accepted; the two are estimated separately as the program requires.
 
@@ -57,5 +57,6 @@ what a queue is.
 | S10.2 | Complete | [Design doc §2–§4](../design/queues-provider-design.md#2-capability-by-mode-s102) |
 | S10.3, S10.5 | Complete | 2026-09-12: `packages/bullmq` holds the manager and loader; core drops `bullmq` and `ioredis`, gains `serve`/`drain` hooks and `BootHandle.consumers`; generator, example, `new module`, skills migrated; four archives, absence probe covers `bullmq`, `ioredis`, `@tulipes/bullmq`; upgrade smoke applies both migrations — [design §6](../design/queues-provider-design.md#6-evidence) |
 | S10.4 | Complete | 2026-09-12: fake-provider `serve`/`drain` contract tests in core, six real-Redis scenarios plus the two moved tests in the provider — [design §6.2](../design/queues-provider-design.md#62-failure-and-omission-matrix-s104-2026-09-12) |
-| S11 | Not started | Own increment after S10 acceptance |
+| S10 measure | Complete | [inventory §4.5](../design/mongoose-dependency-inventory.md#45-after-the-queues-extraction-sprint-04-s10): core-only −24.0%, minimal readiness −33%, remaining app-owned ioredis reported |
+| S11 | Not started | Own increment after S10 acceptance; `socket.io` is 4.9 MB exclusive in the core-only fixture |
 | 04-C1–C3 | Not started | Combination matrix is run when both providers exist; S10 records the queue-relevant rows |

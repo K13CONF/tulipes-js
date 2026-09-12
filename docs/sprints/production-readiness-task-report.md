@@ -9,7 +9,7 @@ under `next`; tag workflow, registry archive identity and fresh registry
 installs of both presets passed. Sprint 03 (S09.1–S09.10) is complete and
 merged (`21040d5`). Previously: [rc.3 candidate release](release-0.9.0-rc.3.md).
 
-**Current workstream: Sprint 04, S10 (queues and Redis ownership).**
+**Current workstream: Sprint 04 — S10 (queues) delivered; S11 (sockets) next.**
 The [detailed execution plan](production-readiness-03.md) defines the coupling
 register, measurement protocol, interface decisions, fixtures and delivery order.
 Sprint 02 implementation, local closeout and CI acceptance are complete.

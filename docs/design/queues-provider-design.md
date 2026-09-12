@@ -167,3 +167,13 @@ Provider, real Redis (`packages/bullmq/tests/provider-matrix.integration.test.ts
 Statuses are refreshed after `serve()` so the banner and `handle.providers`
 report running consumers (found by this matrix).
 
+### 6.3 Measurements (S10.5; 2026-09-12)
+
+Recorded in the [dependency inventory §4.5](mongoose-dependency-inventory.md#45-after-the-queues-extraction-sprint-04-s10):
+core-only install −24.0% (−10,073,367 B, 17 packages), minimal −8.0%,
+`bullmq`/`ioredis`/`@tulipes/bullmq` unresolvable in provider-free fixtures,
+`import @tulipes/core/boot` 146 → 89 ms, minimal readiness 367 → 247 ms with
+20% less RSS, production unchanged within noise. The remaining app-owned
+Redis dependency in the production preset is ioredis for the cache and rate
+limiter (6 exclusive packages, 149 KB); the queues provider shares it.
+
