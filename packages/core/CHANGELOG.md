@@ -11,6 +11,13 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-09-12
+
+A patch release: nothing in the runtime changed, and no migration is needed.
+Published with `@tulipes/cli@0.1.1`, `@tulipes/spec@0.3.1` and the providers at
+`0.1.1` — packing rewrites each package's core dependency, so a core version
+bump changes every archive.
+
 - Generated apps get an **`AGENTS.md`** — the cross-tool convention coding
   agents read — carrying the project rules that used to live only in
   `CLAUDE.md`. `CLAUDE.md` remains as a short bridge to it, so Claude Code

@@ -126,9 +126,9 @@ function renderModule(
         "@tulipes/core": `^${coreVersion()}`,
         [`${scope}/core`]: "workspace:*",
         express: "^5",
-        ...(models && { "@tulipes/mongoose": "^0.1.0", mongoose: "^8" }),
-        ...(queues && { "@tulipes/bullmq": "^0.1.0" }),
-        ...(sockets && { "@tulipes/socket.io": "^0.1.0" }),
+        ...(models && { "@tulipes/mongoose": "^0.1.1", mongoose: "^8" }),
+        ...(queues && { "@tulipes/bullmq": "^0.1.1" }),
+        ...(sockets && { "@tulipes/socket.io": "^0.1.1" }),
       },
     })],
 
