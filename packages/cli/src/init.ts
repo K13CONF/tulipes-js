@@ -134,12 +134,12 @@ function renderProductionFiles(name: string, coreVersion: string, cliVersion: st
   const cli = `^${cliVersion}`;
   // The models provider ships separately from core; the app owns mongoose
   // itself (a peer of the provider) so schemas and provider share one copy.
-  const mongooseProvider = "^0.1.0";
-  const bullmqProvider = "^0.1.0";
-  const socketProvider = "^0.1.0";
+  const mongooseProvider = "^0.1.1";
+  const bullmqProvider = "^0.1.1";
+  const socketProvider = "^0.1.1";
   // The generator ships its own version line; it only has to be recent
   // enough to understand the RouteInfo schemas this core declares.
-  const specVersion = "^0.3.0";
+  const specVersion = "^0.3.1";
 
   const files: [string, string][] = [
     // Ship browser policy as an editable document alongside the auth modules.

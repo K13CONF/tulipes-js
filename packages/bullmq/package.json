@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/bullmq",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "BullMQ queues provider for Tulipes apps: producers in every process, consumers in the worker, behind core's queues capability",
   "type": "module",
   "exports": {

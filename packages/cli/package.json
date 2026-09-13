@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The tulipes command line: scaffold, sync, inspect, describe and run Tulipes apps",
   "type": "module",
   "bin": {
