@@ -26,7 +26,7 @@ application-policy decisions.
 
 ## Design and compatibility
 
-See [offline inspection](../offline-inspection.md) for the interface, migration
+See [inspection](../../packages/core/README.md#inspection) for the interface, migration
 steps and guarantees. Runtime route factories remain supported. Offline behavior
 is explicit, while generated `yarn spec` scripts select it. The initial interface
 uses static route selection; runtime environment-dependent factories use
