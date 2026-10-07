@@ -124,8 +124,9 @@ modules/billing/
 ├── i18n/<locale>.json        this module's strings — the module is the namespace
 ├── models/*.model.ts         { name, schema } — a declaration, not a registration
 ├── bootstrap/*.bootstrap.ts  initialization, every mode; may return its cleanup
-├── queues/*.queues.ts        (ctx, queues) => define + process
-└── sockets/*.sockets.ts      (ctx, sockets) => claim a namespace
+├── queues/*.queues.ts        (ctx, queues) => process; `jobs` export declares the schemas
+├── sockets/*.sockets.ts      (ctx, sockets) => claim a namespace
+└── agent/*.agent.ts          defineAgent({ summary, tools }): what an agent sees
 ```
 
 ```json
@@ -500,14 +501,38 @@ edit:
 ## Built for AI-assisted work
 
 `tulipes init` also writes an **`AGENTS.md`** — the cross-tool convention every
-coding agent reads — plus a short `CLAUDE.md` pointing at it and eight
-task-scoped skills under `.claude/skills/`: module, environment variable,
-endpoint, model, queue, socket, permissions, and reading boot errors. They
-encode the conventions an agent would otherwise guess wrong: declaring
-variables instead of reaching for `process.env`, why `mongoose.model()` is
-never called directly, where global middleware belongs, and how to read an
-aggregate boot report. The skills are plain markdown, so an agent without skill
-support can read them directly.
+coding agent reads — plus a short `CLAUDE.md` pointing at it and task-scoped
+skills under `.claude/skills/`: module, environment variable, endpoint,
+response, model, queue, socket, permissions, settings, i18n, spec, agent tools
+and reading boot errors. They encode the conventions an agent would otherwise
+guess wrong: declaring variables instead of reaching for `process.env`, why
+`mongoose.model()` is never called directly, where global middleware belongs,
+and how to read an aggregate boot report. The skills are plain markdown, so an
+agent without skill support can read them directly.
+
+**The app is a tool box.** Every endpoint declared with `rai()` is a tool an
+agent can call — its name, description, input schema and permission are
+already there — and a module's `agent/*.agent.ts` adds a summary, curates
+which routes an agent sees and declares actions that are not endpoints:
+
+```ts
+export default defineAgent({
+  summary: "Greets callers and counts how often each greeting is used.",
+  tools: [
+    { route: "hello:list-greetings", description: "The stored greetings, most used first" },
+    action({ id: "hello:reset-counts", description: "Reset every counter", input: z.object({ confirm: z.literal(true) }),
+             handler: async (ctx) => ({ reset: (await requireModels(ctx).get("Greeting").updateMany({}, { times_used: 0 })).modifiedCount }) }),
+  ],
+});
+```
+
+`ctx.agent.manifest(role)` is what the generated `agent` module serves at
+`GET <prefix>/agent/tools`, filtered to the caller's role; `ctx.agent.invoke()`
+runs an action through the same gate a route has — ACL on the id, then the
+input schema, then the handler — behind `POST <prefix>/agent/tools/<name>`.
+`tulipes agent manifest` writes the document from an inspection boot, and
+[`@tulipes/mcp`](https://www.npmjs.com/package/@tulipes/mcp) serves it to
+Claude Code over MCP, calling every tool through the app's own HTTP door.
 
 <details>
 <summary><b>Subpath exports</b></summary>
@@ -519,6 +544,7 @@ support can read them directly.
 | `@tulipes/core/env` | `Environment`, `KnownVariables` (codegen target), spec types |
 | `@tulipes/core/http` | `HttpError`, `notFoundHandler`, `errorHandler` |
 | `@tulipes/core/acl` | `Acl`, `AclBuilder`, `AclFn` |
+| `@tulipes/core/agent` | `defineAgent`, `action`, `AgentRegistry`, `AgentManifest` |
 | `@tulipes/core/db` | migration stub only — the Mongoose provider, `ModelStore`, `ModelDef` and `BootstrapFn` live in [`@tulipes/mongoose`](https://www.npmjs.com/package/@tulipes/mongoose) |
 | `@tulipes/core/queues` | migration stub only — the BullMQ provider, `QueueManager`, `QueueRegistry` and `QueuesFn` live in [`@tulipes/bullmq`](https://www.npmjs.com/package/@tulipes/bullmq) |
 | `@tulipes/core/sockets` | migration stub only — the Socket.IO provider, `SocketManager`, `SocketRegistry` and `SocketsFn` live in [`@tulipes/socket.io`](https://www.npmjs.com/package/@tulipes/socket.io) |

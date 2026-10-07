@@ -253,7 +253,7 @@ test("the reference app inspects deterministically with connections denied and n
   const inspect = () => boot({ rootDir: resolve("example"), mode: "backend", inspect: true, handleSignals: false });
 
   const first = await inspect();
-  expect(first.ctx.routes.all()).toHaveLength(28);
+  expect(first.ctx.routes.all()).toHaveLength(30);
   const documentsFirst = await documents(first.ctx);
   await first.shutdown();
 
@@ -299,7 +299,7 @@ test("CLI writes specs for a freshly generated production app without services",
   run(app.rootDir, ["init", "generated", "--preset", "production"]);
   const root = app.rootDir + "/generated";
 
-  expect(run(root, ["routes"])).toContain("28 endpoint(s)");
+  expect(run(root, ["routes"])).toContain("30 endpoint(s)");
   run(root, ["spec", "--openapi", "docs/openapi.json", "--postman", "docs/collection.json"]);
   const { readFile } = await import("node:fs/promises");
   const openapi = JSON.parse(await readFile(root + "/docs/openapi.json", "utf8"));

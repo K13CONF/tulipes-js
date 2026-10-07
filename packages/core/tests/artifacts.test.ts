@@ -46,6 +46,12 @@ test("artifact verification rejects changed archives before any publication", as
             integrity: "sha512-original",
           },
           {
+            name: "@tulipes/mcp",
+            version: "0.1.0",
+            file: "mcp.tgz",
+            integrity: "sha512-original",
+          },
+          {
             name: "@tulipes/cli",
             version: "0.1.0",
             file: "cli.tgz",

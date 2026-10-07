@@ -42,6 +42,13 @@ requireModels(backend).get("User");
 
 requireQueues(backend).queue("users.welcome");
 
+// The agent surface exists in the backend branch only, typed from the registry.
+void backend.agent.manifest("admin").tools[0]?.input_schema;
+void backend.agent.invoke("hello_reset-counts", { confirm: true }, { isAuthenticated: true, user: null, session: null, role: "admin" });
+declare const script: import("../src/boot/index.js").Ctx;
+// @ts-expect-error A worker or script context may carry no agent registry.
+script.agent.manifest();
+
 const routes: RoutesFn = (ctx) => {
   ctx.app.disable("x-powered-by");
 };

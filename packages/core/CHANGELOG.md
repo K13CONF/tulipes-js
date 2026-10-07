@@ -11,6 +11,21 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **The agent surface.** Every route declared with `rai()` is a tool —
+  name from the id (`hello:list-greetings` → `hello_list-greetings`),
+  description, a JSON Schema input built from `params`, `query` and `body`
+  (path parameters without a schema included), the permission, and
+  `read_only` for `GET`. `agent/*.agent.ts` exports `defineAgent({ summary,
+  tools })`: a summary, a curated list of routes (`"*"`, `"<module>:*"` or
+  an id), and `action({ id, description, input, handler })` tools that are
+  not endpoints, gated like a route — ACL on the id, then the schema, then
+  the handler. `agent: false` on a RAI hides an endpoint. `ctx.agent`
+  (backend only) gives `manifest(role)`, `tools(role)`, `find(name)` and
+  `invoke(name, input, actor, req?)`; `tulipes agent manifest` writes the
+  document from an inspection boot; the generated apps carry an `agent`
+  module serving `GET <prefix>/agent/tools` and `POST <prefix>/agent/tools/:name`;
+  the new `@tulipes/mcp` package (`tulipes-mcp`) serves that door to MCP
+  clients, calling every tool through the app's own HTTP with a bearer token.
 - **Generated model and job types.** `tulipes sync` now writes
   `types/tulipes.d.ts` (replacing `types/config.d.ts`, which it removes)
   with two more augmentations: `KnownModels` in `@tulipes/mongoose`, one

@@ -5,6 +5,7 @@ import type { ProcessMode } from "./boot.js";
 import type { GlobalConfig } from "../config/index.js";
 import type { SettingsApi } from "../config/settings.js";
 import type { Acl } from "../acl/acl.js";
+import type { AgentRegistry } from "../agent/registry.js";
 import type { RouteInfo, RouteRegistry } from "../http/rai.js";
 import type { ModuleManifest } from "../modules/manifest.js";
 import type { I18nextInstance, TFunction } from "../i18n/index.js";
@@ -56,6 +57,12 @@ export interface Ctx {
   /** Set by the "sockets" provider in the backend process only; augmented like models. */
   sockets?: SocketsCapability;
   app?: Express;
+  /**
+   * Every tool the app exposes to agents — route tools from the RAIs,
+   * actions from `agent/*.agent.ts` — built in the backend branch once
+   * routes are scanned. Absent in worker and script processes.
+   */
+  agent?: AgentRegistry;
   /**
    * Declares an endpoint and gates it. `id` is the Resource Access
    * Identifier, which is also the ACL permission:
@@ -114,6 +121,7 @@ export interface RuntimeCtx extends Ctx {
 export interface BackendCtx extends RuntimeCtx {
   mode: "backend";
   app: Express;
+  agent: AgentRegistry;
 }
 
 /**

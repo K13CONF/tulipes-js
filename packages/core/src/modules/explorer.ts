@@ -77,6 +77,8 @@ export interface ModuleFiles {
   bootstrapFiles: readonly string[];
   queueFiles: readonly string[];
   socketFiles: readonly string[];
+  /** `agent/*.agent.<ext>` — the module's agent declaration. */
+  agentFiles: readonly string[];
 }
 
 /** dir name → file suffix, e.g. routes/users.routes.ts */
@@ -86,6 +88,7 @@ const COLLECTIONS = [
   ["bootstrapFiles", "bootstrap", ".bootstrap"],
   ["queueFiles", "queues", ".queues"],
   ["socketFiles", "sockets", ".sockets"],
+  ["agentFiles", "agent", ".agent"],
 ] as const;
 
 export interface ExploreOptions {
@@ -107,6 +110,7 @@ export function exploreModules(
       bootstrapFiles: [],
       queueFiles: [],
       socketFiles: [],
+      agentFiles: [],
     };
 
     const configFile = join(module.dir, `module.config${ext}`);

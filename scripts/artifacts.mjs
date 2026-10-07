@@ -5,7 +5,7 @@ import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 // Every published package, in release order; core first because its version names the tag.
-const packages = ['core', 'spec', 'mongoose', 'bullmq', 'socket.io', 'cli'];
+const packages = ['core', 'spec', 'mongoose', 'bullmq', 'socket.io', 'mcp', 'cli'];
 const digest = file => 'sha512-' + createHash('sha512').update(readFileSync(file)).digest('base64');
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: 'inherit', ...options });
 const readJson = file => JSON.parse(readFileSync(file, 'utf8'));
@@ -28,6 +28,7 @@ function verify(dir, expectedCommit) {
     }
     if (name === 'cli' && (packed.bin?.tulipes !== './dist/bin.js' || !listing.includes('package/dist/bin.js') || !listing.includes('package/templates/CLAUDE.md') || !listing.includes('package/templates/app/package.json') || !listing.includes('package/templates/minimal/package.json') || !listing.includes('package/templates/versions.json'))) throw new Error('Missing compiled CLI or templates');
     if (name === 'core' && (packed.bin || listing.some(path => /^package\/(dist\/cli|templates)\//.test(path)))) throw new Error('Core must not ship the CLI or templates');
+    if (name === 'mcp' && (packed.bin?.['tulipes-mcp'] !== './dist/bin.js' || !listing.includes('package/dist/bin.js') || packed.dependencies?.['@tulipes/core'])) throw new Error('The MCP server must ship its binary and reach core as a peer only');
     // The CLI's templates/app is the reference application and legitimately carries tests and env seeds.
     if (listing.some(path => !path.startsWith('package/templates/') && /\/(?:node_modules|tests|\.envs)\//.test(path))) throw new Error('Unexpected private/test content in archive');
     // Core must not carry a driver — not as a dependency, and not through an
