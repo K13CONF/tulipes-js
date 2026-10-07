@@ -39,6 +39,7 @@ Maintained lines, to be updated in each release PR:
 
 | Line | Status |
 |---|---|
+| core 0.11.0-rc.x, cli 0.2.0-rc.x, mongoose and bullmq 0.2.0-rc.x, socket.io 0.1.2-rc.x, mcp and testing 0.1.0-rc.x | candidates (`next`); the agent surface and `@tulipes/mcp` are experimental (above) |
 | core 0.10.x, cli 0.1.x, spec 0.3.x, providers 0.1.x | current; normal fixes target these |
 | core 0.9.x | candidates only (`next`); superseded by 0.10.0 — upgrade rather than expecting fixes |
 | core 0.8.x, spec 0.2.x | previous stable; critical security fixes evaluated until the next core minor ships, where a safe backport is practical |
@@ -55,7 +56,15 @@ versions are immutable; fixes receive new versions.
 The supported API consists of documented package exports, exported types, module
 file contracts, CLI commands and documented HTTP behavior. Internal source or
 dist paths, private Express internals, and undocumented properties have no
-compatibility guarantee. Generated auth, settings and operational policy are
+compatibility guarantee.
+
+**Experimental in 0.11.** The agent surface — `@tulipes/core/agent`, the
+manifest's shape, `agent/*.agent.ts` files, the generated `agent` module's
+routes, `tulipes agent manifest` — and the whole `@tulipes/mcp` package ship
+in the 0.11 line but are excluded from the guarantees above. They may change
+in any release, patch included, without a deprecation period, until real use
+settles them; such changes are still listed in the changelog and
+`MIGRATING.md`. Generated auth, settings and operational policy are
 editable application code, separate from the core API.
 
 Before 1.0: separate optional providers, complete offline inspection and focused

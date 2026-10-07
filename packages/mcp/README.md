@@ -17,6 +17,11 @@ Desktop or any MCP client.
 Requires Node 24.x and an app on `@tulipes/core` 0.11 or later with its
 `agent` module mounted (`tulipes init` scaffolds one).
 
+> [!WARNING]
+> **Experimental.** This package and the core agent surface it serves are
+> outside the 0.11 compatibility promise. Flags, tool naming and the manifest
+> may change in any release without a deprecation period.
+
 ## Run it
 
 ```sh
