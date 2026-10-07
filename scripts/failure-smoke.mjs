@@ -99,13 +99,12 @@ try {
   const resolutions = Object.fromEntries(manifest.packages.map((pkg) => [pkg.name, 'file:' + join(artifacts, pkg.file)]));
   const cliRoot = join(workspace, 'cli');
   mkdirSync(cliRoot);
-  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'yarn@4.18.0', dependencies: { '@tulipes/cli': resolutions['@tulipes/cli'] }, resolutions }));
-  writeFileSync(join(cliRoot, '.yarnrc.yml'), 'nodeLinker: node-modules\n');
-  run('yarn', ['install'], { cwd: cliRoot, env: { ...process.env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' } });
+  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'pnpm@10.28.0', dependencies: { '@tulipes/cli': resolutions['@tulipes/cli'] }, pnpm: { overrides: resolutions } }));
+  run('pnpm', ['install', '--no-frozen-lockfile'], { cwd: cliRoot });
   const app = join(workspace, 'app');
   run(process.execPath, [join(cliRoot, 'node_modules/@tulipes/cli/dist/bin.js'), 'init', app, '--preset', 'production']);
   const pkgFile = join(app, 'package.json');
-  writeFileSync(pkgFile, JSON.stringify({ ...readJson(pkgFile), resolutions }, null, 2));
+  writeFileSync(pkgFile, JSON.stringify({ ...readJson(pkgFile), pnpm: { overrides: resolutions } }, null, 2));
 
   const password = randomBytes(24).toString('hex');
   const env = {
@@ -116,8 +115,8 @@ try {
     AUTH_ADMIN_EMAIL: 'failure@example.test', AUTH_ADMIN_PASSWORD: password,
     TRUST_PROXY_CIDRS: '',
   };
-  run('yarn', ['install'], { cwd: app, env: { ...env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' } });
-  run('yarn', ['sync'], { cwd: app, env });
+  run('pnpm', ['install', '--no-frozen-lockfile'], { cwd: app, env });
+  run('pnpm', ['sync'], { cwd: app, env });
 
   server = spawn(process.execPath, ['--import', 'tsx', 'app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';

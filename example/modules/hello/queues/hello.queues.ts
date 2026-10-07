@@ -5,7 +5,7 @@ import { moduleLogger } from "@app/core";
 
 /**
  * ONE file describes both sides. The backend process registers the queue
- * so routes can produce into it; `yarn worker` turns the processor
+ * so routes can produce into it; `pnpm worker` turns the processor
  * into a live consumer. Never duplicate the definition.
  *
  * Queue names use "." — BullMQ reserves ":" as its redis separator.

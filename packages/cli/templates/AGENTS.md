@@ -39,7 +39,7 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    camelCase is for TypeScript-only names. → skill `tulipes-model`
 4. **Global middleware belongs to a sys-tier module**, not to the
    entrypoint. `app.ts` stays three lines. → skill `tulipes-endpoint`
-5. **Run `yarn sync` after touching any `meta.variables.json` or
+5. **Run `pnpm sync` after touching any `meta.variables.json` or
    `module.config.ts`.** It regenerates `types/config.d.ts` and
    `.env.example`; stale generated types are a lie.
 6. **Every response is `res.respond({ data, meta })`** — never `res.json`,
@@ -107,19 +107,19 @@ provides, declare `dependsOn` — do not rely on luck.
 
 | Command | Use |
 |---|---|
-| `yarn dev` | run the backend process (regenerates types first) |
-| `yarn worker` | run the queue-consumer process |
-| `yarn sync` | regenerate `types/config.d.ts` + `.env.example` |
-| `yarn check` | validate the environment without booting |
-| `yarn typecheck` | typecheck the whole app |
-| `yarn tulipes new module <name>` | scaffold a module |
+| `pnpm dev` | run the backend process (regenerates types first) |
+| `pnpm worker` | run the queue-consumer process |
+| `pnpm sync` | regenerate `types/config.d.ts` + `.env.example` |
+| `pnpm check` | validate the environment without booting |
+| `pnpm typecheck` | typecheck the whole app |
+| `pnpm tulipes new module <name>` | scaffold a module |
 | `tulipes update` | upgrade the global cli and the framework in every manifest |
-| `yarn script scripts/x.ts` | run a one-off script against the real app |
+| `pnpm script scripts/x.ts` | run a one-off script against the real app |
 
 ## Verifying your work
 
-A change is not done until the app boots. Run `yarn typecheck`, then
-`yarn dev` and confirm the startup banner lists what you added (modules,
+A change is not done until the app boots. Run `pnpm typecheck`, then
+`pnpm dev` and confirm the startup banner lists what you added (modules,
 queues, sockets, roles). Boot failures print an aggregate report naming
 every problem at once — read all of it before fixing anything. → skill
 `tulipes-boot-errors`

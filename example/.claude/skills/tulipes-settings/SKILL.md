@@ -75,7 +75,7 @@ by factories that also run once. A write persists; it does not move the
 running app. Every write response carries `requires_reboot: true`.
 
 `POST /settings/reboot` restarts through PM2, ordering the process serving
-the request **last** so the caller still gets its response. Under `yarn
+the request **last** so the caller still gets its response. Under `pnpm
 dev` there is no PM2, and it answers `503 NOT_SUPERVISED` rather than
 exiting a process nothing would restart.
 

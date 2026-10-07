@@ -11,6 +11,42 @@ what makes it work under nvm.
 
 ---
 
+<a id="unreleased--move-to-pnpm"></a>
+
+## Unreleased (0.11) — move to pnpm
+
+Generated apps and the framework repository use pnpm from 0.11; the 0.10
+line used yarn 4. The sections below this one predate the move and quote
+yarn commands, which is correct for the versions they describe: apply them
+with yarn, then switch here. For every app:
+
+1. Install pnpm once per machine: `npm install -g pnpm`.
+2. In `package.json`, set `"packageManager": "pnpm@10.28.0"`, delete the
+   `workspaces` array, and move `resolutions` to `pnpm.overrides`. The PM2
+   pin changes its selector: `"pm2/js-yaml"` becomes `"pm2>js-yaml"`. Add
+   `pnpm.onlyBuiltDependencies` naming `esbuild` and, when the app uses
+   queues, `msgpackr-extract`; pnpm blocks every other install script.
+3. Create `pnpm-workspace.yaml` next to it:
+
+   ```yaml
+   packages:
+     - modules/*
+   ```
+
+4. Delete `.yarnrc.yml`, `.yarn/` and `yarn.lock`, then run `pnpm install`
+   and commit `pnpm-lock.yaml`.
+5. Replace `yarn <script>` with `pnpm <script>` wherever the app's own
+   documentation, PM2 notes or CI quote it; the scripts themselves are
+   unchanged. `tulipes update` detects pnpm from the lockfile or the
+   `packageManager` field and runs the matching install.
+
+pnpm installs each workspace package with only the dependencies it declares,
+so a module importing a package it never listed fails to resolve where yarn's
+hoisting let it through. The fix is the declaration AGENTS.md already asks
+for: add the dependency to that module's `package.json`.
+
+---
+
 <a id="0100--upgrading-from-09x"></a>
 
 ## 0.10.0 — upgrading from 0.9.x

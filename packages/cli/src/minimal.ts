@@ -2139,8 +2139,8 @@ export function renderMinimalProject(name: string, coreVersion: string, cliVersi
   });
   return [
     ["package.json", json({
-      name, private: true, type: "module", packageManager: "yarn@4.18.0", engines: { node: ">=24.0.0 <25" },
-      workspaces: ["modules/*"],
+      name, private: true, type: "module", packageManager: "pnpm@10.28.0", engines: { node: ">=24.0.0 <25" },
+      pnpm: { onlyBuiltDependencies: ["esbuild"] },
       scripts: { dev: "tulipes dev", start: "tsx app.ts", sync: "tulipes sync", check: "tulipes env:check",
         typecheck: "tsc --noEmit", test: "vitest run", spec: "tulipes spec --offline --openapi docs/openapi.json --postman docs/collection.json" },
       dependencies: { "@tulipes/core": core, express: "^5", zod: "^3.25" },
@@ -2148,7 +2148,7 @@ export function renderMinimalProject(name: string, coreVersion: string, cliVersi
     })],
     ["tsconfig.json", json({ compilerOptions: { target: "ES2023", module: "NodeNext", moduleResolution: "NodeNext", strict: true,
       noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, skipLibCheck: true, noEmit: true }, include: ["app.ts", "modules", "types", "config", "tests"] })],
-    [".yarnrc.yml", "nodeLinker: node-modules\n"],
+    ["pnpm-workspace.yaml", "packages:\n  - modules/*\n"],
     [".gitignore", "node_modules/\n.envs/\ncoverage/\nlogs/\n"],
     ["app.ts", 'import { boot } from "@tulipes/core/boot";\n\nawait boot({ rootDir: import.meta.dirname, mode: "backend" });\n'],
     ["tests/app.test.ts", starterTests(false)],
@@ -2196,6 +2196,6 @@ export default defineRoutes(({ rai }) => {
   return router;
 });
 `],
-    ["README.md", `# ${name}\n\nMinimal Tulipes API. Requires Node 24.x and Corepack; no MongoDB, Redis or credentials.\n\n\`\`\`sh\ncorepack enable\nyarn install\nyarn sync\nyarn typecheck\nyarn check\nyarn test\nyarn spec\nyarn dev\n\`\`\`\n\nOpen http://localhost:3000/api/v1/hello or http://localhost:3000/health.\n\nRoutes declare a RAI and use res.respond. Middleware belongs to sys modules.\nCore still installs optional infrastructure libraries, but this app opens no infrastructure connections.\nThe production preset adds auth, users, settings, queues and deployment examples:\n\n\`tulipes init another-api --preset production\`\n`],
+    ["README.md", `# ${name}\n\nMinimal Tulipes API. Requires Node 24.x and pnpm; no MongoDB, Redis or credentials.\n\n\`\`\`sh\npnpm install\npnpm sync\npnpm typecheck\npnpm check\npnpm test\npnpm spec\npnpm dev\n\`\`\`\n\nOpen http://localhost:3000/api/v1/hello or http://localhost:3000/health.\n\nRoutes declare a RAI and use res.respond. Middleware belongs to sys modules.\nCore still installs optional infrastructure libraries, but this app opens no infrastructure connections.\nThe production preset adds auth, users, settings, queues and deployment examples:\n\n\`tulipes init another-api --preset production\`\n`],
   ];
 }

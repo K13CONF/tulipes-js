@@ -31,7 +31,7 @@ export class GreetingsController {
       if (!greeting) throw new HttpError(404, "noSuchGreeting", { vars: { name } });
 
       // Slow or retryable work belongs in a job, not in the request. Run
-      // `yarn worker` in another terminal to see it processed.
+      // `pnpm worker` in another terminal to see it processed.
       await requireQueues(this.ctx).add("hello.count-greeting", "count", { name });
       res.respond({ status: 202, data: { name, queued: true } });
     };

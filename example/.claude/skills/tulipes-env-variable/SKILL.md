@@ -38,7 +38,7 @@ a typo can never reach production as `undefined`.
 ```
 
 3. Add a value to `.envs/.env.development` for anything `required`.
-4. `yarn sync` — regenerates `types/config.d.ts` (so the read is typed)
+4. `pnpm sync` — regenerates `types/config.d.ts` (so the read is typed)
    and `.env.example` (so deployments know what to set).
 5. Read it: `Environment.get("BILLING_TRIAL_DAYS")` → typed `number`.
 
@@ -71,7 +71,7 @@ values always win, which is why deployments need no file.
 ## Gotchas
 
 - `Environment.get()` on an undeclared name **throws**. If you added the
-  entry and still get the error, you did not run `yarn sync`, or you
+  entry and still get the error, you did not run `pnpm sync`, or you
   edited a different module's meta file than the one you are reading from.
 - `APP_ENV` (not `NODE_ENV`) selects the env file.
 - A missing `required` variable is not a runtime surprise — the boot

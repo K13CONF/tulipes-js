@@ -21,7 +21,7 @@ touching anything else.
 
 ## Steps
 
-1. Scaffold: `yarn tulipes new module billing`. It creates every
+1. Scaffold: `pnpm tulipes new module billing`. It creates every
    contract — package.json (scope detected from siblings), meta.variables,
    config with lifecycle hooks, ACL, helper, a controller class, routes
    declaring a RAI, model, bootstrap, queue and socket. Delete the ones this feature does not
@@ -37,13 +37,13 @@ touching anything else.
 }
 ```
 
-3. `yarn install` — the module is a workspace, so the package manager must
+3. `pnpm install` — the module is a workspace, so the package manager must
    link it before imports resolve.
 4. Put endpoints and shared middleware in native `routes/*.routes.ts` factories.
    Add optional files as needed:
    `models/`, `queues/`, `sockets/`, `bootstrap/`, `module.acl.ts`,
    `i18n/` — the module is its own i18n namespace. → skill `tulipes-i18n`
-5. `yarn sync && yarn dev` — the banner must list the module.
+5. `pnpm sync && pnpm dev` — the banner must list the module.
 
 ## The manifest key
 

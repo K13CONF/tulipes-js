@@ -1,8 +1,8 @@
 /**
  * Install this app's nginx site config.
  *
- *   sudo -E APP_ENV=production yarn script scripts/deploy-nginx.ts
- *   APP_ENV=production yarn script scripts/deploy-nginx.ts --dry-run
+ *   sudo -E APP_ENV=production pnpm script scripts/deploy-nginx.ts
+ *   APP_ENV=production pnpm script scripts/deploy-nginx.ts --dry-run
  *
  * APP_ENV picks everything at once — which template is rendered, and the
  * domain and port rendered into it — so the three can never disagree.

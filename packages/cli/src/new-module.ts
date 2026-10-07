@@ -58,8 +58,8 @@ export async function runNewModule(
       `scaffolded modules/${name} (${scope}/${name})`,
       "",
       "next:",
-      "  yarn install     # the module is a workspace package",
-      "  yarn sync        # regenerate config types and .env.example",
+      "  pnpm install     # the module is a workspace package",
+      "  pnpm sync        # regenerate config types and .env.example",
       "",
       `Delete unused files; keep route files wrapped in defineRoutes for offline inspection.`,
       ...(models
@@ -133,7 +133,7 @@ function renderModule(
     })],
 
     // Empty on purpose: add an entry the moment this module needs a value
-    // that differs per deployment, then run `yarn sync`.
+    // that differs per deployment, then run `pnpm sync`.
     ["meta.variables.json", json({ variables: [] })],
 
     ["module.config.ts", [
@@ -141,7 +141,7 @@ function renderModule(
       ``,
       `/**`,
       ` * Runs in boot phase 6. Whatever this returns is stored at`,
-      ` * \`config.${name}\` and typed by \`yarn sync\`, so other modules read it`,
+      ` * \`config.${name}\` and typed by \`pnpm sync\`, so other modules read it`,
       ` * without importing anything from here.`,
       ` */`,
       `export default function ${fn}Config(_ctx: ConfigCtx) {`,
@@ -281,7 +281,7 @@ function renderModule(
       ``,
       `/**`,
       ` * ONE file describes both sides. The backend process registers the`,
-      ` * queue so routes can produce into it; \`yarn worker\` turns the`,
+      ` * queue so routes can produce into it; \`pnpm worker\` turns the`,
       ` * processor into a live consumer.`,
       ` *`,
       ` * Produce from anywhere with ctx.queues:`,

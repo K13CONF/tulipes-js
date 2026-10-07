@@ -17,19 +17,22 @@ test.each([
     const root = await mkdtemp(join(tmpdir(), "tulipes-audit-"));
 
     try {
+      // pnpm audit's document: advisories keyed by id, or no advisories at all
+      // when the request itself failed.
       const record = severity
         ? {
-            value: "fixture",
-            children: { Severity: severity, Issue: "fixture advisory" },
+            advisories: {
+              "1": { severity, module_name: "fixture", title: "fixture advisory" },
+            },
           }
-        : { type: "error", message: "Registry unavailable" };
+        : { error: { code: "ERR_PNPM_AUDIT", message: "Registry unavailable" } };
 
       await writeFile(
-        join(root, "yarn"),
+        join(root, "pnpm"),
         `#!${process.execPath}\nconsole.log(${JSON.stringify(JSON.stringify(record))}); process.exitCode = ${status};\n`,
       );
 
-      await chmod(join(root, "yarn"), 0o755);
+      await chmod(join(root, "pnpm"), 0o755);
 
       const result = spawnSync(
         process.execPath,

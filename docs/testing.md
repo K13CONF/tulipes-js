@@ -3,12 +3,12 @@
 Run the fast suite with Node 24 and the repository's pinned Yarn:
 
 ```sh
-yarn install --immutable
-yarn test
-yarn test:types
+pnpm install --frozen-lockfile
+pnpm test
+pnpm test:types
 ```
 
-`yarn test:watch` runs Vitest in watch mode. Tests live under `packages/*/tests/`;
+`pnpm test:watch` runs Vitest in watch mode. Tests live under `packages/*/tests/`;
 production builds include only `src/`. The compiler checks test code and
 `context.test-d.ts` with `@ts-expect-error` assertions for invalid phase access.
 
@@ -24,7 +24,7 @@ URLs are supplied. Use dedicated local services and a test-only Redis database:
 
 ```sh
 TEST_MONGO_URI=mongodb://127.0.0.1:27017/tulipes_tests \
-TEST_REDIS_URL=redis://127.0.0.1:6379/3 yarn test
+TEST_REDIS_URL=redis://127.0.0.1:6379/3 pnpm test
 ```
 
 CI provides both services and runs the whole suite. Do not point these URLs at
@@ -53,7 +53,7 @@ changing their instructions.
 
 ## Coverage and packed installations
 
-Run `REQUIRE_INTEGRATION_TESTS=1 yarn test:coverage` with both TEST URLs set.
+Run `REQUIRE_INTEGRATION_TESTS=1 pnpm test:coverage` with both TEST URLs set.
 Missing URLs fail CI immediately. Coverage is restricted to boot, ACL and env:
 the measured sprint baseline is 77% statements, 62% branches, 82% functions and
 79% lines (rounded down into enforced floors). These are regression floors,
@@ -83,7 +83,7 @@ test-only databases; application data must never be supplied to this suite.
 
 ## Offline inspection
 
-`yarn test packages/core/tests/inspection.test.ts` exercises offline loading and
+`pnpm test packages/core/tests/inspection.test.ts` exercises offline loading and
 runtime route/schema parity. It includes the production starter with connections
 denied and secrets absent. Its runtime HTTP assertions need local port access.
 Both starter app suites retain the same parity assertion against a real boot.

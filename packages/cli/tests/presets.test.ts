@@ -128,7 +128,7 @@ test("production starter patches PM2's vulnerable pinned YAML dependency", async
     await readFile(app.rootDir + "/api/package.json", "utf8"),
   );
 
-  expect(pkg.resolutions?.["pm2/js-yaml"]).toBe("4.3.2");
+  expect(pkg.pnpm?.overrides?.["pm2>js-yaml"]).toBe("4.3.2");
 });
 
 test("the production preset composes without queues or sockets: no files, dependencies, providers or scripts for them", async () => {

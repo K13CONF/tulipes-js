@@ -65,7 +65,7 @@ belongs after rai() or behind an appropriate earlier authorization check.
 Use routes.mount for nested/shared prefixes, including named parameters. Set
 Router({mergeParams:true}) on children needing inherited parameter values.
 Existing RoutesFn factories remain supported with --runtime. After changes run
-the app tests, tulipes routes --offline and yarn spec; inspect generated diffs.
+the app tests, tulipes routes --offline and pnpm spec; inspect generated diffs.
 
 ## The RAI is not optional
 
