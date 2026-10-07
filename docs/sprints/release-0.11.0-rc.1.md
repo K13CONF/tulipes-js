@@ -86,9 +86,32 @@ tag goes on that PR's merge commit.
    the coverage numbers.~~ Done: PR #25, run 37674727715 green on `1cc3d20`,
    CI column and coverage above; the log stream duration fix after the
    master run.
-2. Decide the registry preflight: `next` currently holds the 0.10 line; the
-   first publishes of `@tulipes/mcp` and `@tulipes/testing` will receive
-   `latest` from npm regardless of `--tag` (record it, as for 0.10.0-rc.3).
-3. Tag `v0.11.0-rc.1` on the merged commit; the gated workflow verifies the
-   eight archives and publishes; then the registry digest check and the
-   `--registry` smokes for both presets.
+2. ~~Decide the registry preflight.~~ Recorded: `@tulipes/mcp` and
+   `@tulipes/testing` were first publishes (each name held a `0.0.0-stage`
+   placeholder), so npm gave them `latest` as well as `next`; every other
+   package has `next` on the candidate and `latest` on the 0.10 line.
+3. ~~Tag `v0.11.0-rc.1` on the merged commit~~ Done by the release owner on
+   `f2e0a21`, the merge of #26 (the log stream duration fix after the
+   master run). Publish run
+   [37683814565](https://github.com/kemora13conf/bp-backend-express/actions/runs/37683814565):
+   `validate-release`, the full verification matrix and `publish` all green;
+   the eight archives went up with `--tag next`.
+
+## Post-publication checks (2026-10-07, after the publish run)
+
+- **Digests.** The eight tarballs downloaded from the registry hash to the
+  registry's `dist.integrity`, and their SHA-1 shasums equal the ones the
+  publish job printed for each archive it uploaded; the run's
+  `release-packages` artifact itself is not reachable from the development
+  container (its blob host is denied), so the archive manifest was rebuilt
+  from the registry tarballs and `scripts/artifacts.mjs verify` accepts it
+  (identity, license, exports, required files, core without drivers).
+- **Dist-tags.** As recorded under step 2 above.
+- **Registry smokes** (`scaffold-smoke.mjs … --registry`, installing from
+  npm at exactly the manifest's versions, refusing local archives):
+  minimal passed in 14.9 s (generated types, tests, specs, backend/shutdown
+  on node); production `--offline-only` and
+  `--no-queues --no-sockets --offline-only` passed with network connections
+  denied. The online production variant needs MongoDB and was not run
+  here; the publish run's own `production` job covered it from the packed
+  archives.
