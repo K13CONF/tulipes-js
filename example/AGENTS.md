@@ -41,7 +41,7 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    A module's root holds exactly `package.json`, `module.config.ts` and
    `module.acl.ts`; everything else has a folder (`routes/`, `controllers/`,
    `models/`, `schemas/`, `helpers/`, `bootstrap/`, `queues/`, `sockets/`,
-   `i18n/`, `agent/`, `lib/`), and the boot refuses a stray root file.
+   `i18n/`, `agent/`, `lib/`, `tests/`), and the boot refuses a stray root file.
    → skill `tulipes-module`
 3. **Never call `mongoose.model()` yourself.** Models are declarations
    picked up by the framework and read from `ctx.models`. Persisted and
@@ -99,6 +99,11 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    adds a summary, curates the routes and declares actions that are not
    endpoints; `agent: false` on a `rai()` hides one. → skill
    `tulipes-agent-tool`
+15. **A module's tests live in `modules/<name>/tests/` and boot the app
+   through `@tulipes/testing`**: `useTestApp({ rootDir }, { beforeAll,
+   afterAll })` once per file, `app.get(app.api("/x"))` with the envelope
+   decoded, `app.as("admin")` for a signed-in role. Never boot per test, and
+   never reach into another module's files from a test.
 
 For endpoint changes, read `tulipes-endpoint`: native routers live in
 `routes/*.routes.ts`, plain `(ctx) => Router` functions: build the router from
@@ -141,6 +146,7 @@ luck.
 | `pnpm worker` | run the queue-consumer process |
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm tulipes agent manifest [--role r]` | print every tool the app exposes to agents, offline |
+| `pnpm test` | every `tests/` and `modules/*/tests/` file; each boots the app once through `@tulipes/testing` |
 | `pnpm check` | validate the environment without booting |
 | `pnpm typecheck` | typecheck the whole app |
 | `pnpm tulipes new module <name>` | scaffold a module |

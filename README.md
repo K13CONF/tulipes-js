@@ -30,6 +30,7 @@ tulipes init my-api          # --preset production for the full application
 | [`packages/bullmq`](./packages/bullmq) | `@tulipes/bullmq` — the `queues` provider |
 | [`packages/socket.io`](./packages/socket.io) | `@tulipes/socket.io` — the `sockets` provider |
 | [`packages/mcp`](./packages/mcp) | `@tulipes/mcp` — `tulipes-mcp`, an MCP server over an app's agent tools |
+| [`packages/testing`](./packages/testing) | `@tulipes/testing` — boot an app for a test file, call it, sign in as a role |
 | [`example`](./example) | the reference application: six modules, exercising every contract |
 
 Start with **[packages/core/README.md](./packages/core/README.md)** — that is

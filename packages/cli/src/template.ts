@@ -53,7 +53,7 @@ const EXCLUDED_FILES = new Set([
   "pnpm-lock.yaml",
 ]);
 const TEXT_EXTENSIONS = new Set([".ts", ".js", ".cjs", ".mjs", ".json", ".md", ".conf", ".yaml", ".yml", ".txt"]);
-const TULIPES_PACKAGES = ["core", "cli", "spec", "mongoose", "bullmq", "socket.io"];
+const TULIPES_PACKAGES = ["core", "cli", "spec", "mongoose", "bullmq", "socket.io", "testing", "mcp"];
 
 /**
  * A source checkout of the framework is recognised by its siblings. There

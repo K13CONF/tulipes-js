@@ -7,7 +7,7 @@ No release is created just by merging a feature PR.
    and supported lines. Update generated dependency ranges and spec's core peer
    range when necessary. Three packages are packed and published together —
    `@tulipes/core`, `@tulipes/spec`, `@tulipes/mongoose`, `@tulipes/bullmq`,
-   `@tulipes/socket.io`, `@tulipes/mcp` and `@tulipes/cli`; every one whose bytes changed needs a new version
+   `@tulipes/socket.io`, `@tulipes/mcp`, `@tulipes/testing` and `@tulipes/cli`; every one whose bytes changed needs a new version
    before publication, and each provider's core peer range must admit the core
    it ships with. Note that `pnpm pack` rewrites `workspace:*` devDependencies to
    the concrete core version, so **every workspace package's archive changes

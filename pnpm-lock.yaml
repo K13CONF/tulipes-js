@@ -64,6 +64,9 @@ importers:
       '@tulipes/spec':
         specifier: workspace:*
         version: link:../packages/spec
+      '@tulipes/testing':
+        specifier: workspace:*
+        version: link:../packages/testing
       '@types/express':
         specifier: ^5
         version: 5.0.6
@@ -428,6 +431,18 @@ importers:
       zod:
         specifier: ^3.25
         version: 3.25.76
+
+  packages/testing:
+    devDependencies:
+      '@tulipes/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: ^24.2.0
+        version: 24.19.1
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
 
 packages:
 

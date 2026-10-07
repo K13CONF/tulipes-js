@@ -552,6 +552,7 @@ Claude Code over MCP, calling every tool through the app's own HTTP door.
 | `@tulipes/core/http` | `HttpError`, `notFoundHandler`, `errorHandler` |
 | `@tulipes/core/acl` | `Acl`, `AclBuilder`, `AclFn` |
 | `@tulipes/core/agent` | `defineAgent`, `action`, `AgentRegistry`, `AgentManifest` |
+| `@tulipes/testing` | a separate package: `useTestApp`, `bootTestApp`, `TestApp` |
 | `@tulipes/core/db` | migration stub only — the Mongoose provider, `ModelStore`, `ModelDef` and `BootstrapFn` live in [`@tulipes/mongoose`](https://www.npmjs.com/package/@tulipes/mongoose) |
 | `@tulipes/core/queues` | migration stub only — the BullMQ provider, `QueueManager`, `QueueRegistry` and `QueuesFn` live in [`@tulipes/bullmq`](https://www.npmjs.com/package/@tulipes/bullmq) |
 | `@tulipes/core/sockets` | migration stub only — the Socket.IO provider, `SocketManager`, `SocketRegistry` and `SocketsFn` live in [`@tulipes/socket.io`](https://www.npmjs.com/package/@tulipes/socket.io) |
@@ -560,6 +561,30 @@ Claude Code over MCP, calling every tool through the app's own HTTP door.
 | `@tulipes/core/errors` | `TulipesBootError`, `BootReport` |
 
 </details>
+
+## Testing an app
+
+[`@tulipes/testing`](https://www.npmjs.com/package/@tulipes/testing) boots the
+app once per test file on a free port, decodes the envelope and signs in as a
+role; it takes the runner's file hooks and depends on nothing but core:
+
+```ts
+const app = useTestApp({ rootDir, settings: { hello: { greeting: "Hi" } } }, { beforeAll, afterAll });
+
+test("greets", async () => {
+  const { status, data } = await app.get<{ message: string }>(app.api("/hello"));
+  expect(status).toBe(200);
+});
+
+test("the console needs a role", async () => {
+  const admin = await app.as("admin");
+  expect((await app.get(app.api("/config"), { as: admin })).status).toBe(200);
+});
+```
+
+A module's tests live in `modules/<name>/tests/`; the generated apps run
+them with vitest, one file after another, since every file boots the app
+against the same services.
 
 ## Generated API documentation
 

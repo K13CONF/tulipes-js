@@ -11,6 +11,14 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **`@tulipes/testing`.** `useTestApp({ rootDir, env, settings }, { beforeAll,
+  afterAll })` boots the app once per test file on a free port and shuts it
+  down; `app.request()` and the `get`/`post`/`patch`/`delete` shorthands
+  decode the envelope and type it; `app.api()` prefixes the configured API
+  prefix; `app.register()`, `app.login()` and `app.as(role)` use the auth
+  module the production preset ships. The reference suite is one file per
+  module under `modules/<name>/tests/` on it, with the app-level parity test
+  in `tests/`; both presets' vitest configs run files one after another.
 - **`tulipes migrate 0.11` and `tulipes config:import`.** The CLI rewrites
   an app generated on 0.10: pnpm manifest and workspace file, node scripts
   and compiler flags, the variables file into `tulipes.env`, `index.ts`
