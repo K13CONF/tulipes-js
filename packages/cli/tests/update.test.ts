@@ -33,10 +33,12 @@ function app(files: Record<string, unknown>): void {
 
 const manifest = (path: string) => JSON.parse(readFileSync(join(root, path), "utf8"));
 
-function registry(versions: { core: string; cli: string } | Error): void {
+/** `latest` per package, by the name after `@tulipes/`; an unlisted package is a 404. */
+function registry(versions: Record<string, string> | Error): void {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     if (versions instanceof Error) throw versions;
-    return { ok: true, json: async () => ({ version: url.includes("%2fcore") ? versions.core : versions.cli }) };
+    const version = versions[/%2f([^/]+)\/latest$/.exec(url)![1]!];
+    return version ? { ok: true, json: async () => ({ version }) } : { ok: false, status: 404 };
   }));
 }
 
@@ -118,10 +120,42 @@ test("an app behind latest is raised in the root and every module, then installe
   expect(manifest("modules/plain/package.json")).toEqual({ name: "@app/plain", dependencies: { zod: "^3" } });
   expect(spawn).toHaveBeenCalledOnce();
   expect(spawn).toHaveBeenCalledWith("pnpm", ["install"], expect.objectContaining({ cwd: root }));
-  expect(logs.filter((line) => line.includes("update package.json"))).toHaveLength(1);
+  expect(logs.filter((line) => line.startsWith("  update package.json:"))).toHaveLength(1);
   expect(logs).toContain("\napp: 0.10.0 → 0.10.1\n");
   // Same minor: no migration warning.
   expect(logs.join("\n")).not.toContain("MIGRATING.md");
+});
+
+test("the providers, spec and testing move to the line paired with the new core", async () => {
+  app({
+    "package.json": { name: "app", dependencies: { "@tulipes/core": "^0.10.1", "@tulipes/mongoose": "^0.1.1", "@tulipes/bullmq": "^0.1.1" },
+      devDependencies: { "@tulipes/cli": "^0.1.1", "@tulipes/spec": "^0.3.1", "@tulipes/testing": "workspace:*" } },
+    "modules/users/package.json": { name: "@app/users", dependencies: { "@tulipes/core": "^0.10.1", "@tulipes/socket.io": "^0.1.1" } },
+    "node_modules/@tulipes/core/package.json": { name: "@tulipes/core", version: "0.10.1" },
+  });
+  registry({ core: "0.11.0", cli: "0.2.0", mongoose: "0.2.0", bullmq: "0.2.0", "socket.io": "0.1.2", spec: "0.3.2", testing: "0.1.0" });
+
+  await runUpdate(root);
+
+  expect(manifest("package.json")).toEqual({ name: "app",
+    dependencies: { "@tulipes/core": "^0.11.0", "@tulipes/mongoose": "^0.2.0", "@tulipes/bullmq": "^0.2.0" },
+    devDependencies: { "@tulipes/cli": "^0.2.0", "@tulipes/spec": "^0.3.2", "@tulipes/testing": "workspace:*" } });
+  expect(manifest("modules/users/package.json").dependencies).toEqual({ "@tulipes/core": "^0.11.0", "@tulipes/socket.io": "^0.1.2" });
+  expect(logs).toContain("  update modules/users/package.json: @tulipes/core ^0.11.0, @tulipes/socket.io ^0.1.2");
+  // Undeclared packages are never looked up.
+  expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter((url) => /mcp/.test(url))).toEqual([]);
+});
+
+test("a package the registry cannot answer for changes nothing", async () => {
+  app({ "package.json": { name: "app", dependencies: { "@tulipes/core": "^0.10.0", "@tulipes/mongoose": "^0.1.0" } } });
+  registry({ core: "0.10.1", cli: "0.1.1" });
+
+  await runUpdate(root);
+
+  expect(manifest("package.json").dependencies).toEqual({ "@tulipes/core": "^0.10.0", "@tulipes/mongoose": "^0.1.0" });
+  expect(spawn).not.toHaveBeenCalled();
+  expect(errors).toEqual(["could not reach the npm registry: @tulipes/mongoose: registry responded 404"]);
+  expect(process.exitCode).toBe(1);
 });
 
 test("crossing a minor points at the migration guide for the new version", async () => {
