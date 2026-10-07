@@ -4,7 +4,8 @@
   "description": "Mongoose models provider for Tulipes apps: connection, model registration and bootstrap behind core's models capability",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./settings": "./src/settings-provider.ts"
   },
   "files": [
     "dist",
@@ -19,7 +20,8 @@
   "publishConfig": {
     "access": "public",
     "exports": {
-      ".": "./dist/index.js"
+      ".": "./dist/index.js",
+      "./settings": "./dist/settings-provider.js"
     }
   },
   "peerDependencies": {

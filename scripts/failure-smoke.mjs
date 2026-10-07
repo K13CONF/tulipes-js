@@ -160,6 +160,30 @@ try {
     return 'none';
   };
 
+  // ── 0. a setting written by another process reaches the running backend ──
+  // The production preset keeps settings in MongoDB; on this replica set the
+  // store opens a change stream, so the write should land in the backend
+  // without waiting for a poll. A one-off script is the other process.
+  writeFileSync(join(app, 'scripts/set-greeting.ts'), `
+    import { boot } from "@tulipes/core/boot";
+    const handle = await boot({ rootDir: new URL("..", import.meta.url).pathname, mode: "script" });
+    try {
+      const written = await handle.ctx.settings.set("hello", { greeting: "Propagated" }, { id: "failure-smoke" });
+      console.log(JSON.stringify({ version: written.version, store: handle.ctx.settings.status().label }));
+    } finally { await handle.shutdown(); }
+  `);
+  const scriptOut = run('pnpm', ['script', 'scripts/set-greeting.ts'], { cwd: app, env });
+  const writtenAt = Date.now();
+  let propagated = null;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const response = await fetch(`${base}/api/v1/hello`);
+    const body = await response.json().catch(() => ({}));
+    if (String(body?.data?.message ?? '').startsWith('Propagated')) { propagated = { ms: Date.now() - writtenAt, message: body.data.message }; break; }
+    await sleep(100);
+  }
+  observe('settings propagation', propagated ? `a write from a script reached the backend in ~${propagated.ms}ms` : 'the write did not reach the backend within 10s',
+    { ...(propagated ?? { propagated: false }), script: scriptOut.trim().split('\n').pop() });
+
   // ── 1. primary loss during a majority-acknowledged refresh rotation ──────
   const before = primaryOf();
   const rotating = refresh(first.tokens.refresh_token);

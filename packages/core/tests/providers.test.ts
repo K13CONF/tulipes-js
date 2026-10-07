@@ -346,3 +346,52 @@ test("a sockets/ directory implies the sockets requirement", async () => {
 
   await expect(app.boot({ mode: "script" })).rejects.toThrow(/\[probe\] requires capability "sockets" \(has sockets\/ files\)/);
 });
+
+test("a declared settings provider's store is what the manager loads, writes and watches, and it never lands on ctx", async () => {
+  const app = await fixture({
+    "package.json": declare({ settings: "./providers/store.js" }),
+    "providers/store.js": `
+      import { appendFileSync } from 'node:fs';
+      import { MemorySettingsStore } from '@tulipes/core/config';
+      const log = line => appendFileSync(new URL('./log.txt', import.meta.url), line + '\\n');
+      class Store extends MemorySettingsStore {
+        constructor() { super('fake store'); }
+        async save(namespace, values, expectedVersion, actor) { log('save ' + namespace + ' v' + expectedVersion + ' by ' + actor.id); return super.save(namespace, values, expectedVersion, actor); }
+        watch(listener) { globalThis.__push = (namespace, stored) => listener(namespace, stored); return () => log('unwatch'); }
+      }
+      export default {
+        contract: 2, capability: 'settings', name: 'fake-store',
+        async acquire({ ctx }, report, own) {
+          log('acquire models=' + (ctx.models ? 'present' : 'absent'));
+          own({ dispose: () => log('dispose'), status: () => ({ label: 'fake store', ready: true }) });
+          return new Store();
+        },
+      };
+    `,
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module" }),
+    "modules/probe/module.config.js": `
+      import { defineConfig } from '@tulipes/core/config';
+      import { z } from 'zod/v4';
+      export default defineConfig({ schema: z.object({ greeting: z.string().default('Hello') }) });
+    `,
+  });
+
+  const handle = await app.boot({ mode: "script" });
+  try {
+    // ctx.settings is core's manager; the provider's store sits behind it.
+    expect(handle.ctx.settings.status()).toEqual({ label: "fake store", ready: true });
+    expect(handle.providers).toEqual([{ capability: "settings", provider: "fake-store", label: "fake store", ready: true }]);
+    expect(handle.ctx.config.probe).toEqual({ greeting: "Hello" });
+
+    await handle.ctx.settings.set("probe", { greeting: "Hi" }, { id: "operator" });
+    expect(handle.ctx.config.probe).toEqual({ greeting: "Hi" });
+
+    (globalThis as unknown as { __push: (namespace: string, stored: unknown) => void }).__push("probe", { values: { greeting: "Elsewhere" }, version: 3, updated_at: "now", updated_by: { id: "other" } });
+    await expect.poll(() => handle.ctx.config.probe).toEqual({ greeting: "Elsewhere" });
+  } finally {
+    await handle.shutdown();
+  }
+  expect(await readLog(app.rootDir)).toEqual(["acquire models=absent", "save probe v0 by system", "save probe v1 by operator", "unwatch", "dispose"]);
+  // No file store was used: the declaration replaced it.
+  await expect(readFile(join(app.rootDir, "config/settings.development.json"), "utf8")).rejects.toThrow();
+});

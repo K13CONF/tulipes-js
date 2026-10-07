@@ -69,3 +69,26 @@ ctx.models.connection;                                   // the boot's own mongo
 requires core `^0.10.0-rc.1`, the candidate that introduced the provider seam;
 install both with `@next`. See core's
 [MIGRATING.md](https://github.com/kemora13conf/bp-backend-express/blob/v0.10.0-rc.1/packages/core/MIGRATING.md#0100-rc1--declare-the-models-provider).
+
+## The settings store
+
+The same package keeps an app's settings in MongoDB. Select it in the app's
+root `package.json`:
+
+```jsonc
+{ "tulipes": { "providers": { "models": "@tulipes/mongoose", "settings": "@tulipes/mongoose/settings" } } }
+```
+
+Every namespace a `module.config.ts` declares is one document in the
+`settings` collection — `{ _id: "<module>", values, version, updated_at,
+updated_by }` — seeded with the schema's defaults on first boot. A write
+through `ctx.settings.set()` is a `findOneAndUpdate` on `{ _id, version }`:
+a stale version is refused with the current document, so two operators
+cannot overwrite each other, and the document it replaced goes to
+`settings_history`. Other processes see the change through a change stream
+when the connection is to a replica set and by polling (every 2s) otherwise;
+core validates every incoming document against the module's schema before
+applying it. The store shares the models provider's connection when both
+are this package, and opens its own from `MONGO_URI` when the app keeps no
+mongoose models. Without the declaration core keeps settings in
+`config/settings.<APP_ENV>.json`.

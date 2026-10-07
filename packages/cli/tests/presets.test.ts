@@ -140,7 +140,7 @@ test("the production preset composes without queues or sockets: no files, depend
 
   const root = app.rootDir + "/api";
   const pkg = JSON.parse(await readFile(root + "/package.json", "utf8"));
-  expect(pkg.tulipes.providers).toEqual({ models: "@tulipes/mongoose" });
+  expect(pkg.tulipes.providers).toEqual({ models: "@tulipes/mongoose", settings: "@tulipes/mongoose/settings" });
   expect(pkg.scripts.worker).toBeUndefined();
   expect(Object.keys(pkg.dependencies)).not.toContain("@tulipes/bullmq");
   expect(Object.keys(pkg.dependencies)).not.toContain("@tulipes/socket.io");
