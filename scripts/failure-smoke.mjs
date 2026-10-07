@@ -113,7 +113,6 @@ try {
     REDIS_URL: `redis://127.0.0.1:${redis.port}`,
     JWT_ACCESS_SECRET: randomBytes(32).toString('hex'), JWT_REFRESH_SECRET: randomBytes(32).toString('hex'),
     AUTH_ADMIN_EMAIL: 'failure@example.test', AUTH_ADMIN_PASSWORD: password,
-    TRUST_PROXY_CIDRS: '',
   };
   run('pnpm', ['install', '--no-frozen-lockfile'], { cwd: app, env });
   run('pnpm', ['sync'], { cwd: app, env });

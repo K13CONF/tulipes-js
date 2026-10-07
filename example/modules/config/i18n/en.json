@@ -1,0 +1,6 @@
+{
+  "noSuchModule": "No such module",
+  "invalidModuleName": "Module names are lowercase kebab-case",
+  "staleVersion": "Version {{version}} is stale; the store holds version {{current}}",
+  "auditUnavailable": "The audit record could not be acknowledged; the change was not applied"
+}

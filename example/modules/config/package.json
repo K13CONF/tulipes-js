@@ -1,0 +1,23 @@
+{
+  "name": "@app/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "tulipes": {
+    "tier": "app",
+    "priority": 910,
+    "dependsOn": [
+      "auth",
+      "core"
+    ]
+  },
+  "dependencies": {
+    "@app/auth": "workspace:*",
+    "@app/core": "workspace:*",
+    "@tulipes/core": "workspace:*",
+    "@tulipes/mongoose": "workspace:*",
+    "express": "^5",
+    "mongoose": "^8",
+    "zod": "^3.25"
+  }
+}

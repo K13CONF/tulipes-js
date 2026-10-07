@@ -1,0 +1,6 @@
+{
+  "noSuchModule": "Module introuvable",
+  "invalidModuleName": "Les noms de modules sont en kebab-case minuscule",
+  "staleVersion": "La version {{version}} est périmée ; le dépôt est à la version {{current}}",
+  "auditUnavailable": "L’enregistrement d’audit n’a pas pu être confirmé ; la modification n’a pas été appliquée"
+}

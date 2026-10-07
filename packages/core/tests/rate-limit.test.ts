@@ -17,7 +17,7 @@ const options = (): RateLimitOptions => ({
   windowMs: 60_000,
   authLimit: 2,
   sessionLimit: 20,
-  settingsLimit: 2,
+  configLimit: 2,
 });
 
 async function server(config: RateLimitOptions, trust = "127.0.0.1") {
@@ -28,7 +28,7 @@ async function server(config: RateLimitOptions, trust = "127.0.0.1") {
 
   app.use("/auth", limits.auth);
 
-  app.use("/settings", limits.settings);
+  app.use("/settings", limits.config);
 
   app.use(express.json());
 
@@ -316,7 +316,7 @@ test.each([0, -1, 1.5, NaN, Infinity, 2_147_483_648])(
       "windowMs",
       "authLimit",
       "sessionLimit",
-      "settingsLimit",
+      "configLimit",
     ]) {
       expect(() => createRateLimits({ ...options(), [field]: value })).toThrow(
         "positive integer",
@@ -329,7 +329,7 @@ test.each(["", "bad key", "x".repeat(129)])(
   "invalid counter namespace fails before connecting: %j",
   (namespace) => {
     expect(() => createRateLimits({ ...options(), namespace })).toThrow(
-      "RATE_LIMIT_NAMESPACE",
+      "rateLimits.namespace",
     );
   },
 );

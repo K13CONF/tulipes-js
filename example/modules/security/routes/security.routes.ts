@@ -10,18 +10,22 @@ import { trustedProxies } from "../helpers/proxy.js";
 import { configuredRateLimits } from "../helpers/rate-limit.js";
 
 /**
- * Every piece here is configured from the environment, which inspection
- * does not resolve, so each is built on its first request. Quotas run
- * before body parsing and Passport, using the configured proxy policy.
+ * Every piece here is configured from `ctx.config.security`, which is live:
+ * helmet, CORS and the body parser are built on each request from the
+ * current values (cheap, and a write lands at once), the proxy policy is
+ * set here and again by module.config's onChange, and the rate limiter is
+ * rebuilt there, so the handlers below always delegate to the current set.
+ * The logger reads the environment, which inspection does not resolve, so
+ * it is built on its first request.
  */
-export default function securityRoutes({ app, Environment, mode, config }: BackendCtx): void {
+export default function securityRoutes(ctx: BackendCtx): void {
+  const { app, Environment, mode, config } = ctx;
   const prefix = String(config.api?.prefix ?? "");
+  const security = () => config.security!;
 
-  app.use(lazy(() => {
-    app.set("trust proxy", trustedProxies(String(Environment.get("TRUST_PROXY_CIDRS"))));
-    return helmet(helmetOptions(Environment));
-  }));
-  app.use(lazy(() => cors(corsOptions(Environment))));
+  app.set("trust proxy", trustedProxies(security().trustProxyCidrs));
+  app.use((req, res, next) => helmet(helmetOptions(security()))(req, res, next));
+  app.use((req, res, next) => cors(corsOptions(security()))(req, res, next));
   app.use(lazy(() => pinoHttp({
     logger: logger(Environment, mode),
     customLogLevel: (_req, res, err) =>
@@ -32,7 +36,7 @@ export default function securityRoutes({ app, Environment, mode, config }: Backe
       res: (res: { statusCode: number }) => ({ status: res.statusCode }),
     },
   })));
-  app.use(`${prefix}/auth`, lazy(() => configuredRateLimits(Environment).auth));
-  app.use(`${prefix}/settings`, lazy(() => configuredRateLimits(Environment).settings));
-  app.use(lazy(() => express.json({ limit: String(Environment.get("BODY_LIMIT")) })));
+  app.use(`${prefix}/auth`, (req, res, next) => configuredRateLimits(ctx).auth(req, res, next));
+  app.use([`${prefix}/config`, `${prefix}/settings`], (req, res, next) => configuredRateLimits(ctx).config(req, res, next));
+  app.use((req, res, next) => express.json({ limit: security().bodyLimit })(req, res, next));
 }

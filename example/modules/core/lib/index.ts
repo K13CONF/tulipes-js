@@ -16,7 +16,7 @@ export {
   type Cache,
 } from "../helpers/cache/index.js";
 
-export { logger, moduleLogger } from "../helpers/logger/index.js";
+export { LOG_FILES, logger, moduleLogger } from "../helpers/logger/index.js";
 
 export { lazy } from "../helpers/lazy.js";
 

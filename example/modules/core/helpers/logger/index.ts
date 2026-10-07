@@ -22,6 +22,24 @@ import type { Environment } from "@tulipes/core/env";
  */
 let instance: Logger | undefined;
 
+/**
+ * How the files are named and rotated. These never needed to differ per
+ * deployment, so they are constants rather than environment variables;
+ * the settings module's log stream reads the same names.
+ */
+export const LOG_FILES = Object.freeze({
+  /** Base name of the all-levels file; the process mode and date are appended. */
+  basename: "app",
+  /** Base name of the errors-only file. */
+  errorBasename: "error",
+  /** Rotate on this schedule: "daily", "hourly", or milliseconds. */
+  rotationFrequency: "daily",
+  /** Also rotate once a file reaches this size. */
+  rotationSize: "20m",
+  /** How many rotated files to keep per destination, besides the current one. */
+  retentionFiles: 14,
+});
+
 export function logger(environment: Environment, mode: ProcessMode = "backend"): Logger {
   if (instance) return instance;
 
@@ -47,9 +65,9 @@ export function logger(environment: Environment, mode: ProcessMode = "backend"):
     const dir = String(environment.get("LOG_DIR"));
     const rotation = {
       // Both limits apply: whichever trips first rotates the file.
-      frequency: String(environment.get("LOG_ROTATION_FREQUENCY")),
-      size: String(environment.get("LOG_ROTATION_SIZE")),
-      limit: { count: Number(environment.get("LOG_RETENTION_FILES")) },
+      frequency: LOG_FILES.rotationFrequency,
+      size: LOG_FILES.rotationSize,
+      limit: { count: LOG_FILES.retentionFiles },
       extension: ".log",
       dateFormat: "yyyy-MM-dd",
       mkdir: true,
@@ -58,7 +76,7 @@ export function logger(environment: Environment, mode: ProcessMode = "backend"):
     targets.push({
       target: "pino-roll",
       level,
-      options: { ...rotation, file: join(dir, `${environment.get("LOG_BASENAME")}-${mode}`) },
+      options: { ...rotation, file: join(dir, `${LOG_FILES.basename}-${mode}`) },
     });
 
     // A second copy of errors only. Everything here is also in the main
@@ -69,7 +87,7 @@ export function logger(environment: Environment, mode: ProcessMode = "backend"):
       level: "error",
       options: {
         ...rotation,
-        file: join(dir, `${environment.get("LOG_ERROR_BASENAME")}-${mode}`),
+        file: join(dir, `${LOG_FILES.errorBasename}-${mode}`),
       },
     });
   }

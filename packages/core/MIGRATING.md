@@ -13,6 +13,40 @@ what makes it work under nvm.
 
 <a id="unreleased--module-layout-and-plain-routes"></a>
 
+## Unreleased (0.11) — the reference app: environment, console, auth cache
+
+Generated apps are the user's code, so these are steps, not library changes.
+
+1. **Environment.** Remove from `modules/security/package.json` every
+   `tulipes.env` entry (`BODY_LIMIT`, `TRUST_PROXY_CIDRS`, `CORS_*`,
+   `HSTS_MAX_AGE`, `RATE_LIMIT_*`, `AUTH_RATE_LIMIT`,
+   `AUTH_SESSION_RATE_LIMIT`, `SETTINGS_RATE_LIMIT`) and from the core
+   module `PUBLIC_DOMAIN`, `LOG_BASENAME`, `LOG_ERROR_BASENAME` and the
+   rotation and retention variables. Copy the reference app's
+   `modules/security/module.config.ts`, `helpers/hardening.ts`,
+   `helpers/rate-limit.ts`, `routes/security.routes.ts` and
+   `modules/core/module.config.ts`, and the `LOG_FILES` constants in
+   `helpers/logger/`. Values from your `.envs` files become settings:
+   write them once through `PATCH /config/security` and `PATCH /config/core`
+   (or `tulipes config:import`, 0.11-S06.4), then delete the lines.
+2. **The console.** Copy `modules/config/` from the reference app and grant
+   `config:read` and `config:describe` to `admin`, `config:*` to
+   `sysadmin`. Reduce `modules/settings/` to `routes/`,
+   `controllers/settings.controllers.ts` (the log stream only),
+   `helpers/log-stream.ts`, `helpers/log-tail.ts`, `helpers/access-lease.ts`,
+   `schemas/` (`logQuery`) and its ACL; delete `helpers/audit.ts`,
+   `env-file.ts`, `files.ts`, `pm2.ts` and the `AuditEvent` model. Clients of
+   `GET /settings/modules` read `GET /config`; of the variable and
+   translation editors and the reboot endpoint, nothing — see the
+   `tulipes-settings` skill for where each went.
+3. **The auth cache.** Copy `modules/auth/helpers/session-cache.ts`, the
+   `cacheTtlSeconds` setting, and the changes in `helpers/passport.ts`,
+   `helpers/tokens.ts`, `helpers/passwords.ts` and `lib/index.ts`. Any code
+   of yours that writes a user's role or deletes a user calls
+   `forgetUser(ctx, userId)` from `@app/auth` first.
+4. Harnesses and tests that set the retired variables write the settings
+   instead, after boot: `ctx.settings.set("security", { … }, actor)`.
+
 ## Unreleased (0.11) — settings in the database
 
 An app that keeps settings in `config/settings.<APP_ENV>.json` changes

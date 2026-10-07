@@ -11,5 +11,14 @@ import { registerBasePlugins } from "./helpers/mongoose/index.js";
  */
 registerBasePlugins();
 
-/** The sys core module has no settings of its own; its helpers read env and `config.app`. */
-export default defineConfig({ schema: z.object({}) });
+/**
+ * The sys core module's own settings. The environment keeps only what boot
+ * needs before the store answers (the port, the connection strings, the log
+ * destinations) and the secrets; everything else is a setting like this one.
+ */
+export default defineConfig({
+  schema: z.object({
+    publicDomain: z.string().min(1).default("localhost")
+      .describe("Public hostname this API is served from; \"localhost\" means not deployed. The nginx deploy script and the generated API documents read it"),
+  }),
+});

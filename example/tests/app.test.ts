@@ -10,9 +10,6 @@ let base: string;
 
 beforeAll(async () => {
   vi.stubEnv("PORT", "0");
-  vi.stubEnv("TRUST_PROXY_CIDRS", "127.0.0.1/32,::1/128");
-  vi.stubEnv("CORS_ORIGINS", "https://console.example.test");
-  vi.stubEnv("CORS_CREDENTIALS", "false");
 
   if (!process.env.TEST_MONGO_URI || !process.env.TEST_REDIS_URL) {
     throw new Error(
@@ -22,10 +19,6 @@ beforeAll(async () => {
 
   vi.stubEnv("MONGO_URI", process.env.TEST_MONGO_URI);
   vi.stubEnv("REDIS_URL", process.env.TEST_REDIS_URL);
-  vi.stubEnv("RATE_LIMIT_NAMESPACE", "test-" + randomBytes(12).toString("hex"));
-  vi.stubEnv("AUTH_RATE_LIMIT", "200");
-  vi.stubEnv("AUTH_SESSION_RATE_LIMIT", "1000");
-  vi.stubEnv("SETTINGS_RATE_LIMIT", "200");
   vi.stubEnv("JWT_ACCESS_SECRET", randomBytes(32).toString("hex"));
   vi.stubEnv("JWT_REFRESH_SECRET", randomBytes(32).toString("hex"));
   vi.stubEnv("AUTH_ADMIN_EMAIL", "test-admin@example.test");
@@ -39,6 +32,18 @@ beforeAll(async () => {
     appEnv: "test",
     handleSignals: false,
   });
+
+  // The request pipeline is configured from settings, not variables: the
+  // values a test run needs are written to the store the way an operator
+  // writes them, and every replica (the second boot below included) reads
+  // them from there.
+  await handle.ctx.settings.set("security", {
+    trustProxyCidrs: "127.0.0.1/32,::1/128",
+    corsOrigins: "https://console.example.test",
+    corsCredentials: false,
+    rateLimits: { namespace: "test-" + randomBytes(12).toString("hex"), windowMs: 60_000, auth: 200, session: 1000, config: 200 },
+  }, { id: "tests" });
+  await handle.ctx.settings.set("hello", { greeting: "Hello" }, { id: "tests" });
 
   const address = handle.server?.address();
 
@@ -1131,261 +1136,6 @@ async function sysadmin() {
   return user;
 }
 
-async function settingsFiles(
-  run: (files: { env: string; locale: string }) => Promise<void>,
-) {
-  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
-  const root = await mkdtemp(join(tmpdir(), "tulipes-settings-test-"));
-  const env = join(root, ".env.test");
-  const locale = join(root, "i18n", "en.json");
-
-  const manifest = handle.ctx.modules.find(
-    (entry) => entry.name === "settings",
-  )!;
-
-  const originalDir = manifest.dir;
-  const originalEnv = handle.ctx.Environment.envFile;
-  const originalPassword = process.env.AUTH_ADMIN_PASSWORD;
-
-  await mkdir(join(root, "i18n"));
-
-  await writeFile(env, "# unchanged\n");
-
-  await writeFile(locale, "{}\n");
-
-  // Route real file operations into disposable files, never the reference app.
-  Object.defineProperty(handle.ctx.Environment, "envFile", { value: env });
-
-  Object.defineProperty(manifest, "dir", { value: root });
-
-  try {
-    await run({ env, locale });
-  } finally {
-    Object.defineProperty(handle.ctx.Environment, "envFile", {
-      value: originalEnv,
-    });
-
-    Object.defineProperty(manifest, "dir", { value: originalDir });
-
-    if (originalPassword === undefined) delete process.env.AUTH_ADMIN_PASSWORD;
-    else process.env.AUTH_ADMIN_PASSWORD = originalPassword;
-
-    await rm(root, { recursive: true, force: true });
-  }
-}
-
-async function put(path: string, body: unknown, token: string) {
-  return fetch(base + path, {
-    method: "PUT",
-    headers: {
-      "content-type": "application/json",
-      authorization: "Bearer " + token,
-    },
-    body: JSON.stringify(body),
-  });
-}
-
-test("secret reveal persists an acknowledged audit even with fatal-only logging", async () => {
-  const user = await sysadmin();
-  const Audit = handle.ctx.models!.get("AuditEvent");
-  const insert = vi.spyOn(Audit.collection, "insertOne");
-
-  try {
-    const response = await get(
-      "/api/v1/settings/variables/AUTH_ADMIN_PASSWORD?reveal=true",
-      user.access_token,
-    );
-
-    expect(response.status).toBe(200);
-
-    const body = z
-      .object({ data: z.object({ value: z.string() }) })
-      .parse(await response.json());
-
-    expect(body.data.value === process.env.AUTH_ADMIN_PASSWORD).toBe(true);
-
-    const event = await Audit.findOne({ actor: user.userId }).lean();
-
-    expect(event).toMatchObject({
-      action: "variable.reveal_requested",
-      actor_role: "sysadmin",
-      variable: "AUTH_ADMIN_PASSWORD",
-    });
-
-    expect(JSON.stringify(event).includes(body.data.value)).toBe(false);
-
-    expect(insert.mock.calls[0]?.[1]).toMatchObject({
-      w: "majority",
-      j: true,
-      wtimeout: 5000,
-    });
-  } finally {
-    insert.mockRestore();
-  }
-});
-
-test.each(["reveal", "variable", "translations", "reboot"])(
-  "audit failure blocks %s without exposing sink errors or changing files",
-  async (action) => {
-    const user = await sysadmin();
-    const canary = randomBytes(24).toString("hex");
-    const Audit = handle.ctx.models!.get("AuditEvent");
-
-    const insert = vi
-      .spyOn(Audit.collection, "insertOne")
-      .mockRejectedValue(new Error(canary));
-
-    // Prevent a real daemon connection even when running this test against the bug.
-    const specifier = "pm2";
-    const pm2 = (await import(specifier)).default;
-
-    const connect = vi.spyOn(pm2, "connect").mockImplementation(() => {
-      throw new Error("unexpected restart");
-    });
-
-    const oldHome = process.env.PM2_HOME;
-
-    process.env.PM2_HOME = "/unused-settings-test";
-
-    try {
-      await settingsFiles(async (files) => {
-        const { readFile } = await import("node:fs/promises");
-        const oldPassword = process.env.AUTH_ADMIN_PASSWORD;
-
-        const response =
-          action === "reveal"
-            ? await get(
-                "/api/v1/settings/variables/AUTH_ADMIN_PASSWORD?reveal=true",
-                user.access_token,
-              )
-            : action === "variable"
-              ? await put(
-                  "/api/v1/settings/variables/AUTH_ADMIN_PASSWORD",
-                  { value: canary },
-                  user.access_token,
-                )
-              : action === "translations"
-                ? await put(
-                    "/api/v1/settings/i18n/settings/en",
-                    { translations: { text: canary } },
-                    user.access_token,
-                  )
-                : await post("/api/v1/settings/reboot", {}, user.access_token);
-
-        expect.soft(response.status).toBe(503);
-
-        const body = await response.text();
-
-        expect.soft(body.includes(canary)).toBe(false);
-        expect.soft(body.includes(oldPassword!)).toBe(false);
-        expect.soft(await readFile(files.env, "utf8")).toBe("# unchanged\n");
-        expect.soft(await readFile(files.locale, "utf8")).toBe("{}\n");
-        expect.soft(process.env.AUTH_ADMIN_PASSWORD === oldPassword).toBe(true);
-        expect.soft(connect).not.toHaveBeenCalled();
-      });
-    } finally {
-      insert.mockRestore();
-
-      connect.mockRestore();
-
-      if (oldHome === undefined) delete process.env.PM2_HOME;
-      else process.env.PM2_HOME = oldHome;
-    }
-  },
-);
-
-test("settings mutation waits for audit acknowledgment and stores no old or new value", async () => {
-  const user = await sysadmin();
-  const Audit = handle.ctx.models!.get("AuditEvent");
-  const insert = Audit.collection.insertOne.bind(Audit.collection);
-  const entered = barrier();
-  const release = barrier();
-
-  const spy = vi
-    .spyOn(Audit.collection, "insertOne")
-    .mockImplementationOnce(async (...args) => {
-      entered.resolve();
-
-      await release.promise;
-
-      return insert(...args);
-    });
-
-  try {
-    await settingsFiles(async (files) => {
-      const { readFile } = await import("node:fs/promises");
-      const value = randomBytes(24).toString("hex");
-      const before = process.env.AUTH_ADMIN_PASSWORD!;
-
-      const pending = put(
-        "/api/v1/settings/variables/AUTH_ADMIN_PASSWORD",
-        { value },
-        user.access_token,
-      );
-
-      try {
-        await Promise.race([
-          entered.promise,
-          pending.then(() => {
-            throw new Error("Mutation skipped the audit barrier");
-          }),
-        ]);
-
-        expect(await readFile(files.env, "utf8")).toBe("# unchanged\n");
-        expect(process.env.AUTH_ADMIN_PASSWORD === before).toBe(true);
-
-        release.resolve();
-
-        expect((await pending).status).toBe(200);
-        expect((await readFile(files.env, "utf8")).includes(value)).toBe(true);
-
-        const event = await Audit.findOne({ actor: user.userId }).lean();
-
-        expect(event).toMatchObject({
-          action: "variable.change_requested",
-          variable: "AUTH_ADMIN_PASSWORD",
-        });
-
-        expect(
-          JSON.stringify(event).includes(value) ||
-            JSON.stringify(event).includes(before),
-        ).toBe(false);
-      } finally {
-        release.resolve();
-
-        await pending;
-      }
-    });
-  } finally {
-    spy.mockRestore();
-  }
-});
-
-test("ordinary administrators cannot reveal settings secrets or create an audit event", async () => {
-  const user = await account();
-
-  await handle.ctx
-    .models!.get("User")
-    .updateOne({ _id: user.userId }, { role: "admin" });
-
-  expect(
-    (
-      await get(
-        "/api/v1/settings/variables/AUTH_ADMIN_PASSWORD?reveal=true",
-        user.access_token,
-      )
-    ).status,
-  ).toBe(403);
-
-  expect(
-    await handle.ctx
-      .models!.get("AuditEvent")
-      .countDocuments({ actor: user.userId }),
-  ).toBe(0);
-});
-
 test("configured proxy trust supplies the same client IP to sessions and durable audits", async () => {
   const user = await sysadmin();
   const headers = { "X-Forwarded-For": "203.0.113.200, 198.51.100.19" };
@@ -1405,24 +1155,23 @@ test("configured proxy trust supplies the same client IP to sessions and durable
     data: { session: { ip: "198.51.100.19" } },
   });
 
-  const revealed = await fetch(
-    base + "/api/v1/settings/variables/AUTH_ADMIN_PASSWORD?reveal=true",
-    {
-      headers: { ...headers, authorization: "Bearer " + pair.access_token },
-    },
-  );
+  const changed = await fetch(base + "/api/v1/config/hello", {
+    method: "PATCH",
+    headers: { ...headers, "content-type": "application/json", authorization: "Bearer " + pair.access_token },
+    body: JSON.stringify({ values: { greeting: "Hello" } }),
+  });
 
-  expect(revealed.status).toBe(200);
+  expect(changed.status).toBe(200);
 
   expect(
     await handle.ctx
-      .models!.get("AuditEvent")
+      .models!.get("ConfigAudit")
       .findOne({ actor: user.userId })
       .lean(),
-  ).toMatchObject({ ip: "198.51.100.19" });
+  ).toMatchObject({ ip: "198.51.100.19", module: "hello", keys: ["greeting"] });
 });
 
-test.each(["auth/login", "settings/modules"])(
+test.each(["auth/login", "config"])(
   "%s limits attempts before parsing or authentication",
   async (path) => {
     const responses = await Promise.all(
@@ -1455,169 +1204,6 @@ test.each(["auth/login", "settings/modules"])(
     expect((await fetch(base + "/api/v1/hello")).status).toBe(200);
   },
 );
-
-test.each(["symlink", "hardlink", "directory-link", "oversized"])(
-  "settings translation reads and writes reject %s files",
-  async (kind) => {
-    const user = await sysadmin();
-
-    await settingsFiles(async (files) => {
-      const { writeFile, readFile, unlink, symlink, link, rename } =
-        await import("node:fs/promises");
-
-      const { dirname, join } = await import("node:path");
-      const outside = join(dirname(files.env), "outside.json");
-      const canary = randomBytes(24).toString("hex");
-      const original = JSON.stringify({ secret: canary });
-
-      await writeFile(outside, original);
-
-      if (kind === "directory-link") {
-        await rename(
-          dirname(files.locale),
-          dirname(files.locale) + "-original",
-        );
-
-        await symlink(
-          dirname(files.locale) + "-original",
-          dirname(files.locale),
-        );
-      } else {
-        await unlink(files.locale);
-
-        if (kind === "symlink") await symlink(outside, files.locale);
-        else if (kind === "hardlink") await link(outside, files.locale);
-        else await writeFile(files.locale, " ".repeat(1024 * 1024 + 1));
-      }
-
-      for (const response of [
-        await get("/api/v1/settings/i18n/settings/en", user.access_token),
-        await put(
-          "/api/v1/settings/i18n/settings/en",
-          { translations: { changed: true } },
-          user.access_token,
-        ),
-      ]) {
-        expect(response.status).toBe(kind === "oversized" ? 413 : 409);
-        expect((await response.text()).includes(canary)).toBe(false);
-      }
-
-      expect(await readFile(outside, "utf8")).toBe(original);
-    });
-  },
-);
-
-test("linked missing-translation files cannot leak through the module summary", async () => {
-  const user = await sysadmin();
-
-  await settingsFiles(async (files) => {
-    const { writeFile, symlink } = await import("node:fs/promises");
-    const { dirname, join } = await import("node:path");
-    const outside = join(dirname(files.env), "outside.json");
-    const canary = randomBytes(24).toString("hex");
-
-    await writeFile(outside, JSON.stringify({ [canary]: "private" }));
-
-    await symlink(outside, join(dirname(files.locale), "en.missing.json"));
-
-    const response = await get("/api/v1/settings/modules", user.access_token);
-
-    expect(response.status).toBe(409);
-    expect((await response.text()).includes(canary)).toBe(false);
-  });
-});
-
-test("linked env files cannot modify their target or the live process environment", async () => {
-  const user = await sysadmin();
-
-  await settingsFiles(async (files) => {
-    const { writeFile, readFile, unlink, symlink } = await import(
-      "node:fs/promises"
-    );
-
-    const outside = files.env + "-outside";
-
-    await writeFile(outside, "# unchanged\n");
-
-    await unlink(files.env);
-
-    await symlink(outside, files.env);
-
-    const previous = process.env.AUTH_ADMIN_PASSWORD;
-
-    const response = await put(
-      "/api/v1/settings/variables/AUTH_ADMIN_PASSWORD",
-      { value: randomBytes(24).toString("hex") },
-      user.access_token,
-    );
-
-    expect(response.status).toBe(409);
-    expect(await readFile(outside, "utf8")).toBe("# unchanged\n");
-    expect(process.env.AUTH_ADMIN_PASSWORD).toBe(previous);
-  });
-});
-
-test("module summaries bound the combined expansion of missing translation keys", async () => {
-  const user = await sysadmin();
-
-  await settingsFiles(async (files) => {
-    const { writeFile } = await import("node:fs/promises");
-    const { dirname, join } = await import("node:path");
-
-    const entries = {
-      ["x".repeat(3000)]: Object.fromEntries(
-        Array.from({ length: 200 }, (_, i) => [String(i), ""]),
-      ),
-    };
-
-    for (const locale of ["en", "fr"])
-      await writeFile(
-        join(dirname(files.locale), locale + ".missing.json"),
-        JSON.stringify(entries),
-      );
-
-    const response = await get("/api/v1/settings/modules", user.access_token);
-
-    expect(response.status).toBe(413);
-
-    expect(await response.json()).toMatchObject({
-      errors: [{ code: "SETTINGS_METADATA_TOO_LARGE" }],
-    });
-  });
-});
-
-test("translation replacement remains readable through the settings API", async () => {
-  const user = await sysadmin();
-
-  await settingsFiles(async (files) => {
-    const translations = {
-      greeting: "updated",
-      nested: { empty: "No entries" },
-    };
-
-    const response = await put(
-      "/api/v1/settings/i18n/settings/en",
-      { translations },
-      user.access_token,
-    );
-
-    expect(response.status).toBe(200);
-
-    const read = await get(
-      "/api/v1/settings/i18n/settings/en",
-      user.access_token,
-    );
-
-    expect(read.status).toBe(200);
-    expect(await read.json()).toMatchObject({ data: { translations } });
-
-    const { readFile } = await import("node:fs/promises");
-
-    expect(JSON.parse(await readFile(files.locale, "utf8"))).toEqual(
-      translations,
-    );
-  });
-});
 
 async function logFiles(run: (dir: string) => Promise<void>) {
   const { mkdtemp, rm } = await import("node:fs/promises");
@@ -1889,89 +1475,6 @@ test.each([
   });
 });
 
-test("restart acknowledgment finishes before PM2 commands and retains its audit", async () => {
-  const user = await sysadmin();
-  const specifier = "pm2";
-
-  const pm2 = (await import(specifier)).default as {
-    connect(callback: (error?: Error) => void): void;
-    list(
-      callback: (error: Error | undefined, processes: unknown[]) => void,
-    ): void;
-    restart(id: number, callback: (error?: Error) => void): void;
-    disconnect(): void;
-  };
-
-  const { realpathSync } = await import("node:fs");
-  const root = realpathSync(fileURLToPath(new URL("../", import.meta.url)));
-  const oldHome = process.env.PM2_HOME;
-
-  process.env.PM2_HOME = "/unused-restart-response-test";
-
-  const connect = vi
-    .spyOn(pm2, "connect")
-    .mockImplementation((callback) => callback());
-
-  const list = vi.spyOn(pm2, "list").mockImplementation((callback) =>
-    callback(undefined, [
-      {
-        name: "test-backend",
-        pm_id: 1,
-        pid: 1001,
-        pm2_env: { pm_cwd: root },
-      },
-    ]),
-  );
-
-  const disconnect = vi.spyOn(pm2, "disconnect").mockImplementation(() => {});
-  const restarted = barrier();
-
-  const restart = vi
-    .spyOn(pm2, "restart")
-    .mockImplementation((_id, callback) => {
-      restarted.resolve();
-
-      callback();
-    });
-
-  try {
-    const response = await post(
-      "/api/v1/settings/reboot",
-      {},
-      user.access_token,
-    );
-
-    expect(response.status).toBe(202);
-
-    expect(await response.json()).toMatchObject({
-      success: true,
-      data: { supervised: true, accepted: true, scheduled: ["test-backend"] },
-    });
-
-    await restarted.promise;
-
-    expect(restart).toHaveBeenCalledWith(1, expect.any(Function));
-
-    expect(
-      await handle.ctx
-        .models!.get("AuditEvent")
-        .findOne({ actor: user.userId })
-        .lean(),
-    ).toMatchObject({ action: "reboot.requested" });
-  } finally {
-    connect.mockRestore();
-
-    list.mockRestore();
-
-    restart.mockRestore();
-
-    disconnect.mockRestore();
-
-    if (oldHome === undefined) delete process.env.PM2_HOME;
-    else process.env.PM2_HOME = oldHome;
-  }
-});
-
 test("shutdown drains settings streams and a later boot owns fresh stream admission", async () => {
   const user = await sysadmin();
 
@@ -2056,4 +1559,138 @@ test("shutdown drains settings streams and a later boot owns fresh stream admiss
       await Promise.all(readers.map((reader) => reader.cancel()));
     }
   });
+});
+
+async function patch(path: string, body: unknown, token: string) {
+  return fetch(base + path, {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + token,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+test("the console describes every module without a secret's value and only administrators read it", async () => {
+  const ordinary = await account();
+  const admin = await account();
+  await handle.ctx.models!.get("User").updateOne({ _id: admin.userId }, { role: "admin" });
+
+  expect((await get("/api/v1/config", ordinary.access_token)).status).toBe(403);
+
+  const response = await get("/api/v1/config", admin.access_token);
+  expect(response.status).toBe(200);
+  const { data } = (await response.json()) as { data: { store: { ready: boolean }; modules: Record<string, unknown>[] } };
+  expect(data.store.ready).toBe(true);
+  expect(data.modules.map((module) => module.name)).toEqual(handle.ctx.modules.map((module) => module.name));
+
+  const auth = data.modules.find((module) => module.name === "auth") as { variables: Record<string, unknown>[]; settings: { values: Record<string, unknown>; version: number }; routes: Record<string, unknown>[] };
+  const secret = auth.variables.find((variable) => variable.name === "JWT_ACCESS_SECRET")!;
+  expect(secret).toMatchObject({ is_secret: true, is_set: true, value: null, default: null });
+  expect(JSON.stringify(data)).not.toContain(process.env.JWT_ACCESS_SECRET);
+  expect(auth.settings.values).toMatchObject({ accessTtl: "15m" });
+  expect(auth.routes).toContainEqual(expect.objectContaining({ id: "auth:login", method: "POST", roles: expect.arrayContaining(["guest"]) }));
+
+  // The administrator may read; writing is the deployment's job.
+  expect((await patch("/api/v1/config/hello", { values: { greeting: "Nope" } }, admin.access_token)).status).toBe(403);
+});
+
+test("a settings write is validated by the module's schema, refused on a stale version, audited without values and applied at once", async () => {
+  const user = await sysadmin();
+  const described = (await (await get("/api/v1/config/hello", user.access_token)).json()) as { data: { settings: { version: number } } };
+  const before = described.data.settings.version;
+
+  const invalid = await patch("/api/v1/config/hello", { values: { greeting: "" } }, user.access_token);
+  expect(invalid.status).toBe(422);
+  expect(await invalid.json()).toMatchObject({ errors: [{ field: "greeting" }] });
+
+  const stale = await patch("/api/v1/config/hello", { values: { greeting: "Howdy" }, version: before + 7 }, user.access_token);
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({ errors: [{ code: "STALE_VERSION" }] });
+
+  const written = await patch("/api/v1/config/hello", { values: { greeting: "Howdy" }, version: before }, user.access_token);
+  expect(written.status).toBe(200);
+  expect(await written.json()).toMatchObject({ data: { module: "hello", values: { greeting: "Howdy" }, version: before + 1, requires_restart: [] } });
+
+  // Live in this process, through the same object every handler reads.
+  expect(handle.ctx.config.hello).toEqual({ greeting: "Howdy" });
+  const greeted = (await (await fetch(base + "/api/v1/hello")).json()) as { data: { message: string } };
+  expect(greeted.data.message).toMatch(/^Howdy/);
+
+  const audit = await handle.ctx.models!.get("ConfigAudit").find({ actor: user.userId }).sort({ recorded_at: -1 }).lean();
+  expect(audit[0]).toMatchObject({ action: "settings.change_requested", module: "hello", keys: ["greeting"], version: before, actor_role: "sysadmin" });
+  expect(JSON.stringify(audit)).not.toContain("Howdy");
+
+  expect((await patch("/api/v1/config/nope", { values: {} }, user.access_token)).status).toBe(404);
+
+  await handle.ctx.settings.set("hello", { greeting: "Hello" }, { id: "tests" });
+});
+
+test("an authenticated request on a cache hit performs no database read", async () => {
+  const user = await account();
+  const cold = await get("/api/v1/auth/me", user.access_token);
+  expect(cold.status).toBe(200);
+
+  const User = handle.ctx.models!.get("User");
+  const Session = handle.ctx.models!.get("Session");
+  const Revoked = handle.ctx.models!.get("RevokedToken");
+  const reads = [
+    vi.spyOn(User, "findById"), vi.spyOn(User, "findOne"),
+    vi.spyOn(Session, "findOne"), vi.spyOn(Session, "find"),
+    vi.spyOn(Revoked, "countDocuments"),
+  ];
+  try {
+    const warm = await get("/api/v1/auth/me", user.access_token);
+    expect(warm.status).toBe(200);
+    expect(await warm.json()).toMatchObject({ data: { user: { email: user.email, role: "user" }, session: { sid: expect.any(String) } } });
+    expect(reads.map((spy) => spy.mock.calls.length)).toEqual([0, 0, 0, 0, 0]);
+  } finally {
+    reads.forEach((spy) => spy.mockRestore());
+  }
+});
+
+test("a revocation on one replica is refused on the very next request on another", async () => {
+  const next = await boot({
+    rootDir: fileURLToPath(new URL("../", import.meta.url)),
+    appEnv: "test",
+    handleSignals: false,
+  });
+  try {
+    const address = next.server!.address();
+    if (!address || typeof address === "string") throw new Error("No listener on the second replica");
+    const other = "http://127.0.0.1:" + address.port;
+    const me = (token: string) => fetch(other + "/api/v1/auth/me", { headers: { authorization: "Bearer " + token } });
+
+    // Logged out on the first replica: the second one, which had the
+    // identity cached from its own request, refuses the next one.
+    const first = await account();
+    expect((await get("/api/v1/auth/me", first.access_token)).status).toBe(200);
+    expect((await me(first.access_token)).status).toBe(200);
+    expect((await post("/api/v1/auth/logout", {}, first.access_token)).status).toBe(200);
+    expect((await me(first.access_token)).status).toBe(401);
+
+    // A password change, a session ended by its owner, and a soft-deleted
+    // account: every path that revokes forgets the cached identity first.
+    const second = await account();
+    expect((await me(second.access_token)).status).toBe(200);
+    const changed = await post("/api/v1/auth/password", { password: randomBytes(24).toString("hex") }, second.access_token);
+    expect(changed.status).toBe(200);
+    expect((await me(second.access_token)).status).toBe(401);
+
+    const third = await account();
+    expect((await me(third.access_token)).status).toBe(200);
+    const { verify } = await import("../modules/auth/helpers/tokens.js");
+    const claims = verify(handle.ctx, third.access_token, "access")!;
+    expect((await fetch(base + "/api/v1/auth/sessions/" + claims.sid, { method: "DELETE", headers: { authorization: "Bearer " + third.access_token } })).status).toBe(200);
+    expect((await me(third.access_token)).status).toBe(401);
+
+    const fourth = await account();
+    expect((await me(fourth.access_token)).status).toBe(200);
+    const admin = await sysadmin();
+    expect((await fetch(base + "/users/" + encodeURIComponent(fourth.email), { method: "DELETE", headers: { authorization: "Bearer " + admin.access_token } })).status).toBe(200);
+    expect((await me(fourth.access_token)).status).toBe(401);
+  } finally {
+    await next.shutdown();
+  }
 });
