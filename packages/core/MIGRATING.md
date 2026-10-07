@@ -11,6 +11,16 @@ what makes it work under nvm.
 
 ---
 
+## 0.11.0-rc.2 — from rc.1
+
+Nothing to change in the app. Update the CLI first: the rc.1 `tulipes update`
+downgrades a candidate app to 0.10. Instead, run
+`npm install -g @tulipes/cli@next`, then `pnpm update -r "@tulipes/*"` in the
+app: the `^…-rc.1` ranges already admit rc.2, so only the lockfile moves.
+From rc.2 on, `tulipes update` is safe on a candidate.
+
+---
+
 <a id="unreleased--module-layout-and-plain-routes"></a>
 
 ## 0.11.0-rc.1 — the two commands
