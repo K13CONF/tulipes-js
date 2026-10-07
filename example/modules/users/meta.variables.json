@@ -1,22 +1,3 @@
 {
-  "variables": [
-    {
-      "name": "USERS_MAX_SESSIONS",
-      "type": "number",
-      "group": "sessions",
-      "description": "Max concurrent sessions per user",
-      "default": 5
-    },
-    {
-      "name": "USERS_SIGNUP_MODE",
-      "type": "enum",
-      "enum": [
-        "open",
-        "invite",
-        "closed"
-      ],
-      "description": "Who can register",
-      "default": "open"
-    }
-  ]
+  "variables": []
 }

@@ -25,10 +25,14 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
 
 ## Non-negotiable rules
 
-1. **Never read `process.env` directly.** Every configuration value is
-   declared in a module's `meta.variables.json` and read with
-   `ctx.Environment.get("NAME")`. Reading an undeclared name throws on
-   purpose. → skill `tulipes-env-variable`
+1. **Never read `process.env` directly, and keep the environment small.**
+   A value is an environment variable only if boot needs it before the
+   database answers (connection strings, the port, log destination) or it
+   is a secret: declared in a module's `meta.variables.json`, read with
+   `ctx.Environment.get("NAME")`. Everything else is a *setting*: declared
+   with a zod schema in that module's `module.config.ts`, stored in the
+   settings store, edited through the console, read live at
+   `ctx.config.<module>`. → skill `tulipes-env-variable`
 2. **A feature is a module, not a layer.** Everything a feature needs —
    routes, models, config, permissions, jobs — lives in one folder under
    `modules/`. Never add a top-level `services/` or `middlewares/` folder.
@@ -39,9 +43,13 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    camelCase is for TypeScript-only names. → skill `tulipes-model`
 4. **Global middleware belongs to a sys-tier module**, not to the
    entrypoint. `app.ts` stays three lines. → skill `tulipes-endpoint`
-5. **Run `pnpm sync` after touching any `meta.variables.json` or
-   `module.config.ts`.** It regenerates `types/config.d.ts` and
-   `.env.example`; stale generated types are a lie.
+5. **Run `pnpm sync` after touching any `meta.variables.json` or a
+   settings schema in `module.config.ts`.** It regenerates `types/config.d.ts`
+   and `.env.example`; stale generated types are a lie. `module.config.ts`
+   has exactly one export, `defineConfig({ schema })`; initialization and
+   cleanup belong to `bootstrap/*.bootstrap.ts`, which may return the
+   function that closes what it opened, and long-lived work ends on
+   `ctx.signal`.
 6. **Every response is `res.respond({ data, meta })`** — never `res.json`,
    which ships a raw body outside the envelope. Failures are **thrown**:
    `throw new HttpError(404, "notFound")`, where the message is an i18n
@@ -84,9 +92,10 @@ keep shared middleware and param callbacks beside their endpoints.
 
 | Decision | Location |
 |---|---|
-| Value differs per deployment (URL, secret, toggle) | that module's `meta.variables.json` |
-| Policy shared by ≥2 modules (pagination, body limit) | `config/app.config.ts` |
-| Config for one feature | that module's `module.config.ts` |
+| Connection string, secret, or anything boot needs before the database answers | that module's `meta.variables.json` |
+| Policy shared by ≥2 modules and the same everywhere (pagination, locales) | `config/app.config.ts` |
+| A value an operator may change at runtime (limits, modes, toggles, lifetimes) | a field in that module's `module.config.ts` schema, read at `ctx.config.<module>` |
+| Opening a client, seeding rows, ensuring indexes, and closing them again | that module's `bootstrap/*.bootstrap.ts`, returning the cleanup |
 | A string a user will read | that module's `i18n/<locale>.json`, reached with `req.t` |
 | The shape of a request body/query | a zod schema on the route's `rai()` |
 | Middleware for every request | a sys-tier module's routes file |
@@ -99,9 +108,10 @@ keep shared middleware and param callbacks beside their endpoints.
 ## Boot order (why load order matters)
 
 `sys` modules load before `app` modules; within a tier, lower `priority`
-first; then `dependsOn` topological order. Config → translations → ACL →
-database → queues → routes. If code needs something another module
-provides, declare `dependsOn` — do not rely on luck.
+first; then `dependsOn` topological order. Declarations → models →
+settings → translations → ACL → bootstrap → queues → routes. If code needs
+something another module provides, declare `dependsOn` — do not rely on
+luck.
 
 ## Commands
 

@@ -13,7 +13,7 @@ import { initSockets } from "./load-sockets.js";
  * phase disconnects clients alongside the HTTP drain, exactly as before.
  */
 export const provider: Provider<"sockets"> = {
-  contract: 1,
+  contract: 2,
   capability: "sockets",
   name: "socket.io",
   situations: ["backend"],

@@ -1,13 +1,38 @@
 ---
 name: tulipes-env-variable
-description: Use when adding or changing any configuration value in a Tulipes app — API keys, connection strings, feature toggles, limits — or when tempted to read process.env. Covers meta.variables.json, the resolution precedence and typed reads.
+description: Use when adding or changing any configuration value in a Tulipes app — API keys, connection strings, feature toggles, limits — or when tempted to read process.env. Covers the split between environment variables (meta.variables.json) and settings (the module.config.ts schema), the resolution precedence and typed reads.
 ---
 
 # Adding a configuration value
 
-**Never read `process.env` directly.** Every value is declared by exactly
-one module and read through the typed store. An undeclared read throws, so
-a typo can never reach production as `undefined`.
+**First decide which of two things it is.** An *environment variable* is
+what the process needs before the database answers — a connection string,
+the port, where logs go — or a secret. Everything else is a *setting*:
+declared with a default in the module's `module.config.ts` schema, stored
+in the settings store, editable by an operator at runtime without a
+restart, read at `ctx.config.<module>`:
+
+```ts
+// modules/billing/module.config.ts — the file's only export
+import { defineConfig } from "@tulipes/core/config";
+import { z } from "zod/v4";
+
+export default defineConfig({
+  schema: z.object({
+    trialDays: z.number().int().positive().default(14).describe("Free trial length"),
+    // a field the process cannot apply without a restart:
+    workers: z.number().int().positive().default(2).meta({ restart: true }),
+  }),
+});
+```
+
+Every field needs a default, secrets are refused, and `pnpm sync` types
+`ctx.config.billing.trialDays` as `number`. The rest of this guide is the
+environment variable.
+
+**Never read `process.env` directly.** Every variable is declared by
+exactly one module and read through the typed store. An undeclared read
+throws, so a typo can never reach production as `undefined`.
 
 ## Steps
 
@@ -65,8 +90,8 @@ values always win, which is why deployments need no file.
 
 - Value shared by several modules but the same everywhere (pagination
   limits, body size) → `config/app.config.ts`, not a variable.
-- Value used by one module and never changed per deployment → that
-  module's `module.config.ts`.
+- Any value an operator may want to change at runtime → a setting in that
+  module's `module.config.ts` schema (above), not a variable.
 
 ## Gotchas
 

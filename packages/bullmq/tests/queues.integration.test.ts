@@ -29,12 +29,18 @@ integration(
         ],
       }),
       "modules/probe/module.config.js": `
-      export default () => ({ closed: false, started: false });
-      export function onDrain(ctx) { ctx.config.probe.draining = true; }
-      export async function onShutdown(ctx) {
-        ctx.config.probe.closed = true;
-        await ctx.queues.add(${JSON.stringify(name)}, 'from-hook', {});
-      }
+      import { defineConfig } from '@tulipes/core/config';
+      import { z } from 'zod/v4';
+      export default defineConfig({ schema: z.object({ closed: z.boolean().default(false), started: z.boolean().default(false) }) });
+    `,
+      "modules/probe/bootstrap/probe.bootstrap.js": `
+      export default (ctx) => {
+        ctx.signal.addEventListener('abort', () => { ctx.config.probe.draining = true; });
+        return async () => {
+          ctx.config.probe.closed = true;
+          await ctx.queues.add(${JSON.stringify(name)}, 'from-cleanup', {});
+        };
+      };
     `,
       "modules/probe/queues/probe.queues.js": `
       export default (ctx, queues) => {

@@ -15,20 +15,6 @@
       "description": "Signing key for refresh tokens; separate from the access key so leaking one cannot mint the other"
     },
     {
-      "name": "JWT_ACCESS_TTL",
-      "type": "string",
-      "group": "auth",
-      "description": "Access token lifetime, as an ms/jsonwebtoken duration. Keep it short: a revoked user keeps their role until it expires",
-      "default": "15m"
-    },
-    {
-      "name": "JWT_REFRESH_TTL",
-      "type": "string",
-      "group": "auth",
-      "description": "Refresh token lifetime; also the TTL on its database record",
-      "default": "30d"
-    },
-    {
       "name": "AUTH_ADMIN_EMAIL",
       "type": "string",
       "group": "auth",

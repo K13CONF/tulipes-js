@@ -7,8 +7,6 @@ const valid = {
   JWT_REFRESH_SECRET: "fixture-refresh-key-long-enough",
   AUTH_ADMIN_EMAIL: "fixture@example.test",
   AUTH_ADMIN_PASSWORD: "fixture-password-long-enough",
-  JWT_ACCESS_TTL: "15m",
-  JWT_REFRESH_TTL: "30d",
 };
 
 test.each([
@@ -34,8 +32,8 @@ test.each([
           description: name,
         })),
       }),
-      "modules/probe/module.config.ts": await readFile(
-        "example/modules/auth/module.config.ts",
+      "modules/probe/bootstrap/credentials.bootstrap.ts": await readFile(
+        "example/modules/auth/bootstrap/credentials.bootstrap.ts",
         "utf8",
       ),
     });
@@ -72,8 +70,8 @@ test.each(["staging", "production", "development"] as const)(
           description: name,
         })),
       }),
-      "modules/probe/module.config.ts": await readFile(
-        "example/modules/auth/module.config.ts",
+      "modules/probe/bootstrap/credentials.bootstrap.ts": await readFile(
+        "example/modules/auth/bootstrap/credentials.bootstrap.ts",
         "utf8",
       ),
     });

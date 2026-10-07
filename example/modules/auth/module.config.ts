@@ -1,31 +1,23 @@
-import type { ConfigCtx } from "@tulipes/core/boot";
+import { defineConfig } from "@tulipes/core/config";
+import { z } from "zod/v4";
 
-export default function authConfig({ Environment }: ConfigCtx) {
-  if (Environment.appEnv === "production" || Environment.appEnv === "staging") {
-    const invalid: string[] = [];
-    const defaults = [
-      ["JWT_ACCESS_SECRET", "dev-only-access-secret-change-me"],
-      ["JWT_REFRESH_SECRET", "dev-only-refresh-secret-change-me"],
-      ["AUTH_ADMIN_PASSWORD", "dev-admin-password"],
-      ["AUTH_ADMIN_EMAIL", "admin@example.com"],
-    ] as const;
-    for (const [name, developmentValue] of defaults) {
-      const value = String(Environment.get(name)).trim();
-      if (!value || value === developmentValue) invalid.push(name);
-    }
-    if (Environment.get("JWT_ACCESS_SECRET") === Environment.get("JWT_REFRESH_SECRET")) {
-      invalid.push("JWT_ACCESS_SECRET / JWT_REFRESH_SECRET (use distinct keys)");
-    }
-    if (invalid.length) throw new Error("Unsafe production credentials: configure " + invalid.join(", "));
-  }
-  return {
-    accessTtl: Environment.get("JWT_ACCESS_TTL"),
-    refreshTtl: Environment.get("JWT_REFRESH_TTL"),
+/**
+ * Token policy is a setting: every deployment wants to tune it, none of it
+ * is secret. The signing keys and the seeded admin credentials stay in the
+ * environment, where secrets belong, and `bootstrap/credentials.bootstrap.ts`
+ * refuses development values outside development.
+ */
+export default defineConfig({
+  schema: z.object({
+    accessTtl: z.string().min(1).default("15m")
+      .describe("Access token lifetime, as an ms/jsonwebtoken duration. Keep it short: a revoked user keeps their role until it expires"),
+    refreshTtl: z.string().min(1).default("30d")
+      .describe("Refresh token lifetime; also the TTL on its database record"),
     /**
      * How stale a session's `last_seen_at` may get before a request pays for
-     * the write. Policy, not a per-deployment value — every environment
-     * wants the same answer, and one write per request is not it.
+     * the write. One write per request is not an option; one per minute is.
      */
-    sessionTouchSeconds: 60,
-  };
-}
+    sessionTouchSeconds: z.number().int().positive().default(60)
+      .describe("Seconds between two writes of a session's last_seen_at"),
+  }),
+});

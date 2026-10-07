@@ -11,6 +11,27 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **Settings declarations.** `module.config.ts` has one export,
+  `defineConfig({ schema, onChange })`: a zod schema with a default for every
+  field. Values live in a settings store — core's file store under
+  `config/settings.<APP_ENV>.json`, or the store a `settings` provider
+  supplies — seeded on first boot, validated on every write, edited at
+  runtime through `ctx.settings.set()` and read live at `ctx.config.<module>`;
+  a field tagged `.meta({ restart: true })` persists and applies on the next
+  boot. The factory form and the `onReady`/`onDrain`/`onShutdown` exports are
+  refused by name.
+- **Bootstrap is the lifecycle.** `bootstrap/*.bootstrap.ts` runs in every
+  mode (scripts included) after settings, translations and ACL and before
+  routes or queues, and may return its cleanup, run after traffic drains in
+  reverse load order. `ctx.signal` aborts when shutdown begins. A
+  `bootstrap/` directory no longer implies a models provider.
+- **Provider contract 2.** Core runs bootstrap; `ProviderContext.runBootstrap`
+  is gone; a `settings` capability joins models, queues and sockets, acquired
+  with models before the settings load while queues and sockets are acquired
+  after bootstrap. `tulipes config:check` prints every namespace. The
+  reference app's token lifetimes, signup mode, session cap and greeting
+  became settings (32 → 27 environment variables); its production credential
+  check is a bootstrap.
 - Generated production apps and the workspace override `basic-ftp` to 6.2.1
   and mute the unfixable braces advisory (GHSA-vfj7-8cjw-p6xm), both in
   PM2's transitive tree; see the dependency review of 2026-10-07 in

@@ -45,13 +45,10 @@ test("shutdown disconnects Socket.IO clients and releases the HTTP listener", as
   }
 });
 
-test("inspection skips socket setup and readiness hooks", async () => {
+test("inspection skips socket setup and bootstrap", async () => {
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/module.config.js": `
-      export default () => ({});
-      export function onReady() { throw new Error('must not run during inspection'); }
-    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": `export default () => { throw new Error('must not run during inspection'); };`,
     "modules/probe/sockets/probe.sockets.js": `export default () => { throw new Error('must not attach sockets'); };`,
   });
 

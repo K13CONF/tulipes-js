@@ -1,24 +1,11 @@
-import type { ConfigCtx, Ctx } from "@tulipes/core/boot";
+import { defineConfig } from "@tulipes/core/config";
+import { z } from "zod/v4";
 
-import { moduleLogger } from "@app/core";
-
-export default function usersConfig({ Environment }: ConfigCtx) {
-  // Types flow from the generated config.d.ts — no annotations needed.
-  return {
-    maxSessions: Environment.get("USERS_MAX_SESSIONS"),
-    signupMode: Environment.get("USERS_SIGNUP_MODE"),
-  };
-}
-
-export async function onReady({ config, Environment, mode }: Ctx): Promise<void> {
-  // A child logger tagged with this module: "[users] …" on the console,
-  // and a queryable "module":"users" field in the log files.
-  moduleLogger(Environment, "users", mode).info(
-    { signupMode: config.users?.signupMode },
-    "module ready",
-  );
-}
-
-export async function onShutdown(): Promise<void> {
-  console.log("[users] shutdown hook ran");
-}
+export default defineConfig({
+  schema: z.object({
+    maxSessions: z.number().int().positive().default(5)
+      .describe("Max concurrent sessions per user; the oldest is evicted past it"),
+    signupMode: z.enum(["open", "invite", "closed"]).default("open")
+      .describe("Who can register: open to anyone, invite only, or nobody"),
+  }),
+});

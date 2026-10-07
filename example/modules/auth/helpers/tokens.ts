@@ -42,12 +42,10 @@ const secret = (ctx: Ctx, typ: "access" | "refresh"): string =>
     ),
   );
 
+// Read at signing time, never cached: token policy is a setting an operator
+// changes without a restart.
 const ttl = (ctx: Ctx, typ: "access" | "refresh"): string =>
-  String(
-    ctx.Environment.get(
-      typ === "access" ? "JWT_ACCESS_TTL" : "JWT_REFRESH_TTL",
-    ),
-  );
+  String(typ === "access" ? ctx.config.auth?.accessTtl ?? "15m" : ctx.config.auth?.refreshTtl ?? "30d");
 
 /**
  * Mint a pair for an existing session.

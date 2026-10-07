@@ -23,8 +23,8 @@ touching anything else.
 
 1. Scaffold: `pnpm tulipes new module billing`. It creates every
    contract — package.json (scope detected from siblings), meta.variables,
-   config with lifecycle hooks, ACL, helper, a controller class, routes
-   declaring a RAI, model, bootstrap, queue and socket. Delete the ones this feature does not
+   a settings declaration, ACL, helper, a controller class, routes
+   declaring a RAI, model, a bootstrap that may return its cleanup, queue and socket. Delete the ones this feature does not
    need. For offline inspection, keep tulipes.offline: true and wrap route
    factories in defineRoutes(); modules without routes need no placeholder file.
 2. Set ordering in `modules/billing/package.json`:

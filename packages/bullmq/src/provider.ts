@@ -13,7 +13,7 @@ import type { QueueManager } from "./queue-manager.js";
  * own cache or rate-limiter clients — and their drain/close/force order.
  */
 export const provider: Provider<"queues"> = {
-  contract: 1,
+  contract: 2,
   capability: "queues",
   name: "bullmq",
   async acquire({ ctx, files }, report, own) {

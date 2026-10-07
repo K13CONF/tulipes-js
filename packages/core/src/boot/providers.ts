@@ -6,8 +6,9 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 
 import { BootReport } from "../errors/boot-error.js";
-import { providerCapabilities, type ProviderCapability } from "../modules/manifest.js";
+import { providerCapabilities, type ModuleRequirement, type ProviderCapability } from "../modules/manifest.js";
 import type { ModuleFiles } from "../modules/explorer.js";
+import type { SettingsStore } from "../config/settings-store.js";
 import type { Cleanup } from "./cleanup.js";
 import type { Ctx, ProviderCapabilities } from "./contracts.js";
 
@@ -63,22 +64,33 @@ export interface ProviderStatus {
   detail?: string;
 }
 
-/** What a provider is handed: the live boot context as it stands after ACL (phase 7). */
+/**
+ * What a provider is handed: the live boot context as it stands when its
+ * capability is acquired. Models and settings are acquired before the
+ * settings load (phase 5), so they see no `ctx.config` namespaces; queues
+ * and sockets are acquired after bootstrap (phase 10) and see everything.
+ */
 export interface ProviderContext {
-  /** Read it, run bootstrap tasks against it; core alone assigns the capability slot. */
+  /** Read it; core alone assigns the capability slot. */
   ctx: Ctx;
   /** Which of the provider's declared situations this boot is. */
   situation: ProviderSituation;
   rootDir: string;
   /** Discovered files for every module in load order; the provider decides what to import. */
   files: readonly ModuleFiles[];
-  /** false in script mode and runtime inspection — bootstrap is a serving process's job. */
-  runBootstrap: boolean;
+}
+
+/** Capability name → the value a provider hands core. Settings is a store core wraps; the others land on ctx. */
+export interface ProvidedValues extends ProviderCapabilities {
+  settings: SettingsStore;
 }
 
 export interface Provider<Capability extends ProviderCapability = ProviderCapability> {
-  /** Bumped when this interface changes incompatibly; core refuses others. */
-  contract: 1;
+  /**
+   * Bumped when this interface changes incompatibly; core refuses others.
+   * 2: bootstrap tasks are core's (phase 9), no provider runs them.
+   */
+  contract: 2;
   capability: Capability;
   /** Short name for the banner and diagnostics, e.g. "mongoose". */
   name: string;
@@ -98,10 +110,10 @@ export interface Provider<Capability extends ProviderCapability = ProviderCapabi
     ctx: ProviderContext,
     report: BootReport,
     own: (resource: AcquiredResource) => void,
-  ): Promise<ProviderCapabilities[Capability] | undefined>;
+  ): Promise<ProvidedValues[Capability] | undefined>;
 }
 
-export const PROVIDER_CONTRACT = 1;
+export const PROVIDER_CONTRACT = 2;
 
 /** `tulipes.providers` of the app's package.json: capability → module specifier. */
 export type ProviderDeclarations = Partial<Record<ProviderCapability, string>>;
@@ -140,9 +152,9 @@ export function readProviderDeclarations(rootDir: string, report: BootReport): P
 }
 
 /** Explicit `requires` plus what a module's files imply. */
-export function effectiveRequirements(files: ModuleFiles): ProviderCapability[] {
-  const required = new Set<ProviderCapability>(files.module.requires);
-  if (files.modelFiles.length > 0 || files.bootstrapFiles.length > 0) required.add("models");
+export function effectiveRequirements(files: ModuleFiles): ModuleRequirement[] {
+  const required = new Set<ModuleRequirement>(files.module.requires);
+  if (files.modelFiles.length > 0) required.add("models");
   if (files.queueFiles.length > 0) required.add("queues");
   if (files.socketFiles.length > 0) required.add("sockets");
   return [...required];
@@ -162,7 +174,7 @@ export function checkRequirements(
       if (declared[capability]) continue;
       const why = files.module.requires.includes(capability)
         ? "declares it in tulipes.requires"
-        : `has ${capability === "queues" ? "queues/" : capability === "sockets" ? "sockets/" : files.modelFiles.length ? "models/" : "bootstrap/"} files`;
+        : `has ${capability === "queues" ? "queues/" : capability === "sockets" ? "sockets/" : "models/"} files`;
       report.add({
         scope: "providers",
         module: files.module.name,
@@ -176,25 +188,31 @@ export interface AcquiredProvider {
   capability: ProviderCapability;
   provider: string;
   resource?: AcquiredResource;
+  /** What acquire() returned; models, queues and sockets also land on ctx. */
+  value?: unknown;
   /** Set when the provider's situations exclude this boot; nothing was acquired. */
   skipped?: ProviderSituation;
 }
 
 /**
- * Phase 8. Import each declared provider from the app (never from wherever
- * core itself lives), validate its shape, acquire, and hand the value to ctx.
- * Every resource a provider registered through `own()` is returned so the
- * caller can dispose it — on success and on failure alike.
+ * Import each declared provider among `capabilities` from the app (never
+ * from wherever core itself lives), validate its shape, acquire, and hand
+ * the value to ctx. Called twice per boot: models and settings before the
+ * settings load, queues and sockets after bootstrap. Every resource a
+ * provider registered through `own()` is returned so the caller can
+ * dispose it — on success and on failure alike.
  */
 export async function acquireProviders(
   declared: ProviderDeclarations,
   context: ProviderContext,
   report: BootReport,
+  capabilities: readonly ProviderCapability[] = providerCapabilities,
 ): Promise<AcquiredProvider[]> {
   const acquired: AcquiredProvider[] = [];
   const requireFromApp = createRequire(join(context.rootDir, "package.json"));
 
   for (const capability of providerCapabilities) {
+    if (!capabilities.includes(capability)) continue;
     const specifier = declared[capability];
     if (!specifier) continue;
 
@@ -235,8 +253,9 @@ export async function acquireProviders(
     const issuesBefore = report.issues.length;
     try {
       const value = await provider.acquire(context, report, own);
-      if (value !== undefined) (context.ctx as Record<ProviderCapability, unknown>)[capability] = value;
-      else if (report.issues.length === issuesBefore) {
+      entry.value = value;
+      if (value !== undefined && capability !== "settings") (context.ctx as unknown as Record<ProviderCapability, unknown>)[capability] = value;
+      else if (value === undefined && report.issues.length === issuesBefore) {
         report.add({ scope: "providers", message: `provider "${provider.name}" returned nothing without reporting why` });
       }
     } catch (error) {

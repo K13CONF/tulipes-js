@@ -52,42 +52,29 @@ declare module "@tulipes/core/env" {
     JWT_ACCESS_SECRET: string;
     /** [auth] Signing key for refresh tokens; separate from the access key so leaking one cannot mint the other */
     JWT_REFRESH_SECRET: string;
-    /** [auth] Access token lifetime, as an ms/jsonwebtoken duration. Keep it short: a revoked user keeps their role until it expires */
-    JWT_ACCESS_TTL: string;
-    /** [auth] Refresh token lifetime; also the TTL on its database record */
-    JWT_REFRESH_TTL: string;
     /** [auth] Email of the admin account seeded on first boot */
     AUTH_ADMIN_EMAIL: string;
     /** [auth] Password for the seeded admin account; change it after the first login */
     AUTH_ADMIN_PASSWORD: string;
-    /** [users] Max concurrent sessions per user */
-    USERS_MAX_SESSIONS: number;
-    /** [users] Who can register */
-    USERS_SIGNUP_MODE: "open" | "invite" | "closed";
-    /** [hello] Word this module greets callers with */
-    HELLO_GREETING: string;
   }
 }
 
 declare module "@tulipes/core/config" {
   interface GlobalConfig {
-    "core"?: Awaited<
-      ReturnType<(typeof import("./../modules/core/module.config.js"))["default"]>
+    "core"?: import("zod/v4").output<
+      (typeof import("./../modules/core/module.config.js"))["default"]["schema"]
     >;
-    "security"?: Awaited<
-      ReturnType<(typeof import("./../modules/security/module.config.js"))["default"]>
+    "security"?: import("zod/v4").output<
+      (typeof import("./../modules/security/module.config.js"))["default"]["schema"]
     >;
-    "auth"?: Awaited<
-      ReturnType<(typeof import("./../modules/auth/module.config.js"))["default"]>
+    "auth"?: import("zod/v4").output<
+      (typeof import("./../modules/auth/module.config.js"))["default"]["schema"]
     >;
-    "users"?: Awaited<
-      ReturnType<(typeof import("./../modules/users/module.config.js"))["default"]>
+    "users"?: import("zod/v4").output<
+      (typeof import("./../modules/users/module.config.js"))["default"]["schema"]
     >;
-    "hello"?: Awaited<
-      ReturnType<(typeof import("./../modules/hello/module.config.js"))["default"]>
-    >;
-    "settings"?: Awaited<
-      ReturnType<(typeof import("./../modules/settings/module.config.js"))["default"]>
+    "hello"?: import("zod/v4").output<
+      (typeof import("./../modules/hello/module.config.js"))["default"]["schema"]
     >;
   }
 }

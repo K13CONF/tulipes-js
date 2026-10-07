@@ -13,12 +13,11 @@ import { initDatabase } from "./database.js";
  * instance, or `instanceof Schema` and the app's global plugins stop applying.
  */
 export const provider: Provider<"models"> = {
-  contract: 1,
+  contract: 2,
   capability: "models",
   name: "mongoose",
-  async acquire({ ctx, files, runBootstrap }, report, own) {
+  async acquire({ ctx, files }, report, own) {
     const connection = await initDatabase(files, ctx, report, {
-      runBootstrap,
       // Registered before the connection is awaited: a database that never
       // answers is still closed by core's failed-boot cleanup.
       onConnection: (connection) => own({

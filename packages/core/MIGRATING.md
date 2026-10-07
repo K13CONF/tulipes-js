@@ -11,6 +11,59 @@ what makes it work under nvm.
 
 ---
 
+<a id="unreleased--settings-and-bootstrap"></a>
+
+## Unreleased (0.11) — settings declarations, bootstrap cleanups, provider contract 2
+
+`module.config.ts` no longer computes values and no longer carries lifecycle
+hooks. It declares the module's **settings**: a zod schema whose values live
+in a settings store (core's file store under `config/settings.<APP_ENV>.json`,
+or the Mongo store an app declares), seeded with the defaults on first boot,
+validated on every write, edited at runtime through `ctx.settings`, and read
+live at `ctx.config.<module>`.
+
+1. Rewrite each `module.config.ts` as one export:
+
+   ```ts
+   import { defineConfig } from "@tulipes/core/config";
+   import { z } from "zod/v4";
+
+   export default defineConfig({
+     schema: z.object({
+       maxSessions: z.number().int().positive().default(5).describe("Max concurrent sessions"),
+     }),
+     onChange(next, ctx) {},   // optional: rebuild what depends on a value
+   });
+   ```
+
+   A value the factory read from the environment becomes a field with that
+   variable's default; the variable leaves `meta.variables.json` unless it
+   is a secret or boot needs it before the database answers. A value the
+   factory computed from other modules' config becomes a plain export of
+   the module's own helpers. Tag a field `.meta({ restart: true })` when the
+   process cannot apply it without a restart.
+2. Move `onReady`, `onDrain` and `onShutdown` bodies into
+   `bootstrap/*.bootstrap.ts`. A bootstrap runs in every mode, after
+   settings, translations and ACL and before routes or queues; it may
+   return the function that closes what it opened, which core runs after
+   traffic drains in reverse load order. What `onDrain` did is now
+   `ctx.signal.addEventListener("abort", …)`, fired the moment shutdown
+   begins. A seed a one-off script should skip checks `ctx.mode === "script"`.
+3. Mongoose base plugins keep registering from the sys core module's
+   `module.config.ts` at declaration time, which is still before models
+   compile; it is the one top-level call that file may make.
+4. `pnpm sync`, then `pnpm typecheck`: `ctx.config.<module>` is typed as
+   the schema's output. The boot refuses the old forms by name — a factory
+   default export, a lifecycle export, a field without a default — and
+   `tulipes config:check` prints what each namespace holds.
+
+Providers implement contract **2**: core runs bootstrap files itself, so a
+`models` provider's `acquire` only connects and compiles, and
+`ProviderContext.runBootstrap` is gone. `@tulipes/mongoose` keeps exporting
+the `BootstrapFn` type as an alias of core's.
+
+---
+
 <a id="unreleased--move-to-pnpm"></a>
 
 ## Unreleased (0.11) — move to pnpm

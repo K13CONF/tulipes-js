@@ -1,13 +1,13 @@
 import type {
-  ConfigCtx,
   BackendCtx,
-  ModuleConfigFn,
   RoutesFn,
-  ModuleLifecycle,
+  BootstrapFn,
 } from "../src/boot/index.js";
 import { requireModels, requireQueues } from "../src/boot/index.js";
 import type { InspectionContext } from "../src/boot/index.js";
 import { defineRoutes } from "../src/http/index.js";
+import { defineConfig } from "../src/config/index.js";
+import { z } from "zod/v4";
 import type {
   RequestHandler,
   RequestParamHandler,
@@ -53,14 +53,6 @@ const declaration = defineRoutes((ctx) => {
 
 void declaration;
 
-declare const config: ConfigCtx;
-
-// @ts-expect-error Database registration has not happened during configuration.
-config.models;
-
-// @ts-expect-error Express is created after configuration.
-config.app;
-
 declare const backend: BackendCtx;
 
 backend.app.disable("x-powered-by");
@@ -75,25 +67,30 @@ requireModels(backend).get("User");
 
 requireQueues(backend).queue("users.welcome");
 
-const configFactory: ModuleConfigFn = (ctx) => {
-  // @ts-expect-error Config factories do not receive runtime queues.
-  ctx.queues;
-
-  return { mode: ctx.mode };
-};
-
 const routes: RoutesFn = (ctx) => {
   ctx.app.disable("x-powered-by");
 };
 
-void configFactory;
-void routes;
+const bootstrap: BootstrapFn = (ctx) => {
+  void ctx.acl.can("guest", "probe:read");
+  void ctx.settings.namespaces();
+  ctx.signal.addEventListener("abort", () => undefined);
+  // @ts-expect-error Bootstrap runs before Express exists.
+  ctx.app.disable("x-powered-by");
+  return () => undefined;
+};
 
-const lifecycle = {
-  module: "probe",
-  onDrain: async (ctx) => {
-    void ctx.models;
+const settingsDeclaration = defineConfig({
+  schema: z.object({ limit: z.number().default(5) }),
+  onChange(next, ctx) {
+    const limit: number = next.limit;
+    // @ts-expect-error The declared shape is exact.
+    next.other;
+    void limit;
+    void ctx.mode;
   },
-} satisfies ModuleLifecycle;
+});
 
-void lifecycle;
+void routes;
+void bootstrap;
+void settingsDeclaration;
