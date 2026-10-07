@@ -1,19 +1,16 @@
-import { appBoot, importFromApp, registerTypeScript } from "./app-core.js";
-import { inspectRoutes, type InspectionContext } from "@tulipes/core/boot";
-import type { Environment } from "@tulipes/core/env";
+import type { BootHandle } from "@tulipes/core/boot";
 
-/** Shared CLI lifetime; offline inspection acquires no application resources. */
-export async function inspectApp(rootDir: string, offline = false): Promise<{
-  ctx: InspectionContext;
-  env?: Environment;
-  shutdown(): Promise<void>;
-}> {
-  await registerTypeScript();
-  if (offline) {
-    const core = await importFromApp<{ inspectRoutes?: typeof inspectRoutes }>(rootDir, "@tulipes/core/boot");
-    if (core && !core.inspectRoutes) throw new Error("The app's @tulipes/core does not support --offline; upgrade it or use --runtime");
-    return { ctx: await (core?.inspectRoutes ?? inspectRoutes)({ rootDir }), shutdown: async () => {} };
-  }
+import { appBoot, requireNativeTypeScript } from "./app-core.ts";
+
+/**
+ * `tulipes routes` and `tulipes spec` boot the app in inspection: every
+ * route mounted, nothing acquired — the environment declared but
+ * unresolved, providers as stubs, settings as their defaults, no bootstrap,
+ * no listener. No `.env`, no secret and no service is needed, and a routes
+ * file that touches infrastructure while building fails here with its path.
+ */
+export async function inspectApp(rootDir: string): Promise<BootHandle> {
+  requireNativeTypeScript();
   const boot = await appBoot(rootDir);
   return boot({ rootDir, mode: "backend", handleSignals: false, inspect: true });
 }

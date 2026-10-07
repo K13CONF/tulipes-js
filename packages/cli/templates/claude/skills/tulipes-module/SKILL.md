@@ -15,18 +15,19 @@ touching anything else.
   (another users endpoint → `modules/users`).
 - **New module** when it is a separate feature with its own vocabulary.
 - **The sys core module** when it is a shared helper with no routes or
-  models of its own — export it from `modules/core/index.ts` and import it
-  as `@app/core`. There is no top-level `lib/`: a helper two modules need
+  models of its own — export it from `modules/core/lib/index.ts` (what its
+  `package.json` "exports" points at) and import it as `@app/core`. There is no top-level `lib/`: a helper two modules need
   is owned by a module like everything else.
 
 ## Steps
 
-1. Scaffold: `yarn tulipes new module billing`. It creates every
-   contract — package.json (scope detected from siblings), meta.variables,
-   config with lifecycle hooks, ACL, helper, a controller class, routes
-   declaring a RAI, model, bootstrap, queue and socket. Delete the ones this feature does not
-   need. For offline inspection, keep tulipes.offline: true and wrap route
-   factories in defineRoutes(); modules without routes need no placeholder file.
+1. Scaffold: `pnpm tulipes new module billing`. It creates every
+   contract — package.json (scope detected from siblings), a settings
+   declaration, ACL, helper, a controller class, a plain routes function
+   declaring a RAI, model, a bootstrap that may return its cleanup, queue and
+   socket. Delete the ones this feature does not need. The module root holds
+   only `package.json`, `module.config.ts` and `module.acl.ts`; everything
+   else has a folder, and the boot refuses a stray root file.
 2. Set ordering in `modules/billing/package.json`:
 
 ```json
@@ -37,13 +38,13 @@ touching anything else.
 }
 ```
 
-3. `yarn install` — the module is a workspace, so the package manager must
+3. `pnpm install` — the module is a workspace, so the package manager must
    link it before imports resolve.
 4. Put endpoints and shared middleware in native `routes/*.routes.ts` factories.
    Add optional files as needed:
    `models/`, `queues/`, `sockets/`, `bootstrap/`, `module.acl.ts`,
    `i18n/` — the module is its own i18n namespace. → skill `tulipes-i18n`
-5. `yarn sync && yarn dev` — the banner must list the module.
+5. `pnpm sync && pnpm dev` — the banner must list the module.
 
 ## The manifest key
 

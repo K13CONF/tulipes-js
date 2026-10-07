@@ -11,6 +11,25 @@ import { Redis } from "ioredis";
 import type { QueuesCapability } from "@tulipes/core/boot";
 import type { BootReport } from "@tulipes/core/errors";
 
+import type { JobData } from "./index.ts";
+
+/**
+ * The shape of one entry in a queue file's `jobs` export — what a zod
+ * schema is, without this package importing zod: the loader registers each
+ * entry for its queue, `add()` parses every payload with it, and
+ * `tulipes sync` types `KnownJobs` from it.
+ */
+export interface JobSchema {
+  safeParse(data: unknown): {
+    success: boolean;
+    data?: unknown;
+    error?: { message: string; issues?: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }> };
+  };
+}
+
+/** `export const jobs = { "billing.send-invoice": z.object({ … }) } satisfies JobSchemas;` */
+export type JobSchemas = Record<string, JobSchema>;
+
 /**
  * What `ctx.queues` is once this provider is in the compilation. Core's
  * QueuesCapability is empty; an app that imports anything from this package
@@ -18,8 +37,12 @@ import type { BootReport } from "@tulipes/core/errors";
  */
 declare module "@tulipes/core/boot" {
   interface QueuesCapability {
-    /** Produce a job. The queue must have been defined by some module. */
-    add(queueName: string, jobName: string, data: unknown, options?: JobsOptions): Promise<void>;
+    /**
+     * Produce a job. The queue must have been defined by some module; a
+     * queue with a declared schema validates the payload before enqueueing
+     * it, and a name `tulipes sync` knows types the payload at the call site.
+     */
+    add<N extends string>(queueName: N, jobName: string, data: JobData<N>, options?: JobsOptions): Promise<void>;
     queue(name: string): Queue;
     names(): string[];
     readonly processorCount: number;
@@ -45,6 +68,7 @@ export class QueueManager implements QueuesCapability {
     string,
     { handler: Processor; owner: string; options?: Partial<WorkerOptions> }
   >();
+  readonly #schemas = new Map<string, { schema: JobSchema; owner: string }>();
   readonly #workers: Worker[] = [];
   readonly #connections: Redis[] = [];
   #closing = false;
@@ -116,6 +140,14 @@ export class QueueManager implements QueuesCapability {
     return undefined;
   }
 
+  /** @internal Loader only: one schema per queue, from the file's `jobs` export. */
+  schema_(name: string, schema: JobSchema, owner: string): string | undefined {
+    const existing = this.#schemas.get(name);
+    if (existing) return existing.owner;
+    this.#schemas.set(name, { schema, owner });
+    return undefined;
+  }
+
   /** Introspection for the startup banner and tooling. */
   names(): string[] {
     return [...this.#queues.keys()];
@@ -129,14 +161,32 @@ export class QueueManager implements QueuesCapability {
     return this.#workers.length;
   }
 
-  /** Produce a job. The queue must have been defined by some module. */
-  async add(
-    queueName: string,
+  /**
+   * Produce a job. The queue must have been defined by some module. A
+   * declared schema parses the payload first — defaults applied, a bad
+   * payload refused here, where the caller is, rather than in the worker.
+   */
+  async add<N extends string>(
+    queueName: N,
     jobName: string,
-    data: unknown,
+    data: JobData<N>,
     options?: JobsOptions,
   ): Promise<void> {
-    await this.queue(queueName).add(jobName, data, options);
+    const queue = this.queue(queueName);
+    await queue.add(jobName, this.#validate(queueName, data), options);
+  }
+
+  #validate(queueName: string, data: unknown): unknown {
+    const declared = this.#schemas.get(queueName);
+    if (!declared) return data;
+    const result = declared.schema.safeParse(data);
+    if (result.success) return result.data;
+    const issues = result.error?.issues?.map(
+      (issue) => `${issue.path.map(String).join(".") || "(root)"}: ${issue.message}`,
+    );
+    throw new Error(
+      `Job data for queue "${queueName}" is invalid — ${issues?.length ? issues.join("; ") : result.error?.message ?? "schema rejected it"}`,
+    );
   }
 
   queue(name: string): Queue {
@@ -234,10 +284,26 @@ export class QueueRegistry {
     return this;
   }
 
-  process(name: string, handler: Processor, options?: Partial<WorkerOptions>): this {
+  /** A name `tulipes sync` knows types `job.data` in the handler. */
+  process<N extends string>(name: N, handler: Processor<JobData<N>>, options?: Partial<WorkerOptions>): this {
     const owner = this.#manager.process_(name, handler, this.#module, options);
     if (owner) this.#issue(`queue "${name}" already has a processor from module "${owner}"`);
     return this;
+  }
+
+  /** @internal Loader only: a `jobs` entry defines its queue if nothing did, then owns its schema. */
+  declare_(name: string, schema: JobSchema): void {
+    if (!QUEUE_NAME.test(name)) {
+      this.#issue(`queue name "${name}" is invalid — lowercase kebab-case, optional "." namespace`);
+      return;
+    }
+    const definer = this.#manager.define_(name, this.#module);
+    if (definer && definer !== this.#module) {
+      this.#issue(`queue "${name}" is already defined by module "${definer}"`);
+      return;
+    }
+    const owner = this.#manager.schema_(name, schema, this.#module);
+    if (owner) this.#issue(`queue "${name}" already has a job schema from module "${owner}"`);
   }
 
   #issue(message: string): void {

@@ -14,11 +14,15 @@ consumer. Never duplicate the definition.
 
 ```ts
 import type { Ctx } from "@tulipes/core/boot";
-import type { QueueRegistry } from "@tulipes/bullmq";
+import type { JobSchemas, QueueRegistry } from "@tulipes/bullmq";
+import { z } from "zod/v4";
+
+// The declaration: defines the queue, validates every add(), types both sides.
+export const jobs = {
+  "billing.send-invoice": z.object({ invoiceId: z.string() }),
+} satisfies JobSchemas;
 
 export default function invoiceQueues({ models }: Ctx, queues: QueueRegistry): void {
-  queues.define("billing.send-invoice");
-
   queues.process("billing.send-invoice", async (job) => {
     const invoice = await models!.get("Invoice").findById(job.data.invoiceId);
     // …do the slow thing here…
@@ -33,7 +37,16 @@ Produce from anywhere with the context:
 await queues!.add("billing.send-invoice", "send", { invoiceId: invoice.id });
 ```
 
-Run a consumer with `yarn worker`. Without it, jobs pile up in Redis and
+Run `pnpm sync` after adding a queue: it records the `jobs` export in
+`types/tulipes.d.ts`, so the payload above and `job.data` in the processor
+are both typed from the schema, and a queue name no file declares does not
+compile. At runtime `add()` parses the payload with the schema — defaults
+applied, a bad payload refused at the producer rather than in the worker.
+A queue that needs options (`defaultJobOptions`, a prefix) calls
+`queues.define(name, options)` as well; a queue without a schema is defined
+that way alone and takes any payload.
+
+Run a consumer with `pnpm worker`. Without it, jobs pile up in Redis and
 nothing processes them — that is the correct behaviour, not a bug.
 
 ## Rules
@@ -42,8 +55,9 @@ nothing processes them — that is the correct behaviour, not a bug.
   reserves `:` as its Redis key separator; a `:` name crashes the boot.
 - Names are globally unique, and a queue may have only one processor —
   duplicates crash the boot naming both modules.
-- A processor registered for a queue nobody defined is a boot error; call
-  `define()` in the same file.
+- A processor registered for a queue nobody defined is a boot error; list
+  it in `jobs` or call `define()` in the same file. One schema per queue:
+  a second module declaring one is a boot error naming the first.
 - The app selects its queue provider once, in its root `package.json`:
   `"tulipes": { "providers": { "queues": "@tulipes/bullmq" } }`. A module with a
   `queues/` file in an app without that line is a boot refusal before any

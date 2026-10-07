@@ -3,6 +3,7 @@
   "tulipes": {
     "providers": {
       "models": "@tulipes/mongoose",
+      "settings": "@tulipes/mongoose/settings",
       "queues": "@tulipes/bullmq",
       "sockets": "@tulipes/socket.io"
     }
@@ -11,14 +12,23 @@
   "type": "module",
   "scripts": {
     "dev": "tulipes dev",
-    "worker": "tsx worker.ts",
+    "worker": "node worker.ts",
     "sync": "tulipes sync",
     "check": "tulipes env:check",
     "typecheck": "tsc --noEmit",
-    "script": "tsx",
-    "spec": "tulipes spec --offline --openapi docs/openapi.json --postman docs/collection.json",
+    "script": "node",
+    "spec": "tulipes spec --openapi docs/openapi.json --postman docs/collection.json",
+    "manifest": "tulipes agent manifest --out docs/agent-manifest.json",
     "test": "vitest run",
-    "start": "tsx app.ts"
+    "start": "node app.ts",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:start:staging": "pm2 start ecosystem.config.cjs --env staging",
+    "pm2:start:production": "pm2 start ecosystem.config.cjs --env production",
+    "pm2:stop": "pm2 stop ecosystem.config.cjs",
+    "pm2:restart": "pm2 restart ecosystem.config.cjs",
+    "pm2:delete": "pm2 delete ecosystem.config.cjs",
+    "pm2:logs": "pm2 logs",
+    "pm2:status": "pm2 status"
   },
   "dependencies": {
     "@tulipes/bullmq": "workspace:*",
@@ -32,8 +42,12 @@
   "devDependencies": {
     "@tulipes/cli": "workspace:*",
     "@tulipes/spec": "workspace:*",
+    "@tulipes/testing": "workspace:*",
+    "@types/express": "^5",
+    "@types/jsonwebtoken": "^9",
+    "@types/node": "^24",
+    "jsonwebtoken": "^9",
     "pm2": "^7.0.4",
-    "socket.io-client": "^4",
     "typescript": "^7",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"

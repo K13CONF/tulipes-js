@@ -2,14 +2,14 @@ import { spawnSync } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
-import { fixture } from "../../core/tests/fixture.js";
+import { fixture } from "../../core/tests/fixture.ts";
 
 const cli = resolve("packages/cli/src/bin.ts");
 
 function init(rootDir: string, args: string[]) {
   return spawnSync(
     process.execPath,
-    ["--import", "tsx", cli, "init", ...args],
+    [cli, "init", ...args],
     {
       cwd: rootDir,
       encoding: "utf8",
@@ -74,7 +74,7 @@ test("the default preset declares no infrastructure and supplies runnable test/s
 
   const check = spawnSync(
     process.execPath,
-    ["--import", "tsx", app.rootDir + "/api/verify.ts"],
+    [app.rootDir + "/api/verify.ts"],
     {
       encoding: "utf8",
       timeout: 10_000,
@@ -128,7 +128,7 @@ test("production starter patches PM2's vulnerable pinned YAML dependency", async
     await readFile(app.rootDir + "/api/package.json", "utf8"),
   );
 
-  expect(pkg.resolutions?.["pm2/js-yaml"]).toBe("4.3.2");
+  expect(pkg.pnpm?.overrides?.["pm2>js-yaml"]).toBe("4.3.2");
 });
 
 test("the production preset composes without queues or sockets: no files, dependencies, providers or scripts for them", async () => {
@@ -140,7 +140,7 @@ test("the production preset composes without queues or sockets: no files, depend
 
   const root = app.rootDir + "/api";
   const pkg = JSON.parse(await readFile(root + "/package.json", "utf8"));
-  expect(pkg.tulipes.providers).toEqual({ models: "@tulipes/mongoose" });
+  expect(pkg.tulipes.providers).toEqual({ models: "@tulipes/mongoose", settings: "@tulipes/mongoose/settings" });
   expect(pkg.scripts.worker).toBeUndefined();
   expect(Object.keys(pkg.dependencies)).not.toContain("@tulipes/bullmq");
   expect(Object.keys(pkg.dependencies)).not.toContain("@tulipes/socket.io");
@@ -160,6 +160,6 @@ test("the production preset composes without queues or sockets: no files, depend
   const greetings = await readFile(root + "/modules/hello/controllers/greetings.controllers.ts", "utf8");
   expect(greetings).not.toContain("requireQueues");
   // The app still declares REDIS_URL: the cache and rate limiter are app-owned.
-  const meta = JSON.parse(await readFile(root + "/modules/core/meta.variables.json", "utf8"));
-  expect(meta.variables.some((v: { name: string }) => v.name === "REDIS_URL")).toBe(true);
+  const core = JSON.parse(await readFile(root + "/modules/core/package.json", "utf8"));
+  expect(core.tulipes.env.some((v: { name: string }) => v.name === "REDIS_URL")).toBe(true);
 });

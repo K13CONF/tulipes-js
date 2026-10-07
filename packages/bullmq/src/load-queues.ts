@@ -2,7 +2,7 @@ import { importFile, type Ctx } from "@tulipes/core/boot";
 import type { BootReport } from "@tulipes/core/errors";
 import type { ModuleFiles } from "@tulipes/core/modules";
 
-import { QueueManager, type QueueRegistry } from "./queue-manager.js";
+import { QueueManager, type JobSchema, type QueueRegistry } from "./queue-manager.ts";
 
 /** Default export of `queues/*.queues.ts`. */
 export type QueuesFn = (ctx: Ctx, queues: QueueRegistry) => void | Promise<void>;
@@ -29,7 +29,7 @@ export async function initQueues(
   if (!url) {
     report.add({
       scope: "providers",
-      message: `provider "bullmq" is selected but "${REDIS_URL}" is not declared/set — declare it in a sys module's meta.variables.json and set it`,
+      message: `provider "bullmq" is selected but "${REDIS_URL}" is not declared/set — declare it in a sys module's package.json tulipes.env and set it`,
     });
     return undefined;
   }
@@ -41,7 +41,7 @@ export async function initQueues(
 
   for (const { module, queueFiles } of explored) {
     for (const file of queueFiles) {
-      const exported = await importFile<{ default?: unknown }>(
+      const exported = await importFile<{ default?: unknown; jobs?: unknown }>(
         file, "boot", module.name, report,
       );
       if (!exported) continue;
@@ -55,20 +55,48 @@ export async function initQueues(
         continue;
       }
 
+      const registry = manager.forModule(module.name, report);
       try {
-        await (exported.default as QueuesFn)(
-          ctx,
-          manager.forModule(module.name, report),
-        );
+        await (exported.default as QueuesFn)(ctx, registry);
       } catch (error) {
         report.add({
           scope: "boot",
           module: module.name,
           message: `queues function threw: ${(error as Error).message}`,
         });
+        continue;
       }
+
+      if (exported.jobs !== undefined) registerJobs(file, exported.jobs, registry, report, module.name);
     }
   }
 
   return manager;
+}
+
+/**
+ * The `jobs` export — `{ [queueName]: schema }` — is the declaration
+ * `tulipes sync` types `KnownJobs` from, so it carries runtime weight too:
+ * each schema validates `add()` payloads, and a queue named only there is
+ * defined with default options, so the common file does not repeat itself.
+ */
+function registerJobs(
+  file: string,
+  jobs: unknown,
+  registry: QueueRegistry,
+  report: BootReport,
+  moduleName: string,
+): void {
+  const refuse = (message: string) => report.add({ scope: "boot", module: moduleName, message: `${file}: ${message}` });
+  if (typeof jobs !== "object" || jobs === null || Array.isArray(jobs)) {
+    refuse("`jobs` must be an object of queue name → schema");
+    return;
+  }
+  for (const [name, schema] of Object.entries(jobs)) {
+    if (typeof (schema as JobSchema | null)?.safeParse !== "function") {
+      refuse(`jobs["${name}"] is not a schema (expected a zod schema with safeParse)`);
+      continue;
+    }
+    registry.declare_(name, schema as JobSchema);
+  }
 }

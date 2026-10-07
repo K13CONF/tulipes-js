@@ -5,20 +5,23 @@ import { Strategy as LocalStrategy } from "passport-local";
 import type { Ctx } from "@tulipes/core/boot";
 import type { Auth } from "@tulipes/core/http";
 
-import { verifyPassword } from "./passwords.js";
+import { verifyPassword } from "./passwords.ts";
 import {
   isRevoked,
   loadSession,
   touchSession,
   type TokenClaims,
-} from "./tokens.js";
-import { GUEST } from "./auth.js";
+} from "./tokens.ts";
+import { GUEST } from "./auth.ts";
+import { readIdentity, writeIdentity } from "./session-cache.ts";
 import type {
   CredentialDoc,
   PasswordIdentity,
+  SessionAttrs,
   SessionDoc,
+  UserAttrs,
   UserDoc,
-} from "./documents.js";
+} from "./documents.ts";
 
 /**
  * Two strategies, both stateless as far as passport is concerned
@@ -27,9 +30,12 @@ import type {
  *   local  runs once, at login, to check an email and password
  *   jwt    runs on every request, to turn a Bearer token into a req.auth
  *
- * The jwt strategy reloads the user on each request rather than trusting
- * the token's claims. It costs a query, and it is what makes a demotion or
- * a ban take effect immediately instead of whenever the token expires.
+ * The jwt strategy never trusts the token's claims for authority: it
+ * resolves the session and the user, from the app cache when a request
+ * resolved them recently and nothing revoked them since (one Redis read),
+ * from the database otherwise (three reads). Every revocation deletes the
+ * cached entry, which is what makes a demotion, a ban or a logout take
+ * effect on the next request instead of whenever the token expires.
  */
 export function configurePassport(ctx: Ctx): void {
   passport.use(
@@ -93,6 +99,22 @@ export function configurePassport(ctx: Ctx): void {
         try {
           if (claims.typ !== "access") return done(null, false);
 
+          // A hit is the identity a cold path resolved moments ago, for
+          // this sid and subject, and no revocation has run since — every
+          // revocation path deletes the entry before it answers. Documents
+          // are hydrated from the cached attributes, so handlers hold the
+          // same kind of value either way.
+          const cached = await readIdentity(ctx, claims.sid);
+          if (cached && String(cached.user._id) === claims.sub && cached.session.sid === claims.sid
+            && new Date(cached.session.expires_at).getTime() > Date.now()) {
+            const user = ctx.models!.get<UserDoc>("User").hydrate(cached.user) as UserDoc;
+            const session = ctx.models!.get<SessionDoc>("Session").hydrate(cached.session) as SessionDoc;
+            if (await touchSession(ctx, session, touchInterval(ctx))) {
+              await writeIdentity(ctx, claims.sid, { user: cached.user, session: session.toObject() as SessionAttrs });
+            }
+            return done(null, resolve(user, session, claims) as unknown as Express.User);
+          }
+
           // Logout blacklists the jti; without this check a "logged out"
           // token keeps working until it expires.
           if (await isRevoked(ctx, claims.jti)) return done(null, false);
@@ -107,6 +129,7 @@ export function configurePassport(ctx: Ctx): void {
           if (!user) return done(null, false);
 
           await touchSession(ctx, session, touchInterval(ctx));
+          await writeIdentity(ctx, claims.sid, { user: user.toObject() as UserAttrs, session: session.toObject() as SessionAttrs });
 
           return done(null, resolve(user, session, claims) as unknown as Express.User);
         } catch (error) {

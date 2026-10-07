@@ -1,0 +1,21 @@
+{
+  "name": "@tulipes-example/core",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "tulipes": {
+    "tier": "sys",
+    "priority": 0,
+    "env": [
+      {
+        "name": "PORT",
+        "type": "number",
+        "default": 3000,
+        "description": "HTTP listener port"
+      }
+    ]
+  },
+  "dependencies": {
+    "@tulipes/core": "workspace:*"
+  }
+}

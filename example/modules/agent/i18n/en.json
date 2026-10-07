@@ -1,0 +1,5 @@
+{
+  "noSuchTool": "No tool named \"{{name}}\"",
+  "routeTool": "\"{{name}}\" is an endpoint — call {{method}} {{path}}",
+  "invalidToolName": "Tool names are letters, digits, _ and -"
+}

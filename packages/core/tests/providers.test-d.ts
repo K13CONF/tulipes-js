@@ -1,6 +1,6 @@
-import type { BootHandle, ConfigCtx, DatabaseCtx, InspectionContext, ModelsCapability, Provider } from "../src/boot/index.js";
-import { requireModels } from "../src/boot/index.js";
-import type { BootReport } from "../src/errors/index.js";
+import type { BootHandle, DatabaseCtx, ModelsCapability, Provider } from "../src/boot/index.ts";
+import { requireModels } from "../src/boot/index.ts";
+import type { BootReport } from "../src/errors/index.ts";
 
 /**
  * The models seam as a consumer and a provider author see it. ModelsCapability
@@ -10,16 +10,8 @@ import type { BootReport } from "../src/errors/index.js";
  * cannot, because the built-in store's augmentation is part of it.
  */
 
-declare const config: ConfigCtx;
-declare const inspection: InspectionContext;
 declare const database: DatabaseCtx;
 declare const handle: BootHandle;
-
-// @ts-expect-error Configuration runs before any provider is acquired.
-config.models;
-
-// @ts-expect-error Offline inspection acquires nothing.
-inspection.models;
 
 // The slot exists after phase 8; its members come from the provider's augmentation.
 const models: ModelsCapability = database.models;
@@ -40,13 +32,12 @@ declare const report: BootReport;
 declare const value: ModelsCapability;
 
 const valid: Provider<"models"> = {
-  contract: 1,
+  contract: 2,
   capability: "models",
   name: "fake",
-  async acquire({ ctx, files, runBootstrap }, incoming, own) {
+  async acquire({ ctx, files }, incoming, own) {
     void ctx.mode;
     void files[0]?.modelFiles;
-    void runBootstrap;
     void (incoming satisfies BootReport);
     own({ dispose: () => undefined, status: () => ({ label: "fake", ready: true }) });
     return value;
@@ -55,8 +46,8 @@ const valid: Provider<"models"> = {
 void valid;
 
 const wrongContract: Provider<"models"> = {
-  // @ts-expect-error Only contract 1 exists.
-  contract: 2,
+  // @ts-expect-error Only contract 2 exists.
+  contract: 1,
   capability: "models",
   name: "fake",
   async acquire() { return value; },
@@ -64,7 +55,7 @@ const wrongContract: Provider<"models"> = {
 void wrongContract;
 
 const wrongCapability: Provider<"models"> = {
-  contract: 1,
+  contract: 2,
   // @ts-expect-error The declared capability must match.
   capability: "queues",
   name: "fake",
@@ -73,7 +64,7 @@ const wrongCapability: Provider<"models"> = {
 void wrongCapability;
 
 const incompleteResource: Provider<"models"> = {
-  contract: 1,
+  contract: 2,
   capability: "models",
   name: "fake",
   async acquire(_ctx, _report, own) {

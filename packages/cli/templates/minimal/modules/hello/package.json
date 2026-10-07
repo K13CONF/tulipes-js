@@ -1,0 +1,11 @@
+{
+  "name": "@tulipes-example/hello",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "dependencies": {
+    "@tulipes/core": "workspace:*",
+    "express": "^5",
+    "zod": "^3.25"
+  }
+}

@@ -5,7 +5,7 @@ export {
   notFoundHandler,
   type FieldIssue,
   type HttpErrorOptions,
-} from "./error-handler.js";
+} from "./error-handler.ts";
 export {
   buildMeta,
   envelope,
@@ -15,13 +15,13 @@ export {
   type MetaActions,
   type ResponseMeta,
   type RespondOptions,
-} from "./envelope.js";
+} from "./envelope.ts";
 export {
   parsePage,
   type PageRequest,
   type PaginationBounds,
-} from "./pagination.js";
-export { bindRespond, markResponded, warnOnRawResponse } from "./respond.js";
+} from "./pagination.ts";
+export { bindRespond, markResponded, warnOnRawResponse } from "./respond.ts";
 export {
   ANONYMOUS,
   createRai,
@@ -33,16 +33,15 @@ export {
   type RaiTag,
   type RouteInfo,
   type RouteRecord,
-} from "./rai.js";
-export { scanRoutes } from "./route-scan.js";
-export { defineRoutes, type DefinedRoutes, type RouterFactory, type RouterCtx, type RuntimeBinder } from "./define-routes.js";
+} from "./rai.ts";
+export { scanRoutes } from "./route-scan.ts";
 export {
   codeOfIssue,
   fieldOf,
   type RouteSchemas,
   type SchemaIssue,
   type ValidatableSchema,
-} from "./schema.js";
+} from "./schema.ts";
 
 /**
  * Who is making a request. Core owns the shape and reads `req.auth`; an

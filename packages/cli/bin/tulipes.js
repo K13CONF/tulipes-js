@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-// Dev-phase shim: the CLI lives in TypeScript sources, so route through
-// tsx's programmatic loader. A published build will point bin at dist/ and
-// drop this indirection.
-import { tsImport } from "tsx/esm/api";
-
-const { main } = await tsImport("../src/main.ts", import.meta.url);
+// Dev-phase shim: the CLI lives in TypeScript sources, which node runs as
+// they are. A published build points bin at dist/ and drops this indirection.
+const { main } = await import("../src/main.ts");
 await main(process.argv.slice(2));

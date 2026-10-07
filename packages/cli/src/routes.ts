@@ -1,14 +1,12 @@
-import { inspectApp } from "./inspection.js";
+import { inspectApp } from "./inspection.ts";
 
 /**
  * `tulipes routes` — every endpoint the app declares, with the roles that
- * can reach it.
- *
- * Reads shared declarations offline, or uses backend inspection for legacy
- * applications. Both paths use the same route scan and ACL metadata.
+ * can reach it, from an inspection boot: the same route scan and ACL the
+ * running app uses, with no service touched.
  */
-export async function runRoutes(rootDir: string, offline = false): Promise<void> {
-  const handle = await inspectApp(rootDir, offline);
+export async function runRoutes(rootDir: string): Promise<void> {
+  const handle = await inspectApp(rootDir);
 
   try {
     const records = [...handle.ctx.routes.all()].sort((a, b) =>

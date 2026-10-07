@@ -1,8 +1,9 @@
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
-import type { CredentialDoc } from "./documents.js";
+import type { CredentialDoc } from "./documents.ts";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
+import { forgetUser } from "./session-cache.ts";
 
 /**
  * bcryptjs — pure JavaScript, so installs never need a native toolchain.
@@ -40,6 +41,8 @@ export async function setPassword(ctx: Ctx, userId: string, plain: string, expec
 
   // Authorization already rejects the previous version even if cleanup fails.
   // Never delete sessions issued under a newer, concurrent password change.
+  // Cached identities of this user go first: they carry the old version.
+  await forgetUser(ctx, userId);
   await ctx.models!.get("Session").deleteMany({
     user: userId,
     credential_version: previous?.version ?? { $exists: false },

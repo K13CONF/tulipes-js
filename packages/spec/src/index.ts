@@ -6,11 +6,11 @@
  * a generated document describes exactly what is mounted — it cannot
  * invent an endpoint or miss one. `tulipes spec` is the CLI over this.
  */
-export { extract, pathParams, toOpenApiPath, toPostmanPath } from "./extract.js";
-export type { SpecRoute, SpecSource } from "./extract.js";
-export { toOpenApi } from "./openapi.js";
-export type { GeneratedDocument, OpenApiOptions } from "./openapi.js";
-export { toPostman } from "./postman.js";
-export type { PostmanOptions } from "./postman.js";
-export { toJsonSchema, exampleFor } from "./json-schema.js";
-export type { JsonSchema } from "./json-schema.js";
+export { extract, pathParams, toOpenApiPath, toPostmanPath } from "./extract.ts";
+export type { SpecRoute, SpecSource } from "./extract.ts";
+export { toOpenApi } from "./openapi.ts";
+export type { GeneratedDocument, OpenApiOptions } from "./openapi.ts";
+export { toPostman } from "./postman.ts";
+export type { PostmanOptions } from "./postman.ts";
+export { toJsonSchema, exampleFor } from "./json-schema.ts";
+export type { JsonSchema } from "./json-schema.ts";

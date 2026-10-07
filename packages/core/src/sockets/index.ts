@@ -1,4 +1,4 @@
-import type { Provider } from "../boot/providers.js";
+import type { Provider } from "../boot/providers.ts";
 
 /**
  * `@tulipes/core/sockets` moved to `@tulipes/socket.io`. What remains is the
@@ -7,7 +7,7 @@ import type { Provider } from "../boot/providers.js";
  * imports fail with "no exported member" — see MIGRATING.md.
  */
 const moved: Provider<"sockets"> = {
-  contract: 1,
+  contract: 2,
   capability: "sockets",
   name: "core/sockets (moved)",
   async acquire(_ctx, report) {

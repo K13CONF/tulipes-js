@@ -1,13 +1,14 @@
 import type { DatabaseCtx } from "@tulipes/core/boot";
 
 /**
- * Runs after models are registered and before the server accepts
+ * Runs after settings, translations and ACL and before the server accepts
  * traffic — the place for indexes, seed rows and defaults.
  *
  * MUST be idempotent: it runs on every boot of every process, backend and
  * worker alike. Upsert; never blind-insert.
  */
-export default async function seedGreetings({ models }: DatabaseCtx): Promise<void> {
+export default async function seedGreetings({ models, mode }: DatabaseCtx): Promise<void> {
+  if (mode === "script") return; // a one-off script reads; it does not seed
   const Greeting = models.get("Greeting");
 
   try {

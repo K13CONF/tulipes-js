@@ -1,12 +1,20 @@
 import { expect, test } from "vitest";
-import { fixture } from "./fixture.js";
+import { fixture, url } from "./fixture.ts";
 
-test("shutdown runs module cleanup only once, including concurrent calls", async () => {
+/**
+ * Lifecycle: a bootstrap file is the one place a module initializes, and
+ * the cleanup it returns is the one place it closes what it opened. Tests
+ * share state with fixture code through globalThis, since both run in this
+ * process.
+ */
+type Probe = Record<string, unknown>;
+const probe = (initial: Probe = {}): Probe => ((globalThis as { __probe?: Probe }).__probe = initial);
+const bootstrap = (body: string) => `const state = globalThis.__probe;\nexport default (ctx) => { ${body} };`;
+
+test("shutdown runs a bootstrap cleanup only once, including concurrent calls", async () => {
+  const state = probe({ calls: 0 });
   const app = await fixture({
-    "modules/probe/module.config.js": `
-      export default () => ({ calls: 0 });
-      export async function onShutdown(ctx) { ctx.config.probe.calls++; }
-    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": bootstrap(`return () => { state.calls++; };`),
   });
 
   const handle = await app.boot({ mode: "script" });
@@ -18,24 +26,23 @@ test("shutdown runs module cleanup only once, including concurrent calls", async
 
   await handle.shutdown();
 
-  expect(handle.ctx.config.probe).toEqual({ calls: 1 });
+  expect(state.calls).toBe(1);
 });
 
-test("drains active requests before disposing module resources", async () => {
+test("drains active requests before running bootstrap cleanups", async () => {
+  const state = probe({ closed: false, started: false });
   const app = await fixture({
-    "modules/probe/module.config.js": `
-      export default () => ({ closed: false, started: false });
-      export function onShutdown(ctx) { ctx.config.probe.closed = true; }
-    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": bootstrap(`return () => { state.closed = true; };`),
     "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:read');`,
     "modules/probe/routes/probe.routes.js": `
       import { Router } from 'express';
+      const state = globalThis.__probe;
       export default ctx => {
         const r = Router();
         r.get('/slow', ctx.rai({ id: 'probe:read' }), async (req, res) => {
-          ctx.config.probe.started = true;
-          await new Promise(resolve => { ctx.config.probe.release = resolve; });
-          res.respond({ data: { closed: ctx.config.probe.closed } });
+          state.started = true;
+          await new Promise(resolve => { state.release = resolve; });
+          res.respond({ data: { closed: state.closed } });
         });
         return r;
       };
@@ -43,42 +50,29 @@ test("drains active requests before disposing module resources", async () => {
   });
 
   const handle = await app.boot();
-  const { url } = await import("./fixture.js");
 
-  const state = handle.ctx.config.probe as {
-    started: boolean;
-    release: () => void;
-  };
-
-  const response = fetch(url(handle) + "/slow", {
-    headers: { connection: "close" },
-  });
+  const response = fetch(url(handle) + "/slow", { headers: { connection: "close" } });
 
   await expect.poll(() => state.started).toBe(true);
 
   const shutdown = handle.shutdown();
 
-  state.release();
+  (state.release as () => void)();
 
-  expect(await (await response).json()).toMatchObject({
-    data: { closed: false },
-  });
+  expect(await (await response).json()).toMatchObject({ data: { closed: false } });
 
   await shutdown;
+  expect(state.closed).toBe(true);
 });
 
-test("cleans up configured modules when a later boot phase fails", async () => {
+test("runs collected cleanups when a later boot phase fails", async () => {
   const { readFile } = await import("node:fs/promises");
   const app = await fixture();
   const marker = JSON.stringify(app.rootDir + "/closed");
 
   await app.write(
-    "modules/probe/module.config.js",
-    `
-    import { writeFileSync } from 'node:fs';
-    export default () => ({});
-    export function onShutdown() { writeFileSync(${marker}, 'closed'); }
-  `,
+    "modules/probe/bootstrap/probe.bootstrap.js",
+    `import { writeFileSync } from 'node:fs';\nexport default () => () => writeFileSync(${marker}, 'closed');`,
   );
 
   await app.write(
@@ -91,36 +85,31 @@ test("cleans up configured modules when a later boot phase fails", async () => {
   expect(await readFile(app.rootDir + "/closed", "utf8")).toBe("closed");
 });
 
-test("bounds a stuck cleanup hook and still attempts later cleanup", async () => {
+test("bounds a stuck cleanup and still runs the ones before it", async () => {
+  const state = probe({ closed: false });
   const app = await fixture({
-    "modules/probe/module.config.js": `
-      export default () => ({ closed: false });
-      export function onShutdown(ctx) { ctx.config.probe.closed = true; }
-    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": bootstrap(`return () => { state.closed = true; };`),
     "modules/stuck/package.json":
       '{"name":"@test/stuck","type":"module","tulipes":{"dependsOn":["probe"]}}',
-    "modules/stuck/module.config.js": `
-      export default () => ({});
-      export function onShutdown() { return new Promise(() => {}); }
-    `,
+    "modules/stuck/bootstrap/stuck.bootstrap.js": `export default () => () => new Promise(() => {});`,
   });
 
   const handle = await app.boot({ mode: "script", shutdownTimeoutMs: 100 });
 
   await expect(handle.shutdown()).rejects.toThrow(/timed out/);
 
-  expect(handle.ctx.config.probe).toEqual({ closed: true });
+  expect(state.closed).toBe(true);
 });
 
 test("capability accessors reject missing infrastructure and preserve available services", async () => {
-  const { requireModels, requireQueues } = await import("../src/boot/index.js");
+  const { requireModels, requireQueues } = await import("../src/boot/index.ts");
 
   expect(() => requireModels({})).toThrow(/tulipes\.providers\.models/);
   expect(() => requireQueues({})).toThrow(/tulipes\.providers\.queues/);
 
   // Whatever the declared providers handed over: core only checks presence.
-  const models = {} as import("../src/boot/index.js").ModelsCapability,
-    queues = {} as import("../src/boot/index.js").QueuesCapability;
+  const models = {} as import("../src/boot/index.ts").ModelsCapability,
+    queues = {} as import("../src/boot/index.ts").QueuesCapability;
 
   expect(requireModels({ models })).toBe(models);
   expect(requireQueues({ queues })).toBe(queues);
@@ -143,13 +132,10 @@ test("removes its signal listeners on explicit shutdown", async () => {
   ]).toEqual(before);
 });
 
-test("preserves the startup failure when cleanup also fails", async () => {
+test("preserves the startup failure when a cleanup also fails", async () => {
   const app = await fixture({
-    "modules/probe/module.config.js": `
-      export default () => ({});
-      export function onReady() { throw new Error('startup marker'); }
-      export function onShutdown() { throw new Error('cleanup marker'); }
-    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": `export default () => () => { throw new Error('cleanup marker'); };`,
+    "modules/probe/routes/probe.routes.js": `export default () => { throw new Error('startup marker'); };`,
   });
 
   await expect(app.boot()).rejects.toMatchObject({
@@ -165,48 +151,44 @@ test("preserves the startup failure when cleanup also fails", async () => {
   });
 });
 
-test("attempts remaining module cleanup after a hook throws", async () => {
+test("attempts the remaining cleanups after one throws, in reverse load order", async () => {
+  const state = probe({ closed: false });
   const app = await fixture({
-    "modules/probe/module.config.js": `
-      export default () => ({ closed: false });
-      export function onShutdown(ctx) { ctx.config.probe.closed = true; }
-    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": bootstrap(`return () => { state.closed = true; };`),
     "modules/failed/package.json":
       '{"name":"@test/failed","type":"module","tulipes":{"dependsOn":["probe"]}}',
-    "modules/failed/module.config.js": `
-      export default () => ({});
-      export function onShutdown() { throw new Error('intentional failure'); }
-    `,
+    "modules/failed/bootstrap/failed.bootstrap.js": `export default () => () => { throw new Error('intentional failure'); };`,
   });
 
   const handle = await app.boot({ mode: "script" });
 
   await expect(handle.shutdown()).rejects.toThrow(/intentional failure/);
 
-  expect(handle.ctx.config.probe).toEqual({ closed: true });
+  expect(state.closed).toBe(true);
 });
 
-test("onDrain closes an idle SSE before HTTP waits while ordinary requests keep their resources", async () => {
+test("ctx.signal ends an idle SSE before HTTP waits while ordinary requests keep their resources", async () => {
+  const state = probe({ closed: false, aborts: 0, started: false });
   const app = await fixture({
-    "modules/probe/module.config.js": `
-      export default () => ({ closed: false, drains: 0, started: false });
-      export function onDrain(ctx) { ctx.config.probe.drains++; ctx.config.probe.stream?.end(); }
-      export function onShutdown(ctx) { ctx.config.probe.closed = true; }
-    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": bootstrap(`
+      ctx.signal.addEventListener('abort', () => { state.aborts++; state.stream?.end(); });
+      return () => { state.closed = true; };
+    `),
     "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:read', 'probe:stream');`,
     "modules/probe/routes/probe.routes.js": `
       import { Router } from 'express';
+      const state = globalThis.__probe;
       export default ctx => {
         const r = Router();
         r.get('/stream', ctx.rai({ id: 'probe:stream' }), (req, res) => {
-          ctx.config.probe.stream = res;
+          state.stream = res;
           res.writeHead(200, { 'Content-Type': 'text/event-stream' });
           res.write('event: ready\\ndata: {}\\n\\n');
         });
         r.get('/slow', ctx.rai({ id: 'probe:read' }), async (req, res) => {
-          ctx.config.probe.started = true;
-          await new Promise(resolve => { ctx.config.probe.release = resolve; });
-          res.respond({ data: { closed: ctx.config.probe.closed } });
+          state.started = true;
+          await new Promise(resolve => { state.release = resolve; });
+          res.respond({ data: { closed: state.closed } });
         });
         return r;
       };
@@ -214,20 +196,10 @@ test("onDrain closes an idle SSE before HTTP waits while ordinary requests keep 
   });
 
   const handle = await app.boot({ shutdownTimeoutMs: 500 });
-  const { url } = await import("./fixture.js");
   const base = url(handle);
-
-  const state = handle.ctx.config.probe as {
-    drains: number;
-    started: boolean;
-    closed: boolean;
-    release: () => void;
-  };
 
   const stream = await fetch(base + "/stream");
   const body = stream.text();
-
-  // Handle the old implementation's forced close without an unhandled rejection.
   void body.catch(() => {});
 
   const slow = fetch(base + "/slow", { headers: { connection: "close" } });
@@ -237,31 +209,26 @@ test("onDrain closes an idle SSE before HTTP waits while ordinary requests keep 
   const pending = handle.shutdown();
 
   expect(handle.shutdown()).toBe(pending);
+  await Promise.resolve();
+  expect(handle.ctx.signal.aborted).toBe(true);
 
-  state.release();
+  (state.release as () => void)();
 
   expect(await (await slow).json()).toMatchObject({ data: { closed: false } });
 
   await expect(pending).resolves.toBeUndefined();
 
   expect(await body).toContain("event: ready");
-  expect(state).toMatchObject({ drains: 1, closed: true });
+  expect(state).toMatchObject({ aborts: 1, closed: true });
 });
 
-test("drain failures share the deadline, aggregate errors and preserve later cleanup", async () => {
+test("cleanup failures share the deadline, aggregate errors and preserve later cleanup", async () => {
+  const state = probe({ calls: [] as string[] });
   const app = await fixture({
-    "modules/probe/module.config.js": `
-      export default () => ({ calls: [] });
-      export function onDrain(ctx) { ctx.config.probe.calls.push('probe drain'); throw new Error('drain marker'); }
-      export function onShutdown(ctx) { ctx.config.probe.calls.push('probe close'); }
-    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": bootstrap(`return () => { state.calls.push('probe close'); throw new Error('close marker'); };`),
     "modules/stuck/package.json":
       '{"name":"@test/stuck","type":"module","tulipes":{"dependsOn":["probe"]}}',
-    "modules/stuck/module.config.js": `
-      export default () => ({});
-      export function onDrain(ctx) { ctx.config.probe.calls.push('stuck drain'); return new Promise(() => {}); }
-      export function onShutdown(ctx) { ctx.config.probe.calls.push('stuck close'); }
-    `,
+    "modules/stuck/bootstrap/stuck.bootstrap.js": bootstrap(`return () => { state.calls.push('stuck close'); return new Promise(() => {}); };`),
   });
 
   const handle = await app.boot({ shutdownTimeoutMs: 250 });
@@ -270,41 +237,58 @@ test("drain failures share the deadline, aggregate errors and preserve later cle
 
   void stopping.catch(() => {});
 
-  // A stuck drain notification must not keep the HTTP listener accepting work.
+  // Shutdown must not keep the HTTP listener accepting work while a cleanup hangs.
   await expect.poll(() => handle.server!.listening).toBe(false);
 
   await expect(stopping).rejects.toMatchObject({
     errors: expect.arrayContaining([
-      expect.objectContaining({
-        message: expect.stringContaining("probe onDrain: drain marker"),
-      }),
-      expect.objectContaining({
-        message: expect.stringContaining(
-          "stuck onDrain: stuck onDrain timed out",
-        ),
-      }),
+      expect.objectContaining({ message: expect.stringContaining("timed out") }),
+      expect.objectContaining({ message: expect.stringContaining("close marker") }),
     ]),
   });
 
   expect(performance.now() - started).toBeLessThan(1000);
 
-  expect(handle.ctx.config.probe).toEqual({
-    calls: ["stuck drain", "probe drain", "stuck close", "probe close"],
-  });
+  expect(state.calls).toEqual(["stuck close", "probe close"]);
 });
 
-test("onDrain is validated and runs during failed startup before module disposal", async () => {
+test("the 0.10 lifecycle exports and config factories are refused by name", async () => {
+  const hooks = await fixture({
+    "modules/probe/module.config.js": `
+      import { defineConfig } from '@tulipes/core/config';
+      import { z } from 'zod/v4';
+      export default defineConfig({ schema: z.object({}) });
+      export function onDrain() {}
+      export function onShutdown() {}
+    `,
+  });
+
+  await expect(hooks.boot({ mode: "script" })).rejects.toThrow(
+    /module\.config exports "onDrain".*bootstrap\/\*\.bootstrap\.ts.*ctx\.signal[\s\S]*exports "onShutdown"/,
+  );
+
+  const factory = await fixture({
+    "modules/probe/module.config.js": `export default () => ({ greeting: 'hi' });`,
+  });
+
+  await expect(factory.boot({ mode: "script" })).rejects.toThrow(
+    /default-exports a factory — the 0\.10 form; export defineConfig\(\{ schema \}\)/,
+  );
+});
+
+test("ctx.signal aborts during a failed startup, before the cleanups run", async () => {
   const { readFile } = await import("node:fs/promises");
   const app = await fixture();
-  const marker = JSON.stringify(app.rootDir + "/drain-order");
+  const marker = JSON.stringify(app.rootDir + "/order");
 
   await app.write(
-    "modules/probe/module.config.js",
+    "modules/probe/bootstrap/probe.bootstrap.js",
     `
     import { appendFileSync } from 'node:fs';
-    export default () => ({});
-    export function onDrain() { appendFileSync(${marker}, 'drain '); }
-    export function onShutdown() { appendFileSync(${marker}, 'close'); }
+    export default (ctx) => {
+      ctx.signal.addEventListener('abort', () => appendFileSync(${marker}, 'abort '));
+      return () => appendFileSync(${marker}, 'close');
+    };
   `,
   );
 
@@ -315,37 +299,21 @@ test("onDrain is validated and runs during failed startup before module disposal
 
   await expect(app.boot()).rejects.toThrow(/route marker/);
 
-  expect(await readFile(app.rootDir + "/drain-order", "utf8")).toBe(
-    "drain close",
-  );
-
-  const invalid = await fixture({
-    "modules/probe/module.config.js": `export default () => ({}); export const onDrain = 42;`,
-  });
-
-  await expect(invalid.boot({ mode: "script" })).rejects.toThrow(
-    /onDrain.*must be a function/,
-  );
+  expect(await readFile(app.rootDir + "/order", "utf8")).toBe("abort close");
 });
 
-test("a module can export only onDrain and reentrant shutdown shares the same operation", async () => {
+test("a shutdown requested from a signal listener shares the same operation", async () => {
+  const state = probe({ calls: 0 });
   const app = await fixture({
-    "modules/probe/module.config.js": `
-      export default () => ({ calls: 0 });
-      export function onDrain(ctx) {
-        ctx.config.probe.calls++;
-        ctx.config.probe.reentrant = ctx.config.probe.shutdown();
-      }
-    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": bootstrap(`
+      ctx.signal.addEventListener('abort', () => {
+        state.calls++;
+        state.reentrant = state.shutdown();
+      });
+    `),
   });
 
   const handle = await app.boot({ mode: "script" });
-
-  const state = handle.ctx.config.probe as {
-    shutdown: () => Promise<void>;
-    calls: number;
-    reentrant?: Promise<void>;
-  };
 
   state.shutdown = handle.shutdown;
 

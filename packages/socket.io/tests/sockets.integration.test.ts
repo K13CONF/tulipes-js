@@ -1,6 +1,6 @@
 import { io } from "socket.io-client";
 import { expect, test } from "vitest";
-import { fixture, url } from "../../core/tests/fixture.js";
+import { fixture, url } from "../../core/tests/fixture.ts";
 
 const declared = JSON.stringify({ type: "module", tulipes: { providers: { sockets: "@tulipes/socket.io" } } });
 
@@ -45,19 +45,16 @@ test("shutdown disconnects Socket.IO clients and releases the HTTP listener", as
   }
 });
 
-test("inspection skips socket setup and readiness hooks", async () => {
+test("inspection skips socket setup and bootstrap", async () => {
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/module.config.js": `
-      export default () => ({});
-      export function onReady() { throw new Error('must not run during inspection'); }
-    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": `export default () => { throw new Error('must not run during inspection'); };`,
     "modules/probe/sockets/probe.sockets.js": `export default () => { throw new Error('must not attach sockets'); };`,
   });
 
   const handle = await app.boot({ inspect: true });
 
-  expect(handle.ctx.sockets).toBeUndefined();
+  expect(() => (handle.ctx.sockets as { of(name: string): unknown }).of("/probe")).toThrow(/not available during inspection/);
   expect(handle.providers).toEqual([expect.objectContaining({ capability: "sockets", skipped: "inspect" })]);
   expect(handle.server!.listening).toBe(false);
 });

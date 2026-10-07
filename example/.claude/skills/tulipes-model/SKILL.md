@@ -49,8 +49,15 @@ Read it anywhere the context reaches:
 const Invoice = models!.get("Invoice");
 ```
 
-`models.get()` throws on an unregistered name (listing what does exist),
-so a typo fails at the call site instead of returning `undefined`.
+Run `pnpm sync` after adding a model: it records the model's name and file
+in `types/tulipes.d.ts`, so `models.get("Invoice")` is typed from the
+schema above (its fields, methods and statics) and a name that no model
+file declares does not compile. The name must be a string literal in the
+file for that; a computed name stays reachable only through
+`models.get<T>(name)`, the caller-side generic, which also serves code that
+builds names at runtime. `models.get()` throws on an unregistered name
+(listing what does exist), so a typo in dynamic code still fails at the
+call site instead of returning `undefined`.
 
 ## Requirements
 
@@ -97,8 +104,8 @@ is all the task wanted.
 
 - Global plugins (timestamps, soft delete) only apply to schemas compiled
   *after* registration, which is why `registerBasePlugins()` is called from
-  the sys core module's `module.config.ts` — phase 6, before models compile
-  in phase 8. That covers every mode, scripts included; calling it from
+  the sys core module's `module.config.ts` — declaration time (phase 4),
+  before models compile in phase 5. That covers every mode, scripts included; calling it from
   `app.ts` instead would leave scripts compiling models without the
   soft-delete guard.
 - Mongoose queries are lazy: `await` them, and prefer `.lean()` for reads

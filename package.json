@@ -1,16 +1,11 @@
 {
   "name": "tulipes",
   "private": true,
-  "packageManager": "yarn@4.18.0",
+  "packageManager": "pnpm@10.28.0",
   "type": "module",
-  "workspaces": [
-    "packages/*",
-    "example",
-    "example/modules/*"
-  ],
   "scripts": {
-    "example": "yarn workspace @tulipes-example/app dev",
-    "typecheck": "yarn workspaces foreach -A --no-private run typecheck",
+    "example": "pnpm --filter @tulipes-example/app dev",
+    "typecheck": "pnpm -r --filter \"./packages/*\" run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:types": "tsc -p tsconfig.tests.json --noEmit",
@@ -19,8 +14,8 @@
   "devDependencies": {
     "@types/node": "^24.2.0",
     "@vitest/coverage-v8": "^5.0.0",
+    "ioredis": "^5",
     "socket.io-client": "^4.8.3",
-    "tsx": "^4.19.2",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"
@@ -28,7 +23,19 @@
   "engines": {
     "node": ">=24.0.0 <25"
   },
-  "resolutions": {
-    "pm2/js-yaml": "4.3.2"
+  "pnpm": {
+    "overrides": {
+      "pm2>js-yaml": "4.3.2",
+      "basic-ftp": "^6.2.1"
+    },
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msgpackr-extract"
+    ],
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-vfj7-8cjw-p6xm"
+      ]
+    }
   }
 }

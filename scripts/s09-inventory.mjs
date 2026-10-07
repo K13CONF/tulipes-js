@@ -1,3 +1,6 @@
+// HISTORICAL — S09.1 measurements were taken with yarn 4 at 3d56aed and are recorded in
+// docs/design/mongoose-dependency-inventory.md. The repository moved to pnpm in 0.11; this harness
+// still reads yarn.lock and calls yarn, so rerunning it needs a checkout from before that move.
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';

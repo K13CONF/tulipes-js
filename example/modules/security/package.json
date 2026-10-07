@@ -8,8 +8,7 @@
     "priority": 10,
     "dependsOn": [
       "core"
-    ],
-    "offline": true
+    ]
   },
   "dependencies": {
     "@app/core": "workspace:*",

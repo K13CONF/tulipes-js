@@ -30,7 +30,7 @@ TulipesBootError: Boot aborted during "environment" — 3 issue(s):
 
 ## Quick start
 
-Requires Node 24.x and Corepack. The 0.10 line is stable — its API is settled
+Requires Node 24.x and pnpm. The 0.10 line is stable — its API is settled
 and breaking changes wait for 0.11 — but no production pilot has run it yet;
 the [compatibility policy](../../docs/support.md) says exactly what that leaves
 unproven.
@@ -39,14 +39,13 @@ unproven.
 npm install -g @tulipes/cli
 tulipes init my-api
 cd my-api
-corepack enable
-yarn install
-yarn sync
-yarn typecheck
-yarn check
-yarn test
-yarn spec
-yarn dev
+pnpm install
+pnpm sync
+pnpm typecheck
+pnpm check
+pnpm test
+pnpm spec
+pnpm dev
 ```
 
 Open http://localhost:3000/api/v1/hello or http://localhost:3000/health.
@@ -97,8 +96,10 @@ forked at the last pipeline phase. A maintenance script therefore runs against
 exactly the configuration the server has, never an approximation of it.
 
 **Types generated, not hand-written.** `tulipes sync` reads your modules and
-emits a `config.d.ts`: enum variables become literal unions, config namespaces
-are inferred from your factories' return types.
+emits a `types/tulipes.d.ts`: enum variables become literal unions, config
+namespaces are the output of each module's settings schema, `ctx.models.get()`
+is typed from each model file's schema and `queues.add()` from each queue
+file's job schemas — a wrong name or payload does not compile.
 
 **The framework stays out of your request path.** Core mounts *no* middleware.
 Your sys-tier modules own the head of the pipeline; core guarantees only the
@@ -112,18 +113,20 @@ delete what this feature does not need.
 
 ```
 modules/billing/
-├── package.json              name + "tulipes" ordering key
-├── meta.variables.json       this module's environment contract
-├── module.config.ts          config factory + onReady / onDrain / onShutdown
+├── package.json              name, "tulipes" ordering key and env contract
+├── module.config.ts          defineConfig({ schema }): this module's settings
 ├── module.acl.ts             permission grants
-├── routes/*.routes.ts        native Router factories, optionally wrapped in defineRoutes
-├── controllers/              the work; handler factories import it lazily
+├── routes/*.routes.ts        (ctx) => Router, mounted under config.api.prefix
+├── controllers/              the work; constructed from the context while routes build
+├── schemas/*.schemas.ts      zod request schemas shared by routes
 ├── helpers/                  pure logic, no framework
+├── lib/index.ts              the module's public exports (package.json "exports")
 ├── i18n/<locale>.json        this module's strings — the module is the namespace
 ├── models/*.model.ts         { name, schema } — a declaration, not a registration
-├── bootstrap/*.bootstrap.ts  post-database, pre-traffic: indexes, seeds
-├── queues/*.queues.ts        (ctx, queues) => define + process
-└── sockets/*.sockets.ts      (ctx, sockets) => claim a namespace
+├── bootstrap/*.bootstrap.ts  initialization, every mode; may return its cleanup
+├── queues/*.queues.ts        (ctx, queues) => process; `jobs` export declares the schemas
+├── sockets/*.sockets.ts      (ctx, sockets) => claim a namespace
+└── agent/*.agent.ts          defineAgent({ summary, tools }): what an agent sees
 ```
 
 ```json
@@ -314,30 +317,34 @@ call site without core knowing anything about your models.
 ## The boot pipeline
 
 ```
- 1  Environment      .env.<APP_ENV> + every meta.variables.json → validate
+ 1  Environment      .env.<APP_ENV> + every package.json tulipes.env → validate
  2  Module graph     "tulipes" keys → tier / priority / topological sort
  3  Exploration      resolve conventional paths in load order, import nothing
- 4  Global config    config/app.config.ts seed → each module.config.ts factory
- 5  Translations     modules/*/i18n/*.json, one namespace per module
- 6  ACL              module.acl.ts in load order
- 7  Providers        the app's declared providers, in order: models
-                     (@tulipes/mongoose: connect → model store → bootstrap),
-                     queues (@tulipes/bullmq: every *.queues.ts registers),
+ 4  Declarations     config/app.config.ts seed; each module.config.ts schema
+ 5  Models, settings providers connect (@tulipes/mongoose: connection → model store;
+    @tulipes/mongoose/settings: the `settings` collection behind ctx.settings)
+ 6  Settings         every namespace read from the store, seeded on first boot,
+                     validated against its schema → ctx.config.<module>
+ 7  Translations     modules/*/i18n/*.json, one namespace per module
+ 8  ACL              module.acl.ts in load order
+ 9  Bootstrap        bootstrap/*.bootstrap.ts in load order, every mode;
+                     a returned function is the module's cleanup
+10  Queues, sockets  queues (@tulipes/bullmq: every *.queues.ts registers),
                      sockets (@tulipes/socket.io, backend only: namespaces claimed)
- 8  ── fork ──
+11  ── fork ──
     backend          module routers → 404 → error handler → providers attach → listen
     worker           each provider serves: one BullMQ worker per processor
     script           start nothing; the caller owns the process
- 9  onReady          hooks in load order → startup banner
-    shutdown         SIGTERM → onDrain + stop/drain http + provider drain →
-                     onShutdown in REVERSE order → providers disposed in reverse
+12  Banner
+    shutdown         SIGTERM → ctx.signal aborts + stop/drain http + provider drain →
+                     bootstrap cleanups in REVERSE order → providers disposed in reverse
 ```
 
 Each phase crashes with its own aggregate report before the next begins.
-`onDrain` hooks start in reverse module order before traffic drain actions;
-asynchronous hooks and traffic drain concurrently under the same shutdown deadline.
-Keep dependencies available until `onShutdown`. Failed/timed-out notifications are
-aggregated and do not prevent later cleanup attempts.
+`ctx.signal` aborts the moment shutdown begins, before HTTP stops accepting,
+so an SSE handler or a poller ends while everything it needs is still alive;
+cleanups run after traffic drains, under one deadline, and a failed or stuck
+cleanup is aggregated without preventing the ones after it.
 
 <details>
 <summary><b>Contracts — what each file exports</b></summary>
@@ -358,13 +365,17 @@ interface Ctx {
   app?: Express;            // backend only
 }
 
-// module.config.ts — the namespace stored at config.<module>
-export default function billingConfig({ Environment }: Ctx) {
-  return { trialDays: Environment.get("BILLING_TRIAL_DAYS") };
-}
-export async function onReady(ctx: Ctx) {}
-export async function onDrain(ctx: Ctx) {}       // signal long-lived work to stop
-export async function onShutdown(ctx: Ctx) {}    // dispose after draining, reverse order
+// module.config.ts — this module's settings, stored at config.<module>, kept
+// live: an operator's write through ctx.settings lands without a restart.
+// They persist in config/settings.<APP_ENV>.json until the app declares
+// "providers": { "settings": "@tulipes/mongoose/settings" } — then in the
+// `settings` collection, versioned, with history, propagated to every replica.
+export default defineConfig({
+  schema: z.object({
+    trialDays: z.number().int().positive().default(14).describe("Free trial length"),
+  }),
+  onChange(next, ctx) {},                          // optional: rebuild what depends on it
+});
 
 // routes/*.routes.ts — every route declares a RAI, or the boot fails
 export default function billingRoutes(ctx: Ctx): Router {
@@ -384,8 +395,13 @@ export default function billingRoutes(ctx: Ctx): Router {
 //   "tulipes": { "providers": { "models": "@tulipes/mongoose" } }
 export default { name: "Invoice", schema } satisfies ModelDef; // ModelDef from @tulipes/mongoose
 
-// bootstrap/*.bootstrap.ts — runs in every process, so make it idempotent
-export default async function seed({ models }: Ctx) {}
+// bootstrap/*.bootstrap.ts — the one place a module initializes: every mode,
+// after settings and ACL, before routes. Idempotent; may return its cleanup.
+export default async function seed(ctx: RuntimeCtx) {
+  const client = openSomething(ctx);
+  ctx.signal.addEventListener("abort", () => client.stopPolling());   // shutdown began
+  return () => client.close();                                         // after traffic drains
+}
 
 // queues/*.queues.ts — ONE file, both sides; the process mode decides.
 // Needs "tulipes": { "providers": { "queues": "@tulipes/bullmq" } }; QueueRegistry from @tulipes/bullmq
@@ -426,18 +442,21 @@ only in development.
 
 The command line is its own package, [`@tulipes/cli`](https://www.npmjs.com/package/@tulipes/cli):
 install it globally to scaffold, and generated apps also list it in
-`devDependencies` so `yarn dev`, `yarn sync` and `yarn tulipes …` need no
+`devDependencies` so `pnpm dev`, `pnpm sync` and `pnpm tulipes …` need no
 global install. Core itself ships no binary, no templates and no TypeScript
 loader — a running app installs only the HTTP runtime.
 
 | Command | What it does |
 |---|---|
 | `tulipes init [dir] [--minimal \| --preset minimal \| --preset production] [--no-queues] [--no-sockets]` | scaffold an application; no services; the opt-outs compose the production preset without that provider |
-| `tulipes dev [entry]` | regenerate types, then run under tsx watch |
-| `tulipes sync` | regenerate `types/config.d.ts` and `.env.example` |
+| `tulipes dev [entry]` | regenerate types, then run the entrypoint with `node --watch` |
+| `tulipes sync` | regenerate `types/tulipes.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting — a CI gate |
-| `tulipes routes [--offline \| --runtime]` | inspect shared declarations offline or runtime endpoints |
-| `tulipes spec [--offline \| --runtime] [--openapi file] [--postman file] [--url base]` | generate specs from the selected inspection mode |
+| `tulipes routes` | list every declared endpoint with the roles that reach it; no service, secret or `.env` |
+| `tulipes spec [--openapi file] [--postman file] [--url base]` | generate documents from the same inspection |
+| `tulipes config:check` | load every settings namespace from the store and print it |
+| `tulipes migrate 0.11` | rewrite an app generated on 0.10 to the 0.11 layout and contracts |
+| `tulipes config:import` | carry env values that became settings into the store |
 | `tulipes new module <name>` | scaffold a module with every contract |
 | `tulipes update` | upgrade the global CLI and, inside an app, the app itself |
 | `tulipes -v` | print the CLI version, and the app's when they differ |
@@ -450,14 +469,53 @@ target a different Node version than the one holding your binary.
 
 `init`, `sync`, `env:check`, `new module`, version and update commands do not
 connect application infrastructure (`update` uses the package registry). `dev`
-boots the application and requires its declared services. `routes` and `spec`
-default to runtime inspection, which connects configured infrastructure and runs
-config/route factories and shutdown hooks, while skipping bootstrap, sockets,
-listening and readiness. `--offline` builds opted-in native routers and loads ACL
-without services, runtime config or secrets. Both new presets use it in `yarn spec`.
-See [offline inspection](../../docs/offline-inspection.md) for migration and limits.
-This interface is available from core `0.10.0`; use `@tulipes/core` with
-`@tulipes/spec` and the providers your app declares.
+and `config:check` boot the application and require its declared services.
+`routes`, `spec` and `agent manifest` run an **inspection boot**.
+
+### Inspection
+
+`tulipes routes` and `tulipes spec` boot the application in **inspection**:
+the normal boot with nothing acquired. Every `routes/*.routes.ts` runs
+through the same loader and the same scan as a serving process, so what the
+tools describe is exactly what is mounted; what differs is the context the
+routes files receive:
+
+| | serving | inspection |
+|---|---|---|
+| `ctx.Environment` | resolved and validated | declared and validated, every read throws |
+| `ctx.models`, `ctx.queues`, `ctx.sockets` | the declared providers | stubs that throw on use (undefined when not declared) |
+| `ctx.config.<module>` | the settings store | each schema's defaults, in memory |
+| bootstrap | runs | skipped |
+| listener, transports | yes | no |
+
+The consequence is a rule a routes file already follows when it is written
+well: build the router from the context and use infrastructure inside
+handlers. A controller keeps `ctx` and reads `ctx.models` when a request
+arrives; a middleware that needs a variable or a client is built on its
+first request (`lazy()` in the reference app's core module). A file that
+reads a variable or a model while building fails inspection with its path
+and the reason, which is the right outcome: it would have coupled routing
+to a service.
+
+```sh
+tulipes routes
+tulipes spec --openapi docs/openapi.json --postman docs/collection.json
+tulipes spec --openapi docs/openapi.json --url https://api.example.com
+```
+
+Programmatically, `boot({ rootDir, mode: "backend", inspect: true })` returns
+the same handle a serving boot does, with `ctx.routes.all()`, `ctx.acl` and
+`ctx.config` filled; the reference app's tests compare the inspection's
+documents with the running app's. Provider declarations (`tulipes.providers`
+in the root manifest, `requires` in module manifests) are validated for
+consistency, but no provider is resolved or imported, so an uninstalled
+provider is not an inspection error. A custom access checker installed while
+building is reported as dynamic: generated documents make no static role or
+public-access claim for it.
+
+Before 0.11 inspection was an opt-in path (`tulipes.offline`,
+`defineRoutes()`, `runtime()`, `--offline`); those forms are refused by name
+and the migration guide says what replaces each.
 
 ## What `tulipes init --preset production` gives you
 
@@ -489,14 +547,39 @@ edit:
 ## Built for AI-assisted work
 
 `tulipes init` also writes an **`AGENTS.md`** — the cross-tool convention every
-coding agent reads — plus a short `CLAUDE.md` pointing at it and eight
-task-scoped skills under `.claude/skills/`: module, environment variable,
-endpoint, model, queue, socket, permissions, and reading boot errors. They
-encode the conventions an agent would otherwise guess wrong: declaring
-variables instead of reaching for `process.env`, why `mongoose.model()` is
-never called directly, where global middleware belongs, and how to read an
-aggregate boot report. The skills are plain markdown, so an agent without skill
-support can read them directly.
+coding agent reads — plus a short `CLAUDE.md` pointing at it and task-scoped
+skills under `.claude/skills/`: module, environment variable, endpoint,
+response, model, queue, socket, permissions, config (settings and the
+console), settings (the log stream), i18n, spec, agent tools and reading boot
+errors. They encode the conventions an agent would otherwise
+guess wrong: declaring variables instead of reaching for `process.env`, why
+`mongoose.model()` is never called directly, where global middleware belongs,
+and how to read an aggregate boot report. The skills are plain markdown, so an
+agent without skill support can read them directly.
+
+**The app is a tool box.** Every endpoint declared with `rai()` is a tool an
+agent can call — its name, description, input schema and permission are
+already there — and a module's `agent/*.agent.ts` adds a summary, curates
+which routes an agent sees and declares actions that are not endpoints:
+
+```ts
+export default defineAgent({
+  summary: "Greets callers and counts how often each greeting is used.",
+  tools: [
+    { route: "hello:list-greetings", description: "The stored greetings, most used first" },
+    action({ id: "hello:reset-counts", description: "Reset every counter", input: z.object({ confirm: z.literal(true) }),
+             handler: async (ctx) => ({ reset: (await requireModels(ctx).get("Greeting").updateMany({}, { times_used: 0 })).modifiedCount }) }),
+  ],
+});
+```
+
+`ctx.agent.manifest(role)` is what the generated `agent` module serves at
+`GET <prefix>/agent/tools`, filtered to the caller's role; `ctx.agent.invoke()`
+runs an action through the same gate a route has — ACL on the id, then the
+input schema, then the handler — behind `POST <prefix>/agent/tools/<name>`.
+`tulipes agent manifest` writes the document from an inspection boot, and
+[`@tulipes/mcp`](https://www.npmjs.com/package/@tulipes/mcp) serves it to
+Claude Code over MCP, calling every tool through the app's own HTTP door.
 
 <details>
 <summary><b>Subpath exports</b></summary>
@@ -508,6 +591,8 @@ support can read them directly.
 | `@tulipes/core/env` | `Environment`, `KnownVariables` (codegen target), spec types |
 | `@tulipes/core/http` | `HttpError`, `notFoundHandler`, `errorHandler` |
 | `@tulipes/core/acl` | `Acl`, `AclBuilder`, `AclFn` |
+| `@tulipes/core/agent` | `defineAgent`, `action`, `AgentRegistry`, `AgentManifest` |
+| `@tulipes/testing` | a separate package: `useTestApp`, `bootTestApp`, `TestApp` |
 | `@tulipes/core/db` | migration stub only — the Mongoose provider, `ModelStore`, `ModelDef` and `BootstrapFn` live in [`@tulipes/mongoose`](https://www.npmjs.com/package/@tulipes/mongoose) |
 | `@tulipes/core/queues` | migration stub only — the BullMQ provider, `QueueManager`, `QueueRegistry` and `QueuesFn` live in [`@tulipes/bullmq`](https://www.npmjs.com/package/@tulipes/bullmq) |
 | `@tulipes/core/sockets` | migration stub only — the Socket.IO provider, `SocketManager`, `SocketRegistry` and `SocketsFn` live in [`@tulipes/socket.io`](https://www.npmjs.com/package/@tulipes/socket.io) |
@@ -516,6 +601,30 @@ support can read them directly.
 | `@tulipes/core/errors` | `TulipesBootError`, `BootReport` |
 
 </details>
+
+## Testing an app
+
+[`@tulipes/testing`](https://www.npmjs.com/package/@tulipes/testing) boots the
+app once per test file on a free port, decodes the envelope and signs in as a
+role; it takes the runner's file hooks and depends on nothing but core:
+
+```ts
+const app = useTestApp({ rootDir, settings: { hello: { greeting: "Hi" } } }, { beforeAll, afterAll });
+
+test("greets", async () => {
+  const { status, data } = await app.get<{ message: string }>(app.api("/hello"));
+  expect(status).toBe(200);
+});
+
+test("the console needs a role", async () => {
+  const admin = await app.as("admin");
+  expect((await app.get(app.api("/config"), { as: admin })).status).toBe(200);
+});
+```
+
+A module's tests live in `modules/<name>/tests/`; the generated apps run
+them with vitest, one file after another, since every file boots the app
+against the same services.
 
 ## Generated API documentation
 
@@ -542,8 +651,8 @@ router.post(
 ```
 
 ```sh
-yarn add -D @tulipes/spec
-yarn tulipes spec --openapi docs/openapi.json --postman docs/collection.json
+pnpm add -D @tulipes/spec
+pnpm tulipes spec --openapi docs/openapi.json --postman docs/collection.json
 ```
 
 One declaration validates the request and documents it, so the two cannot
@@ -558,11 +667,10 @@ language:
   "meta": {} }
 ```
 
-`--offline` builds the same `defineRoutes()` router trees used at runtime,
-without acquiring callbacks registered through `runtime()` or connecting services. Use `--url` to set the deployment
-URL; offline defaults to `http://localhost:3000` and package.json title/version.
-The default `--runtime` path retains infrastructure-backed inspection for legacy
-factories. Declaration imports remain trusted JavaScript, not a sandbox.
+`tulipes spec` runs the inspection boot: the same routers the app serves,
+built with nothing acquired. Use `--url` to set the deployment URL; the
+default is `http://localhost:3000`. Routes files are trusted JavaScript, not
+a sandbox.
 
 Use `ctx.routes.mount(parent, "/api", childRouter)` for nested routers so the
 registry records the full prefix. Each supported HTTP method needs exactly one
@@ -576,8 +684,8 @@ queues work. `res.respond` uses that default and OpenAPI describes it. An explic
 `res.respond({ status })` still overrides the default. Custom access checkers are
 reported as dynamic policies in generated documents.
 
-For lifecycle timing changes and the more precise `ConfigCtx`, `BackendCtx` and
-`DatabaseCtx` contracts, see [the migration guide](./MIGRATING.md).
+For the move from config factories and lifecycle hooks to settings
+declarations and bootstrap cleanups, see [the migration guide](./MIGRATING.md).
 
 ## Versioning
 

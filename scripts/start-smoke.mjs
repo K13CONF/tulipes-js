@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import assert from 'node:assert/strict';
 
 for (const script of ['dev', 'start']) {
-  const child = spawn('yarn', [script], { env: { ...process.env, PORT: '0' }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('pnpm', [script], { env: { ...process.env, PORT: '0' }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   const closed = once(child, 'close');
   let output = '';
   const ready = new Promise((resolve, reject) => {

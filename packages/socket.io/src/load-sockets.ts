@@ -2,7 +2,7 @@ import { importFile, type Ctx } from "@tulipes/core/boot";
 import type { BootReport } from "@tulipes/core/errors";
 import type { ModuleFiles } from "@tulipes/core/modules";
 
-import { SocketManager, type SocketRegistry } from "./socket-manager.js";
+import { SocketManager, type SocketRegistry } from "./socket-manager.ts";
 
 /** Default export of `sockets/*.sockets.ts` (backend branch only). */
 export type SocketsFn = (ctx: Ctx, sockets: SocketRegistry) => void | Promise<void>;

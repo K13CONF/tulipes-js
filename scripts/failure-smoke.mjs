@@ -99,13 +99,12 @@ try {
   const resolutions = Object.fromEntries(manifest.packages.map((pkg) => [pkg.name, 'file:' + join(artifacts, pkg.file)]));
   const cliRoot = join(workspace, 'cli');
   mkdirSync(cliRoot);
-  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'yarn@4.18.0', dependencies: { '@tulipes/cli': resolutions['@tulipes/cli'] }, resolutions }));
-  writeFileSync(join(cliRoot, '.yarnrc.yml'), 'nodeLinker: node-modules\n');
-  run('yarn', ['install'], { cwd: cliRoot, env: { ...process.env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' } });
+  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'pnpm@10.28.0', dependencies: { '@tulipes/cli': resolutions['@tulipes/cli'] }, pnpm: { overrides: resolutions } }));
+  run('pnpm', ['install', '--no-frozen-lockfile'], { cwd: cliRoot });
   const app = join(workspace, 'app');
   run(process.execPath, [join(cliRoot, 'node_modules/@tulipes/cli/dist/bin.js'), 'init', app, '--preset', 'production']);
   const pkgFile = join(app, 'package.json');
-  writeFileSync(pkgFile, JSON.stringify({ ...readJson(pkgFile), resolutions }, null, 2));
+  writeFileSync(pkgFile, JSON.stringify({ ...readJson(pkgFile), pnpm: { overrides: resolutions } }, null, 2));
 
   const password = randomBytes(24).toString('hex');
   const env = {
@@ -114,12 +113,11 @@ try {
     REDIS_URL: `redis://127.0.0.1:${redis.port}`,
     JWT_ACCESS_SECRET: randomBytes(32).toString('hex'), JWT_REFRESH_SECRET: randomBytes(32).toString('hex'),
     AUTH_ADMIN_EMAIL: 'failure@example.test', AUTH_ADMIN_PASSWORD: password,
-    TRUST_PROXY_CIDRS: '',
   };
-  run('yarn', ['install'], { cwd: app, env: { ...env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' } });
-  run('yarn', ['sync'], { cwd: app, env });
+  run('pnpm', ['install', '--no-frozen-lockfile'], { cwd: app, env });
+  run('pnpm', ['sync'], { cwd: app, env });
 
-  server = spawn(process.execPath, ['--import', 'tsx', 'app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, ['app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   server.stdout.on('data', (d) => { output += d; });
   server.stderr.on('data', (d) => { output += d; });
@@ -160,6 +158,30 @@ try {
     }
     return 'none';
   };
+
+  // ── 0. a setting written by another process reaches the running backend ──
+  // The production preset keeps settings in MongoDB; on this replica set the
+  // store opens a change stream, so the write should land in the backend
+  // without waiting for a poll. A one-off script is the other process.
+  writeFileSync(join(app, 'scripts/set-greeting.ts'), `
+    import { boot } from "@tulipes/core/boot";
+    const handle = await boot({ rootDir: new URL("..", import.meta.url).pathname, mode: "script" });
+    try {
+      const written = await handle.ctx.settings.set("hello", { greeting: "Propagated" }, { id: "failure-smoke" });
+      console.log(JSON.stringify({ version: written.version, store: handle.ctx.settings.status().label }));
+    } finally { await handle.shutdown(); }
+  `);
+  const scriptOut = run('pnpm', ['script', 'scripts/set-greeting.ts'], { cwd: app, env });
+  const writtenAt = Date.now();
+  let propagated = null;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const response = await fetch(`${base}/api/v1/hello`);
+    const body = await response.json().catch(() => ({}));
+    if (String(body?.data?.message ?? '').startsWith('Propagated')) { propagated = { ms: Date.now() - writtenAt, message: body.data.message }; break; }
+    await sleep(100);
+  }
+  observe('settings propagation', propagated ? `a write from a script reached the backend in ~${propagated.ms}ms` : 'the write did not reach the backend within 10s',
+    { ...(propagated ?? { propagated: false }), script: scriptOut.trim().split('\n').pop() });
 
   // ── 1. primary loss during a majority-acknowledged refresh rotation ──────
   const before = primaryOf();

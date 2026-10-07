@@ -18,7 +18,7 @@ router.post("/users", rai({
   name: "Create a user",
   body: z.object({ email: z.email("emailInvalid") }),
   returns: z.object({ id: z.string(), email: z.string() }),
-}), users(value => value.create())); // users is a runtime() binder
+}), users.create());
 
 ```
 
@@ -30,8 +30,8 @@ response.
 understands v4 schemas. The classic `from "zod"` import still validates but
 produces no shape in the document, and `tulipes spec` will say so.
 
-Keep schemas in `modules/<name>/schemas.ts` when a route file starts to
-sprawl; both the example's users and auth modules do.
+Keep schemas in `modules/<name>/schemas/<name>.schemas.ts` when a route file
+starts to sprawl; the example's users, auth and config modules do.
 
 ## What validation gives you
 
@@ -70,17 +70,15 @@ rai({ id: "auth:sessions", name: "List sessions", folder: "sessions" })
 ## Generating
 
 ```sh
-yarn spec     # tulipes spec --offline --openapi docs/openapi.json --postman docs/collection.json
+pnpm spec     # tulipes spec --openapi docs/openapi.json --postman docs/collection.json
 ```
 
-Offline generation builds native router factories wrapped in defineRoutes().
-Every module opts in with tulipes.offline: true; no extra declaration file is
-required. Keep schema imports pure and acquire services/controllers through
-runtime(). Use --runtime for factories requiring live configuration.
---url sets the advertised base URL. Offline defaults to http://localhost:3000
-and package.json title/version; runtime uses PORT/PUBLIC_DOMAIN and config.app.
-Install custom access checkers inside defineRoutes using routes.setAccessChecker;
-offline tooling sees the checker and makes no static role/public-access claim.
+Generation is an inspection boot: every routes file runs with nothing
+acquired, so no service, secret or `.env` is needed, and a routes file that
+touches infrastructure while building fails with its path. `--url` sets the
+advertised base URL (default `http://localhost:3000`). A custom access
+checker installed with `routes.setAccessChecker` is reported as dynamic: the
+document makes no static role or public-access claim for it.
 
 The generator lives in `@tulipes/spec`, a dev dependency. Core does not
 depend on it, so an app that never generates a spec never installs it.

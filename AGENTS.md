@@ -14,13 +14,13 @@ framework.
 
 | Command | Use |
 |---|---|
-| `corepack enable && yarn install` | once per machine; yarn 4 is pinned |
-| `yarn typecheck` | every public workspace |
-| `yarn test` | the suite; needs `TEST_MONGO_URI` and `TEST_REDIS_URL` |
-| `yarn test:types` | the `.test-d.ts` type fixtures |
-| `yarn test:coverage` | the suite with the thresholds CI enforces |
-| `yarn example` | boot the reference app (MongoDB and Redis required) |
-| `yarn install --immutable` | what CI runs — a stale lockfile fails the build |
+| `pnpm install` | pnpm 10 is pinned through `packageManager`; `npm install -g pnpm` once per machine |
+| `pnpm typecheck` | every public workspace |
+| `pnpm test` | the suite; needs `TEST_MONGO_URI` and `TEST_REDIS_URL` |
+| `pnpm test:types` | the `.test-d.ts` type fixtures |
+| `pnpm test:coverage` | the suite with the thresholds CI enforces |
+| `pnpm example` | boot the reference app (MongoDB and Redis required) |
+| `pnpm install --frozen-lockfile` | what CI runs — a stale lockfile fails the build |
 
 Integration tests skip without services and CI refuses that, so run them with
 both variables set before claiming a suite passed.
@@ -31,11 +31,15 @@ both variables set before claiming a suite passed.
   in its provider package behind the seam in `packages/core/src/boot/providers.ts`.
   Core must not gain a dependency that an app declaring no providers would
   install; `scripts/artifacts.mjs verify` fails the build if it does.
-- **The reference app is generated output, not hand-written.** `example/` must
-  match what `tulipes init --preset production` produces; CI diffs them. Change
-  the generator in `packages/cli/src/init.ts`, then mirror into `example/`.
-  The same goes for `packages/cli/templates/` versus `example/AGENTS.md`,
-  `example/CLAUDE.md` and `example/.claude/`.
+- **The reference app is the template.** `tulipes init --preset production`
+  copies `example/` and transforms it only in the ways
+  `packages/cli/src/template.ts` lists (the app name, pinned versions,
+  features left out). Change the app in `example/`; nothing is mirrored by
+  hand. CI still scaffolds an app and diffs it against `example/` to prove
+  the renderer is faithful. The minimal preset is the committed tree under
+  `packages/cli/templates/minimal`, and `packages/cli/templates/` holds the
+  one copy of `AGENTS.md`, `CLAUDE.md` and `.claude/` that `example/` must
+  match.
 - **Generated apps are the user's code.** Auth, settings, the cache and the
   nginx templates are scaffolded for editing, so fixes there ship as migration
   steps, not as library changes.

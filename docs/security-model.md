@@ -1,11 +1,16 @@
 # Production starter security model and remaining review
 
 The production preset generates editable application policy: auth, users,
-settings, logging and PM2 operations. The minimal preset omits these modules.
-Neither preset constitutes a completed external security audit.
+the `config` console, the `settings` log stream, logging and PM2 operations.
+The minimal preset omits these modules. Neither preset constitutes a
+completed external security audit.
 
-S08a–S08m are implemented and verified locally and in Sprint 02 CI. This document describes their
-cumulative behavior; dated dependency entries remain historical observations.
+S08a–S08m were implemented and verified locally and in Sprint 02 CI on the
+0.10 line. 0.11 retired the surface four of them covered (S08a, S08d, S08g,
+S08i: the restart endpoint, the variable and translation editors and their
+audit) and changed how two of them are kept (S08b, S08k: a read cache in
+front of the database path). Each section below says which; dated
+dependency entries remain historical observations.
 The [Sprint 02 evidence map](sprints/production-readiness-02-evidence.md) links
 implementation and abuse tests, records accepted CI evidence and identifies
 remaining deployment verification.
@@ -14,10 +19,19 @@ remaining deployment verification.
 
 Untrusted clients reach Express through the operator's TLS reverse proxy. Trusted
 middleware resolves identity before RAI checks, and the ACL fails closed for
-unknown roles or denied permissions. Sysadmin access includes secret settings,
-logs and process operations; keep that role separate from ordinary administrators.
-Operators must restrict infrastructure networking and protect environment files,
-backups and logs. JWT signing keys and admin credentials are deployment secrets.
+unknown roles or denied permissions. Since 0.11 configuration has two layers:
+the environment holds what boot needs before the settings store answers (the
+port, the connection strings, the log destinations) and the secrets, and is
+read-only at runtime; everything else is a setting, declared with a schema in
+the owning module, stored per deployment (MongoDB `settings` collection in the
+production preset), and written through `PATCH /config/:module` — `admin` may
+read the console, `sysadmin` alone may write, and every write is validated by
+the schema, refused on a stale version, audited to `config_audit_events`
+without its values before it lands, and applied in every replica. Sysadmin
+access also includes the log stream; keep that role separate from ordinary
+administrators. Operators must restrict infrastructure networking and protect
+environment files, backups and logs. JWT signing keys and admin credentials are
+deployment secrets and are never readable through the console.
 
 Staging and production boot reject blank or known development signing keys,
 seed passwords/default admin identity, and identical access/refresh keys. Errors
@@ -40,8 +54,8 @@ Before a production pilot, review and test:
   for auth and administrative endpoints; secure headers and restrictive CORS.
 - Client refresh coordination and incident response under the S08k policy below;
   retain password-change and concurrent-session regressions during adaptations.
-- Audit durability for every secret reveal/update; role boundaries and omission
-  of administrative modules; log redaction, file traversal and restart targets.
+- Audit durability for every settings write; role boundaries and omission of
+  administrative modules; log redaction and the log stream's bounds.
 - CSRF protection and cookie flags if an operator moves bearer tokens into
   cookies. See the [browser authentication guide](../example/docs/browser-auth.md)
   for the current transport contract and cookie-adaptation requirements.
@@ -65,6 +79,21 @@ CI retains separate workspace/runtime and complete starter audits. Lower severit
 findings and deprecation notices remain visible; this is a dated inventory,
 not a permanent claim that dependencies are vulnerability-free.
 
+## Dependency review, 2026-10-07
+
+Two high advisories reached PM2's transitive tree after 0.10.1, both denial
+of service and both outside any request path: basic-ftp
+([GHSA-c475-qrg2-pj4r](https://github.com/advisories/GHSA-c475-qrg2-pj4r),
+used by get-uri only to fetch an `ftp://` proxy configuration) and braces
+([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm),
+used by chokidar to expand the watch globs an operator writes). The
+workspace and every generated production app override basic-ftp to the
+patched 6.2.1 line, one major above the range get-uri declares; the braces
+advisory has no fixed release (3.0.3 is the latest), so it is muted through
+`pnpm.auditConfig.ignoreGhsas` with this entry as the reason. The audit gate
+prints muted advisories and still fails on any unmuted high or critical
+finding; revisit both when PM2 updates its dependencies.
+
 ## Release audit follow-up, 2026-09-09
 
 The rc.1 publication gate found a newly listed high-severity advisory affecting
@@ -76,29 +105,28 @@ start/restart. Remove the override once PM2 declares a patched version upstream.
 
 ## S08a — Administrative restart scope
 
-The reviewed helper previously selected every process in a PM2 daemon for an empty
-request and passed names to restart. On a shared daemon, that could affect another
-application, including one with the same process name. The corrected starter
-limits selection to processes whose canonical PM2 working directory equals the
-app root derived from the installed helper's location. The complete requested
-name set is validated before restarting anything; unknown/out-of-scope names
-return `INVALID_RESTART_TARGETS` (400), and an empty verified inventory returns
-`NO_APP_PROCESSES` (503). Calls use numeric PM2 IDs, so names such as `all` have no
-selector semantics. Repeated names do not duplicate restarts; cluster members are
-restarted individually. Both generated and reference helpers share this behavior.
-
-The application directory is the scope: processes deliberately sharing that exact
-directory belong to the same app for this policy. Configure PM2 `cwd` accordingly;
-missing, unavailable or different directory metadata never authorizes a restart.
-The daemon and local filesystem remain trusted operator controls. A PM2 environment
-marker permits attempting daemon access; it is not proof of application ownership.
-Sysadmin authorization still comes from the existing settings RAI/ACL.
-
-Self-restart runs last. S08d adds durable audit before PM2 access and S08i adds
-complete HTTP acceptance handoff before execution, as described below. These
-supersede the response/audit follow-ups recorded at the S08a checkpoint.
+Retired in 0.11. `POST /settings/reboot` and the PM2 restart helper are gone:
+nothing needs a restart to take effect, since settings apply live and a
+restart-tagged field says so in the write's response. PM2 operations stay
+with the operator's shell (`pnpm pm2:*`). The retained check is that PM2
+starts both TypeScript entrypoints with node and restarts them
+(`scripts/pm2-smoke.mjs`, in the online production smoke).
 
 ## S08b — Session validity and revocation timing
+
+Since 0.11 the auth module keeps a resolved session in the app cache (Redis in
+production, shared by every replica) under its sid for `auth.cacheTtlSeconds`
+(default 60, never longer than `accessTtl`). A hit skips the database reads
+below; every path that revokes — logout, refresh rotation and reuse, a session
+ended by its owner, a password change, a soft-deleted account, and any code
+that writes a role (it calls `forgetUser()`) — deletes the entry before it
+answers, so a revocation is refused on the very next request on any replica.
+The cache is best effort: a Redis outage is a miss and the database path
+decides; the TTL bounds the one window a deletion could be lost in, a Redis
+outage at the moment of the revocation. The open log stream's re-check reads
+the database, never the cache. The reference tests assert a warm request
+performs no model read and that a revocation on one replica is refused at
+once on a second.
 
 Access authentication and refresh rotation require the session to belong to the
 signed token's subject and have an expiration strictly later than the application
@@ -156,33 +184,17 @@ for existing data but is no longer read or advanced by the starter's auth flow.
 
 ## S08d — Durable settings audit before action
 
-The settings controller awaits an `AuditEvent` insert before a declared secret
-reveal, environment-file change, translation-file change or restart attempt.
-Records live in MongoDB's `settings_audit_events` collection, independently of
-`LOG_LEVEL`, console/file destinations and log-stream filtering. Each insert
-requires majority acknowledgment and journaling, with a 5-second write-concern
-timeout. That timeout does not bound connection/server-selection delays.
-
-If the audit model is unavailable or its write fails, the endpoint returns
-`AUDIT_UNAVAILABLE` (503) before sending the secret, writing a file, changing the
-process environment or calling PM2. Sink errors are not included in the response.
-An uncertain acknowledgment can leave a stored record for an action that was
-blocked; records explicitly describe requests, not successful completion.
-
-The allowlisted fields identify the action, authenticated actor/role, observed IP,
-environment, process mode, timestamp, variable or module/locale, and counts. No
-old/new variable value, translation content, arbitrary details or raw restart
-target names are stored. A zero restart target count means the default selection
-of all verified application processes. IP remains informational until deployment
-proxy trust is reviewed. Ordinary administrators remain outside the settings ACL.
-
-The application only inserts these records; it does not expose an audit mutation
-or browsing API. This is not a tamper-proof store: trusted application/database
-operators can alter it. No automatic TTL or retention deletion is configured;
-operators own archival, retention, storage monitoring and database access controls.
-File writes and PM2 operations are not transactional with MongoDB. A later action
-failure leaves its request record, without claiming the action completed. External
-archival and completion/outcome correlation are outside this bounded correction.
+Retired with the surface it covered; its principle moved to the `config`
+module. `PATCH /config/:module` awaits a `ConfigAudit` insert — namespace,
+field names, the version the caller read, actor, role, client IP; never a
+value — with majority acknowledgment and journaling and a 5-second
+write-concern timeout before anything is written to the settings store; an
+unacknowledged audit is a 503 and no change. Records live in
+`config_audit_events`, independently of `LOG_LEVEL` and the destinations.
+There are no secret reveals to audit any more: the console never returns a
+secret's value. The reference test for the proxy-trust path asserts the
+audit record's IP; the console tests assert the record carries names and no
+value.
 
 ## S08e — Explicit proxy trust and client IPs
 
@@ -228,8 +240,12 @@ hops, TLS, replicas — is still an operator check; that evidence belongs to
 
 Redis fixed-window counters run before JSON parsing and Passport. Defaults per
 client per minute are 20 combined credential POSTs, 120 total auth requests and
-60 settings requests. Replicas share atomic counters when they use the same app
-namespace, environment and quota configuration. Rejected requests do not extend
+60 console requests (`/config` and `/settings`). Since 0.11 the quotas, the
+window and the namespace are the `security.rateLimits` setting, validated by
+the schema and rebuilt by the module's `onChange` when written; proxy trust,
+CORS, HSTS and the body limit are settings in the same namespace, and none of
+them is an environment variable any more. Replicas share atomic counters when
+they use the same namespace, environment and quota configuration. Rejected requests do not extend
 the window; responses use 429 with `Retry-After`. Store errors and stalled initial
 connections/commands fail closed with sanitized 503 responses and one-second
 bounds. Each boot owns its limiter connection and cleanup.
@@ -245,22 +261,14 @@ operators own sizing, persistence and deployment tuning. See the
 
 ## S08g — Constrained settings files
 
-Settings reads and writes refuse symlinked configured directories/files, hardlinked
-files and non-regular targets. Descriptor reads and writes have a 1 MiB ceiling;
-directory enumeration, JSON depth/node counts and missing-key expansion also have
-explicit bounds. Environment values must round-trip through dotenv without changing
-unrelated effective values. Replacements sync an exclusive temporary sibling before
-rename, preserve the old file on pre-rename failure and write env files as 0600.
-The live environment changes only after the file write succeeds.
-
-Unsafe, oversized, invalid and unavailable inputs have distinct sanitized errors.
-These checks require trusted operator-controlled directories and ancestors; they
-do not sandbox hostile local writers racing directory replacement. There is no
-cross-process edit lock or directory-entry power-loss guarantee. Custom file
-metadata is not preserved by replacement. The
-[file migration contract](../packages/core/MIGRATING.md#unreleased--constrained-settings-file-access)
-records exact limits and compatibility constraints. Audit acknowledgment precedes
-mutation and records a request, not proof of successful completion.
+Retired in 0.11. The console no longer reads or writes `.env` files or
+translation files: variables are read-only through `GET /config` (names,
+types, sources, and a non-secret's resolved value), translations are code in
+the repository, and settings live in the store the app declares. The file
+store core ships for apps without a settings provider writes
+`config/settings.<APP_ENV>.json` through an exclusive temporary sibling and
+a rename, and never follows a request-supplied path. The log stream's file
+rules (S08h) are unchanged.
 
 ## S08h — Bounded log history and streaming
 
@@ -283,21 +291,10 @@ describes limits, sanitized errors and client reconnection requirements.
 
 ## S08i — Restart acceptance before execution
 
-After durable audit and complete target validation, the endpoint returns 202 with
-`accepted` and `scheduled`. The response finish event releases PM2 execution;
-close/error before finish cancels it. This establishes complete handoff to the
-operating system, not remote receipt or restart completion. Each numeric target's
-canonical directory, name and PID are checked again before execution; self runs
-last. A local lock isolates shared PM2 client use, and callbacks/response completion
-have five-second bounds. Errors after acceptance emit a stable stderr signal
-without a second HTTP response.
-
-Earlier targets may restart before a later failure, and a timed-out command may
-have reached PM2. No durable job, rollback or completion endpoint is provided.
-Cross-backend coordination and the inventory-check/command race remain deployment
-limitations. See the
-[restart migration contract](../packages/core/MIGRATING.md#unreleased--restart-acknowledgment-before-execution).
-
+Retired with S08a: there is no restart endpoint. A write to a field tagged
+`.meta({ restart: true })` persists, applies on the next boot, and the
+response says `requires_restart` with `meta.action: "restart_required"`; the
+restart itself is the operator's.
 
 ## S08j — Browser authentication and cookie adaptation
 

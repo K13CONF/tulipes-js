@@ -11,6 +11,282 @@ what makes it work under nvm.
 
 ---
 
+<a id="unreleased--module-layout-and-plain-routes"></a>
+
+## 0.11.0-rc.1 — the two commands
+
+Most of the 0.11 sections below are what `tulipes migrate 0.11` does by
+itself on an app generated on 0.10, leaving a `TODO 0.11:` comment and a
+line in its report wherever it cannot decide. The order:
+
+```sh
+corepack enable                 # pnpm 10 is pinned by the migrated manifest
+tulipes migrate 0.11            # from the app root, with the 0.11 CLI
+pnpm install
+tulipes config:import --env production   # once per environment, from its .envs file
+pnpm sync && pnpm typecheck     # the TODOs are where this may still fail
+```
+
+Then review `config/migration-0.11.json` and delete it, declare
+`"settings": "@tulipes/mongoose/settings"` if the app should keep its
+settings in MongoDB, and delete from `.envs/` the variables the record
+names. The sections below say what each rewrite is and what to do by hand
+where the command stopped.
+
+## 0.11.0-rc.1 — production without tsx
+
+Node 24 (and 22.18+) runs TypeScript as it is, so nothing transpiles any
+more. `tulipes migrate 0.11` (0.11-S06.3) performs the mechanical part;
+by hand:
+
+1. In `tsconfig.json`, next to `moduleResolution`, add
+   `"allowImportingTsExtensions": true`, `"rewriteRelativeImportExtensions": true`
+   and `"erasableSyntaxOnly": true`.
+2. Rewrite every relative import of your own files from `.js` to `.ts`
+   (`from "../controllers/x.controllers.js"` → `.ts`); package imports do
+   not change.
+3. Replace what native stripping refuses and `erasableSyntaxOnly` now
+   reports: parameter properties (`constructor(private readonly ctx: Ctx) {}`
+   becomes a declared field assigned in the constructor), `enum`, and
+   runtime `namespace`s.
+4. In `package.json`: `"start": "node app.ts"`, `"worker": "node worker.ts"`,
+   `"script": "node"`; remove `tsx` from `devDependencies` and `esbuild`
+   from `pnpm.onlyBuiltDependencies`. In `ecosystem.config.cjs` set
+   `interpreter: "node"`. In `vitest.config.ts` drop
+   `execArgv: ["--import", "tsx"]`.
+5. `pnpm install`, then `pnpm sync`: the generated types now use `.ts`
+   specifiers.
+
+## 0.11.0-rc.1 — the reference app: environment, console, auth cache
+
+Generated apps are the user's code, so these are steps, not library changes.
+
+1. **Environment.** Remove from `modules/security/package.json` every
+   `tulipes.env` entry (`BODY_LIMIT`, `TRUST_PROXY_CIDRS`, `CORS_*`,
+   `HSTS_MAX_AGE`, `RATE_LIMIT_*`, `AUTH_RATE_LIMIT`,
+   `AUTH_SESSION_RATE_LIMIT`, `SETTINGS_RATE_LIMIT`) and from the core
+   module `PUBLIC_DOMAIN`, `LOG_BASENAME`, `LOG_ERROR_BASENAME` and the
+   rotation and retention variables. Copy the reference app's
+   `modules/security/module.config.ts`, `helpers/hardening.ts`,
+   `helpers/rate-limit.ts`, `routes/security.routes.ts` and
+   `modules/core/module.config.ts`, and the `LOG_FILES` constants in
+   `helpers/logger/`. Values from your `.envs` files become settings:
+   write them once through `PATCH /config/security` and `PATCH /config/core`
+   (or `tulipes config:import`, 0.11-S06.4), then delete the lines.
+2. **The console.** Copy `modules/config/` from the reference app and grant
+   `config:read` and `config:describe` to `admin`, `config:*` to
+   `sysadmin`. Reduce `modules/settings/` to `routes/`,
+   `controllers/settings.controllers.ts` (the log stream only),
+   `helpers/log-stream.ts`, `helpers/log-tail.ts`, `helpers/access-lease.ts`,
+   `schemas/` (`logQuery`) and its ACL; delete `helpers/audit.ts`,
+   `env-file.ts`, `files.ts`, `pm2.ts` and the `AuditEvent` model. Clients of
+   `GET /settings/modules` read `GET /config`; of the variable and
+   translation editors and the reboot endpoint, nothing — see the
+   `tulipes-settings` skill for where each went.
+3. **The auth cache.** Copy `modules/auth/helpers/session-cache.ts`, the
+   `cacheTtlSeconds` setting, and the changes in `helpers/passport.ts`,
+   `helpers/tokens.ts`, `helpers/passwords.ts` and `lib/index.ts`. Any code
+   of yours that writes a user's role or deletes a user calls
+   `forgetUser(ctx, userId)` from `@app/auth` first.
+4. Harnesses and tests that set the retired variables write the settings
+   instead, after boot: `ctx.settings.set("security", { … }, actor)`.
+
+## 0.11.0-rc.1 — settings in the database
+
+An app that keeps settings in `config/settings.<APP_ENV>.json` changes
+nothing. To move them into MongoDB, as the production preset now does:
+
+1. Add the provider to the root `package.json`:
+   `"tulipes": { "providers": { "settings": "@tulipes/mongoose/settings" } }`
+   (next to `models`; the store shares that connection).
+2. Boot once: every namespace is seeded from its schema's defaults. Values
+   edited in the JSON file are not carried over — set them again through
+   `ctx.settings.set()` or `tulipes config:import` (0.11-S06.4), then delete
+   the file.
+3. Deployments with replicas now see a write everywhere: on a replica set
+   through a change stream, otherwise within the 2s poll.
+
+## 0.11.0-rc.1 — the agent surface
+
+Nothing is required: an app with no `agent/` folder exposes every route as
+a tool and `ctx.agent` exists in every backend process. To make the surface
+reachable, and worth reaching:
+
+1. Add the `agent` module `tulipes init` now scaffolds — copy
+   `modules/agent/` from the reference app (routes, ACL, i18n) and grant
+   `agent:*` to the roles that may discover and run tools. Its two routes
+   declare `agent: false`, so the door is not itself a tool.
+2. Give every `rai()` a `description` written for an agent, or add
+   `agent: false` to endpoints that should stay out (demo routes, the
+   infrastructure console). `tulipes agent manifest --role user` shows what
+   a role would see.
+3. Where a module needs a summary, a shorter list or an action that is not
+   an endpoint, add `agent/<module>.agent.ts` with `defineAgent({ … })` —
+   see the `tulipes-agent-tool` skill.
+4. For Claude Code: `pnpm add -D @tulipes/mcp` and
+   `claude mcp add <app> -- pnpm tulipes-mcp --token <bearer token>`.
+
+## 0.11.0-rc.1 — generated model and job types
+
+`tulipes sync` writes `types/tulipes.d.ts` and deletes the `types/config.d.ts`
+it wrote before. Nothing else is required; two steps are worth taking.
+
+1. In each `queues/*.queues.ts`, declare the job data once and drop the
+   `define()` call for queues that need no options:
+
+   ```ts
+   import type { JobSchemas, QueueRegistry } from "@tulipes/bullmq";
+   import { z } from "zod/v4";
+
+   export const jobs = {
+     "users.welcome": z.object({ email: z.email(), locale: z.string() }),
+   } satisfies JobSchemas;
+   ```
+
+   After `pnpm sync`, `queues.add("users.welcome", …)` and `job.data` in the
+   processor are typed from it, `add()` validates the payload, and the
+   `as { … }` casts on `job.data` come out. A payload the compiler now
+   refuses (an optional route parameter passed as a string, say) was a
+   runtime hole before.
+2. Drop `models.get<T>("Name")` generics where the model file's schema is the
+   truth: `models.get("User")` is typed from it once `pnpm sync` has run. Keep
+   the generic where the type is deliberately narrower or wider than the
+   schema, and for names built at runtime — that overload is unchanged.
+
+## 0.11.0-rc.1 — the module root, plain routes, inspection
+
+A module's root holds three files: `package.json`, `module.config.ts` and
+`module.acl.ts`. Everything else has a folder, and the boot refuses a stray
+root file with the folder it belongs in.
+
+1. Move `meta.variables.json` into `package.json` under
+   `"tulipes": { "env": [ … ] }` — the same entries — and delete the file.
+2. Move `index.ts` to `lib/index.ts` and point `package.json` at it:
+   `"exports": { ".": "./lib/index.ts" }`. Importers of `@app/<module>`
+   change nothing.
+3. Move `schemas.ts` to `schemas/<module>.schemas.ts` and fix the imports
+   in `routes/`.
+4. Rewrite each routes file as a plain function and drop `tulipes.offline`:
+
+   ```ts
+   import { Router } from "express";
+   import type { BackendCtx } from "@tulipes/core/boot";
+   import { UsersController } from "../controllers/users.controllers.js";
+
+   export default function usersRoutes(ctx: BackendCtx): Router {
+     const router = Router();
+     const users = new UsersController(ctx);
+     router.get("/", ctx.rai({ id: "users:read" }), users.list());
+     return router;                       // mounted under config.api.prefix
+   }
+   ```
+
+   `defineRoutes()` and `runtime()` are gone: controllers are constructed
+   from the context and read `ctx.models`, `ctx.config` and the environment
+   inside handlers. A returned router is mounted under `config.api.prefix`;
+   `ctx.routes.mount(router, "/other")` chooses a path, and
+   `ctx.routes.mount(parent, "/tenants/:tenant", child)` nests. Global
+   middleware configured from the environment is built on its first request
+   (`lazy()` in the reference app's core module), because inspection builds
+   every router with the environment unresolved and providers as stubs.
+5. `tulipes routes` and `tulipes spec` take no mode: both inspect. Replace
+   `tulipes spec --offline …` in `package.json` with `tulipes spec …`, and
+   `inspectRoutes({ rootDir })` in tests with
+   `boot({ rootDir, mode: "backend", inspect: true, handleSignals: false })`.
+6. `dependsOn` is derived from a module's `@app/*` dependencies; keep an
+   explicit entry only for ordering without an import.
+
+---
+
+<a id="unreleased--settings-and-bootstrap"></a>
+
+## 0.11.0-rc.1 — settings declarations, bootstrap cleanups, provider contract 2
+
+`module.config.ts` no longer computes values and no longer carries lifecycle
+hooks. It declares the module's **settings**: a zod schema whose values live
+in a settings store (core's file store under `config/settings.<APP_ENV>.json`,
+or the Mongo store an app declares), seeded with the defaults on first boot,
+validated on every write, edited at runtime through `ctx.settings`, and read
+live at `ctx.config.<module>`.
+
+1. Rewrite each `module.config.ts` as one export:
+
+   ```ts
+   import { defineConfig } from "@tulipes/core/config";
+   import { z } from "zod/v4";
+
+   export default defineConfig({
+     schema: z.object({
+       maxSessions: z.number().int().positive().default(5).describe("Max concurrent sessions"),
+     }),
+     onChange(next, ctx) {},   // optional: rebuild what depends on a value
+   });
+   ```
+
+   A value the factory read from the environment becomes a field with that
+   variable's default; the variable leaves `meta.variables.json` unless it
+   is a secret or boot needs it before the database answers. A value the
+   factory computed from other modules' config becomes a plain export of
+   the module's own helpers. Tag a field `.meta({ restart: true })` when the
+   process cannot apply it without a restart.
+2. Move `onReady`, `onDrain` and `onShutdown` bodies into
+   `bootstrap/*.bootstrap.ts`. A bootstrap runs in every mode, after
+   settings, translations and ACL and before routes or queues; it may
+   return the function that closes what it opened, which core runs after
+   traffic drains in reverse load order. What `onDrain` did is now
+   `ctx.signal.addEventListener("abort", …)`, fired the moment shutdown
+   begins. A seed a one-off script should skip checks `ctx.mode === "script"`.
+3. Mongoose base plugins keep registering from the sys core module's
+   `module.config.ts` at declaration time, which is still before models
+   compile; it is the one top-level call that file may make.
+4. `pnpm sync`, then `pnpm typecheck`: `ctx.config.<module>` is typed as
+   the schema's output. The boot refuses the old forms by name — a factory
+   default export, a lifecycle export, a field without a default — and
+   `tulipes config:check` prints what each namespace holds.
+
+Providers implement contract **2**: core runs bootstrap files itself, so a
+`models` provider's `acquire` only connects and compiles, and
+`ProviderContext.runBootstrap` is gone. `@tulipes/mongoose` keeps exporting
+the `BootstrapFn` type as an alias of core's.
+
+---
+
+<a id="unreleased--move-to-pnpm"></a>
+
+## 0.11.0-rc.1 — move to pnpm
+
+Generated apps and the framework repository use pnpm from 0.11; the 0.10
+line used yarn 4. The sections below this one predate the move and quote
+yarn commands, which is correct for the versions they describe: apply them
+with yarn, then switch here. For every app:
+
+1. Install pnpm once per machine: `npm install -g pnpm`.
+2. In `package.json`, set `"packageManager": "pnpm@10.28.0"`, delete the
+   `workspaces` array, and move `resolutions` to `pnpm.overrides`. The PM2
+   pin changes its selector: `"pm2/js-yaml"` becomes `"pm2>js-yaml"`. Add
+   `pnpm.onlyBuiltDependencies` naming `esbuild` and, when the app uses
+   queues, `msgpackr-extract`; pnpm blocks every other install script.
+3. Create `pnpm-workspace.yaml` next to it:
+
+   ```yaml
+   packages:
+     - modules/*
+   ```
+
+4. Delete `.yarnrc.yml`, `.yarn/` and `yarn.lock`, then run `pnpm install`
+   and commit `pnpm-lock.yaml`.
+5. Replace `yarn <script>` with `pnpm <script>` wherever the app's own
+   documentation, PM2 notes or CI quote it; the scripts themselves are
+   unchanged. `tulipes update` detects pnpm from the lockfile or the
+   `packageManager` field and runs the matching install.
+
+pnpm installs each workspace package with only the dependencies it declares,
+so a module importing a package it never listed fails to resolve where yarn's
+hoisting let it through. The fix is the declaration AGENTS.md already asks
+for: add the dependency to that module's `package.json`.
+
+---
+
 <a id="0100--upgrading-from-09x"></a>
 
 ## 0.10.0 — upgrading from 0.9.x
@@ -602,7 +878,7 @@ RoutesFn factories remain supported with `--runtime`; both new starters select
 The production prefix lives in `config/routes.ts`. Offline document metadata uses
 package.json, with `http://localhost:3000` as the default URL; use `--url` for a
 deployment. Register custom access checkers in the router factory so both scans
-observe them. See [offline inspection](../../docs/offline-inspection.md) for the
+observe them. See [inspection](./README.md#inspection) for the
 full interface, guarantees and migration examples.
 
 ## 0.9 release candidate: minimal default and Node 24

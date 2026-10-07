@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "../../core/tests/fixture.js";
+import { fixture } from "../../core/tests/fixture.ts";
 // Brings this package's ModelsCapability augmentation into the test program.
-import type { ModelStore } from "../src/index.js";
+import type { ModelStore } from "../src/index.ts";
 
 const mongo = process.env.TEST_MONGO_URI;
 const integration = test.skipIf(!mongo);
@@ -26,16 +26,14 @@ integration(
   async () => {
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: [
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
           {
             name: "MONGO_URI",
             type: "url",
             default: mongo,
             description: "Test database",
           },
-        ],
-      }),
+        ] } }),
       "modules/probe/models/broken.model.js": `export default { name: 'Broken' };`,
     });
 
@@ -52,16 +50,14 @@ integration(
   async () => {
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: [
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
           {
             name: "MONGO_URI",
             type: "url",
             default: mongo,
             description: "Test database",
           },
-        ],
-      }),
+        ] } }),
       "modules/probe/models/broken.model.js": `
       import { Schema } from 'mongoose';
       const schema = new Schema({});
@@ -87,16 +83,14 @@ integration(
 
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: [
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
           {
             name: "MONGO_URI",
             type: "url",
             default: mongo,
             description: "Test database",
           },
-        ],
-      }),
+        ] } }),
     });
 
     await app.write(
@@ -121,16 +115,14 @@ integration(
   async () => {
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: [
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
           {
             name: "MONGO_URI",
             type: "url",
             default: mongo,
             description: "Test database",
           },
-        ],
-      }),
+        ] } }),
     });
 
     const handle = await app.boot({ mode: "script", shutdownTimeoutMs: 50 });

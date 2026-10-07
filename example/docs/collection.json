@@ -1,10 +1,95 @@
 {
   "info": {
-    "name": "@tulipes-example/app",
+    "name": "tulipes-example",
     "description": "Generated from the app's declared routes. Sign in with the auth request and every other request is authenticated automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
+    {
+      "name": "agent",
+      "item": [
+        {
+          "name": "List the tools an agent may call",
+          "request": {
+            "method": "GET",
+            "description": "The manifest filtered to the caller's role: route tools with their method and path, actions with their input schema",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/tools",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "tools"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Run a declared action",
+          "request": {
+            "method": "POST",
+            "description": "Runs an action from a module's agent declaration; the action's own permission and input schema apply",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/tools/{{name}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "tools",
+                "{{name}}"
+              ],
+              "variable": [
+                {
+                  "key": "name",
+                  "value": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": []
+        }
+      ]
+    },
     {
       "name": "auth",
       "item": [
@@ -251,6 +336,117 @@
             },
             "auth": {
               "type": "noauth"
+            }
+          },
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "config",
+      "item": [
+        {
+          "name": "Describe the app",
+          "request": {
+            "method": "GET",
+            "description": "Every module in load order: manifest, declared variables (names, types, sources; secrets never), settings with schema, live values and stored version, endpoints with the roles that reach them",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/config/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "config",
+                ""
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Describe one module",
+          "request": {
+            "method": "GET",
+            "description": "The same description for one module",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/config/{{module}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "config",
+                "{{module}}"
+              ],
+              "variable": [
+                {
+                  "key": "module",
+                  "value": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Change a module's settings",
+          "request": {
+            "method": "PATCH",
+            "description": "A patch over the stored values, validated by the module's schema; a stale version is refused; applied at once in every replica, except fields tagged restart, which apply on the next boot",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/config/{{module}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "config",
+                "{{module}}"
+              ],
+              "variable": [
+                {
+                  "key": "module",
+                  "value": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"values\": {},\n  \"version\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "event": []
@@ -513,96 +709,6 @@
       "name": "settings",
       "item": [
         {
-          "name": "Read a module's translations",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept-Language",
-                "value": "en",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/settings/i18n/{{module}}/{{locale}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "settings",
-                "i18n",
-                "{{module}}",
-                "{{locale}}"
-              ],
-              "variable": [
-                {
-                  "key": "module",
-                  "value": "string"
-                },
-                {
-                  "key": "locale",
-                  "value": "string"
-                }
-              ]
-            }
-          },
-          "event": []
-        },
-        {
-          "name": "Replace a module's translations",
-          "request": {
-            "method": "PUT",
-            "description": "New keys are accepted — filling the recorded gaps is the point",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Accept-Language",
-                "value": "en",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/settings/i18n/{{module}}/{{locale}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "settings",
-                "i18n",
-                "{{module}}",
-                "{{locale}}"
-              ],
-              "variable": [
-                {
-                  "key": "module",
-                  "value": "string"
-                },
-                {
-                  "key": "locale",
-                  "value": "string"
-                }
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"translations\": {}\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": []
-        },
-        {
           "name": "Stream logs",
           "request": {
             "method": "GET",
@@ -643,161 +749,6 @@
                   "disabled": true
                 }
               ]
-            }
-          },
-          "event": []
-        },
-        {
-          "name": "Describe every module",
-          "request": {
-            "method": "GET",
-            "description": "Manifest, declared variables with their full spec and resolved source, config, i18n and routes",
-            "header": [
-              {
-                "key": "Accept-Language",
-                "value": "en",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/settings/modules",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "settings",
-                "modules"
-              ]
-            }
-          },
-          "event": []
-        },
-        {
-          "name": "Restart the app",
-          "request": {
-            "method": "POST",
-            "description": "Applies written values. Requires PM2; 503 when unsupervised",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Accept-Language",
-                "value": "en",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/settings/reboot",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "settings",
-                "reboot"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"targets\": [\n    \"string\"\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": []
-        },
-        {
-          "name": "Read one variable",
-          "request": {
-            "method": "GET",
-            "description": "Add ?reveal=true to return a secret's value — audited",
-            "header": [
-              {
-                "key": "Accept-Language",
-                "value": "en",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/settings/variables/{{name}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "settings",
-                "variables",
-                "{{name}}"
-              ],
-              "query": [
-                {
-                  "key": "reveal",
-                  "value": "true",
-                  "disabled": true
-                }
-              ],
-              "variable": [
-                {
-                  "key": "name",
-                  "value": "string"
-                }
-              ]
-            }
-          },
-          "event": []
-        },
-        {
-          "name": "Set a variable",
-          "request": {
-            "method": "PUT",
-            "description": "Writes .envs/.env.<APP_ENV>; takes effect on the next boot",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Accept-Language",
-                "value": "en",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/settings/variables/{{name}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "settings",
-                "variables",
-                "{{name}}"
-              ],
-              "variable": [
-                {
-                  "key": "name",
-                  "value": "string"
-                }
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"value\": \"string\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
             }
           },
           "event": []

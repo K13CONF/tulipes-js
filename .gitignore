@@ -15,15 +15,12 @@ logs/
 .env.local
 .envs/.env.*.local
 
-# yarn berry
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-.pnp.*
-
 # Vitest artifacts
 .vitest/
 coverage/
 reports/
 .artifacts/
+
+# packed into the CLI at prepack from example/ and packages/*/package.json
+packages/cli/templates/app/
+packages/cli/templates/versions.json

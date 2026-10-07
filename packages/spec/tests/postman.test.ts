@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { toPostman } from "../src/postman.js";
+import { toPostman } from "../src/postman.ts";
 
 test("warns instead of inheriting bearer auth for a dynamic checker", async () => {
   const result = await toPostman({

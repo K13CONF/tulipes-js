@@ -1,7 +1,7 @@
-import { BootReport } from "../errors/boot-error.js";
-import { importFile } from "../boot/import-file.js";
-import type { ModuleFiles } from "../modules/explorer.js";
-import { Acl, type AclBuilder } from "./acl.js";
+import { BootReport } from "../errors/boot-error.ts";
+import { importFile } from "../boot/import-file.ts";
+import type { ModuleFiles } from "../modules/explorer.ts";
+import { Acl, type AclBuilder } from "./acl.ts";
 
 /** Default export of `module.acl.ts`. */
 export type AclFn = (acl: AclBuilder) => void | Promise<void>;

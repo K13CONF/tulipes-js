@@ -571,7 +571,7 @@ range are quoted here; later sprint durations need evidence before commitment.
 - [Sprint 01 plan and implementation status](production-readiness-01.md)
 - [Sprint 02 tracker and S08 history](production-readiness-02.md)
 - [Sprint 03 inventory and provider design plan](production-readiness-03.md)
-- [Offline inspection contract](../offline-inspection.md)
+- [Inspection](../../packages/core/README.md#inspection)
 - [Security model and remaining review](../security-model.md)
 - [Testing and packed verification](../testing.md)
 - [Core migration guide](../../packages/core/MIGRATING.md)

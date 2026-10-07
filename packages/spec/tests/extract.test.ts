@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { extract } from "../src/extract.js";
-import { fixture } from "../../core/tests/fixture.js";
+import { extract } from "../src/extract.ts";
+import { fixture } from "../../core/tests/fixture.ts";
 
 test("extracts mounted paths, statuses and custom authorization from the inspected app", async () => {
   const app = await fixture({

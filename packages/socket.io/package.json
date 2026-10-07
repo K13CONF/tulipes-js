@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/socket.io",
-  "version": "0.1.1",
+  "version": "0.1.2-rc.1",
   "description": "Socket.IO sockets provider for Tulipes apps: module-owned namespaces on the backend's HTTP server, behind core's sockets capability",
   "type": "module",
   "exports": {
@@ -14,7 +14,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
-    "prepack": "yarn build"
+    "prepack": "pnpm build"
   },
   "publishConfig": {
     "access": "public",
@@ -26,7 +26,7 @@
     "socket.io": "^4"
   },
   "peerDependencies": {
-    "@tulipes/core": "^0.10.0"
+    "@tulipes/core": "^0.10.0 || ^0.11.0-rc.1"
   },
   "devDependencies": {
     "@tulipes/core": "workspace:*",
