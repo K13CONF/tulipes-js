@@ -45,7 +45,14 @@ pnpm reports as a warning), pnpm 10.28.0, a local Redis at
 runners with MongoDB 8 and Redis 7 service containers, macOS for the second
 minimal entry; the push-triggered run on the same head ([37674721763](https://github.com/kemora13conf/bp-backend-express/actions/runs/37674721763))
 passed identically. The two runs before it, on `530a9e8`, were red on the
-production smoke alone, with the three suite defects `1cc3d20` fixes.
+production smoke alone, with the three suite defects `1cc3d20` fixes. The
+run on master's merge commit `4d3a3cf` ([37676275747](https://github.com/kemora13conf/bp-backend-express/actions/runs/37676275747))
+failed one test on the `24` entry only: the log stream's duration deadline
+started when the request entered `open()`, so a 100 ms duration on a loaded
+runner expired during the authorization round trip and the stream answered
+401 instead of `ready`. The duration now starts at the ready frame and the
+test's margins are wider; that fix is the follow-up PR whose merge carries
+the tag.
 
 | Check | Local | CI |
 |---|---|---|
@@ -68,15 +75,17 @@ the change sets are `5e7ad9b` (S00), `07437d9` (S06.1), `fae0b6a` (S01),
 `b02bd4d` (S03), `c815a6c` (S03.4), `e25323d` (S04), `ab59259` (S02),
 `d8c6c4c` (S05), `e80f90a` (S06.2), `bc2e4bb` (S06.3/S06.4), `b3aa547` (S07),
 `3c0bb62` (S08, this file), then the two CI-driven fixes `530a9e8` (two
-MongoDB-only tests) and `1cc3d20` (three reference-suite defects); the
-head under release is `1cc3d20`.
+MongoDB-only tests) and `1cc3d20` (three reference-suite defects), merged
+as `4d3a3cf`; the log stream duration fix follows in its own PR, and the
+tag goes on that PR's merge commit.
 
 ## Steps left for the release owner
 
 1. ~~Open the PR to the default branch; let the full verification matrix run on
    Node 24 with services; fill the CI column above from its jobs and record
    the coverage numbers.~~ Done: PR #25, run 37674727715 green on `1cc3d20`,
-   CI column and coverage above.
+   CI column and coverage above; the log stream duration fix after the
+   master run.
 2. Decide the registry preflight: `next` currently holds the 0.10 line; the
    first publishes of `@tulipes/mcp` and `@tulipes/testing` will receive
    `latest` from npm regardless of `--tag` (record it, as for 0.10.0-rc.3).

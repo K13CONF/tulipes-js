@@ -84,15 +84,14 @@ export class LogStreams {
       defaultMessage: "Log streams are unavailable during shutdown",
     });
     if (this.#draining) throw unavailable();
-    const lifetime = Math.min(
-      this.#limits.durationMs,
-      options.expiresAt - Date.now(),
-    );
-    if (!options.userId || !Number.isFinite(lifetime) || lifetime <= 0) {
+    // The credential's expiry is absolute; the stream's own duration starts
+    // once it is ready, so a slow authorization round trip or file open cannot
+    // eat into it and turn a valid credential into a refusal.
+    let expiresAt = options.expiresAt;
+    if (!options.userId || !Number.isFinite(expiresAt) || Date.now() >= expiresAt) {
       throw new HttpError(401, "unauthorized");
     }
 
-    const expiresAt = Date.now() + lifetime;
     const owned = this.#active.get(options.userId) ?? 0;
 
     if (
@@ -241,6 +240,7 @@ export class LogStreams {
         },
       });
       if (Date.now() >= expiresAt) throw new HttpError(401, "unauthorized");
+      expiresAt = Math.min(expiresAt, Date.now() + this.#limits.durationMs);
 
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
