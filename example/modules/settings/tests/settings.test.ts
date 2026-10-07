@@ -69,14 +69,11 @@ async function logFiles(run: (dir: string) => Promise<void>) {
   const previous = {
     file: env.get("LOG_FILE"),
     dir: env.get("LOG_DIR"),
-    name: env.get("LOG_BASENAME"),
   };
 
   env.store.set("LOG_FILE", true);
 
   env.store.set("LOG_DIR", dir);
-
-  env.store.set("LOG_BASENAME", "app");
 
   try {
     await run(dir);
@@ -84,8 +81,6 @@ async function logFiles(run: (dir: string) => Promise<void>) {
     env.store.set("LOG_FILE", previous.file);
 
     env.store.set("LOG_DIR", previous.dir);
-
-    env.store.set("LOG_BASENAME", previous.name);
 
     await rm(dir, { recursive: true, force: true });
   }
@@ -377,7 +372,7 @@ test("shutdown drains settings streams and a later boot owns fresh stream admiss
 
       // The module is imported once, but stream admission belongs to each boot.
       const next = await boot({
-        rootDir: fileURLToPath(new URL("../", import.meta.url)),
+        rootDir,
         appEnv: "test",
         handleSignals: false,
       });
@@ -386,8 +381,6 @@ test("shutdown drains settings streams and a later boot owns fresh stream admiss
         next.env.store.set("LOG_FILE", true);
 
         next.env.store.set("LOG_DIR", dir);
-
-        next.env.store.set("LOG_BASENAME", "app");
 
         const address = next.server!.address();
 
