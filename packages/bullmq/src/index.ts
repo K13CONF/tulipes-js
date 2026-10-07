@@ -17,11 +17,13 @@ export interface KnownJobs {}
 export type KnownQueueName = keyof KnownJobs & string;
 
 /**
- * The job data of a queue: the declared shape for a known name, `unknown`
- * for a dynamic one — one signature, so a wrong payload for a known queue
- * has no untyped overload to fall back to.
+ * The job data of a queue: the declared shape for a known name, `any` for
+ * a name `tulipes sync` has not seen (a dynamic name, or a queue file
+ * without a `jobs` export) — one signature, so a wrong payload for a known
+ * queue has no untyped overload to fall back to.
  */
-export type JobData<N extends string> = N extends KnownQueueName ? KnownJobs[N] : unknown;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type JobData<N extends string> = N extends KnownQueueName ? KnownJobs[N] : any;
 
 /**
  * What codegen derives from a queue file's `jobs` export: the output type of

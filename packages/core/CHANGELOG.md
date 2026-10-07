@@ -11,6 +11,19 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **`tulipes migrate 0.11` and `tulipes config:import`.** The CLI rewrites
+  an app generated on 0.10: pnpm manifest and workspace file, node scripts
+  and compiler flags, the variables file into `tulipes.env`, `index.ts`
+  into `lib/`, `schemas.ts` into `schemas/`, `.ts` specifiers, declared
+  fields for parameter properties, plain routes functions with static
+  controller imports (other `runtime()` uses keep their semantics through a
+  generated helper), `defineConfig` written from the config factory, the
+  lifecycle exports moved into a bootstrap file, `inspectRoutes()` into an
+  inspection boot, and the root's devDependencies completed for what its
+  own files import. `config/migration-0.11.json` records which variables
+  became which settings; `config:import` reads it and the env file and
+  writes the values through the app's store, validated by each schema.
+  The upgrade harness runs a real 0.10 app through both.
 - **Production without tsx.** Node strips types natively, so generated
   apps run `node app.ts`, `tulipes dev` is `node --watch`, PM2 runs node
   directly and `tsx` is gone from every manifest. Relative imports name
@@ -67,7 +80,7 @@ While the major version is `0`, a minor bump may carry breaking changes —
   so `queues.add()` and `job.data` in the processor agree on the payload. A
   queue listed in `jobs` is defined without a separate `define()` call and
   `add()` validates every payload with its schema. Names codegen does not
-  know keep the caller-side generic and `unknown` payloads.
+  know keep the caller-side generic and untyped (`any`) payloads.
 - **The module root is three files.** `package.json` (with the env contract
   under `tulipes.env`, replacing `meta.variables.json`), `module.config.ts`
   and `module.acl.ts`; public exports move to `lib/index.ts` behind
