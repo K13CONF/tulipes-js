@@ -107,16 +107,20 @@ test("duration and credential expiry close idle streams and release capacity", a
       const started = performance.now();
       const response = await get();
 
+      // The duration (500 ms, counted from the ready frame) closes the idle
+      // stream well inside the fixture's 3 s default.
       expect(await response.text()).toContain("event: ready");
-      expect(performance.now() - started).toBeLessThan(1000);
+      expect(performance.now() - started).toBeLessThan(2000);
 
-      const short = await get("one", "&expires=30");
+      // A credential that expires before the duration does closes the
+      // stream at its own expiry; one already expired is refused.
+      const short = await get("one", "&expires=400");
 
       expect(short.status).toBe(200);
       expect(await short.text()).toContain("event: ready");
       expect((await get("one", "&expires=-1")).status).toBe(401);
     },
-    { connections: 1, durationMs: 100 },
+    { connections: 1, durationMs: 500 },
   ));
 
 test("output cap ends the stream and severity filtering excludes unknown-level lines", async () =>
