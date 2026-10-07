@@ -5,7 +5,7 @@ import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 // Every published package, in release order; core first because its version names the tag.
-const packages = ['core', 'spec', 'mongoose', 'bullmq', 'socket.io', 'mcp', 'cli'];
+const packages = ['core', 'spec', 'mongoose', 'bullmq', 'socket.io', 'mcp', 'testing', 'cli'];
 const digest = file => 'sha512-' + createHash('sha512').update(readFileSync(file)).digest('base64');
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: 'inherit', ...options });
 const readJson = file => JSON.parse(readFileSync(file, 'utf8'));

@@ -24,7 +24,7 @@ cpSync(example, target, {
 });
 
 const versions = readVersions();
-for (const name of ["pnpm", "@tulipes/core", "@tulipes/cli", "@tulipes/spec", "@tulipes/mongoose", "@tulipes/bullmq", "@tulipes/socket.io"]) {
+for (const name of ["pnpm", "@tulipes/core", "@tulipes/cli", "@tulipes/spec", "@tulipes/mongoose", "@tulipes/bullmq", "@tulipes/socket.io", "@tulipes/testing"]) {
   if (!versions[name]) throw new Error(`pack-templates: missing workspace version for ${name}`);
 }
 writeFileSync(join(cli, "templates", "versions.json"), JSON.stringify(versions, null, 2) + "\n");

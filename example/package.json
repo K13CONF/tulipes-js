@@ -42,6 +42,7 @@
   "devDependencies": {
     "@tulipes/cli": "workspace:*",
     "@tulipes/spec": "workspace:*",
+    "@tulipes/testing": "workspace:*",
     "@types/express": "^5",
     "@types/jsonwebtoken": "^9",
     "@types/node": "^24",
