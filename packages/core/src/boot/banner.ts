@@ -10,8 +10,8 @@ import {
   red,
 } from "colorette";
 
-import type { BootHandle } from "./boot.js";
-import type { ModuleManifest } from "../modules/manifest.js";
+import type { BootHandle } from "./boot.ts";
+import type { ModuleManifest } from "../modules/manifest.ts";
 
 /**
  * The end-of-boot banner: one glance answers every "is it actually up?"

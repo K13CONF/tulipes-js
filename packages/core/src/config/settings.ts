@@ -1,20 +1,25 @@
 import type { z } from "zod/v4";
 
-import type { Ctx } from "../boot/contracts.js";
-import { BootReport } from "../errors/boot-error.js";
+import type { Ctx } from "../boot/contracts.ts";
+import { BootReport } from "../errors/boot-error.ts";
 import {
   declarationJsonSchema,
   declarationProblems,
   restartFields,
   type ConfigDeclaration,
-} from "./define-config.js";
-import { SYSTEM_ACTOR, type Actor, type SettingsStore, type StoredSettings } from "./settings-store.js";
+} from "./define-config.ts";
+import { SYSTEM_ACTOR, type Actor, type SettingsStore, type StoredSettings } from "./settings-store.ts";
 
 /** A write the schema refuses, with the same issue shape request validation uses. */
 export class SettingsValidationError extends Error {
-  constructor(readonly namespace: string, readonly issues: readonly { path: PropertyKey[]; message: string }[]) {
+  readonly namespace: string;
+  readonly issues: readonly { path: PropertyKey[]; message: string }[];
+
+  constructor(namespace: string, issues: readonly { path: PropertyKey[]; message: string }[]) {
     super(`settings "${namespace}": ${issues.map((issue) => `${issue.path.join(".") || "(root)"} ${issue.message}`).join("; ")}`);
     this.name = "SettingsValidationError";
+    this.namespace = namespace;
+    this.issues = issues;
   }
 }
 

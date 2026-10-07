@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 
-import { HelloController } from "../controllers/hello.controllers.js";
+import { HelloController } from "../controllers/hello.controllers.ts";
 
 /**
  * A routes file is a plain function of the context. It returns a Router,

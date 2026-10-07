@@ -2,7 +2,7 @@ import { importFile, type Ctx } from "@tulipes/core/boot";
 import type { BootReport } from "@tulipes/core/errors";
 import type { ModuleFiles } from "@tulipes/core/modules";
 
-import { QueueManager, type JobSchema, type QueueRegistry } from "./queue-manager.js";
+import { QueueManager, type JobSchema, type QueueRegistry } from "./queue-manager.ts";
 
 /** Default export of `queues/*.queues.ts`. */
 export type QueuesFn = (ctx: Ctx, queues: QueueRegistry) => void | Promise<void>;

@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { BootReport } from "../errors/boot-error.js";
-import { importFile } from "./import-file.js";
-import type { Ctx } from "./contracts.js";
+import { BootReport } from "../errors/boot-error.ts";
+import { importFile } from "./import-file.ts";
+import type { Ctx } from "./contracts.ts";
 
 /**
  * The one app-level (non-module) convention file. Optional — an app that

@@ -1,7 +1,7 @@
 import type { DatabaseCtx } from "@tulipes/core/boot";
 
-import { setPassword } from "../helpers/passwords.js";
-import type { UserDoc } from "../helpers/documents.js";
+import { setPassword } from "../helpers/passwords.ts";
+import type { UserDoc } from "../helpers/documents.ts";
 
 /**
  * Seeds the first admin: the account and its credential together.

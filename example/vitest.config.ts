@@ -1,3 +1,4 @@
 import { defineConfig } from "vitest/config";
 
-export default defineConfig({ test: { include: ["tests/**/*.test.ts"], execArgv: ["--import", "tsx"] } });
+// Node strips types natively, so the app's own files import without a loader.
+export default defineConfig({ test: { include: ["tests/**/*.test.ts"] } });

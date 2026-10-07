@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 
-export { I18n, type I18nSettings } from "./i18n.js";
-export { LOCALE_QUERY, resolveLocale } from "./locale.js";
+export { I18n, type I18nSettings } from "./i18n.ts";
+export { LOCALE_QUERY, resolveLocale } from "./locale.ts";
 export type { TFunction, i18n as I18nextInstance } from "i18next";
 
 /**

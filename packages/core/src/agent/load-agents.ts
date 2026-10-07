@@ -1,9 +1,9 @@
-import type { RuntimeCtx } from "../boot/contracts.js";
-import { importFile } from "../boot/import-file.js";
-import type { BootReport } from "../errors/boot-error.js";
-import type { ModuleFiles } from "../modules/explorer.js";
-import { agentDeclarationProblems, isAgentDeclaration, type AgentDeclaration } from "./define-agent.js";
-import { AgentRegistry } from "./registry.js";
+import type { RuntimeCtx } from "../boot/contracts.ts";
+import { importFile } from "../boot/import-file.ts";
+import type { BootReport } from "../errors/boot-error.ts";
+import type { ModuleFiles } from "../modules/explorer.ts";
+import { agentDeclarationProblems, isAgentDeclaration, type AgentDeclaration } from "./define-agent.ts";
+import { AgentRegistry } from "./registry.ts";
 
 /**
  * Backend branch and inspection, after the route scan: import every

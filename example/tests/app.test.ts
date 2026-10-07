@@ -1104,7 +1104,7 @@ test("a legacy login cannot upgrade credentials replaced while its verification 
     const password = randomBytes(24).toString("hex");
 
     const { setPassword } = await import(
-      "../modules/auth/helpers/passwords.js"
+      "../modules/auth/helpers/passwords.ts"
     );
 
     await setPassword(handle.ctx, initial.userId, password);
@@ -1349,7 +1349,7 @@ test.each([
   const user = await sysadmin();
 
   const { verify, endSession, revokeAccess } = await import(
-    "../modules/auth/helpers/tokens.js"
+    "../modules/auth/helpers/tokens.ts"
   );
 
   const claims = verify(handle.ctx, user.access_token, "access")!;
@@ -1396,7 +1396,7 @@ test.each([
         ).toBe(200);
       } else if (change === "password replacement") {
         const { setPassword } = await import(
-          "../modules/auth/helpers/passwords.js"
+          "../modules/auth/helpers/passwords.ts"
         );
 
         await setPassword(
@@ -1680,7 +1680,7 @@ test("a revocation on one replica is refused on the very next request on another
 
     const third = await account();
     expect((await me(third.access_token)).status).toBe(200);
-    const { verify } = await import("../modules/auth/helpers/tokens.js");
+    const { verify } = await import("../modules/auth/helpers/tokens.ts");
     const claims = verify(handle.ctx, third.access_token, "access")!;
     expect((await fetch(base + "/api/v1/auth/sessions/" + claims.sid, { method: "DELETE", headers: { authorization: "Bearer " + third.access_token } })).status).toBe(200);
     expect((await me(third.access_token)).status).toBe(401);

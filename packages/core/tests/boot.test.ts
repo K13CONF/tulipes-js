@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { fixture, url } from "./fixture.js";
+import { fixture, url } from "./fixture.ts";
 
 /**
  * Lifecycle: a bootstrap file is the one place a module initializes, and
@@ -102,14 +102,14 @@ test("bounds a stuck cleanup and still runs the ones before it", async () => {
 });
 
 test("capability accessors reject missing infrastructure and preserve available services", async () => {
-  const { requireModels, requireQueues } = await import("../src/boot/index.js");
+  const { requireModels, requireQueues } = await import("../src/boot/index.ts");
 
   expect(() => requireModels({})).toThrow(/tulipes\.providers\.models/);
   expect(() => requireQueues({})).toThrow(/tulipes\.providers\.queues/);
 
   // Whatever the declared providers handed over: core only checks presence.
-  const models = {} as import("../src/boot/index.js").ModelsCapability,
-    queues = {} as import("../src/boot/index.js").QueuesCapability;
+  const models = {} as import("../src/boot/index.ts").ModelsCapability,
+    queues = {} as import("../src/boot/index.ts").QueuesCapability;
 
   expect(requireModels({ models })).toBe(models);
   expect(requireQueues({ queues })).toBe(queues);

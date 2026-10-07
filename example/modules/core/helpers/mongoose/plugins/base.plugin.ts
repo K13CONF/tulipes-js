@@ -1,7 +1,7 @@
 import type { Schema } from "mongoose";
 
-import { softDeletePlugin } from "./soft-delete.plugin.js";
-import { timestampsPlugin } from "./timestamps.plugin.js";
+import { softDeletePlugin } from "./soft-delete.plugin.ts";
+import { timestampsPlugin } from "./timestamps.plugin.ts";
 
 /**
  * The base plugin every model gets. Composes the focused plugins so each

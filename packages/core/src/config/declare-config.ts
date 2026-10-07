@@ -1,8 +1,8 @@
-import { BootReport } from "../errors/boot-error.js";
-import type { ModuleFiles } from "../modules/explorer.js";
-import { importFile } from "../boot/import-file.js";
-import { isConfigDeclaration } from "./define-config.js";
-import type { Settings } from "./settings.js";
+import { BootReport } from "../errors/boot-error.ts";
+import type { ModuleFiles } from "../modules/explorer.ts";
+import { importFile } from "../boot/import-file.ts";
+import { isConfigDeclaration } from "./define-config.ts";
+import type { Settings } from "./settings.ts";
 
 /**
  * Boot phase 4: import every `module.config.ts` and register its

@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import { ANONYMOUS, type Auth } from "@tulipes/core/http";
 
-import type { SessionDoc, UserDoc } from "./documents.js";
+import type { SessionDoc, UserDoc } from "./documents.ts";
 
 /**
  * Core owns the `Auth` shape and reads `req.auth`; this module's only job

@@ -11,6 +11,15 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **Production without tsx.** Node strips types natively, so generated
+  apps run `node app.ts`, `tulipes dev` is `node --watch`, PM2 runs node
+  directly and `tsx` is gone from every manifest. Relative imports name
+  `.ts` files, `tsconfig` sets `allowImportingTsExtensions`,
+  `rewriteRelativeImportExtensions` and `erasableSyntaxOnly`, and
+  `types/tulipes.d.ts` uses `.ts` specifiers. The CLI refuses a node that
+  cannot strip types with the reason instead of a late syntax error. The
+  workspace packages follow the same rules (their emitted JavaScript still
+  carries `.js` specifiers), so every test and harness runs on plain node.
 - **The reference app on 0.11 (production preset).** The environment is
   eleven variables: `PORT`, `MONGO_URI`, `REDIS_URL`, `LOG_LEVEL`,
   `LOG_CONSOLE`, `LOG_FILE`, `LOG_DIR` and the four auth secrets; proxy

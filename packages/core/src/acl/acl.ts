@@ -1,4 +1,4 @@
-import { BootReport } from "../errors/boot-error.js";
+import { BootReport } from "../errors/boot-error.ts";
 
 /**
  * Global ACL registry.

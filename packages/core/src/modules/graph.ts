@@ -1,5 +1,5 @@
-import { BootReport } from "../errors/boot-error.js";
-import type { ModuleManifest } from "./manifest.js";
+import { BootReport } from "../errors/boot-error.ts";
+import type { ModuleManifest } from "./manifest.ts";
 
 /**
  * Compute the definitive load order. Three sort keys, applied in order:

@@ -1,6 +1,6 @@
-import type { BootHandle, DatabaseCtx, ModelsCapability, Provider } from "../src/boot/index.js";
-import { requireModels } from "../src/boot/index.js";
-import type { BootReport } from "../src/errors/index.js";
+import type { BootHandle, DatabaseCtx, ModelsCapability, Provider } from "../src/boot/index.ts";
+import { requireModels } from "../src/boot/index.ts";
+import type { BootReport } from "../src/errors/index.ts";
 
 /**
  * The models seam as a consumer and a provider author see it. ModelsCapability

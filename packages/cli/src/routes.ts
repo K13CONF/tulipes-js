@@ -1,4 +1,4 @@
-import { inspectApp } from "./inspection.js";
+import { inspectApp } from "./inspection.ts";
 
 /**
  * `tulipes routes` — every endpoint the app declares, with the roles that

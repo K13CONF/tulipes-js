@@ -1,7 +1,7 @@
-import { BootReport } from "../errors/boot-error.js";
-import type { ModuleFiles } from "../modules/explorer.js";
-import { importFile } from "./import-file.js";
-import type { BootstrapCleanup, BootstrapFn, RuntimeCtx } from "./contracts.js";
+import { BootReport } from "../errors/boot-error.ts";
+import type { ModuleFiles } from "../modules/explorer.ts";
+import { importFile } from "./import-file.ts";
+import type { BootstrapCleanup, BootstrapFn, RuntimeCtx } from "./contracts.ts";
 
 export interface RegisteredCleanup {
   module: string;

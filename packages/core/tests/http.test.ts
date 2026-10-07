@@ -1,7 +1,7 @@
 import express from "express";
 import { expect, test } from "vitest";
-import { ANONYMOUS, createRai, RouteRegistry } from "../src/http/rai.js";
-import { bindRespond } from "../src/http/respond.js";
+import { ANONYMOUS, createRai, RouteRegistry } from "../src/http/rai.ts";
+import { bindRespond } from "../src/http/respond.ts";
 
 async function request(app: express.Express, path: string) {
   const server = app.listen(0, "127.0.0.1");
@@ -46,7 +46,7 @@ test("res.respond uses the route's declared success status", async () => {
 
 test("validates and coerces input before the handler and aggregates invalid segments", async () => {
   const { z } = await import("zod");
-  const { errorHandler } = await import("../src/http/error-handler.js");
+  const { errorHandler } = await import("../src/http/error-handler.ts");
   const app = express();
 
   const rai = createRai(
@@ -98,9 +98,9 @@ test.each([
 ])(
   "access enforcement for $role produces $status",
   async ({ role, authenticated, status }) => {
-    const { Acl } = await import("../src/acl/acl.js");
-    const { BootReport } = await import("../src/errors/boot-error.js");
-    const { errorHandler } = await import("../src/http/error-handler.js");
+    const { Acl } = await import("../src/acl/acl.ts");
+    const { BootReport } = await import("../src/errors/boot-error.ts");
+    const { errorHandler } = await import("../src/http/error-handler.ts");
     const acl = new Acl();
 
     acl
@@ -142,7 +142,7 @@ test.each(["/items", "/items?required=present"])(
   "waits for asynchronous access denial before validating or responding to %s",
   async (path) => {
     const { z } = await import("zod");
-    const { errorHandler } = await import("../src/http/error-handler.js");
+    const { errorHandler } = await import("../src/http/error-handler.ts");
 
     const app = express(),
       registry = new RouteRegistry();
@@ -182,7 +182,7 @@ test.each([
 ])(
   "handles an asynchronous access check that returns $decision",
   async ({ decision, status }) => {
-    const { errorHandler } = await import("../src/http/error-handler.js");
+    const { errorHandler } = await import("../src/http/error-handler.ts");
 
     const app = express(),
       registry = new RouteRegistry();
@@ -215,7 +215,7 @@ test.each([
 test.each([false, true])(
   "isolates anonymous authentication with a middleware guest fallback: %s",
   async (middleware) => {
-    const { errorHandler } = await import("../src/http/error-handler.js");
+    const { errorHandler } = await import("../src/http/error-handler.ts");
     const app = express();
 
     if (middleware)
@@ -269,7 +269,7 @@ test.each([false, true])(
 test.each(["false", 1, {}])(
   "denies a custom checker result that is not a boolean: %j",
   async (decision) => {
-    const { errorHandler } = await import("../src/http/error-handler.js");
+    const { errorHandler } = await import("../src/http/error-handler.ts");
 
     const app = express(),
       registry = new RouteRegistry();

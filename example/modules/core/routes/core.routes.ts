@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { RequestHandler } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
 
-import { appCache } from "../helpers/cache/index.js";
-import { lazy } from "../helpers/lazy.js";
+import { appCache } from "../helpers/cache/index.ts";
+import { lazy } from "../helpers/lazy.ts";
 
 /**
  * The sys core module loads first, so what it mounts on `ctx.app` runs on

@@ -1,6 +1,6 @@
 import type { Provider } from "@tulipes/core/boot";
 
-import { initDatabase } from "./database.js";
+import { initDatabase } from "./database.ts";
 
 /**
  * The "models" provider an app selects with

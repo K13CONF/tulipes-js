@@ -1,4 +1,4 @@
-import type { Provider } from "../boot/providers.js";
+import type { Provider } from "../boot/providers.ts";
 
 /**
  * `@tulipes/core/queues` moved to `@tulipes/bullmq`. What remains is the

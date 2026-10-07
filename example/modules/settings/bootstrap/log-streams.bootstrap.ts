@@ -1,6 +1,6 @@
 import type { RuntimeCtx } from "@tulipes/core/boot";
 
-import { configuredLogStreams } from "../helpers/log-stream.js";
+import { configuredLogStreams } from "../helpers/log-stream.ts";
 
 /**
  * An open log stream is a response that never ends on its own. `ctx.signal`

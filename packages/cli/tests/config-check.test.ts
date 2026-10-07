@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
-import { fixture } from "../../core/tests/fixture.js";
+import { fixture } from "../../core/tests/fixture.ts";
 
 const cli = resolve("packages/cli/src/bin.ts");
 
@@ -14,7 +14,7 @@ test("config:check loads every namespace from the store and prints it; invalid s
       export default defineConfig({ schema: z.object({ greeting: z.string().min(1).default('Hello'), port: z.number().default(1).meta({ restart: true }) }) });
     `,
   });
-  const run = () => spawnSync(process.execPath, ["--import", "tsx", cli, "config:check"], { cwd: app.rootDir, encoding: "utf8", timeout: 20_000, env: { ...process.env, APP_ENV: "production", PORT: "0" } });
+  const run = () => spawnSync(process.execPath, [cli, "config:check"], { cwd: app.rootDir, encoding: "utf8", timeout: 20_000, env: { ...process.env, APP_ENV: "production", PORT: "0" } });
 
   const first = run();
   expect(first.status, first.stdout + first.stderr).toBe(0);
@@ -50,7 +50,7 @@ test("agent manifest describes every tool offline, filtered by role when asked",
       export default defineAgent({ summary: 'Things.', tools: [{ route: '*' }, { id: 'probe:reset', description: 'Reset', handler: () => 0 }] });
     `,
   });
-  const run = (...args: string[]) => spawnSync(process.execPath, ["--import", "tsx", cli, "agent", "manifest", ...args], { cwd: app.rootDir, encoding: "utf8", timeout: 20_000, env: { ...process.env, APP_ENV: "production" } });
+  const run = (...args: string[]) => spawnSync(process.execPath, [cli, "agent", "manifest", ...args], { cwd: app.rootDir, encoding: "utf8", timeout: 20_000, env: { ...process.env, APP_ENV: "production" } });
 
   const all = run("--out", "docs/agent.json");
   expect(all.status, all.stdout + all.stderr).toBe(0);

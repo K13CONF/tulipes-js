@@ -1,6 +1,6 @@
 import { io } from "socket.io-client";
 import { expect, test } from "vitest";
-import { fixture, url } from "../../core/tests/fixture.js";
+import { fixture, url } from "../../core/tests/fixture.ts";
 
 const declared = JSON.stringify({ type: "module", tulipes: { providers: { sockets: "@tulipes/socket.io" } } });
 

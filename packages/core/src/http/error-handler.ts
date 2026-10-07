@@ -1,8 +1,8 @@
 import type { ErrorRequestHandler, Request, RequestHandler } from "express";
 
-import type { AppEnv } from "../env/environment.js";
-import { envelope, type ApiError } from "./envelope.js";
-import { markResponded } from "./respond.js";
+import type { AppEnv } from "../env/environment.ts";
+import { envelope, type ApiError } from "./envelope.ts";
+import { markResponded } from "./respond.ts";
 
 /**
  * The error a route throws on purpose. Anything else reaching the error

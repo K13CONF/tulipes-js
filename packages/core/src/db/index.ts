@@ -1,4 +1,4 @@
-import type { Provider } from "../boot/providers.js";
+import type { Provider } from "../boot/providers.ts";
 
 /**
  * `@tulipes/core/db` moved to `@tulipes/mongoose`. What remains here is the

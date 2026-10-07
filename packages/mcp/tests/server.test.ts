@@ -2,8 +2,8 @@ import { createServer as createHttpServer, type IncomingMessage, type ServerResp
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, expect, test } from "vitest";
-import { AgentBridge } from "../src/bridge.js";
-import { createServer } from "../src/server.js";
+import { AgentBridge } from "../src/bridge.ts";
+import { createServer } from "../src/server.ts";
 
 /**
  * A stand-in for the app's agent door, in the envelope every Tulipes

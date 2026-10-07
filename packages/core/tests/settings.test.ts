@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { expect, test } from "vitest";
-import { SettingsValidationError } from "../src/config/settings.js";
-import { fixture } from "./fixture.js";
+import { SettingsValidationError } from "../src/config/settings.ts";
+import { fixture } from "./fixture.ts";
 
 const declaration = (fields: string, extra = "") => `
   import { defineConfig } from '@tulipes/core/config';

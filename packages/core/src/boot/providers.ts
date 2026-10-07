@@ -5,12 +5,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 
-import { BootReport } from "../errors/boot-error.js";
-import { providerCapabilities, type ModuleRequirement, type ProviderCapability } from "../modules/manifest.js";
-import type { ModuleFiles } from "../modules/explorer.js";
-import type { SettingsStore } from "../config/settings-store.js";
-import type { Cleanup } from "./cleanup.js";
-import type { Ctx, ProviderCapabilities } from "./contracts.js";
+import { BootReport } from "../errors/boot-error.ts";
+import { providerCapabilities, type ModuleRequirement, type ProviderCapability } from "../modules/manifest.ts";
+import type { ModuleFiles } from "../modules/explorer.ts";
+import type { SettingsStore } from "../config/settings-store.ts";
+import type { Cleanup } from "./cleanup.ts";
+import type { Ctx, ProviderCapabilities } from "./contracts.ts";
 
 /**
  * Infrastructure providers — the seam that lets core boot without owning a

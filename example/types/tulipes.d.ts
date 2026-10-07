@@ -30,19 +30,19 @@ declare module "@tulipes/core/env" {
 declare module "@tulipes/core/config" {
   interface GlobalConfig {
     "core"?: import("zod/v4").output<
-      (typeof import("./../modules/core/module.config.js"))["default"]["schema"]
+      (typeof import("./../modules/core/module.config.ts"))["default"]["schema"]
     >;
     "security"?: import("zod/v4").output<
-      (typeof import("./../modules/security/module.config.js"))["default"]["schema"]
+      (typeof import("./../modules/security/module.config.ts"))["default"]["schema"]
     >;
     "auth"?: import("zod/v4").output<
-      (typeof import("./../modules/auth/module.config.js"))["default"]["schema"]
+      (typeof import("./../modules/auth/module.config.ts"))["default"]["schema"]
     >;
     "users"?: import("zod/v4").output<
-      (typeof import("./../modules/users/module.config.js"))["default"]["schema"]
+      (typeof import("./../modules/users/module.config.ts"))["default"]["schema"]
     >;
     "hello"?: import("zod/v4").output<
-      (typeof import("./../modules/hello/module.config.js"))["default"]["schema"]
+      (typeof import("./../modules/hello/module.config.ts"))["default"]["schema"]
     >;
   }
 }
@@ -50,24 +50,24 @@ declare module "@tulipes/core/config" {
 declare module "@tulipes/mongoose" {
   interface KnownModels {
     /** [auth] modules/auth/models/credential.model.ts */
-    "Credential": (typeof import("./../modules/auth/models/credential.model.js"))["default"];
+    "Credential": (typeof import("./../modules/auth/models/credential.model.ts"))["default"];
     /** [auth] modules/auth/models/revoked-token.model.ts */
-    "RevokedToken": (typeof import("./../modules/auth/models/revoked-token.model.js"))["default"];
+    "RevokedToken": (typeof import("./../modules/auth/models/revoked-token.model.ts"))["default"];
     /** [auth] modules/auth/models/session.model.ts */
-    "Session": (typeof import("./../modules/auth/models/session.model.js"))["default"];
+    "Session": (typeof import("./../modules/auth/models/session.model.ts"))["default"];
     /** [users] modules/users/models/user.model.ts */
-    "User": (typeof import("./../modules/users/models/user.model.js"))["default"];
+    "User": (typeof import("./../modules/users/models/user.model.ts"))["default"];
     /** [hello] modules/hello/models/greeting.model.ts */
-    "Greeting": (typeof import("./../modules/hello/models/greeting.model.js"))["default"];
+    "Greeting": (typeof import("./../modules/hello/models/greeting.model.ts"))["default"];
     /** [config] modules/config/models/config-audit.model.ts */
-    "ConfigAudit": (typeof import("./../modules/config/models/config-audit.model.js"))["default"];
+    "ConfigAudit": (typeof import("./../modules/config/models/config-audit.model.ts"))["default"];
   }
 }
 
 declare module "@tulipes/bullmq" {
   interface KnownJobs extends
-    JobsOf<typeof import("./../modules/users/queues/users.queues.js")>,
-    JobsOf<typeof import("./../modules/hello/queues/hello.queues.js")> {}
+    JobsOf<typeof import("./../modules/users/queues/users.queues.ts")>,
+    JobsOf<typeof import("./../modules/hello/queues/hello.queues.ts")> {}
 }
 
 export {};

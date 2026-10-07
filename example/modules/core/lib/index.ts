@@ -14,11 +14,11 @@ export {
   MemoryCache,
   RedisCache,
   type Cache,
-} from "../helpers/cache/index.js";
+} from "../helpers/cache/index.ts";
 
-export { LOG_FILES, logger, moduleLogger } from "../helpers/logger/index.js";
+export { LOG_FILES, logger, moduleLogger } from "../helpers/logger/index.ts";
 
-export { lazy } from "../helpers/lazy.js";
+export { lazy } from "../helpers/lazy.ts";
 
 export {
   baseSchemaOptions,
@@ -31,4 +31,4 @@ export {
   type SoftDeleteFields,
   type SoftDeleteMethods,
   type Timestamps,
-} from "../helpers/mongoose/index.js";
+} from "../helpers/mongoose/index.ts";

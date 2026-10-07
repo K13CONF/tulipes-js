@@ -75,8 +75,10 @@ function renderDts(
   );
 
   const explored = exploreModules(order);
+  // `.ts` specifiers: the app imports its own files that way (Node strips
+  // the types natively) and tsconfig allows importing them.
   const specifierOf = (file: string) =>
-    "./" + relative(join(rootDir, "types"), file).replace(/\.ts$/, ".js");
+    "./" + relative(join(rootDir, "types"), file);
 
   // Only modules with a declaration get a typed namespace; the rest fall
   // back to GlobalConfig's index signature.

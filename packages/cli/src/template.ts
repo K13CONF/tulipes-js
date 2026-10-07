@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 
-import { packageRoot } from "./package-info.js";
-import type { InitFeatures, InitPreset } from "./init.js";
+import { packageRoot } from "./package-info.ts";
+import type { InitFeatures, InitPreset } from "./init.ts";
 
 /**
  * `tulipes init` copies a template tree and transforms it; it renders no
@@ -204,9 +204,9 @@ function rootManifest(text: string, name: string, versions: Record<string, strin
     // braces (GHSA-vfj7-8cjw-p6xm, via pm2's chokidar) has no fixed release:
     // it expands the watch globs an operator writes, never request input.
     auditConfig: { ignoreGhsas: ["GHSA-vfj7-8cjw-p6xm"] },
-    // The only install scripts pnpm may run: tsx's esbuild binary and, with
-    // queues, bullmq's optional native helper. Everything else is blocked.
-    onlyBuiltDependencies: ["esbuild", "msgpackr-extract"],
+    // The only install script pnpm may run: with queues, bullmq's optional
+    // native helper. Everything else is blocked.
+    onlyBuiltDependencies: ["msgpackr-extract"],
   };
   if (!features.queues) {
     delete pkg.tulipes?.providers?.queues;

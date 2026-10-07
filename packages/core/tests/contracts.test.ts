@@ -1,9 +1,9 @@
 import { expect, test, vi } from "vitest";
-import { Environment } from "../src/env/environment.js";
-import { sortModules } from "../src/modules/graph.js";
-import type { ModuleManifest } from "../src/modules/manifest.js";
-import { BootReport } from "../src/errors/boot-error.js";
-import { fixture } from "./fixture.js";
+import { Environment } from "../src/env/environment.ts";
+import { sortModules } from "../src/modules/graph.ts";
+import type { ModuleManifest } from "../src/modules/manifest.ts";
+import { BootReport } from "../src/errors/boot-error.ts";
+import { fixture } from "./fixture.ts";
 
 test("environment resolves and attributes deployment overrides while redacting secrets", async () => {
   const app = await fixture({
@@ -116,7 +116,7 @@ test.each([
 );
 
 test("a url variable accepts a replica set's host list and still rejects a malformed one", async () => {
-  const { coerceValue } = await import("../src/env/coerce.js");
+  const { coerceValue } = await import("../src/env/coerce.ts");
   const spec = { name: "MONGO_URI", type: "url", description: "Database" } as const;
   const accepts = (value: string) => coerceValue(spec, value).ok;
 

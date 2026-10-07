@@ -1,8 +1,8 @@
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
-import { importFromApp } from "./app-core.js";
-import { inspectApp } from "./inspection.js";
+import { importFromApp } from "./app-core.ts";
+import { inspectApp } from "./inspection.ts";
 
 /**
  * `tulipes spec` — an OpenAPI document and/or a Postman collection, built

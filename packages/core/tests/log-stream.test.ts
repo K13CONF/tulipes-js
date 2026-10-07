@@ -3,8 +3,8 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
-import { LogStreams } from "../../../example/modules/settings/helpers/log-stream.js";
-import { errorHandler } from "../src/http/error-handler.js";
+import { LogStreams } from "../../../example/modules/settings/helpers/log-stream.ts";
+import { errorHandler } from "../src/http/error-handler.ts";
 
 async function fixture(
   run: (
@@ -412,7 +412,7 @@ test("disconnect during opening aborts authorization without admitting overlappi
 
 test("a slow successful check cannot extend permission from its completion time", async () => {
   const { AccessLease } = await import(
-    "../../../example/modules/settings/helpers/access-lease.js"
+    "../../../example/modules/settings/helpers/access-lease.ts"
   );
 
   vi.useFakeTimers();

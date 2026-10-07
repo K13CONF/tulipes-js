@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { BootReport } from "../errors/boot-error.js";
-import { derivedDependsOn, tulipesManifestSchema, type ModuleManifest } from "./manifest.js";
+import { BootReport } from "../errors/boot-error.ts";
+import { derivedDependsOn, tulipesManifestSchema, type ModuleManifest } from "./manifest.ts";
 
 /**
  * What a module keeps at its root: its manifest, its settings declaration

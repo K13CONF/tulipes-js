@@ -60,7 +60,7 @@ before writing your own:
 
 | command | does |
 |---|---|
-| `pnpm dev` | regenerate types, run backend process under tsx watch |
+| `pnpm dev` | regenerate types, run the backend process with `node --watch` |
 | `pnpm worker` | run the queue-consumer process (needs a queue first) | <!-- feature:queues -->
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm check` | validate env against every module contract — CI gate |

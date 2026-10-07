@@ -1,8 +1,8 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
-import { packageRoot } from "./package-info.js";
-import { minimalTemplate, productionTemplate, renderTemplate } from "./template.js";
+import { packageRoot } from "./package-info.ts";
+import { minimalTemplate, productionTemplate, renderTemplate } from "./template.ts";
 
 /**
  * `tulipes init [dir]` — scaffold a complete application from a template

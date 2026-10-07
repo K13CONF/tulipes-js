@@ -1,6 +1,6 @@
-import type { RuntimeCtx } from "../boot/contracts.js";
-import type { Auth } from "../http/index.js";
-import type { ValidatableSchema } from "../http/schema.js";
+import type { RuntimeCtx } from "../boot/contracts.ts";
+import type { Auth } from "../http/index.ts";
+import type { ValidatableSchema } from "../http/schema.ts";
 
 /**
  * Who is calling a tool: the request's `Auth` plus the role the ACL

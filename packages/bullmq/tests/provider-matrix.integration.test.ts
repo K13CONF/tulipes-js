@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Redis } from "ioredis";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "../../core/tests/fixture.js";
-import type { QueueManager } from "../src/index.js";
+import { fixture } from "../../core/tests/fixture.ts";
+import type { QueueManager } from "../src/index.ts";
 
 /**
  * S10.4 — the queues provider with a real Redis: selection semantics,

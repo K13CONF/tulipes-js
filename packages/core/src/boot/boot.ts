@@ -1,27 +1,27 @@
-import { Cleanup } from "./cleanup.js";
+import { Cleanup } from "./cleanup.ts";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import express, { type Express } from "express";
 
-import { Environment, type AppEnv } from "../env/environment.js";
-import { BootReport } from "../errors/boot-error.js";
-import { discoverModules } from "../modules/discovery.js";
-import { sortModules } from "../modules/graph.js";
-import { exploreModules, type ModuleFiles } from "../modules/explorer.js";
-import { declareConfig } from "../config/declare-config.js";
-import { Settings } from "../config/settings.js";
-import { FileSettingsStore, MemorySettingsStore, type SettingsStore } from "../config/settings-store.js";
-import { loadAcl } from "../acl/load-acl.js";
-import { errorHandler, notFoundHandler } from "../http/error-handler.js";
-import { createRai, RouteRegistry } from "../http/rai.js";
-import { bindRespond, warnOnRawResponse } from "../http/respond.js";
-import { I18n } from "../i18n/i18n.js";
-import { scanRoutes } from "../http/route-scan.js";
-import { loadAgents } from "../agent/load-agents.js";
-import { loadRoutes } from "./load-routes.js";
-import { loadAppConfigSeed } from "./app-files.js";
-import { printStartupBanner } from "./banner.js";
-import { runBootstrap, type RegisteredCleanup } from "./bootstrap.js";
+import { Environment, type AppEnv } from "../env/environment.ts";
+import { BootReport } from "../errors/boot-error.ts";
+import { discoverModules } from "../modules/discovery.ts";
+import { sortModules } from "../modules/graph.ts";
+import { exploreModules, type ModuleFiles } from "../modules/explorer.ts";
+import { declareConfig } from "../config/declare-config.ts";
+import { Settings } from "../config/settings.ts";
+import { FileSettingsStore, MemorySettingsStore, type SettingsStore } from "../config/settings-store.ts";
+import { loadAcl } from "../acl/load-acl.ts";
+import { errorHandler, notFoundHandler } from "../http/error-handler.ts";
+import { createRai, RouteRegistry } from "../http/rai.ts";
+import { bindRespond, warnOnRawResponse } from "../http/respond.ts";
+import { I18n } from "../i18n/i18n.ts";
+import { scanRoutes } from "../http/route-scan.ts";
+import { loadAgents } from "../agent/load-agents.ts";
+import { loadRoutes } from "./load-routes.ts";
+import { loadAppConfigSeed } from "./app-files.ts";
+import { printStartupBanner } from "./banner.ts";
+import { runBootstrap, type RegisteredCleanup } from "./bootstrap.ts";
 import {
   acquireProviders,
   attachProviders,
@@ -34,9 +34,9 @@ import {
   serveProviders,
   type AcquiredProvider,
   type AcquiredStatus,
-} from "./providers.js";
-import { providerCapabilities } from "../modules/manifest.js";
-import type { BackendCtx, Ctx, RuntimeCtx } from "./contracts.js";
+} from "./providers.ts";
+import { providerCapabilities } from "../modules/manifest.ts";
+import type { BackendCtx, Ctx, RuntimeCtx } from "./contracts.ts";
 
 /**
  * "script" is a one-shot mode: it runs every shared phase — environment,

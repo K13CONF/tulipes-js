@@ -1,7 +1,7 @@
 import type { Provider } from "@tulipes/core/boot";
 
-import { initQueues } from "./load-queues.js";
-import type { QueueManager } from "./queue-manager.js";
+import { initQueues } from "./load-queues.ts";
+import type { QueueManager } from "./queue-manager.ts";
 
 /**
  * The "queues" provider an app selects with

@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "../../core/tests/fixture.js";
-import type { ModelStore } from "../src/index.js";
+import { fixture } from "../../core/tests/fixture.ts";
+import type { ModelStore } from "../src/index.ts";
 
 /**
  * S09.9 — the failure and omission matrix with the real driver. What core's

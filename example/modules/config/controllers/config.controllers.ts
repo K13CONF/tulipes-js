@@ -3,8 +3,8 @@ import type { Ctx } from "@tulipes/core/boot";
 import { SettingsConflictError, SettingsValidationError } from "@tulipes/core/config";
 import { HttpError, ValidationError } from "@tulipes/core/http";
 
-import { auditChange } from "../helpers/audit.js";
-import { describeModule } from "../helpers/describe.js";
+import { auditChange } from "../helpers/audit.ts";
+import { describeModule } from "../helpers/describe.ts";
 
 /**
  * The console: what every module is configured with, and the one write —
@@ -15,16 +15,20 @@ import { describeModule } from "../helpers/describe.js";
  * or a secret, and neither is edited at runtime.
  */
 export class ConfigController {
-  constructor(private readonly ctx: Ctx) {}
+  readonly #ctx: Ctx;
+
+  constructor(ctx: Ctx) {
+    this.#ctx = ctx;
+  }
 
   /** Every module, in load order. */
   app(): RequestHandler {
     return (_req: Request, res: Response) => {
       res.respond({
         data: {
-          app: this.ctx.config.app ?? {},
-          store: this.ctx.settings.status(),
-          modules: this.ctx.modules.map((module) => describeModule(this.ctx, module.name)),
+          app: this.#ctx.config.app ?? {},
+          store: this.#ctx.settings.status(),
+          modules: this.#ctx.modules.map((module) => describeModule(this.#ctx, module.name)),
         },
       });
     };
@@ -32,7 +36,7 @@ export class ConfigController {
 
   module(): RequestHandler {
     return (req: Request, res: Response) => {
-      const described = describeModule(this.ctx, String(req.params.module));
+      const described = describeModule(this.#ctx, String(req.params.module));
       if (!described) throw new HttpError(404, "noSuchModule", { field: "module" });
       res.respond({ data: described });
     };
@@ -42,11 +46,11 @@ export class ConfigController {
     return async (req: Request, res: Response) => {
       const namespace = String(req.params.module);
       const { values, version } = req.body as { values: Record<string, unknown>; version?: number };
-      if (!this.ctx.settings.namespaces().includes(namespace)) {
+      if (!this.#ctx.settings.namespaces().includes(namespace)) {
         throw new HttpError(404, "noSuchModule", { field: "module" });
       }
 
-      const current = this.ctx.settings.describe(namespace).stored.version;
+      const current = this.#ctx.settings.describe(namespace).stored.version;
       if (version !== undefined && version !== current) {
         throw new HttpError(409, "staleVersion", {
           code: "STALE_VERSION",
@@ -57,11 +61,11 @@ export class ConfigController {
       }
 
       // Acknowledged before anything changes: identifiers only, never values.
-      await auditChange(this.ctx, req, { module: namespace, keys: Object.keys(values), version: current });
+      await auditChange(this.#ctx, req, { module: namespace, keys: Object.keys(values), version: current });
 
       const user = req.auth.user!;
       try {
-        const written = await this.ctx.settings.set(namespace, values, { id: String(user._id), label: user.email });
+        const written = await this.#ctx.settings.set(namespace, values, { id: String(user._id), label: user.email });
         res.respond({
           data: { module: namespace, values: written.values, version: written.version, requires_restart: written.requiresRestart },
           ...(written.requiresRestart.length > 0 && { meta: { action: "restart_required" } }),

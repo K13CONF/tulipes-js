@@ -1,4 +1,4 @@
-import type { Provider } from "../boot/providers.js";
+import type { Provider } from "../boot/providers.ts";
 
 /**
  * `@tulipes/core/sockets` moved to `@tulipes/socket.io`. What remains is the

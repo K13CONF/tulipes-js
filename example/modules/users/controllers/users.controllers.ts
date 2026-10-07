@@ -17,13 +17,17 @@ import { HttpError } from "@tulipes/core/http";
  * "notFound" becomes NOT_FOUND with a translated message.
  */
 export class UsersController {
-  constructor(private readonly ctx: Ctx) {}
+  readonly #ctx: Ctx;
+
+  constructor(ctx: Ctx) {
+    this.#ctx = ctx;
+  }
 
   list(): RequestHandler {
     return async (req: Request, res: Response) => {
       // ?page and ?per_page, already clamped by config.pagination.
       const { per_page, skip } = req.page;
-      const User = this.ctx.models!.get("User");
+      const User = this.#ctx.models!.get("User");
 
       const [users, total_items] = await Promise.all([
         User.find().select("email role -_id").skip(skip).limit(per_page).lean(),
@@ -39,12 +43,12 @@ export class UsersController {
   /** Soft delete: the row stays in mongo but leaves every ordinary query. */
   softDelete(): RequestHandler {
     return async (req: Request, res: Response) => {
-      const user = await this.ctx.models!.get("User").findOne({ email: req.params.email });
+      const user = await this.#ctx.models!.get("User").findOne({ email: req.params.email });
       if (!user) throw new HttpError(404, "notFound");
 
       // The account leaves every query, so its sessions resolve to nobody on
       // the cold path; the cached identities would not know, so they go too.
-      await forgetUser(this.ctx, String(user._id));
+      await forgetUser(this.#ctx, String(user._id));
       await (user as unknown as { softDelete(): Promise<unknown> }).softDelete();
       res.respond({ data: { email: req.params.email, soft_deleted: true } });
     };
@@ -52,7 +56,7 @@ export class UsersController {
 
   listDeleted(): RequestHandler {
     return async (_req: Request, res: Response) => {
-      const deleted = await this.ctx.models!
+      const deleted = await this.#ctx.models!
         .get("User")
         .find({ is_deleted: true })
         .setOptions({ withDeleted: true } as Record<string, unknown>)
@@ -69,10 +73,10 @@ export class UsersController {
       // `field` is what puts this against the input in the envelope.
       if (!email) throw new HttpError(422, "emailRequired", { field: "email" });
 
-      await this.ctx.models!.get("User").create({ email });
+      await this.#ctx.models!.get("User").create({ email });
       // The locale travels with the job: the worker has no request to
       // negotiate from, so whoever queues the work owns that decision.
-      await this.ctx.queues!.add("users.welcome", "welcome", {
+      await this.#ctx.queues!.add("users.welcome", "welcome", {
         email,
         locale: req.locale,
       });
@@ -87,7 +91,7 @@ export class UsersController {
         data: {
           module: "users",
           locale: req.locale,
-          max_sessions: this.ctx.config.users?.maxSessions,
+          max_sessions: this.#ctx.config.users?.maxSessions,
         },
       });
     };

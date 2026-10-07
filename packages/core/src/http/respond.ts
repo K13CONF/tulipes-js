@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 
-import { buildMeta, envelope, type Envelope, type RespondOptions } from "./envelope.js";
-import { parsePage, type PageRequest, type PaginationBounds } from "./pagination.js";
+import { buildMeta, envelope, type Envelope, type RespondOptions } from "./envelope.ts";
+import { parsePage, type PageRequest, type PaginationBounds } from "./pagination.ts";
 
 /**
  * `res.respond` is the app's own method, not a replacement for anything:

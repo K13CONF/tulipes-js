@@ -4,7 +4,7 @@ import type { Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 
-import { configuredLogStreams, type LogStreams } from "../helpers/log-stream.js";
+import { configuredLogStreams, type LogStreams } from "../helpers/log-stream.ts";
 
 /**
  * A live view of the logs — the one thing an operator needs from the
@@ -15,14 +15,17 @@ import { configuredLogStreams, type LogStreams } from "../helpers/log-stream.js"
  */
 export class SettingsController {
   readonly #logStreams: LogStreams;
+  readonly #ctx: Ctx;
 
-  constructor(private readonly ctx: Ctx) {
+  constructor(ctx: Ctx) {
+
+    this.#ctx = ctx;
     this.#logStreams = configuredLogStreams(ctx.Environment);
   }
 
   logStream(): RequestHandler {
     return async (req: Request, res: Response) => {
-      if (!Boolean(this.ctx.Environment.get("LOG_FILE"))) {
+      if (!Boolean(this.#ctx.Environment.get("LOG_FILE"))) {
         throw new HttpError(409, "fileLoggingDisabled", {
           code: "FILE_LOGGING_DISABLED",
           defaultMessage: "LOG_FILE is off — there are no log files to stream",
@@ -36,7 +39,7 @@ export class SettingsController {
 
       const session = req.auth.session;
       await this.#logStreams.open(res, {
-        authorize: createAccessCheck(this.ctx, req.auth, "settings:logs"),
+        authorize: createAccessCheck(this.#ctx, req.auth, "settings:logs"),
         userId: req.auth.user ? String(req.auth.user._id) : "",
         expiresAt: session
           ? Math.min(
@@ -44,7 +47,7 @@ export class SettingsController {
               session.expires_at.getTime(),
             )
           : 0,
-        dir: String(this.ctx.Environment.get("LOG_DIR")),
+        dir: String(this.#ctx.Environment.get("LOG_DIR")),
         prefix: `${LOG_FILES.basename}-${which}`,
         process: which,
         tail,

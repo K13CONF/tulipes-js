@@ -2,7 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { AgentTool } from "@tulipes/core/agent";
 
-import { AgentBridge, describe } from "./bridge.js";
+import { AgentBridge, describe } from "./bridge.ts";
 
 export interface ServerOptions {
   /** Shown to the client; the app's name is used when omitted. */

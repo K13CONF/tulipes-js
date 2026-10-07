@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
 
-import { GreetingsController } from "../controllers/greetings.controllers.js";
+import { GreetingsController } from "../controllers/greetings.controllers.ts";
 
 export default function greetingsRoutes(ctx: BackendCtx): Router {
   const { rai } = ctx;

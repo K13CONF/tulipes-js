@@ -1,6 +1,6 @@
 import type { Provider } from "@tulipes/core/boot";
 
-import { initSockets } from "./load-sockets.js";
+import { initSockets } from "./load-sockets.ts";
 
 /**
  * The "sockets" provider an app selects with

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { fixture, url } from "./fixture.js";
+import { fixture, url } from "./fixture.ts";
 
 /**
  * The agent surface: every declared route is a tool unless it opts out, an

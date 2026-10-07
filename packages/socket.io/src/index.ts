@@ -1,4 +1,4 @@
-export { SocketManager, SocketRegistry } from "./socket-manager.js";
-export { initSockets, type SocketsFn } from "./load-sockets.js";
-export { provider } from "./provider.js";
-export { provider as default } from "./provider.js";
+export { SocketManager, SocketRegistry } from "./socket-manager.ts";
+export { initSockets, type SocketsFn } from "./load-sockets.ts";
+export { provider } from "./provider.ts";
+export { provider as default } from "./provider.ts";

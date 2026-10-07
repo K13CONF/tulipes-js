@@ -30,8 +30,7 @@
     }
   },
   "dependencies": {
-    "@tulipes/core": "workspace:^",
-    "tsx": "^4"
+    "@tulipes/core": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^24.2.0",

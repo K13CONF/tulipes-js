@@ -1,9 +1,9 @@
 import type { Express, Router, Request, RequestHandler, Response } from "express";
 
-import { HttpError, ValidationError, type FieldIssue } from "./error-handler.js";
-import { codeOfIssue, fieldOf, type RouteSchemas, type ValidatableSchema } from "./schema.js";
-import type { Auth } from "./index.js";
-import { routePath } from "./paths.js";
+import { HttpError, ValidationError, type FieldIssue } from "./error-handler.ts";
+import { codeOfIssue, fieldOf, type RouteSchemas, type ValidatableSchema } from "./schema.ts";
+import type { Auth } from "./index.ts";
+import { routePath } from "./paths.ts";
 
 /**
  * RAI — Resource Access Identifier.

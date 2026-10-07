@@ -1,6 +1,6 @@
 import { TulipesBootError } from "@tulipes/core/errors";
 
-import { appBoot, registerTypeScript } from "./app-core.js";
+import { appBoot, requireNativeTypeScript } from "./app-core.ts";
 
 /**
  * `tulipes config:check` — boot in script mode, which loads every settings
@@ -10,7 +10,7 @@ import { appBoot, registerTypeScript } from "./app-core.js";
  * settings store, the way `env:check` is one for the environment.
  */
 export async function runConfigCheck(rootDir: string): Promise<void> {
-  await registerTypeScript();
+  requireNativeTypeScript();
   const boot = await appBoot(rootDir);
   let handle;
   try {
