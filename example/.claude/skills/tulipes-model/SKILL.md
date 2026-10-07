@@ -49,8 +49,15 @@ Read it anywhere the context reaches:
 const Invoice = models!.get("Invoice");
 ```
 
-`models.get()` throws on an unregistered name (listing what does exist),
-so a typo fails at the call site instead of returning `undefined`.
+Run `pnpm sync` after adding a model: it records the model's name and file
+in `types/tulipes.d.ts`, so `models.get("Invoice")` is typed from the
+schema above (its fields, methods and statics) and a name that no model
+file declares does not compile. The name must be a string literal in the
+file for that; a computed name stays reachable only through
+`models.get<T>(name)`, the caller-side generic, which also serves code that
+builds names at runtime. `models.get()` throws on an unregistered name
+(listing what does exist), so a typo in dynamic code still fails at the
+call site instead of returning `undefined`.
 
 ## Requirements
 

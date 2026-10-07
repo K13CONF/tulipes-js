@@ -66,7 +66,7 @@ throws, so a typo can never reach production as `undefined`.
 ```
 
 3. Add a value to `.envs/.env.development` for anything `required`.
-4. `pnpm sync` — regenerates `types/config.d.ts` (so the read is typed)
+4. `pnpm sync` — regenerates `types/tulipes.d.ts` (so the read is typed)
    and `.env.example` (so deployments know what to set).
 5. Read it: `Environment.get("BILLING_TRIAL_DAYS")` → typed `number`.
 

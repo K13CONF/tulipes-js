@@ -47,9 +47,12 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    camelCase is for TypeScript-only names. → skill `tulipes-model`
 4. **Global middleware belongs to a sys-tier module**, not to the
    entrypoint. `app.ts` stays three lines. → skill `tulipes-endpoint`
-5. **Run `pnpm sync` after touching a module's `tulipes.env` or a
-   settings schema in `module.config.ts`.** It regenerates `types/config.d.ts`
-   and `.env.example`; stale generated types are a lie. `module.config.ts`
+5. **Run `pnpm sync` after touching a module's `tulipes.env`, a
+   settings schema in `module.config.ts`, a model file or a queue file's
+   `jobs` export.** It regenerates `types/tulipes.d.ts` and `.env.example`;
+   stale generated types are a lie. With it, `ctx.models.get("User")` is
+   typed from the model's schema and `queues.add("users.welcome", …)` from
+   the queue's job schema, so a wrong name or payload does not compile. `module.config.ts`
    has exactly one export, `defineConfig({ schema })`; initialization and
    cleanup belong to `bootstrap/*.bootstrap.ts`, which may return the
    function that closes what it opened, and long-lived work ends on
@@ -127,7 +130,7 @@ luck.
 |---|---|
 | `pnpm dev` | run the backend process (regenerates types first) |
 | `pnpm worker` | run the queue-consumer process |
-| `pnpm sync` | regenerate `types/config.d.ts` + `.env.example` |
+| `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm check` | validate the environment without booting |
 | `pnpm typecheck` | typecheck the whole app |
 | `pnpm tulipes new module <name>` | scaffold a module |

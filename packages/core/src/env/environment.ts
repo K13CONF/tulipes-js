@@ -58,7 +58,7 @@ export class Environment {
 
   /**
    * Convenience passthrough: `env.get("PORT")` ≡ `env.store.get("PORT")` —
-   * with per-variable types once `tulipes sync` has generated config.d.ts.
+   * with per-variable types once `tulipes sync` has generated tulipes.d.ts.
    */
   get<K extends string>(name: K): Resolved<K> {
     if (this.#inspecting) {

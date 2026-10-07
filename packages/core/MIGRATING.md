@@ -13,6 +13,33 @@ what makes it work under nvm.
 
 <a id="unreleased--module-layout-and-plain-routes"></a>
 
+## Unreleased (0.11) — generated model and job types
+
+`tulipes sync` writes `types/tulipes.d.ts` and deletes the `types/config.d.ts`
+it wrote before. Nothing else is required; two steps are worth taking.
+
+1. In each `queues/*.queues.ts`, declare the job data once and drop the
+   `define()` call for queues that need no options:
+
+   ```ts
+   import type { JobSchemas, QueueRegistry } from "@tulipes/bullmq";
+   import { z } from "zod/v4";
+
+   export const jobs = {
+     "users.welcome": z.object({ email: z.email(), locale: z.string() }),
+   } satisfies JobSchemas;
+   ```
+
+   After `pnpm sync`, `queues.add("users.welcome", …)` and `job.data` in the
+   processor are typed from it, `add()` validates the payload, and the
+   `as { … }` casts on `job.data` come out. A payload the compiler now
+   refuses (an optional route parameter passed as a string, say) was a
+   runtime hole before.
+2. Drop `models.get<T>("Name")` generics where the model file's schema is the
+   truth: `models.get("User")` is typed from it once `pnpm sync` has run. Keep
+   the generic where the type is deliberately narrower or wider than the
+   schema, and for names built at runtime — that overload is unchanged.
+
 ## Unreleased (0.11) — the module root, plain routes, inspection
 
 A module's root holds three files: `package.json`, `module.config.ts` and

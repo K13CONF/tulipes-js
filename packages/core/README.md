@@ -96,8 +96,10 @@ forked at the last pipeline phase. A maintenance script therefore runs against
 exactly the configuration the server has, never an approximation of it.
 
 **Types generated, not hand-written.** `tulipes sync` reads your modules and
-emits a `config.d.ts`: enum variables become literal unions, config namespaces
-are inferred from your factories' return types.
+emits a `types/tulipes.d.ts`: enum variables become literal unions, config
+namespaces are the output of each module's settings schema, `ctx.models.get()`
+is typed from each model file's schema and `queues.add()` from each queue
+file's job schemas — a wrong name or payload does not compile.
 
 **The framework stays out of your request path.** Core mounts *no* middleware.
 Your sys-tier modules own the head of the pipeline; core guarantees only the
@@ -443,7 +445,7 @@ loader — a running app installs only the HTTP runtime.
 |---|---|
 | `tulipes init [dir] [--minimal \| --preset minimal \| --preset production] [--no-queues] [--no-sockets]` | scaffold an application; no services; the opt-outs compose the production preset without that provider |
 | `tulipes dev [entry]` | regenerate types, then run under tsx watch |
-| `tulipes sync` | regenerate `types/config.d.ts` and `.env.example` |
+| `tulipes sync` | regenerate `types/tulipes.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting — a CI gate |
 | `tulipes routes` | list every declared endpoint with the roles that reach it; no service, secret or `.env` |
 | `tulipes spec [--openapi file] [--postman file] [--url base]` | generate documents from the same inspection |

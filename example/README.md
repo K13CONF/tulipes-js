@@ -62,7 +62,7 @@ before writing your own:
 |---|---|
 | `pnpm dev` | regenerate types, run backend process under tsx watch |
 | `pnpm worker` | run the queue-consumer process (needs a queue first) | <!-- feature:queues -->
-| `pnpm sync` | regenerate `types/config.d.ts` + `.env.example` |
+| `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm check` | validate env against every module contract — CI gate |
 | `pnpm tulipes new module <name>` | scaffold a module |
 | `pnpm tulipes update` | upgrade the framework everywhere it is declared |
