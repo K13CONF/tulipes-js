@@ -7,7 +7,7 @@
     "priority": 900
   },
   "dependencies": {
-    "@tulipes/core": "^0.10.1",
+    "@tulipes/core": "workspace:*",
     "express": "^5",
     "zod": "^3.25"
   }

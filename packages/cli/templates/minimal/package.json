@@ -21,14 +21,14 @@
     "spec": "tulipes spec --openapi docs/openapi.json --postman docs/collection.json"
   },
   "dependencies": {
-    "@tulipes/core": "^0.10.1",
+    "@tulipes/core": "workspace:*",
     "express": "^5",
     "zod": "^3.25"
   },
   "devDependencies": {
-    "@tulipes/cli": "^0.1.1",
-    "@tulipes/spec": "^0.3.1",
-    "@tulipes/testing": "^0.1.0",
+    "@tulipes/cli": "workspace:*",
+    "@tulipes/spec": "workspace:*",
+    "@tulipes/testing": "workspace:*",
     "@types/express": "^5",
     "@types/node": "^24",
     "typescript": "^7",

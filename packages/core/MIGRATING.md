@@ -13,7 +13,7 @@ what makes it work under nvm.
 
 <a id="unreleased--module-layout-and-plain-routes"></a>
 
-## Unreleased (0.11) — the two commands
+## 0.11.0-rc.1 — the two commands
 
 Most of the 0.11 sections below are what `tulipes migrate 0.11` does by
 itself on an app generated on 0.10, leaving a `TODO 0.11:` comment and a
@@ -33,7 +33,7 @@ settings in MongoDB, and delete from `.envs/` the variables the record
 names. The sections below say what each rewrite is and what to do by hand
 where the command stopped.
 
-## Unreleased (0.11) — production without tsx
+## 0.11.0-rc.1 — production without tsx
 
 Node 24 (and 22.18+) runs TypeScript as it is, so nothing transpiles any
 more. `tulipes migrate 0.11` (0.11-S06.3) performs the mechanical part;
@@ -57,7 +57,7 @@ by hand:
 5. `pnpm install`, then `pnpm sync`: the generated types now use `.ts`
    specifiers.
 
-## Unreleased (0.11) — the reference app: environment, console, auth cache
+## 0.11.0-rc.1 — the reference app: environment, console, auth cache
 
 Generated apps are the user's code, so these are steps, not library changes.
 
@@ -91,7 +91,7 @@ Generated apps are the user's code, so these are steps, not library changes.
 4. Harnesses and tests that set the retired variables write the settings
    instead, after boot: `ctx.settings.set("security", { … }, actor)`.
 
-## Unreleased (0.11) — settings in the database
+## 0.11.0-rc.1 — settings in the database
 
 An app that keeps settings in `config/settings.<APP_ENV>.json` changes
 nothing. To move them into MongoDB, as the production preset now does:
@@ -106,7 +106,7 @@ nothing. To move them into MongoDB, as the production preset now does:
 3. Deployments with replicas now see a write everywhere: on a replica set
    through a change stream, otherwise within the 2s poll.
 
-## Unreleased (0.11) — the agent surface
+## 0.11.0-rc.1 — the agent surface
 
 Nothing is required: an app with no `agent/` folder exposes every route as
 a tool and `ctx.agent` exists in every backend process. To make the surface
@@ -126,7 +126,7 @@ reachable, and worth reaching:
 4. For Claude Code: `pnpm add -D @tulipes/mcp` and
    `claude mcp add <app> -- pnpm tulipes-mcp --token <bearer token>`.
 
-## Unreleased (0.11) — generated model and job types
+## 0.11.0-rc.1 — generated model and job types
 
 `tulipes sync` writes `types/tulipes.d.ts` and deletes the `types/config.d.ts`
 it wrote before. Nothing else is required; two steps are worth taking.
@@ -153,7 +153,7 @@ it wrote before. Nothing else is required; two steps are worth taking.
    the generic where the type is deliberately narrower or wider than the
    schema, and for names built at runtime — that overload is unchanged.
 
-## Unreleased (0.11) — the module root, plain routes, inspection
+## 0.11.0-rc.1 — the module root, plain routes, inspection
 
 A module's root holds three files: `package.json`, `module.config.ts` and
 `module.acl.ts`. Everything else has a folder, and the boot refuses a stray
@@ -200,7 +200,7 @@ root file with the folder it belongs in.
 
 <a id="unreleased--settings-and-bootstrap"></a>
 
-## Unreleased (0.11) — settings declarations, bootstrap cleanups, provider contract 2
+## 0.11.0-rc.1 — settings declarations, bootstrap cleanups, provider contract 2
 
 `module.config.ts` no longer computes values and no longer carries lifecycle
 hooks. It declares the module's **settings**: a zod schema whose values live
@@ -253,7 +253,7 @@ the `BootstrapFn` type as an alias of core's.
 
 <a id="unreleased--move-to-pnpm"></a>
 
-## Unreleased (0.11) — move to pnpm
+## 0.11.0-rc.1 — move to pnpm
 
 Generated apps and the framework repository use pnpm from 0.11; the 0.10
 line used yarn 4. The sections below this one predate the move and quote
@@ -878,7 +878,7 @@ RoutesFn factories remain supported with `--runtime`; both new starters select
 The production prefix lives in `config/routes.ts`. Offline document metadata uses
 package.json, with `http://localhost:3000` as the default URL; use `--url` for a
 deployment. Register custom access checkers in the router factory so both scans
-observe them. See [offline inspection](../../docs/offline-inspection.md) for the
+observe them. See [inspection](./README.md#inspection) for the
 full interface, guarantees and migration examples.
 
 ## 0.9 release candidate: minimal default and Node 24

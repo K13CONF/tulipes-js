@@ -16,6 +16,6 @@
     ]
   },
   "dependencies": {
-    "@tulipes/core": "^0.10.1"
+    "@tulipes/core": "workspace:*"
   }
 }

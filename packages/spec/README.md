@@ -13,7 +13,7 @@ routes.
 Requires Node 24.x. Runtime inspection connects configured infrastructure.
 Core 0.9.0-rc.3 adds the native-router `--offline` interface: both
 migrated presets generate specs without MongoDB, Redis or runtime secrets.
-See the [offline inspection guide](../../docs/offline-inspection.md).
+See [inspection](../core/README.md#inspection) in the core README.
 
 Version 0.3.0-rc.5 supports core `^0.9.0-rc.3 || ^0.10.0-rc.1`. Install the candidate
 with `pnpm add -D @tulipes/spec@next`. See the core

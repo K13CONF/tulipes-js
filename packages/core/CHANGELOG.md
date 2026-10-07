@@ -9,7 +9,14 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
-## [Unreleased]
+## [0.11.0-rc.1] — 2026-10-07
+
+The 0.11 line as a release candidate: every entry below is breaking for an app
+on 0.10, and `tulipes migrate 0.11` carries most of it across; the migration
+guide lists the rest. Published packages: core `0.11.0-rc.1`, `@tulipes/cli`
+`0.2.0-rc.1`, `@tulipes/spec` `0.3.2-rc.1`, `@tulipes/mongoose` `0.2.0-rc.1`,
+`@tulipes/bullmq` `0.2.0-rc.1`, `@tulipes/socket.io` `0.1.2-rc.1`, and the first
+`@tulipes/mcp` and `@tulipes/testing` at `0.1.0-rc.1`.
 
 - **`@tulipes/testing`.** `useTestApp({ rootDir, env, settings }, { beforeAll,
   afterAll })` boots the app once per test file on a free port and shuts it
@@ -638,7 +645,7 @@ generated types, ACL, the model store, queues, sockets, the three process
 modes (`backend`, `worker`, `script`), the startup banner, and the CLI —
 `init`, `dev`, `sync`, `env:check`, `new module`, `update`.
 
-[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.3...HEAD
+[0.11.0-rc.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.10.1...v0.11.0-rc.1
 [0.9.0-rc.3]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.2...v0.9.0-rc.3
 [0.9.0-rc.2]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.1...v0.9.0-rc.2
 [0.9.0-rc.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.8.0...v0.9.0-rc.1
