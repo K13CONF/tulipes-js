@@ -581,6 +581,13 @@ input schema, then the handler — behind `POST <prefix>/agent/tools/<name>`.
 [`@tulipes/mcp`](https://www.npmjs.com/package/@tulipes/mcp) serves it to
 Claude Code over MCP, calling every tool through the app's own HTTP door.
 
+> [!WARNING]
+> **Experimental.** `@tulipes/core/agent`, the manifest's shape, the `agent`
+> module's two routes, `tulipes agent manifest` and `@tulipes/mcp` are outside
+> the 0.11 compatibility promise: they may change in a patch or minor release
+> without a deprecation period, until real use settles them. Everything else
+> in 0.11 is covered as usual (see `docs/support.md`).
+
 <details>
 <summary><b>Subpath exports</b></summary>
 

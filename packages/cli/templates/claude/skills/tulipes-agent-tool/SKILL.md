@@ -12,6 +12,10 @@ becomes `hello_list-greetings`, a `GET` is marked read-only. A module with
 no `agent/` folder exposes every route it declares. The folder adds what
 cannot be derived.
 
+The agent surface and `@tulipes/mcp` are **experimental** in 0.11: they may
+change in any release without a deprecation period. Check `MIGRATING.md`
+after each `@tulipes/core` upgrade before relying on a manifest shape.
+
 `modules/hello/agent/hello.agent.ts`:
 
 ```ts

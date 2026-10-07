@@ -23,10 +23,12 @@ interface Manifest {
  *   the CLI    the globally installed `tulipes` on your PATH (@tulipes/cli)
  *   the app    @tulipes/core in the app root and in every module, since
  *              modules are workspace packages that declare it themselves,
- *              plus the app's own @tulipes/cli devDependency
+ *              plus every other @tulipes package the app declares — the
+ *              CLI devDependency, spec, testing, the providers
  *
- * Provider packages (@tulipes/mongoose, /bullmq, /socket.io) follow their
- * own lines and are not rewritten here; MIGRATING.md lists the pairing.
+ * The packages are released in lockstep (docs/releasing.md), so each one's
+ * `latest` is the version paired with core's `latest`: raising core alone
+ * would leave a provider whose peer range refuses the new core.
  *
  * Updating only the app leaves you typing an old CLI against a new
  * framework; updating only the CLI leaves the app behind. This does both,
@@ -36,15 +38,22 @@ interface Manifest {
 export async function runUpdate(rootDir: string): Promise<void> {
   const current = cliVersion();
 
-  let latest: string;
-  let latestCli: string;
+  const manifests = findManifests(rootDir);
+  const rootManifest = join(rootDir, "package.json");
+  const targets = [...new Set([PACKAGE, CLI, ...declaredPackages([...manifests.map(({ path }) => path), rootManifest])])];
+
+  // Every version is known before any manifest is written, so a registry
+  // failure halfway through leaves the app as it was.
+  let versions: Map<string, string>;
   try {
-    [latest, latestCli] = await Promise.all([fetchLatest(PACKAGE), fetchLatest(CLI)]);
+    versions = new Map(await Promise.all(targets.map(async (name) => [name, await fetchLatest(name)] as const)));
   } catch (error) {
     console.error(`could not reach the npm registry: ${(error as Error).message}`);
     process.exitCode = 1;
     return;
   }
+  const latest = versions.get(PACKAGE)!;
+  const latestCli = versions.get(CLI)!;
 
   const cliRoot = packageRoot();
   // Updatable-as-a-CLI means: an installed package (it lives under some
@@ -59,20 +68,21 @@ export async function runUpdate(rootDir: string): Promise<void> {
 
   if (cliIsGlobal) {
     didSomething = true;
-    if (current === latestCli) {
-      console.log(`cli already on ${latestCli}`);
+    // `latest` can be behind a candidate installed from `next`; an update
+    // never moves backwards.
+    if (atOrAhead(current, latestCli)) {
+      console.log(`cli already on ${current}${current === latestCli ? "" : ` (latest is ${latestCli})`}`);
     } else {
       await updateGlobalCli(cliRoot, current, latestCli);
     }
   }
 
-  const manifests = findManifests(rootDir);
   if (manifests.length > 0) {
     didSomething = true;
     // The app's installed version, not the CLI's — they are separate
     // installs, and reporting one as the other is how this whole confusion
     // started.
-    await updateApp(rootDir, manifests, appCoreVersion(rootDir), latest, latestCli);
+    await updateApp(rootDir, manifests, appCoreVersion(rootDir), versions);
   }
 
   if (!didSomething) {
@@ -125,22 +135,24 @@ async function updateApp(
   rootDir: string,
   manifests: { path: string }[],
   current: string | undefined,
-  latest: string,
-  latestCli: string,
+  versions: Map<string, string>,
 ): Promise<void> {
-  const range = `^${latest}`;
-  const changed = manifests.filter(({ path }) => rewrite(path, range));
-  // The app's own CLI devDependency moves with it, so `pnpm dev` and friends
-  // keep matching the framework they generate for.
-  if (rewrite(join(rootDir, "package.json"), `^${latestCli}`, CLI)) changed.push({ path: join(rootDir, "package.json") });
+  const latest = versions.get(PACKAGE)!;
+  const ranges = new Map([...versions].map(([name, version]) => [name, `^${version}`]));
+  // The root is rewritten even when only modules depend on core: the app's
+  // own CLI devDependency moves with it, so `pnpm dev` and friends keep
+  // matching the framework they generate for.
+  const root = join(rootDir, "package.json");
+  const paths = [...new Set([...(existsSync(root) ? [root] : []), ...manifests.map(({ path }) => path)])];
+  const changed = paths.map((path) => ({ path, names: rewrite(path, ranges) })).filter(({ names }) => names.length > 0);
 
   if (changed.length === 0) {
-    console.log(`app already on ${PACKAGE}@${range}`);
+    console.log(`app already on ${PACKAGE} ${current ?? ranges.get(PACKAGE)}${current && current !== latest ? ` (latest is ${latest})` : ""}`);
     return;
   }
 
-  for (const { path } of changed) {
-    console.log(`  update ${relative(rootDir, path) || "package.json"} → ${range}`);
+  for (const { path, names } of changed) {
+    console.log(`  update ${relative(rootDir, path) || "package.json"}: ${names.map((name) => `${name} ${ranges.get(name)}`).join(", ")}`);
   }
   console.log(`\napp: ${current ?? "not installed"} → ${latest}\n`);
 
@@ -198,11 +210,11 @@ async function fetchLatest(name: string): Promise<string> {
   // The scoped name has to be encoded for the registry's document route.
   const response = await fetch(`${REGISTRY}/${name.replace("/", "%2f")}/latest`);
   if (!response.ok) {
-    throw new Error(`registry responded ${response.status}`);
+    throw new Error(`${name}: registry responded ${response.status}`);
   }
   const body = (await response.json()) as { version?: unknown };
   if (typeof body.version !== "string") {
-    throw new Error("registry returned no version");
+    throw new Error(`${name}: registry returned no version`);
   }
   return body.version;
 }
@@ -236,22 +248,45 @@ function dependsOnCore(path: string): boolean {
   }
 }
 
-/** Returns true when the file actually changed. */
-function rewrite(path: string, range: string, name: string = PACKAGE): boolean {
-  const manifest = JSON.parse(readFileSync(path, "utf8")) as Manifest;
-
-  let touched = false;
-  for (const field of ["dependencies", "devDependencies"] as const) {
-    const deps = manifest[field];
-    if (deps?.[name] !== undefined && deps[name] !== range) {
-      deps[name] = range;
-      touched = true;
+/** Every @tulipes package the manifests declare as a dependency. */
+function declaredPackages(paths: string[]): string[] {
+  const names = new Set<string>();
+  for (const path of paths) {
+    let manifest: Manifest;
+    try {
+      manifest = JSON.parse(readFileSync(path, "utf8")) as Manifest;
+    } catch {
+      continue;
+    }
+    for (const deps of [manifest.dependencies, manifest.devDependencies]) {
+      for (const name of Object.keys(deps ?? {})) if (name.startsWith("@tulipes/")) names.add(name);
     }
   }
-  if (!touched) return false;
+  return [...names];
+}
 
-  writeFileSync(path, JSON.stringify(manifest, null, 2) + "\n");
-  return true;
+/**
+ * Raises each package to its range wherever the manifest declares it, and
+ * returns the names that changed. Only a plain version range (`^x.y.z`,
+ * `~x.y.z`, `x.y.z`) whose floor is below the target is rewritten: a floor
+ * at or above it is a candidate ahead of `latest`, and anything else —
+ * `workspace:*`, `file:`, a compound range — is the app's own choice.
+ */
+function rewrite(path: string, ranges: Map<string, string>): string[] {
+  const manifest = JSON.parse(readFileSync(path, "utf8")) as Manifest;
+
+  const changed = new Set<string>();
+  for (const deps of [manifest.dependencies, manifest.devDependencies]) {
+    for (const [name, range] of ranges) {
+      const floor = deps?.[name] === undefined ? undefined : floorOf(deps[name]);
+      if (deps && floor && compareVersions(floor, floorOf(range)!) < 0) {
+        deps[name] = range;
+        changed.add(name);
+      }
+    }
+  }
+  if (changed.size > 0) writeFileSync(path, JSON.stringify(manifest, null, 2) + "\n");
+  return [...changed];
 }
 
 /** Resolves to the exit code, or -1 when the command could not be spawned. */
@@ -263,7 +298,42 @@ async function run(command: string, args: string[], cwd: string): Promise<number
   });
 }
 
-function detectManager(rootDir: string): "yarn" | "npm" | "pnpm" {
+const VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/** The lowest version a plain range admits, or undefined for any other range. */
+function floorOf(range: string): string | undefined {
+  const version = range.trim().replace(/^[\^~]|^=/, "").replace(/^v/, "");
+  return VERSION.test(version) ? version : undefined;
+}
+
+/** True when `version` is a version at or above `latest`; an unknown version is never ahead. */
+function atOrAhead(version: string, latest: string): boolean {
+  return VERSION.test(version) && VERSION.test(latest) && compareVersions(version, latest) >= 0;
+}
+
+/** Semver precedence: negative, zero or positive as `a` sorts before, with or after `b`. */
+export function compareVersions(a: string, b: string): number {
+  const [, ...left] = VERSION.exec(a)!;
+  const [, ...right] = VERSION.exec(b)!;
+  for (let i = 0; i < 3; i++) {
+    const difference = Number(left[i]) - Number(right[i]);
+    if (difference !== 0) return Math.sign(difference);
+  }
+  const [preA, preB] = [left[3], right[3]];
+  if (preA === undefined || preB === undefined) return preA === preB ? 0 : preA === undefined ? 1 : -1;
+  const [idsA, idsB] = [preA.split("."), preB.split(".")];
+  for (let i = 0; i < Math.min(idsA.length, idsB.length); i++) {
+    const [x, y] = [idsA[i]!, idsB[i]!];
+    if (x === y) continue;
+    const [numX, numY] = [/^\d+$/.test(x), /^\d+$/.test(y)];
+    if (numX && numY) return Math.sign(Number(x) - Number(y));
+    if (numX !== numY) return numX ? -1 : 1;
+    return x < y ? -1 : 1;
+  }
+  return Math.sign(idsA.length - idsB.length);
+}
+
+export function detectManager(rootDir: string): "yarn" | "npm" | "pnpm" {
   if (existsSync(join(rootDir, "yarn.lock"))) return "yarn";
   if (existsSync(join(rootDir, "pnpm-lock.yaml"))) return "pnpm";
   if (existsSync(join(rootDir, "package-lock.json"))) return "npm";
