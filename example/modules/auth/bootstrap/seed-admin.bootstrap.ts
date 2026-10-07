@@ -13,6 +13,8 @@ import type { UserDoc } from "../helpers/documents.js";
  * a sys module may not depend on an app module.
  */
 export default async function seedAdmin(ctx: DatabaseCtx): Promise<void> {
+  // Bootstrap runs in every mode; a one-off script has no business seeding.
+  if (ctx.mode === "script") return;
   const email = String(ctx.Environment.get("AUTH_ADMIN_EMAIL")).toLowerCase();
   const User = ctx.models.get<UserDoc>("User");
 

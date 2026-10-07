@@ -2,14 +2,12 @@ export { boot, processModes, type BootHandle, type BootOptions, type ProcessMode
 export type { AppConfigFn } from "./app-files.js";
 export type {
   Ctx,
-  ConfigCtx,
   RuntimeCtx,
   BackendCtx,
   DatabaseCtx,
-  LifecycleHook,
+  BootstrapCleanup,
+  BootstrapFn,
   ModelsCapability,
-  ModuleConfigFn,
-  ModuleLifecycle,
   ProviderCapabilities,
   QueuesCapability,
   SocketsCapability,
@@ -21,6 +19,7 @@ export {
   type AcquiredResource,
   type Provider,
   type ProviderContext,
+  type ProvidedValues,
   type ProviderDeclarations,
   type ProviderStatus,
 } from "./providers.js";

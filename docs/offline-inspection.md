@@ -91,9 +91,9 @@ contract structure/ownership and ACL. It imports the opted-in route files, build
 the actual router trees and uses the same scanner as runtime. Callback registration
 does not execute middleware, param callbacks, handlers or access checkers.
 
-It skips environment value resolution and env files, app/module config factories,
-models, controller acquisition through `runtime()`, translation initialization,
-MongoDB/Redis, queues, sockets and application lifecycle hooks. Provider
+It skips environment value resolution and env files, the app config seed and
+settings declarations, models, controller acquisition through `runtime()`,
+translation initialization, MongoDB/Redis, queues, sockets and bootstrap. Provider
 declarations (`tulipes.providers` in the root manifest, `requires` in module
 manifests) are validated for consistency, but the provider itself is never
 resolved or imported, so an uninstalled provider is not an offline error.

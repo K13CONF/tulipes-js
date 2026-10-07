@@ -1,9 +1,9 @@
-import type { ConfigCtx, Ctx } from "@tulipes/core/boot";
-import { closeRateLimits } from "./helpers/rate-limit.js";
+import { defineConfig } from "@tulipes/core/config";
+import { z } from "zod/v4";
 
-// Preserve app-level security settings, including the password cost factor.
-export default function securityConfig({ config }: ConfigCtx): Record<string, unknown> {
-  return { ...config.security };
-}
-
-export function onShutdown({ Environment }: Ctx): void { closeRateLimits(Environment); }
+export default defineConfig({
+  schema: z.object({
+    passwordRounds: z.number().int().min(4).max(31).default(12)
+      .describe("bcrypt cost factor for new password hashes; existing hashes are upgraded on login"),
+  }),
+});

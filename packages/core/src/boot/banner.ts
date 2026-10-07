@@ -60,6 +60,14 @@ export function printStartupBanner(
     }
   }
 
+  const namespaces = ctx.settings.namespaces();
+  rows.push([
+    "Settings",
+    namespaces.length
+      ? `${cyan(ctx.settings.status().label)}  ${dim("·")}  ${gray(namespaces.map((name) => `${name} v${ctx.settings.describe(name).stored.version}`).join(", "))}`
+      : gray("no module declares settings"),
+  ]);
+
   rows.push([
     "Modules",
     `${bold(String(modules.length))} ${gray(

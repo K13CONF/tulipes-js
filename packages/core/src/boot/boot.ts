@@ -8,7 +8,9 @@ import { BootReport } from "../errors/boot-error.js";
 import { discoverModules } from "../modules/discovery.js";
 import { sortModules } from "../modules/graph.js";
 import { exploreModules, type ModuleFiles } from "../modules/explorer.js";
-import { buildGlobalConfig } from "../config/build-config.js";
+import { declareConfig } from "../config/declare-config.js";
+import { Settings } from "../config/settings.js";
+import { FileSettingsStore, type SettingsStore } from "../config/settings-store.js";
 import { loadAcl } from "../acl/load-acl.js";
 import { errorHandler, notFoundHandler } from "../http/error-handler.js";
 import { createRai, RouteRegistry } from "../http/rai.js";
@@ -18,6 +20,7 @@ import { scanRoutes } from "../http/route-scan.js";
 import { loadRoutes } from "./load-routes.js";
 import { loadAppConfigSeed } from "./app-files.js";
 import { printStartupBanner } from "./banner.js";
+import { runBootstrap, type RegisteredCleanup } from "./bootstrap.js";
 import {
   acquireProviders,
   attachProviders,
@@ -30,15 +33,15 @@ import {
   type AcquiredProvider,
   type AcquiredStatus,
 } from "./providers.js";
-import type { BackendCtx, Ctx, ModuleLifecycle } from "./contracts.js";
+import type { BackendCtx, Ctx, RuntimeCtx } from "./contracts.js";
 
 /**
  * "script" is a one-shot mode: it runs every shared phase — environment,
- * modules, config, ACL, database, models, queue registration — then starts
- * nothing at all, so a maintenance script gets exactly what a request
- * handler gets minus the server. It is deliberately the same code path as
- * the long-running modes, so a script can never be handed config the real
- * app does not have.
+ * modules, settings, ACL, database, models, bootstrap, queue registration —
+ * then starts nothing at all, so a maintenance script gets exactly what a
+ * request handler gets minus the server. It is deliberately the same code
+ * path as the long-running modes, so a script can never be handed config
+ * the real app does not have.
  */
 export const processModes = ["backend", "worker", "script"] as const;
 export type ProcessMode = (typeof processModes)[number];
@@ -57,9 +60,9 @@ export interface BootOptions {
    * that is already running — `tulipes routes` is the reason it exists.
    */
   listen?: boolean;
-  /** Total graceful cleanup deadline, including hooks. Defaults to 10 seconds. */
+  /** Total graceful cleanup deadline, including cleanups. Defaults to 10 seconds. */
   shutdownTimeoutMs?: number;
-  /** Mount routes for tooling; skip bootstrap, sockets, listening and readiness. */
+  /** Mount routes for tooling; skip bootstrap, sockets, listening and the banner. */
   inspect?: boolean;
 }
 
@@ -79,10 +82,22 @@ export interface BootHandle {
 }
 
 /**
- * The whole run workflow, in the order the POC pins down:
- * environment → module graph → exploration → global config → (acl, db —
- * future steps) → mode fork (backend | worker) → onReady. Each phase crashes
- * with its aggregate report before the next begins.
+ * The whole run workflow:
+ *
+ *   1  environment        .env.<APP_ENV> + every declared variable → validate
+ *   2  module graph       tier / priority / dependsOn → load order
+ *   3  exploration        conventional paths resolved, nothing imported
+ *   4  declarations       config/app.config.ts seed; module.config.ts schemas
+ *   5  models, settings   providers connect; no values are read yet
+ *   6  settings           every namespace loaded, seeded, validated → ctx.config
+ *   7  translations
+ *   8  ACL
+ *   9  bootstrap          bootstrap/*.bootstrap.ts in load order, every mode
+ *  10  queues, sockets    providers acquired against the full context
+ *  11  fork               backend | worker | script
+ *  12  banner
+ *
+ * Each phase crashes with its aggregate report before the next begins.
  */
 export async function boot(options: BootOptions): Promise<BootHandle> {
   const bootStartedAt = Date.now();
@@ -92,23 +107,24 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   }
   const mode = resolveMode(options.mode);
   if (options.inspect && mode !== "backend") throw new Error("inspection requires backend mode");
+  const situation = options.inspect ? "inspect" : mode;
 
-  // Phases 1–3 — Environment engine (crashes internally on bad env)
+  // Phase 1 — Environment engine (crashes internally on bad env)
   const env = Environment.load({
     rootDir: options.rootDir,
     ...(options.appEnv && { appEnv: options.appEnv }),
   });
 
-  // Phase 4 — module graph
+  // Phase 2 — module graph
   const graphReport = new BootReport();
   const manifests = discoverModules(join(options.rootDir, "modules"), graphReport);
   const order = sortModules(manifests, graphReport);
   graphReport.throwIfAny("module graph");
 
-  // Phase 5 — exploration (no failure modes)
+  // Phase 3 — exploration (no failure modes)
   const explored = exploreModules(order);
 
-  // Phase 5b — provider declarations. Static, read from the app's own
+  // Phase 3b — provider declarations. Static, read from the app's own
   // package.json, checked against every module's requirements BEFORE any
   // module code is imported: a module that needs models in an app with no
   // models provider never gets as far as importing a schema.
@@ -117,19 +133,20 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   checkRequirements(explored, declaredProviders, providerReport);
   providerReport.throwIfAny("providers");
 
-  // Phase 6 — global config: app-level seed first, then module factories
   // The registry exists before any module runs, so a routes file can
-  // declare into it the moment it is called.
+  // declare into it the moment it is called. The i18next instance exists
+  // from here on and is never replaced; phase 7 is where resources arrive.
   const routes = new RouteRegistry();
-  // The i18next instance exists from here on and is never replaced, so
-  // ctx.i18n and ctx.t are safe to hold from any phase; phase 6b is where
-  // the resources arrive.
   const i18n = new I18n();
+  const settings = new Settings();
+  const aborter = new AbortController();
   const ctx: Ctx = {
     mode,
     Environment: env,
     modules: order,
     config: {},
+    settings,
+    signal: aborter.signal,
     routes,
     rai: createRai(
       routes,
@@ -145,11 +162,12 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     t: (namespace, locale) => i18n.t(namespace, locale),
     i18n: i18n.instance,
   };
-  let lifecycles: ModuleLifecycle[] = [];
+  let cleanups: RegisteredCleanup[] = [];
   let shutdownPromise: Promise<void> | undefined;
   const signalHandlers = new Map<NodeJS.Signals, () => void>();
   // Per boot, never module-global: two handles in one process own two sets.
   const acquiredProviders: AcquiredProvider[] = [];
+  let fileStore: FileSettingsStore | undefined;
   const handle: BootHandle = {
     mode, env, ctx, i18n,
     providers: [],
@@ -157,52 +175,71 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     shutdown: () => {
       if (!shutdownPromise) {
         for (const [signal, handler] of signalHandlers) process.removeListener(signal, handler);
-        shutdownPromise = shutdown(handle, lifecycles, acquiredProviders, shutdownTimeoutMs);
+        // Deferred by a microtask so the promise is already the handle's by
+        // the time ctx.signal fires: a listener that asks for shutdown gets
+        // this same operation, not a second one.
+        shutdownPromise = Promise.resolve().then(() =>
+          shutdown(handle, aborter, cleanups, acquiredProviders, settings, fileStore, shutdownTimeoutMs));
       }
       return shutdownPromise;
     },
   };
+  const providerContext = { ctx, rootDir: options.rootDir, files: explored, situation } as const;
   try {
-    const configReport = new BootReport();
-    await loadAppConfigSeed(options.rootDir, ctx, configReport);
-    lifecycles = await buildGlobalConfig(explored, ctx, configReport);
-    configReport.throwIfAny("config");
+    // Phase 4 — declarations: the app-level seed and every module's schema.
+    const declarationReport = new BootReport();
+    await loadAppConfigSeed(options.rootDir, ctx, declarationReport);
+    await declareConfig(explored, settings, declarationReport);
+    declarationReport.throwIfAny("config");
 
-    // Phase 6b — translations. After config, because the locales an app ships
-    // are app policy read from config.i18n; before everything that might want
-    // to say something to a user.
+    // Phase 5 — models and the settings store. A provider registers
+    // ownership through own() before it awaits anything, so the failure
+    // path below can always dispose what was created. Only the app's
+    // declaration selects a provider: an installed package or a MONGO_URI
+    // on its own acquires nothing.
+    const acquireReport = new BootReport();
+    acquiredProviders.push(...await acquireProviders(declaredProviders, providerContext, acquireReport, ["models", "settings"]));
+    handle.providers = providerStatuses(acquiredProviders);
+    acquireReport.throwIfAny("providers");
+
+    // Phase 6 — settings: every namespace read from the store, seeded on
+    // first boot, validated against its declaration, handed to ctx.config.
+    const settingsReport = new BootReport();
+    const declaredStore = acquiredProviders.find((entry) => entry.capability === "settings")?.value as SettingsStore | undefined;
+    const store = declaredStore ?? (fileStore = new FileSettingsStore(options.rootDir, env.appEnv));
+    await settings.load(store, ctx, settingsReport);
+    settingsReport.throwIfAny("settings");
+
+    // Phase 7 — translations. After settings, because the locales an app
+    // ships are app policy read from config.i18n; before everything that
+    // might want to say something to a user.
     const i18nReport = new BootReport();
-    await i18n.load(
-      explored,
-      I18n.readSettings(ctx.config.i18n, i18nReport),
-      env.appEnv,
-      i18nReport,
-    );
+    await i18n.load(explored, I18n.readSettings(ctx.config.i18n, i18nReport), env.appEnv, i18nReport);
     i18nReport.throwIfAny("i18n");
 
-    // Phase 7 — ACL merge
+    // Phase 8 — ACL merge
     const aclReport = new BootReport();
     ctx.acl = await loadAcl(explored, aclReport);
     aclReport.throwIfAny("acl");
 
-    // Phase 8 — declared providers, in capability order (models, queues). A provider registers
-    // ownership through own() before it awaits anything, so the failure path
-    // below can always dispose what was created. Only the app's declaration
-    // selects a provider: an installed package or a MONGO_URI on its own
-    // acquires nothing.
-    const acquireReport = new BootReport();
-    acquiredProviders.push(...await acquireProviders(declaredProviders, {
-      ctx, rootDir: options.rootDir, files: explored,
-      situation: options.inspect ? "inspect" : mode,
-      runBootstrap: mode !== "script" && !options.inspect,
-    }, acquireReport));
+    // Phase 9 — bootstrap, every mode. Inspection acquires nothing and so
+    // runs nothing that could open a resource.
+    if (!options.inspect) {
+      const bootstrapReport = new BootReport();
+      cleanups = await runBootstrap(explored, ctx as RuntimeCtx, bootstrapReport);
+      bootstrapReport.throwIfAny("bootstrap");
+    }
+
+    // Phase 10 — queues and sockets, against the full context.
+    const lateReport = new BootReport();
+    acquiredProviders.push(...await acquireProviders(declaredProviders, providerContext, lateReport, ["queues", "sockets"]));
     handle.providers = providerStatuses(acquiredProviders);
-    acquireReport.throwIfAny("providers");
+    lateReport.throwIfAny("providers");
 
     if (mode === "backend") {
       await startBackend(handle, explored, acquiredProviders, options.listen !== false && !options.inspect, options.inspect);
     } else if (mode === "worker") {
-      // Phase 9 (worker) — every acquired provider that can serve starts
+      // Phase 11 (worker) — every acquired provider that can serve starts
       // consuming. Consumers hold the event loop open; a worker with nothing
       // to consume is a misconfigured deployment, not a valid idle state.
       const workerReport = new BootReport();
@@ -219,19 +256,8 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     // "script" starts nothing: the caller owns what happens next, and owns
     // calling handle.shutdown() when it is done.
 
-    // Phase 12 — onReady, load order. Scripts skip it: those hooks announce a
-    // process that is up and serving, which a script never is.
+    // Phase 12 — the banner, for a process that is up and serving.
     if (mode !== "script" && options.listen !== false && !options.inspect) {
-      for (const { module, onReady } of lifecycles) {
-        try {
-          await onReady?.(ctx);
-        } catch (error) {
-          // Late-phase hook failures must still take the process down cleanly:
-          // a half-ready app serving traffic is worse than no app.
-          throw new Error(`onReady hook of "${module}" failed: ${(error as Error).message}`, { cause: error });
-        }
-      }
-
       printStartupBanner(handle, order, Date.now() - bootStartedAt);
     }
 
@@ -279,7 +305,7 @@ function resolveMode(override: ProcessMode | undefined): ProcessMode {
 }
 
 /**
- * Phases 9b–11b: express, module routes, http server.
+ * Phase 11 (backend): express, module routes, http server.
  *
  * The request pipeline, in order:
  *   1. every module router      (load order — sys modules first, so their
@@ -330,8 +356,8 @@ async function startBackend(
   const server = createServer(app);
   handle.server = server;
 
-  // Phase 11b — transports attach before listen() so no client can connect
-  // to a namespace that isn't wired yet. Inspection never attaches.
+  // Transports attach before listen() so no client can connect to a
+  // namespace that isn't wired yet. Inspection never attaches.
   const attachReport = new BootReport();
   if (!inspect) await attachProviders(providers, server, attachReport);
   handle.providers = providerStatuses(providers);
@@ -345,21 +371,24 @@ async function startBackend(
   });
 }
 
-/** Stop new work, drain active work, dispose modules, then infrastructure. */
+/**
+ * Stop new work, drain active work, run the cleanups bootstrap returned in
+ * reverse order, then dispose infrastructure. `ctx.signal` aborts first, so
+ * long-lived work ends while everything it may still need is alive.
+ */
 async function shutdown(
   handle: BootHandle,
-  lifecycles: readonly ModuleLifecycle[],
+  aborter: AbortController,
+  cleanups: readonly RegisteredCleanup[],
   providers: readonly AcquiredProvider[],
+  settings: Settings,
+  fileStore: FileSettingsStore | undefined,
   timeoutMs: number,
 ): Promise<void> {
   const cleanup = new Cleanup(timeoutMs);
-  // Begin notification before waiting for traffic. Hooks share the drain's
-  // deadline, so a stuck notifier cannot prevent HTTP/workers from stopping.
-  const notifications = [...lifecycles].reverse().map(({ module, onDrain }) =>
-    cleanup.run(`${module} onDrain`, () => onDrain?.(handle.ctx)),
-  );
+  aborter.abort();
+  settings.dispose();
   await Promise.all([
-    ...notifications,
     cleanup.run("http", async () => {
       if (handle.server?.listening) {
         await new Promise<void>((resolve, reject) => {
@@ -370,9 +399,10 @@ async function shutdown(
     ...drainProviders(providers, cleanup),
   ]);
 
-  for (const { module, onShutdown } of [...lifecycles].reverse()) {
-    await cleanup.run(`${module} onShutdown`, () => onShutdown?.(handle.ctx));
+  for (const { module, file, cleanup: dispose } of [...cleanups].reverse()) {
+    await cleanup.run(`${module} bootstrap cleanup (${file})`, () => dispose());
   }
   await disposeProviders(providers, cleanup);
+  fileStore?.dispose();
   cleanup.finish();
 }

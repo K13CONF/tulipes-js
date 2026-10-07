@@ -17,12 +17,17 @@ export type ModuleTier = (typeof moduleTiers)[number];
 export const DEFAULT_PRIORITY = 100;
 
 /**
- * Infrastructure a module can require from a provider the app declares in its
- * own package.json (`tulipes.providers`). Kept as an enum so a misspelt
- * requirement is a manifest error, not a silently unmet one.
+ * Capabilities an app can declare a provider for in its own package.json
+ * (`tulipes.providers`), in acquisition order. `settings` has a default
+ * (core's file store) and is never something a module requires; the other
+ * three a module can require, kept as an enum so a misspelt requirement is
+ * a manifest error, not a silently unmet one.
  */
-export const providerCapabilities = ["models", "queues", "sockets"] as const;
+export const providerCapabilities = ["models", "settings", "queues", "sockets"] as const;
 export type ProviderCapability = (typeof providerCapabilities)[number];
+
+export const moduleRequirements = ["models", "queues", "sockets"] as const;
+export type ModuleRequirement = (typeof moduleRequirements)[number];
 
 /**
  * `.strict()` so a typo like "dependson" crashes boot instead of silently
@@ -39,9 +44,9 @@ export const tulipesManifestSchema = z
     offline: z.boolean().optional(),
     /**
      * Provider capabilities this module consumes without owning files that
-     * imply them (`models/` or `bootstrap/` imply "models", `queues/` "queues", `sockets/` "sockets").
+     * imply them (`models/` implies "models", `queues/` "queues", `sockets/` "sockets").
      */
-    requires: z.array(z.enum(providerCapabilities)).default([]),
+    requires: z.array(z.enum(moduleRequirements)).default([]),
   })
   .strict();
 
@@ -58,5 +63,5 @@ export interface ModuleManifest {
   priority: number;
   dependsOn: readonly string[];
   offline?: boolean;
-  requires: readonly ProviderCapability[];
+  requires: readonly ModuleRequirement[];
 }

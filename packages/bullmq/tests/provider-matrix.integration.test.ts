@@ -71,10 +71,6 @@ integration("a producer-only module declares the requirement and can enqueue int
     "modules/probe/meta.variables.json": redisMeta,
     "modules/probe/queues/work.queues.js": queueFile(name),
     "modules/producer/package.json": JSON.stringify({ name: "@test/producer", type: "module", tulipes: { dependsOn: ["probe"], requires: ["queues"] } }),
-    "modules/producer/module.config.js": `
-      export default () => ({});
-      export async function onReady(ctx) { await ctx.queues.add(${JSON.stringify(name)}, 'hello', { from: 'producer' }); }
-    `,
   });
 
   const backend = await app.boot({ listen: false });
@@ -84,8 +80,9 @@ integration("a producer-only module declares the requirement and can enqueue int
   expect(backend.consumers).toBe(0);
   expect(backend.providers).toEqual([expect.objectContaining({ capability: "queues", provider: "bullmq", ready: true, detail: "1 processor(s) registered" })]);
 
+  await queues.add(name, "hello", { from: "producer" });
   await queues.add(name, "hello", { from: "test" });
-  expect(await queues.queue(name).getWaitingCount()).toBe(1);
+  expect(await queues.queue(name).getWaitingCount()).toBe(2);
 
   await queues.queue(name).obliterate({ force: true });
   await backend.shutdown();
@@ -96,7 +93,7 @@ integration("the worker serves every processor and reports it; a queue-free work
   const app = await fixture({
     "package.json": declared,
     "modules/probe/meta.variables.json": redisMeta,
-    "modules/probe/module.config.js": `export default () => ({});`,
+    "modules/probe/module.config.js": `import { defineConfig } from '@tulipes/core/config'; import { z } from 'zod/v4'; export default defineConfig({ schema: z.object({}) });`,
     "modules/probe/queues/work.queues.js": queueFile(name),
   });
 
@@ -121,11 +118,14 @@ integration("disposing the provider leaves the application's own Redis client co
   const app = await fixture({
     "package.json": declared,
     "modules/probe/meta.variables.json": redisMeta,
-    "modules/probe/module.config.js": `
+    "modules/probe/module.config.js": `import { defineConfig } from '@tulipes/core/config'; import { z } from 'zod/v4'; export default defineConfig({ schema: z.object({}) });`,
+    "modules/probe/bootstrap/probe.bootstrap.js": `
       import { Redis } from 'ioredis';
-      const mine = new Redis(process.env.REDIS_URL, { connectionName: 'app-owned' });
-      export default () => ({ mine });
-      export async function onShutdown(ctx) { ctx.config.probe.pingAfterDrain = await mine.ping(); }
+      export default (ctx) => {
+        const mine = new Redis(process.env.REDIS_URL, { connectionName: 'app-owned' });
+        ctx.config.probe.mine = mine;
+        return async () => { ctx.config.probe.pingAfterDrain = await mine.ping(); };
+      };
     `,
     "modules/probe/queues/work.queues.js": queueFile(name),
   });
@@ -136,7 +136,7 @@ integration("disposing the provider leaves the application's own Redis client co
   await worker.shutdown();
 
   const state = worker.ctx.config.probe as { mine: Redis; pingAfterDrain?: string };
-  // The module's hook ran after the provider drained and still used its own client.
+  // The module's cleanup ran after the provider drained and still used its own client.
   expect(state.pingAfterDrain).toBe("PONG");
   expect(await state.mine.ping()).toBe("PONG");
   expect((await clientNames()).includes("app-owned")).toBe(true);
@@ -155,7 +155,7 @@ integration("driver errors on producers and consumers never escape as unhandled 
   const app = await fixture({
     "package.json": declared,
     "modules/probe/meta.variables.json": redisMeta,
-    "modules/probe/module.config.js": `export default () => ({});`,
+    "modules/probe/module.config.js": `import { defineConfig } from '@tulipes/core/config'; import { z } from 'zod/v4'; export default defineConfig({ schema: z.object({}) });`,
     "modules/probe/queues/work.queues.js": queueFile(name),
   });
 
@@ -184,7 +184,7 @@ integration("shutting down while a consumer is still connecting rejects nothing"
   const app = await fixture({
     "package.json": declared,
     "modules/probe/meta.variables.json": redisMeta,
-    "modules/probe/module.config.js": `export default () => ({});`,
+    "modules/probe/module.config.js": `import { defineConfig } from '@tulipes/core/config'; import { z } from 'zod/v4'; export default defineConfig({ schema: z.object({}) });`,
     "modules/probe/queues/work.queues.js": queueFile(name),
   });
 

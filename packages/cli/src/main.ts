@@ -4,6 +4,7 @@ import { runEnvCheck } from "./env-check.js";
 import { runNewModule } from "./new-module.js";
 import { runDev } from "./dev.js";
 import { runUpdate } from "./update.js";
+import { runConfigCheck } from "./config-check.js";
 import { runRoutes } from "./routes.js";
 import { runSpec } from "./spec.js";
 import { appCoreVersion, cliVersion, coreVersion } from "./package-info.js";
@@ -22,6 +23,7 @@ Usage:
   tulipes dev [entry]          run with tsx in watch mode (default entry: app.ts), sync first
   tulipes sync                 regenerate types/config.d.ts and .env.example
   tulipes env:check            validate env against every meta.variables.json (CI-friendly)
+  tulipes config:check         load every settings namespace from the store and print it
   tulipes routes               list every declared endpoint, with the roles that reach it
   tulipes spec [options]       write an OpenAPI document / Postman collection (needs @tulipes/spec)
                                  --openapi <file>  --postman <file>  --url <base>
@@ -54,6 +56,8 @@ export async function main(argv: readonly string[]): Promise<void> {
     }
     case "sync":
       return runSync(rootDir);
+    case "config:check":
+      return runConfigCheck(rootDir);
     case "env:check":
       return runEnvCheck(rootDir);
     case "routes":

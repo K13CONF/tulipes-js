@@ -7,7 +7,7 @@ import type { Provider } from "../boot/providers.js";
  * imports fail with "no exported member" — see MIGRATING.md.
  */
 const moved: Provider<"queues"> = {
-  contract: 1,
+  contract: 2,
   capability: "queues",
   name: "core/queues (moved)",
   async acquire(_ctx, report) {

@@ -9,12 +9,13 @@ import { exploreModules } from "@tulipes/core/modules";
 import type { VariableSpec } from "@tulipes/core/env";
 
 /**
- * `tulipes sync` — everything derivable from the meta files, derived:
+ * `tulipes sync` — everything derivable from the declarations, derived:
  *
- *   types/config.d.ts  KnownVariables + GlobalConfig augmentations. Config
- *                      namespaces are typed as each factory's RETURN TYPE via
- *                      `typeof import(...)` — the compiler does the inference,
- *                      codegen never executes module code.
+ *   types/config.d.ts  KnownVariables + GlobalConfig augmentations. A config
+ *                      namespace is typed as the OUTPUT of the schema its
+ *                      module.config.ts declares, via `typeof import(...)` —
+ *                      the compiler does the inference, codegen never
+ *                      executes module code.
  *   .env.example       every variable, grouped by module and `group`.
  *
  * Both files are committed and marked generated.
@@ -57,7 +58,7 @@ function renderDts(
     ]),
   );
 
-  // Only modules with a config factory get a typed namespace; the rest fall
+  // Only modules with a declaration get a typed namespace; the rest fall
   // back to GlobalConfig's index signature.
   const configLines = exploreModules(order)
     .filter((files) => files.configFile)
@@ -66,11 +67,11 @@ function renderDts(
         join(rootDir, "types"),
         files.configFile!,
       ).replace(/\.ts$/, ".js");
-      // Optional on purpose: a namespace only exists once phase 6 has run
-      // its factory, and an empty config seed must stay assignable.
+      // Optional on purpose: a namespace only exists once phase 6 has loaded
+      // it, and an empty config seed must stay assignable.
       return [
-        `    ${JSON.stringify(files.module.name)}?: Awaited<`,
-        `      ReturnType<(typeof import("${specifier}"))["default"]>`,
+        `    ${JSON.stringify(files.module.name)}?: import("zod/v4").output<`,
+        `      (typeof import("${specifier}"))["default"]["schema"]`,
         `    >;`,
       ];
     });

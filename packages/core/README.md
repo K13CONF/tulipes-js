@@ -113,14 +113,14 @@ delete what this feature does not need.
 modules/billing/
 ├── package.json              name + "tulipes" ordering key
 ├── meta.variables.json       this module's environment contract
-├── module.config.ts          config factory + onReady / onDrain / onShutdown
+├── module.config.ts          defineConfig({ schema }): this module's settings
 ├── module.acl.ts             permission grants
 ├── routes/*.routes.ts        native Router factories, optionally wrapped in defineRoutes
 ├── controllers/              the work; handler factories import it lazily
 ├── helpers/                  pure logic, no framework
 ├── i18n/<locale>.json        this module's strings — the module is the namespace
 ├── models/*.model.ts         { name, schema } — a declaration, not a registration
-├── bootstrap/*.bootstrap.ts  post-database, pre-traffic: indexes, seeds
+├── bootstrap/*.bootstrap.ts  initialization, every mode; may return its cleanup
 ├── queues/*.queues.ts        (ctx, queues) => define + process
 └── sockets/*.sockets.ts      (ctx, sockets) => claim a namespace
 ```
@@ -316,27 +316,30 @@ call site without core knowing anything about your models.
  1  Environment      .env.<APP_ENV> + every meta.variables.json → validate
  2  Module graph     "tulipes" keys → tier / priority / topological sort
  3  Exploration      resolve conventional paths in load order, import nothing
- 4  Global config    config/app.config.ts seed → each module.config.ts factory
- 5  Translations     modules/*/i18n/*.json, one namespace per module
- 6  ACL              module.acl.ts in load order
- 7  Providers        the app's declared providers, in order: models
-                     (@tulipes/mongoose: connect → model store → bootstrap),
-                     queues (@tulipes/bullmq: every *.queues.ts registers),
+ 4  Declarations     config/app.config.ts seed; each module.config.ts schema
+ 5  Models, settings providers connect (@tulipes/mongoose: connection → model store)
+ 6  Settings         every namespace read from the store, seeded on first boot,
+                     validated against its schema → ctx.config.<module>
+ 7  Translations     modules/*/i18n/*.json, one namespace per module
+ 8  ACL              module.acl.ts in load order
+ 9  Bootstrap        bootstrap/*.bootstrap.ts in load order, every mode;
+                     a returned function is the module's cleanup
+10  Queues, sockets  queues (@tulipes/bullmq: every *.queues.ts registers),
                      sockets (@tulipes/socket.io, backend only: namespaces claimed)
- 8  ── fork ──
+11  ── fork ──
     backend          module routers → 404 → error handler → providers attach → listen
     worker           each provider serves: one BullMQ worker per processor
     script           start nothing; the caller owns the process
- 9  onReady          hooks in load order → startup banner
-    shutdown         SIGTERM → onDrain + stop/drain http + provider drain →
-                     onShutdown in REVERSE order → providers disposed in reverse
+12  Banner
+    shutdown         SIGTERM → ctx.signal aborts + stop/drain http + provider drain →
+                     bootstrap cleanups in REVERSE order → providers disposed in reverse
 ```
 
 Each phase crashes with its own aggregate report before the next begins.
-`onDrain` hooks start in reverse module order before traffic drain actions;
-asynchronous hooks and traffic drain concurrently under the same shutdown deadline.
-Keep dependencies available until `onShutdown`. Failed/timed-out notifications are
-aggregated and do not prevent later cleanup attempts.
+`ctx.signal` aborts the moment shutdown begins, before HTTP stops accepting,
+so an SSE handler or a poller ends while everything it needs is still alive;
+cleanups run after traffic drains, under one deadline, and a failed or stuck
+cleanup is aggregated without preventing the ones after it.
 
 <details>
 <summary><b>Contracts — what each file exports</b></summary>
@@ -357,13 +360,14 @@ interface Ctx {
   app?: Express;            // backend only
 }
 
-// module.config.ts — the namespace stored at config.<module>
-export default function billingConfig({ Environment }: Ctx) {
-  return { trialDays: Environment.get("BILLING_TRIAL_DAYS") };
-}
-export async function onReady(ctx: Ctx) {}
-export async function onDrain(ctx: Ctx) {}       // signal long-lived work to stop
-export async function onShutdown(ctx: Ctx) {}    // dispose after draining, reverse order
+// module.config.ts — this module's settings, stored at config.<module>, kept
+// live: an operator's write through ctx.settings lands without a restart.
+export default defineConfig({
+  schema: z.object({
+    trialDays: z.number().int().positive().default(14).describe("Free trial length"),
+  }),
+  onChange(next, ctx) {},                          // optional: rebuild what depends on it
+});
 
 // routes/*.routes.ts — every route declares a RAI, or the boot fails
 export default function billingRoutes(ctx: Ctx): Router {
@@ -383,8 +387,13 @@ export default function billingRoutes(ctx: Ctx): Router {
 //   "tulipes": { "providers": { "models": "@tulipes/mongoose" } }
 export default { name: "Invoice", schema } satisfies ModelDef; // ModelDef from @tulipes/mongoose
 
-// bootstrap/*.bootstrap.ts — runs in every process, so make it idempotent
-export default async function seed({ models }: Ctx) {}
+// bootstrap/*.bootstrap.ts — the one place a module initializes: every mode,
+// after settings and ACL, before routes. Idempotent; may return its cleanup.
+export default async function seed(ctx: RuntimeCtx) {
+  const client = openSomething(ctx);
+  ctx.signal.addEventListener("abort", () => client.stopPolling());   // shutdown began
+  return () => client.close();                                         // after traffic drains
+}
 
 // queues/*.queues.ts — ONE file, both sides; the process mode decides.
 // Needs "tulipes": { "providers": { "queues": "@tulipes/bullmq" } }; QueueRegistry from @tulipes/bullmq
@@ -575,8 +584,8 @@ queues work. `res.respond` uses that default and OpenAPI describes it. An explic
 `res.respond({ status })` still overrides the default. Custom access checkers are
 reported as dynamic policies in generated documents.
 
-For lifecycle timing changes and the more precise `ConfigCtx`, `BackendCtx` and
-`DatabaseCtx` contracts, see [the migration guide](./MIGRATING.md).
+For the move from config factories and lifecycle hooks to settings
+declarations and bootstrap cleanups, see [the migration guide](./MIGRATING.md).
 
 ## Versioning
 

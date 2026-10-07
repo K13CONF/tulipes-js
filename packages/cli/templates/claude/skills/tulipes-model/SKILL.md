@@ -97,8 +97,8 @@ is all the task wanted.
 
 - Global plugins (timestamps, soft delete) only apply to schemas compiled
   *after* registration, which is why `registerBasePlugins()` is called from
-  the sys core module's `module.config.ts` — phase 6, before models compile
-  in phase 8. That covers every mode, scripts included; calling it from
+  the sys core module's `module.config.ts` — declaration time (phase 4),
+  before models compile in phase 5. That covers every mode, scripts included; calling it from
   `app.ts` instead would leave scripts compiling models without the
   soft-delete guard.
 - Mongoose queries are lazy: `await` them, and prefer `.lean()` for reads

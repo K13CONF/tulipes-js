@@ -1,22 +1,15 @@
-import type { ConfigCtx } from "@tulipes/core/boot";
+import { defineConfig } from "@tulipes/core/config";
+import { z } from "zod/v4";
 
-import { closeCache } from "./helpers/cache/index.js";
 import { registerBasePlugins } from "./helpers/mongoose/index.js";
 
 /**
- * Registering here — phase 6, before models compile in phase 8 — is what
- * makes the base plugins apply in EVERY mode: backend, worker and script
- * alike. Doing it in app.ts instead would leave scripts compiling models
- * without timestamps or the soft-delete guard, so a script would happily
- * return rows the API considers deleted.
+ * Declaration time (boot phase 4) is before models compile (phase 5), which
+ * is exactly when a global mongoose plugin has to exist: registering here
+ * makes the base plugins apply in EVERY mode — backend, worker and script
+ * alike — so a script can never read rows the API considers deleted.
  */
 registerBasePlugins();
 
-export default function coreConfig(_ctx: ConfigCtx) {
-  return {};
-}
-
-/** The sys core module owns app-wide infra glue lifecycles. */
-export async function onShutdown(): Promise<void> {
-  await closeCache();
-}
+/** The sys core module has no settings of its own; its helpers read env and `config.app`. */
+export default defineConfig({ schema: z.object({}) });

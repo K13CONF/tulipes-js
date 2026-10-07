@@ -1,6 +1,6 @@
 import { createConnection, Schema, type Connection } from "mongoose";
 
-import { importFile, type Ctx, type DatabaseCtx } from "@tulipes/core/boot";
+import { importFile, type Ctx } from "@tulipes/core/boot";
 import type { BootReport } from "@tulipes/core/errors";
 import type { ModuleFiles } from "@tulipes/core/modules";
 
@@ -17,28 +17,26 @@ export interface ModelDef {
   collection?: string;
 }
 
-/** Default export of `bootstrap/*.bootstrap.ts` — post-DB, pre-server init. */
-export type BootstrapFn = (ctx: DatabaseCtx) => void | Promise<void>;
+/**
+ * Kept for apps written against 0.10, where bootstrap was this provider's.
+ * Since 0.11 core runs bootstrap files in every mode and the function may
+ * return its cleanup; prefer `BootstrapFn` from `@tulipes/core/boot`.
+ */
+export type { BootstrapFn } from "@tulipes/core/boot";
 
 /** Well-known infra variable, declared by the app's sys core module. */
 const MONGO_URI = "MONGO_URI";
 
 /**
- * Boot phase 8, run by the provider below: connect, register every model in
- * load order, then run every bootstrap task in load order (indexes, seed
- * roles, default records).
+ * Boot phase 5, run by the provider below: connect and register every model
+ * in load order. Bootstrap tasks (indexes, seed rows) are core's phase 9,
+ * run against the loaded settings and ACL.
  *
  * Reached only when the app declared this provider, so a missing connection
  * string is a contradiction the boot must refuse — an app without a database
  * simply declares no provider.
  */
 export interface InitDatabaseOptions {
-  /**
-   * Bootstrap tasks seed and ensure indexes for a process about to serve.
-   * A one-shot script skips them: they are somebody else's startup work,
-   * and running them on every `ls`-style script is wasted writes.
-   */
-  runBootstrap?: boolean;
   /** Register ownership before connecting or compiling models can fail. */
   onConnection?: (connection: Connection) => void;
 }
@@ -83,12 +81,6 @@ export async function initDatabase(
 
   await registerModels(explored, connection, store, report);
 
-  // Bootstrap tasks only make sense against a fully-populated model store,
-  // and only when nothing above them failed.
-  if ((options.runBootstrap ?? true) && report.issues.length === 0) {
-    await runBootstrapTasks(explored, ctx, report);
-  }
-
   return connection;
 }
 
@@ -130,40 +122,6 @@ async function registerModels(
 
       const model = connection.model(def.name, def.schema, def.collection);
       store.register_(def.name as string, model as never, module.name);
-    }
-  }
-}
-
-async function runBootstrapTasks(
-  explored: readonly ModuleFiles[],
-  ctx: Ctx,
-  report: BootReport,
-): Promise<void> {
-  for (const { module, bootstrapFiles } of explored) {
-    for (const file of bootstrapFiles) {
-      const exported = await importFile<{ default?: unknown }>(
-        file, "boot", module.name, report,
-      );
-      if (!exported) continue;
-
-      if (typeof exported.default !== "function") {
-        report.add({
-          scope: "boot",
-          module: module.name,
-          message: `${file} must default-export a bootstrap function (ctx) => void`,
-        });
-        continue;
-      }
-
-      try {
-        await (exported.default as BootstrapFn)(ctx as DatabaseCtx);
-      } catch (error) {
-        report.add({
-          scope: "boot",
-          module: module.name,
-          message: `bootstrap task ${file} threw: ${(error as Error).message}`,
-        });
-      }
     }
   }
 }
