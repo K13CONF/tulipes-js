@@ -1,24 +1,36 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 
 import { BootReport } from "../errors/boot-error.js";
-import { metaFileSchema, type VariableSpec } from "./spec.js";
+import { variableSpecSchema, type VariableSpec } from "./spec.js";
 
-export const META_FILENAME = "meta.variables.json";
+/** Where a module declared its variables before 0.11; its presence is an error naming the move. */
+export const LEGACY_META_FILENAME = "meta.variables.json";
 
 export interface ModuleMeta {
   /** Folder name under modules/ — enough for attribution at this phase. */
   module: string;
+  /** The module's package.json, where `tulipes.env` lives. */
   filePath: string;
   variables: VariableSpec[];
 }
 
 /**
- * Walk `modules/*` and load every module's env contract.
+ * Only the part of the manifest this phase needs. The module graph reads
+ * the whole `tulipes` key later and validates it strictly; here anything
+ * else is left alone so an ordering mistake is reported once, by the
+ * phase that owns it.
+ */
+const envOnly = z.object({ tulipes: z.object({ env: z.array(variableSpecSchema).default([]) }).passthrough().optional() }).passthrough();
+
+/**
+ * Walk `modules/*` and load every module's env contract from its
+ * package.json (`tulipes.env`).
  *
- * A module without a meta file simply declares no variables — that's valid,
- * not an error. Malformed files, on the other hand, are collected into the
- * report (never thrown one-by-one) so the developer sees all of them at once.
+ * A module without the key simply declares no variables — that's valid,
+ * not an error. Malformed entries are collected into the report (never
+ * thrown one-by-one) so the developer sees all of them at once.
  */
 export function discoverModuleMeta(
   modulesDir: string,
@@ -38,42 +50,40 @@ export function discoverModuleMeta(
   const metas: ModuleMeta[] = [];
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     const module = entry.name;
-    const filePath = join(modulesDir, module, META_FILENAME);
+    const filePath = join(modulesDir, module, "package.json");
 
-    let text: string;
-    try {
-      text = readFileSync(filePath, "utf8");
-    } catch {
-      continue; // no meta file — module needs no env variables
-    }
-
-    let json: unknown;
-    try {
-      json = JSON.parse(text);
-    } catch (error) {
+    if (existsSync(join(modulesDir, module, LEGACY_META_FILENAME))) {
       report.add({
         scope: "env",
         module,
-        message: `${META_FILENAME} is not valid JSON: ${(error as Error).message}`,
+        message: `${LEGACY_META_FILENAME} moved to package.json under "tulipes": { "env": [...] } — same entries, one file fewer (tulipes migrate 0.11 moves it)`,
       });
       continue;
     }
 
-    const parsed = metaFileSchema.safeParse(json);
+    let json: unknown;
+    try {
+      json = JSON.parse(readFileSync(filePath, "utf8"));
+    } catch {
+      continue; // no manifest or an invalid one: the module graph reports it
+    }
+
+    const parsed = envOnly.safeParse(json);
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         report.add({
           scope: "env",
           module,
-          message: `${META_FILENAME}: ${issue.message}`,
+          message: `package.json tulipes.env: ${issue.message}`,
         });
       }
       continue;
     }
 
-    metas.push({ module, filePath, variables: parsed.data.variables });
+    const variables = parsed.data.tulipes?.env ?? [];
+    if (variables.length > 0) metas.push({ module, filePath, variables });
   }
 
   return metas;

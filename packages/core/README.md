@@ -111,13 +111,14 @@ delete what this feature does not need.
 
 ```
 modules/billing/
-├── package.json              name + "tulipes" ordering key
-├── meta.variables.json       this module's environment contract
+├── package.json              name, "tulipes" ordering key and env contract
 ├── module.config.ts          defineConfig({ schema }): this module's settings
 ├── module.acl.ts             permission grants
-├── routes/*.routes.ts        native Router factories, optionally wrapped in defineRoutes
-├── controllers/              the work; handler factories import it lazily
+├── routes/*.routes.ts        (ctx) => Router, mounted under config.api.prefix
+├── controllers/              the work; constructed from the context while routes build
+├── schemas/*.schemas.ts      zod request schemas shared by routes
 ├── helpers/                  pure logic, no framework
+├── lib/index.ts              the module's public exports (package.json "exports")
 ├── i18n/<locale>.json        this module's strings — the module is the namespace
 ├── models/*.model.ts         { name, schema } — a declaration, not a registration
 ├── bootstrap/*.bootstrap.ts  initialization, every mode; may return its cleanup
@@ -313,7 +314,7 @@ call site without core knowing anything about your models.
 ## The boot pipeline
 
 ```
- 1  Environment      .env.<APP_ENV> + every meta.variables.json → validate
+ 1  Environment      .env.<APP_ENV> + every package.json tulipes.env → validate
  2  Module graph     "tulipes" keys → tier / priority / topological sort
  3  Exploration      resolve conventional paths in load order, import nothing
  4  Declarations     config/app.config.ts seed; each module.config.ts schema
@@ -444,8 +445,9 @@ loader — a running app installs only the HTTP runtime.
 | `tulipes dev [entry]` | regenerate types, then run under tsx watch |
 | `tulipes sync` | regenerate `types/config.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting — a CI gate |
-| `tulipes routes [--offline \| --runtime]` | inspect shared declarations offline or runtime endpoints |
-| `tulipes spec [--offline \| --runtime] [--openapi file] [--postman file] [--url base]` | generate specs from the selected inspection mode |
+| `tulipes routes` | list every declared endpoint with the roles that reach it; no service, secret or `.env` |
+| `tulipes spec [--openapi file] [--postman file] [--url base]` | generate documents from the same inspection |
+| `tulipes config:check` | load every settings namespace from the store and print it |
 | `tulipes new module <name>` | scaffold a module with every contract |
 | `tulipes update` | upgrade the global CLI and, inside an app, the app itself |
 | `tulipes -v` | print the CLI version, and the app's when they differ |
@@ -458,14 +460,13 @@ target a different Node version than the one holding your binary.
 
 `init`, `sync`, `env:check`, `new module`, version and update commands do not
 connect application infrastructure (`update` uses the package registry). `dev`
-boots the application and requires its declared services. `routes` and `spec`
-default to runtime inspection, which connects configured infrastructure and runs
-config/route factories and shutdown hooks, while skipping bootstrap, sockets,
-listening and readiness. `--offline` builds opted-in native routers and loads ACL
-without services, runtime config or secrets. Both new presets use it in `pnpm spec`.
-See [offline inspection](../../docs/offline-inspection.md) for migration and limits.
-This interface is available from core `0.10.0`; use `@tulipes/core` with
-`@tulipes/spec` and the providers your app declares.
+and `config:check` boot the application and require its declared services.
+`routes` and `spec` run an **inspection boot**: every route mounted through
+the normal loader and scan, the environment declared but unresolved,
+declared providers as stubs that throw on use, settings as their defaults,
+no bootstrap, no listener — so they need no service, secret or `.env`, and a
+routes file that touches infrastructure while building fails with its path.
+See [inspection](../../docs/offline-inspection.md).
 
 ## What `tulipes init --preset production` gives you
 
@@ -566,11 +567,10 @@ language:
   "meta": {} }
 ```
 
-`--offline` builds the same `defineRoutes()` router trees used at runtime,
-without acquiring callbacks registered through `runtime()` or connecting services. Use `--url` to set the deployment
-URL; offline defaults to `http://localhost:3000` and package.json title/version.
-The default `--runtime` path retains infrastructure-backed inspection for legacy
-factories. Declaration imports remain trusted JavaScript, not a sandbox.
+`tulipes spec` runs the inspection boot: the same routers the app serves,
+built with nothing acquired. Use `--url` to set the deployment URL; the
+default is `http://localhost:3000`. Routes files are trusted JavaScript, not
+a sandbox.
 
 Use `ctx.routes.mount(parent, "/api", childRouter)` for nested routers so the
 registry records the full prefix. Each supported HTTP method needs exactly one

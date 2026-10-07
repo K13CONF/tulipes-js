@@ -127,8 +127,8 @@ try {
   writeFileSync(guard, `import { Socket } from 'node:net';\nSocket.prototype.connect = function () { throw new Error('Offline inspection attempted a network connection'); };\n`);
   const offlineEnv = { ...env, APP_ENV: 'production', MONGO_URI: 'invalid', REDIS_URL: 'invalid',
     JWT_ACCESS_SECRET: '', JWT_REFRESH_SECRET: '', AUTH_ADMIN_PASSWORD: '' };
-  run(process.execPath, ['--import', guard, bin, 'routes', '--offline'], app, offlineEnv);
-  const generate = () => run(process.execPath, ['--import', guard, bin, 'spec', '--offline',
+  run(process.execPath, ['--import', guard, bin, 'routes'], app, offlineEnv);
+  const generate = () => run(process.execPath, ['--import', guard, bin, 'spec',
     '--openapi', 'docs/openapi.json', '--postman', 'docs/collection.json'], app, offlineEnv);
   generate();
   const first = ['openapi.json', 'collection.json'].map(file => readFileSync(join(app, 'docs', file), 'utf8'));

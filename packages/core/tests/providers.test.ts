@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { inspectRoutes } from "../src/boot/inspect.js";
 import { fixture } from "./fixture.js";
 
 /**
@@ -88,12 +87,10 @@ test("a models/ directory implies the models requirement", async () => {
 test("an installed but undeclared provider is never imported, even with MONGO_URI set", async () => {
   const app = await fixture({
     "providers/fake.js": `throw new Error('provider imported without a declaration');`,
-    "modules/probe/meta.variables.json": JSON.stringify({
-      variables: [
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
         { name: "PORT", type: "number", default: 0, description: "Ephemeral HTTP port" },
         { name: "MONGO_URI", type: "url", default: "mongodb://127.0.0.1:1/unused", description: "Leftover" },
-      ],
-    }),
+      ] } }),
   });
 
   const handle = await app.boot({ mode: "script" });
@@ -184,21 +181,24 @@ test("declaration typos fail closed in both the app manifest and a module manife
   await expect(module.boot({ mode: "script" })).rejects.toThrow(/\[probe\] package\.json "tulipes" key: requires\.0 — /);
 });
 
-test("offline inspection validates declarations without resolving or importing the provider", async () => {
+test("inspection validates declarations without resolving or importing the provider", async () => {
   const declaredButAbsent = await fixture({
     "package.json": declare({ models: "@tulipes/not-installed-anywhere" }),
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { offline: true, requires: ["models"] } }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"] } }),
     "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest');`,
   });
 
-  await expect(inspectRoutes({ rootDir: declaredButAbsent.rootDir })).resolves.toMatchObject({ routes: expect.anything() });
+  const inspected = await declaredButAbsent.boot({ inspect: true });
+  expect(inspected.providers).toEqual([expect.objectContaining({ capability: "models", provider: "@tulipes/not-installed-anywhere", skipped: "inspect" })]);
+  expect(() => (inspected.ctx.models as { get(name: string): unknown }).get("User")).toThrow(/ctx\.models is not available during inspection/);
+  await inspected.shutdown();
 
   const unmet = await fixture({
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { offline: true, requires: ["models"] } }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"] } }),
     "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest');`,
   });
 
-  await expect(inspectRoutes({ rootDir: unmet.rootDir })).rejects.toThrow(/\[probe\] requires capability "models"/);
+  await expect(unmet.boot({ inspect: true })).rejects.toThrow(/\[probe\] requires capability "models"/);
 });
 
 /** A provider whose resource can serve and drain, logging the order of events. */
@@ -321,7 +321,9 @@ test("a backend-only provider attaches before listen and is skipped elsewhere wi
     // Worker mode refuses for lack of consumers, but the skipped provider is not the reason.
     if (handle instanceof Error) expect(handle.message).toMatch(/zero processors/);
     else {
-      expect(handle.ctx.sockets).toBeUndefined();
+      // Inspection hands out a stub that throws on use; the other modes hand out nothing.
+      if (situation === "inspect") expect(() => (handle.ctx.sockets as { of(name: string): unknown }).of("/probe")).toThrow(/not available during inspection/);
+      else expect(handle.ctx.sockets).toBeUndefined();
       expect(handle.providers).toEqual([expect.objectContaining({ capability: "sockets", skipped: situation, ready: true })]);
       await handle.shutdown();
     }

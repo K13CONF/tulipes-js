@@ -15,7 +15,7 @@ export {
   type VariableSource,
 } from "./variable-store.js";
 export { coerceValue } from "./coerce.js";
-export { discoverModuleMeta, META_FILENAME, type ModuleMeta } from "./meta-discovery.js";
+export { discoverModuleMeta, LEGACY_META_FILENAME, type ModuleMeta } from "./meta-discovery.js";
 export {
   metaFileSchema,
   variableSpecSchema,

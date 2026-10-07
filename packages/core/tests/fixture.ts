@@ -21,22 +21,12 @@ export async function fixture(files: Record<string, string> = {}) {
     await writeFile(path, contents);
   };
 
-  for (const [file, contents] of Object.entries({
-    "package.json": '{"type":"module"}',
-    "modules/probe/package.json": '{"name":"@test/probe","type":"module"}',
-    "modules/probe/meta.variables.json": JSON.stringify({
-      variables: [
-        {
-          name: "PORT",
-          type: "number",
-          default: 0,
-          description: "Ephemeral HTTP port",
-        },
-      ],
-    }),
-    ...files,
-  }))
-    await write(file, contents);
+  const port = { name: "PORT", type: "number", default: 0, description: "Ephemeral HTTP port" };
+  const provided: Record<string, string> = { "package.json": '{"type":"module"}', ...files };
+  // Every probe module declares an ephemeral PORT, even when the test
+  // supplies the manifest, so a backend boot never takes a real port.
+  provided["modules/probe/package.json"] = withPort(provided["modules/probe/package.json"] ?? JSON.stringify({ name: "@test/probe", type: "module" }), port);
+  for (const [file, contents] of Object.entries(provided)) await write(file, contents);
 
   // onTestFinished, not afterEach: fixture() is called from inside a test, and
   // a hook registered there never runs — every fixture leaked its temp
@@ -63,6 +53,18 @@ export async function fixture(files: Record<string, string> = {}) {
       return handle;
     },
   };
+}
+
+function withPort(manifest: string, port: Record<string, unknown>): string {
+  try {
+    const pkg = JSON.parse(manifest) as { tulipes?: { env?: Record<string, unknown>[] } };
+    const env = pkg.tulipes?.env ?? [];
+    if (env.some((variable) => variable.name === "PORT")) return manifest;
+    pkg.tulipes = { ...pkg.tulipes, env: [...env, port] };
+    return JSON.stringify(pkg);
+  } catch {
+    return manifest; // a deliberately invalid manifest stays invalid
+  }
 }
 
 /**

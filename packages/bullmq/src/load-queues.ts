@@ -29,7 +29,7 @@ export async function initQueues(
   if (!url) {
     report.add({
       scope: "providers",
-      message: `provider "bullmq" is selected but "${REDIS_URL}" is not declared/set — declare it in a sys module's meta.variables.json and set it`,
+      message: `provider "bullmq" is selected but "${REDIS_URL}" is not declared/set — declare it in a sys module's package.json tulipes.env and set it`,
     });
     return undefined;
   }

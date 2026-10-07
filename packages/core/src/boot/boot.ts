@@ -10,7 +10,7 @@ import { sortModules } from "../modules/graph.js";
 import { exploreModules, type ModuleFiles } from "../modules/explorer.js";
 import { declareConfig } from "../config/declare-config.js";
 import { Settings } from "../config/settings.js";
-import { FileSettingsStore, type SettingsStore } from "../config/settings-store.js";
+import { FileSettingsStore, MemorySettingsStore, type SettingsStore } from "../config/settings-store.js";
 import { loadAcl } from "../acl/load-acl.js";
 import { errorHandler, notFoundHandler } from "../http/error-handler.js";
 import { createRai, RouteRegistry } from "../http/rai.js";
@@ -27,12 +27,14 @@ import {
   checkRequirements,
   disposeProviders,
   drainProviders,
+  inspectionStub,
   providerStatuses,
   readProviderDeclarations,
   serveProviders,
   type AcquiredProvider,
   type AcquiredStatus,
 } from "./providers.js";
+import { providerCapabilities } from "../modules/manifest.js";
 import type { BackendCtx, Ctx, RuntimeCtx } from "./contracts.js";
 
 /**
@@ -62,7 +64,13 @@ export interface BootOptions {
   listen?: boolean;
   /** Total graceful cleanup deadline, including cleanups. Defaults to 10 seconds. */
   shutdownTimeoutMs?: number;
-  /** Mount routes for tooling; skip bootstrap, sockets, listening and the banner. */
+  /**
+   * Inspection: build the app and mount every route with nothing acquired —
+   * the environment is declared but unresolved, declared providers are stubs
+   * that throw on use, settings are their defaults in memory, bootstrap and
+   * listening are skipped. What `tulipes routes` and `tulipes spec` run,
+   * without a `.env`, a secret or a service.
+   */
   inspect?: boolean;
 }
 
@@ -109,8 +117,9 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   if (options.inspect && mode !== "backend") throw new Error("inspection requires backend mode");
   const situation = options.inspect ? "inspect" : mode;
 
-  // Phase 1 — Environment engine (crashes internally on bad env)
-  const env = Environment.load({
+  // Phase 1 — Environment engine (crashes internally on bad env). Inspection
+  // validates the declarations and resolves nothing.
+  const env = (options.inspect ? Environment.inspection : Environment.load)({
     rootDir: options.rootDir,
     ...(options.appEnv && { appEnv: options.appEnv }),
   });
@@ -196,17 +205,29 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     // ownership through own() before it awaits anything, so the failure
     // path below can always dispose what was created. Only the app's
     // declaration selects a provider: an installed package or a MONGO_URI
-    // on its own acquires nothing.
-    const acquireReport = new BootReport();
-    acquiredProviders.push(...await acquireProviders(declaredProviders, providerContext, acquireReport, ["models", "settings"]));
+    // on its own acquires nothing. Inspection acquires nothing at all: a
+    // declared capability is a stub that throws the moment it is used.
+    if (options.inspect) {
+      for (const capability of providerCapabilities) {
+        if (!declaredProviders[capability]) continue;
+        acquiredProviders.push({ capability, provider: declaredProviders[capability]!, skipped: "inspect" });
+        if (capability !== "settings") (ctx as unknown as Record<string, unknown>)[capability] = inspectionStub(capability);
+      }
+    } else {
+      const acquireReport = new BootReport();
+      acquiredProviders.push(...await acquireProviders(declaredProviders, providerContext, acquireReport, ["models", "settings"]));
+      handle.providers = providerStatuses(acquiredProviders);
+      acquireReport.throwIfAny("providers");
+    }
     handle.providers = providerStatuses(acquiredProviders);
-    acquireReport.throwIfAny("providers");
 
     // Phase 6 — settings: every namespace read from the store, seeded on
     // first boot, validated against its declaration, handed to ctx.config.
     const settingsReport = new BootReport();
     const declaredStore = acquiredProviders.find((entry) => entry.capability === "settings")?.value as SettingsStore | undefined;
-    const store = declaredStore ?? (fileStore = new FileSettingsStore(options.rootDir, env.appEnv));
+    const store = options.inspect
+      ? new MemorySettingsStore("defaults (inspection)")
+      : declaredStore ?? (fileStore = new FileSettingsStore(options.rootDir, env.appEnv));
     await settings.load(store, ctx, settingsReport);
     settingsReport.throwIfAny("settings");
 
@@ -231,10 +252,12 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     }
 
     // Phase 10 — queues and sockets, against the full context.
-    const lateReport = new BootReport();
-    acquiredProviders.push(...await acquireProviders(declaredProviders, providerContext, lateReport, ["queues", "sockets"]));
-    handle.providers = providerStatuses(acquiredProviders);
-    lateReport.throwIfAny("providers");
+    if (!options.inspect) {
+      const lateReport = new BootReport();
+      acquiredProviders.push(...await acquireProviders(declaredProviders, providerContext, lateReport, ["queues", "sockets"]));
+      handle.providers = providerStatuses(acquiredProviders);
+      lateReport.throwIfAny("providers");
+    }
 
     if (mode === "backend") {
       await startBackend(handle, explored, acquiredProviders, options.listen !== false && !options.inspect, options.inspect);
@@ -334,10 +357,10 @@ async function startBackend(
   handle.ctx.app = app;
 
   const report = new BootReport();
-  if (explored.every(files => files.module.offline) && handle.ctx.routes.checker) {
-    report.add({ scope: "routes", message: "offline modules must install custom access checkers inside defineRoutes, not runtime config" });
-  }
-  await loadRoutes(app, explored, handle.ctx.routes, handle.ctx.rai, report, handle.ctx as BackendCtx);
+  // A returned router lands under the configured prefix; the app seed
+  // owns that value, so every module agrees without importing anything.
+  handle.ctx.routes.bind_(app, String((handle.ctx.config.api as { prefix?: unknown } | undefined)?.prefix ?? ""));
+  await loadRoutes(app, explored, handle.ctx.routes, handle.ctx as BackendCtx, report);
 
   app.use(notFoundHandler());
   app.use(errorHandler(handle.env.appEnv));

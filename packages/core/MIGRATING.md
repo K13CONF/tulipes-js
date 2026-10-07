@@ -11,6 +11,53 @@ what makes it work under nvm.
 
 ---
 
+<a id="unreleased--module-layout-and-plain-routes"></a>
+
+## Unreleased (0.11) — the module root, plain routes, inspection
+
+A module's root holds three files: `package.json`, `module.config.ts` and
+`module.acl.ts`. Everything else has a folder, and the boot refuses a stray
+root file with the folder it belongs in.
+
+1. Move `meta.variables.json` into `package.json` under
+   `"tulipes": { "env": [ … ] }` — the same entries — and delete the file.
+2. Move `index.ts` to `lib/index.ts` and point `package.json` at it:
+   `"exports": { ".": "./lib/index.ts" }`. Importers of `@app/<module>`
+   change nothing.
+3. Move `schemas.ts` to `schemas/<module>.schemas.ts` and fix the imports
+   in `routes/`.
+4. Rewrite each routes file as a plain function and drop `tulipes.offline`:
+
+   ```ts
+   import { Router } from "express";
+   import type { BackendCtx } from "@tulipes/core/boot";
+   import { UsersController } from "../controllers/users.controllers.js";
+
+   export default function usersRoutes(ctx: BackendCtx): Router {
+     const router = Router();
+     const users = new UsersController(ctx);
+     router.get("/", ctx.rai({ id: "users:read" }), users.list());
+     return router;                       // mounted under config.api.prefix
+   }
+   ```
+
+   `defineRoutes()` and `runtime()` are gone: controllers are constructed
+   from the context and read `ctx.models`, `ctx.config` and the environment
+   inside handlers. A returned router is mounted under `config.api.prefix`;
+   `ctx.routes.mount(router, "/other")` chooses a path, and
+   `ctx.routes.mount(parent, "/tenants/:tenant", child)` nests. Global
+   middleware configured from the environment is built on its first request
+   (`lazy()` in the reference app's core module), because inspection builds
+   every router with the environment unresolved and providers as stubs.
+5. `tulipes routes` and `tulipes spec` take no mode: both inspect. Replace
+   `tulipes spec --offline …` in `package.json` with `tulipes spec …`, and
+   `inspectRoutes({ rootDir })` in tests with
+   `boot({ rootDir, mode: "backend", inspect: true, handleSignals: false })`.
+6. `dependsOn` is derived from a module's `@app/*` dependencies; keep an
+   explicit entry only for ordering without an import.
+
+---
+
 <a id="unreleased--settings-and-bootstrap"></a>
 
 ## Unreleased (0.11) — settings declarations, bootstrap cleanups, provider contract 2

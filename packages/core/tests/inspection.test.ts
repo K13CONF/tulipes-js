@@ -1,484 +1,307 @@
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Socket } from "node:net";
 import { expect, test, vi } from "vitest";
-import { inspectRoutes, type InspectionContext } from "../src/boot/inspect.js";
+import type { Ctx } from "../src/boot/contracts.js";
 import { extract } from "../../spec/src/extract.js";
 import { toOpenApi } from "../../spec/src/openapi.js";
 import { toPostman } from "../../spec/src/postman.js";
 import { fixture, url } from "./fixture.js";
 
-const manifest =
-  '{"name":"@test/probe","type":"module","tulipes":{"offline":true}}';
-
+/**
+ * Inspection is the normal boot with nothing acquired: every route mounted
+ * through the same loader and scan, the environment declared but
+ * unresolved, providers as stubs, settings as defaults, no bootstrap, no
+ * listener. `tulipes routes` and `tulipes spec` run it.
+ */
 const acl = `export default acl => { acl.defineRole('guest').allow('guest', 'probe:read'); };`;
-const imports = `import { Router } from 'express'; import { defineRoutes } from '@tulipes/core/http';`;
 
-const declaration = `${imports}
+const declaration = `
+  import { Router } from 'express';
   import { z } from 'zod/v4';
-  export default defineRoutes(({rai}) => {
+  export default ({ rai }) => {
     const router = Router();
     router.get('/probe/:id', rai({ id: 'probe:read', params: z.object({ id: z.string() }), returns: z.object({ id: z.string() }) }),
       (req, res) => res.respond({ data: { id: req.params.id } }));
     return router;
-  });
+  };
 `;
 
-const offlineFixture = (files: Record<string, string> = {}) =>
-  fixture({ "modules/probe/package.json": manifest, ...files });
-
-const documents = async (ctx: InspectionContext) => {
+const documents = async (ctx: Pick<Ctx, "config" | "routes" | "acl">) => {
   const source = { ...extract(ctx), app: { name: "parity" } };
-
   return { openapi: await toOpenApi(source), postman: await toPostman(source) };
 };
 
-test("offline composes routers without importing runtime dependencies or resolving secrets", async () => {
+test("inspection mounts every route without resolving a variable, importing a provider or opening a connection", async () => {
   const files: Record<string, string> = {
-    "modules/probe/routes/probe.routes.js": `${imports}
-      export default defineRoutes(({rai,runtime}) => {
+    "modules/probe/routes/probe.routes.js": `
+      import { Router } from 'express';
+      import { RuntimeController } from '../controllers/runtime.js';
+      export default (ctx) => {
         const router = Router();
-        const controller = runtime(async () => { await import('../controllers/runtime.js'); throw new Error('acquired'); });
-        router.get('/probe/:id', rai({id:'probe:read'}), controller(value => value.handler));
+        const controller = new RuntimeController(ctx);
+        router.get('/probe/:id', ctx.rai({ id: 'probe:read' }), controller.show());
         return router;
-      });`,
+      };`,
+    "modules/probe/controllers/runtime.js": `
+      export class RuntimeController {
+        constructor(ctx) { this.ctx = ctx; }
+        show() { return (req, res) => res.respond({ data: { key: this.ctx.Environment.get('PRIVATE_KEY'), id: this.ctx.models.get('Thing') } }); }
+      }`,
     "modules/probe/module.acl.js": acl,
-    "modules/probe/meta.variables.json": JSON.stringify({
-      variables: [
-        {
-          name: "PRIVATE_KEY",
-          type: "secret",
-          required: true,
-          description: "Runtime only",
-        },
-        {
-          name: "MONGO_URI",
-          type: "url",
-          required: true,
-          description: "Runtime database",
-        },
-      ],
-    }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"], env: [
+      { name: "PRIVATE_KEY", type: "secret", required: true, description: "Runtime only" },
+      { name: "MONGO_URI", type: "url", required: true, description: "Runtime database" },
+    ] } }),
     ".envs/.env.production": "MONGO_URI=invalid\n",
-    // Declared, so the module's models/ requirement is met offline; the
-    // provider file itself must never be imported by inspection.
     "package.json": JSON.stringify({ type: "module", tulipes: { providers: { models: "./providers/models.js", queues: "./providers/queues.js", sockets: "./providers/sockets.js" } } }),
   };
-
-  for (const path of [
-    "providers/models.js",
-    "providers/queues.js",
-    "providers/sockets.js",
-    "config/app.config.js",
-    "modules/probe/module.config.js",
-    "modules/probe/controllers/runtime.js",
-    "modules/probe/models/runtime.model.js",
-    "modules/probe/bootstrap/runtime.bootstrap.js",
-    "modules/probe/queues/runtime.queues.js",
-    "modules/probe/sockets/runtime.sockets.js",
-  ])
+  for (const path of ["providers/models.js", "providers/queues.js", "providers/sockets.js", "modules/probe/bootstrap/runtime.bootstrap.js", "modules/probe/queues/runtime.queues.js", "modules/probe/sockets/runtime.sockets.js"]) {
     files[path] = `throw new Error('runtime file imported: ${path}');`;
-
-  const app = await offlineFixture(files);
+  }
+  const app = await fixture(files);
 
   vi.stubEnv("APP_ENV", "production");
   vi.stubEnv("PRIVATE_KEY", undefined);
+  const connect = vi.spyOn(Socket.prototype, "connect").mockImplementation(() => { throw new Error("network forbidden"); });
 
-  const connect = vi
-    .spyOn(Socket.prototype, "connect")
-    .mockImplementation(() => {
-      throw new Error("network forbidden");
-    });
-
-  const context = await inspectRoutes(app);
-
-  expect(extract(context).routes[0]).toMatchObject({
-    path: "/probe/:id",
-    roles: ["guest"],
-    public: true,
-  });
-
+  const inspected = await app.boot({ inspect: true });
+  expect(extract(inspected.ctx).routes[0]).toMatchObject({ path: "/probe/:id", roles: ["guest"], public: true });
+  expect(inspected.server!.listening).toBe(false);
+  expect(inspected.providers.map((status) => status.skipped)).toEqual(["inspect", "inspect", "inspect"]);
+  expect(() => inspected.ctx.Environment.get("PRIVATE_KEY")).toThrow(/not available during inspection — read it inside a handler/);
   expect(connect).not.toHaveBeenCalled();
+  await inspected.shutdown();
 
+  // The same app, booted for real, resolves its environment and refuses the missing secret.
   await expect(app.boot()).rejects.toThrow(/PRIVATE_KEY/);
 });
 
-test("native routes share schemas and enforce authorization at runtime", async () => {
-  const app = await offlineFixture({
+test("a routes file that touches infrastructure while building fails inspection with its path", async () => {
+  for (const [body, message] of [
+    ["ctx.Environment.get('PORT')", /environment variable "PORT" is not available during inspection/],
+    ["ctx.models.get('Thing')", /ctx\.models is not available during inspection/],
+  ] as const) {
+    const app = await fixture({
+      "package.json": JSON.stringify({ type: "module", tulipes: { providers: { models: "./providers/models.js" } } }),
+      "providers/models.js": `throw new Error('provider imported');`,
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"] } }),
+      "modules/probe/routes/probe.routes.js": `export default (ctx) => { ${body}; };`,
+    });
+    const error = await app.boot({ inspect: true }).catch((error: Error) => error);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(message);
+    expect((error as Error).message).toMatch(/\[probe\] routes function threw/);
+  }
+});
+
+test("the inspection and the running app describe the same routes, schemas and authorization", async () => {
+  const app = await fixture({
     "modules/probe/routes/probe.routes.js": declaration,
     "modules/probe/module.acl.js": acl,
   });
 
+  const inspected = await app.boot({ inspect: true });
   const handle = await app.boot();
 
-  expect(await documents(handle.ctx)).toEqual(
-    await documents(await inspectRoutes(app)),
-  );
+  expect(await documents(handle.ctx)).toEqual(await documents(inspected.ctx));
 
   const response = await fetch(url(handle) + "/probe/123");
-
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ data: { id: "123" } });
 
-  const denied = await offlineFixture({
+  const denied = await fixture({
     "modules/probe/routes/probe.routes.js": declaration,
-    "modules/probe/module.acl.js":
-      "export default acl => { acl.defineRole('guest'); };",
+    "modules/probe/module.acl.js": "export default acl => { acl.defineRole('guest'); };",
   });
-
   const privateApp = await denied.boot();
-
   expect((await fetch(url(privateApp) + "/probe/123")).status).toBe(401);
 });
 
-test("shared prefixes, middleware and router.param retain scope, order and one acquisition per boot", async () => {
-  const app = await offlineFixture({
-    "modules/probe/module.acl.js": acl,
-    "modules/probe/routes/probe.routes.js": `${imports}
-    export default defineRoutes(({app,rai,routes,runtime}) => {
-      const parent = Router();
-      const users = Router({mergeParams:true});
-      let acquisitions = 0, parameters = 0;
-      const callbacks = runtime(() => {
-        acquisitions++;
-        return {
-          middleware: (_req,res,next) => { res.locals.order = ['middleware']; next(); },
-          param: (req,res,next,id,name) => { parameters++; res.locals.order.push('param'); res.locals.loaded={id,name}; next(); },
-          show: (req,res) => { res.locals.order.push(req.rai.id); res.respond({data:{...res.locals, tenant:req.params.tenant, acquisitions, parameters}}); },
-        };
-      });
-      users.use(callbacks(value=>value.middleware));
-      users.param('id', callbacks(value=>value.param));
-      users.route('/:id').get(rai({id:'probe:read'}),callbacks(value=>value.show));
-      routes.mount(parent, '/tenants/:tenant/users', users);
-      routes.mount(app, '/api/v1', parent);
-      app.get('/outside',rai({id:'probe:outside'}),(_req,res)=>res.respond({data:res.locals}));
-    });`,
-  });
-
-  const offline = await inspectRoutes(app);
-
-  expect(offline.routes.all().map((record) => record.path)).toContain(
-    "/api/v1/tenants/:tenant/users/:id",
-  );
-
-  const handle = await app.boot();
-
-  expect(await documents(handle.ctx)).toEqual(await documents(offline));
-
-  for (const [index, id] of ["1", "2"].entries()) {
-    const response = await fetch(
-      url(handle) + "/api/v1/tenants/acme/users/" + id,
-    );
-
-    expect(response.status).toBe(200);
-
-    expect(await response.json()).toMatchObject({
-      data: {
-        order: ["middleware", "param", "probe:read"],
-        loaded: { id, name: "id" },
-        tenant: "acme",
-        acquisitions: 1,
-        parameters: index + 1,
-      },
-    });
-  }
-
-  expect((await fetch(url(handle) + "/outside")).status).toBe(401);
-
-  // A second boot must own different bindings, even with Node's import cache.
-  const second = await app.boot();
-
-  expect(
-    await (await fetch(url(second) + "/api/v1/tenants/other/users/3")).json(),
-  ).toMatchObject({
-    data: { acquisitions: 1, parameters: 1, tenant: "other" },
-  });
-});
-
-test("bound callbacks preserve async rejection, next('route'), and Express error-handler arity", async () => {
-  const app = await offlineFixture({
-    "modules/probe/module.acl.js": `export default acl => {acl.defineRole('guest').allow('guest','probe:*');};`,
-    "modules/probe/routes/probe.routes.js": `${imports}
-    export default defineRoutes(({rai,runtime})=>{
-      const router=Router();
-      const handlers=runtime(()=>({
-        skip: (_req,_res,next)=>next('route'),
-        fail: async ()=>{throw new Error('expected');},
-        error: (err,_req,res,_next)=>res.respond({data:{caught:err.message}}),
-      }));
-      router.get('/item/:id',rai({id:'probe:first'}),handlers(value=>value.skip),()=>{throw new Error('should skip');});
-      router.get('/item/fallback',rai({id:'probe:fallback'}),(_req,res)=>res.respond({data:{fallback:true}}));
-      router.get('/failure',rai({id:'probe:failure'}),handlers(value=>value.fail));
-      router.use(handlers(value=>value.error));
-      return router;
-    });`,
-  });
-
-  const handle = await app.boot();
-
-  expect(
-    await (await fetch(url(handle) + "/item/fallback")).json(),
-  ).toMatchObject({ data: { fallback: true } });
-
-  expect(await (await fetch(url(handle) + "/failure")).json()).toMatchObject({
-    data: { caught: "expected" },
-  });
-});
-
-test("legacy modules fail offline before importing route files and keep runtime inspection", async () => {
+test("a returned router lands under the configured prefix; mount() chooses another path or nests", async () => {
   const app = await fixture({
-    "modules/probe/routes/probe.routes.js": `export default () => {};`,
+    "config/app.config.js": `export default () => ({ api: { prefix: '/api/v2' } });`,
+    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:read', 'probe:nested', 'probe:ops');`,
+    "modules/probe/routes/probe.routes.js": `
+      import { Router } from 'express';
+      export default ({ rai, routes }) => {
+        const router = Router();
+        router.get('/items', rai({ id: 'probe:read' }), (_req, res) => res.respond({ data: 'prefixed' }));
+        const tenants = Router({ mergeParams: true });
+        tenants.get('/users/:id', rai({ id: 'probe:nested' }), (req, res) => res.respond({ data: req.params }));
+        routes.mount(router, '/tenants/:tenant', tenants);
+        const ops = Router();
+        ops.get('/health', rai({ id: 'probe:ops' }), (_req, res) => res.respond({ data: 'ok' }));
+        routes.mount(ops, '/ops');
+        return router;
+      };`,
   });
 
-  await expect(inspectRoutes(app)).rejects.toThrow(
-    /probe.*tulipes.offline.*--runtime/,
-  );
+  const inspected = await app.boot({ inspect: true });
+  expect(inspected.ctx.routes.all().map((record) => record.path).sort()).toEqual([
+    "/api/v2/items",
+    "/api/v2/tenants/:tenant/users/:id",
+    "/ops/health",
+  ]);
+  await inspected.shutdown();
 
-  const handle = await app.boot({ inspect: true });
-
-  expect(handle.ctx.routes.all()).toEqual([]);
+  const handle = await app.boot();
+  expect(await (await fetch(url(handle) + "/api/v2/tenants/acme/users/7")).json()).toMatchObject({ data: { tenant: "acme", id: "7" } });
+  expect(await (await fetch(url(handle) + "/ops/health")).json()).toMatchObject({ data: "ok" });
 });
 
 test.each([
-  [`export default {};`, /defineRoutes/],
-  [`export default () => {};`, /defineRoutes/],
-  [`${imports} export default defineRoutes(()=>42);`, /Router or void/],
+  [`export default {};`, /must default-export a routes function/],
+  [`export default () => 42;`, /returns a Router or nothing/],
   [declaration.replace("router.get", "router.all"), /all.*unsupported/],
-  [
-    declaration.replace("'/probe/:id'", "'/probe/*rest'"),
-    /unsupported route path/,
-  ],
-  [
-    declaration.replace("id: 'probe:read',", "id: 'probe:read', status: 500,"),
-    /success status/,
-  ],
+  [declaration.replace("'/probe/:id'", "'/probe/*rest'"), /unsupported route path/],
+  [declaration.replace("id: 'probe:read',", "id: 'probe:read', status: 500,"), /success status/],
   [declaration.replace("id: 'probe:read',", "id: '',"), /nonempty string/],
-])("rejects malformed router factories: %s", async (source, message) => {
-  const app = await offlineFixture({
-    "modules/probe/routes/probe.routes.js": source,
-  });
-
-  await expect(inspectRoutes(app)).rejects.toThrow(message);
+])("rejects malformed routes files under inspection: %s", async (source, message) => {
+  const app = await fixture({ "modules/probe/routes/probe.routes.js": source });
+  await expect(app.boot({ inspect: true })).rejects.toThrow(message);
 });
 
-test.each(["duplicate id", "duplicate path"])(
-  "offline scan rejects %s across modules",
-  async (kind) => {
-    const app = await offlineFixture({
-      "modules/probe/routes/probe.routes.js": declaration,
-      "modules/other/package.json": manifest.replace("probe", "other"),
-      "modules/other/routes/other.routes.js":
-        kind === "duplicate id"
-          ? declaration
-          : declaration
-              .replace("'probe:read'", "'other:read'")
-              .replace("'/probe/:id'", "'/probe/:other'"),
-    });
-
-    await expect(inspectRoutes(app)).rejects.toThrow(/already declared/);
-  },
-);
-
-test.each(["invalid", "duplicate"])(
-  "offline checks %s environment declarations without resolving values",
-  async (kind) => {
-    const app = await offlineFixture({
-      "modules/probe/meta.variables.json":
-        kind === "invalid"
-          ? '{"variables":[{"name":"bad"}]}'
-          : JSON.stringify({
-              variables: [
-                { name: "PORT", type: "number", description: "First" },
-                { name: "PORT", type: "number", description: "Second" },
-              ],
-            }),
-    });
-
-    await expect(inspectRoutes(app)).rejects.toThrow(
-      kind === "invalid" ? /meta.variables/ : /one owner/,
-    );
-  },
-);
-
-test("offline preserves ACL and module graph validation", async () => {
-  const app = await offlineFixture({
-    "modules/probe/module.acl.js": `export default acl => { acl.allow('unknown', 'probe:read'); };`,
+test.each(["duplicate id", "duplicate path"])("the scan rejects a %s across modules", async (kind) => {
+  const app = await fixture({
+    "modules/probe/routes/probe.routes.js": declaration,
+    "modules/other/package.json": '{"name":"@test/other","type":"module"}',
+    "modules/other/routes/other.routes.js":
+      kind === "duplicate id"
+        ? declaration
+        : declaration.replace("'probe:read'", "'other:read'").replace("'/probe/:id'", "'/probe/:other'"),
   });
-
-  await expect(inspectRoutes(app)).rejects.toThrow(/unknown/);
-
-  const broken = await offlineFixture({
-    "modules/probe/package.json":
-      '{"name":"@test/probe","type":"module","tulipes":{"dependsOn":["missing"],"offline":true}}',
-    "modules/probe/routes/probe.routes.js":
-      "throw new Error('imported too early');",
-  });
-
-  await expect(inspectRoutes(broken)).rejects.toThrow(/missing/);
+  await expect(app.boot({ inspect: true })).rejects.toThrow(/already declared/);
 });
 
-test("runtime bindings cannot secretly add endpoints or replace the access checker", async () => {
-  for (const mutation of [
-    "app.get('/extra',rai({id:'extra'}),()=>{})",
-    "routes.setAccessChecker(()=>true)",
-  ]) {
-    const app = await offlineFixture({
-      "modules/probe/routes/probe.routes.js": `${imports}
-      export default defineRoutes(({app,rai,routes,runtime})=>{
-        const bound=runtime(()=>{${mutation};return ()=>{};});
-        app.get('/p',rai({id:'p'}),bound(fn=>fn));
-      });`,
-    });
-
-    await expect(app.boot({ inspect: true })).rejects.toThrow(
-      /runtime\(\) changed/,
-    );
-  }
-});
-
-test.each([
-  "undefined",
-  "[]",
-  "Promise.reject(new Error('acquisition failed'))",
-])("runtime rejects broken callback acquisition: %s", async (result) => {
-  const app = await offlineFixture({
-    "modules/probe/routes/probe.routes.js": `${imports}
-    export default defineRoutes(({app,rai,runtime})=>{const bound=runtime(()=>${result});app.get('/p',rai({id:'p'}),bound(value=>value));});`,
+test.each(["invalid", "duplicate"])("inspection checks %s environment declarations without resolving values", async (kind) => {
+  const app = await fixture({
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env:
+      kind === "invalid"
+        ? [{ name: "bad" }]
+        : [{ name: "PORT", type: "number", description: "First" }, { name: "PORT", type: "number", description: "Second" }] } }),
   });
-
-  await expect(app.boot({ inspect: true })).rejects.toThrow(
-    /must select a callback|acquisition failed/,
-  );
+  await expect(app.boot({ inspect: true })).rejects.toThrow(kind === "invalid" ? /tulipes\.env/ : /one owner/);
 });
 
-test("a bound custom access checker stays dynamic offline and enforces policy at runtime", async () => {
-  const app = await offlineFixture({
-    "modules/probe/routes/probe.routes.js": `${imports}
-    export default defineRoutes(({app,rai,routes,runtime})=>{
-      const policy=runtime(()=>({check:async()=>false}));
-      routes.setAccessChecker(policy(value=>value.check));
-      app.get('/p',rai({id:'probe:read'}),()=>{throw new Error('denied handler ran');});
-    });`,
+test("the 0.10 forms are refused by name: tulipes.offline, defineRoutes and the legacy declaration file", async () => {
+  const offline = await fixture({
+    "modules/probe/package.json": '{"name":"@test/probe","type":"module","tulipes":{"offline":true}}',
+  });
+  await expect(offline.boot({ inspect: true })).rejects.toThrow(/tulipes\.offline" is gone — every module is inspectable/);
+
+  const legacy = await fixture({ "modules/probe/meta.variables.json": '{"variables":[]}' });
+  await expect(legacy.boot({ inspect: true })).rejects.toThrow(/meta\.variables\.json moved to package\.json under "tulipes": \{ "env"/);
+  await expect(legacy.boot({ mode: "script" })).rejects.toThrow(/meta\.variables\.json moved/);
+
+  const root = await fixture({ "modules/probe/index.js": "export const x = 1;", "modules/probe/schemas.js": "export const y = 1;" });
+  await expect(root.boot({ mode: "script" })).rejects.toThrow(/index\.js does not belong at the module root — its public exports live in lib\/index\.js[\s\S]*schemas\.js does not belong at the module root/);
+});
+
+test("inspection preserves ACL and module graph validation", async () => {
+  const app = await fixture({ "modules/probe/module.acl.js": `export default acl => { acl.allow('unknown', 'probe:read'); };` });
+  await expect(app.boot({ inspect: true })).rejects.toThrow(/unknown/);
+
+  const broken = await fixture({
+    "modules/probe/package.json": '{"name":"@test/probe","type":"module","tulipes":{"dependsOn":["missing"]}}',
+    "modules/probe/routes/probe.routes.js": "throw new Error('imported too early');",
+  });
+  await expect(broken.boot({ inspect: true })).rejects.toThrow(/missing/);
+});
+
+test("dependsOn is derived from a module's scoped dependencies", async () => {
+  const app = await fixture({
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", dependencies: { "@test/base": "workspace:*", express: "^5" } }),
+    "modules/base/package.json": '{"name":"@test/base","type":"module"}',
+  });
+  const handle = await app.boot({ mode: "script" });
+  expect(handle.ctx.modules.map((module) => module.name)).toEqual(["base", "probe"]);
+  expect(handle.ctx.modules.find((module) => module.name === "probe")!.dependsOn).toEqual(["base"]);
+  await handle.shutdown();
+
+  const cycle = await fixture({
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", dependencies: { "@test/base": "workspace:*" } }),
+    "modules/base/package.json": JSON.stringify({ name: "@test/base", type: "module", dependencies: { "@test/probe": "workspace:*" } }),
+  });
+  await expect(cycle.boot({ mode: "script" })).rejects.toThrow(/dependency cycle/);
+});
+
+test("a custom access checker installed while building stays dynamic under inspection and enforces policy at runtime", async () => {
+  const app = await fixture({
+    "modules/probe/routes/probe.routes.js": `
+      export default ({ app, rai, routes }) => {
+        routes.setAccessChecker(async () => false);
+        app.get('/p', rai({ id: 'probe:read' }), () => { throw new Error('denied handler ran'); });
+      };`,
     "modules/probe/module.acl.js": acl,
   });
 
-  const context = await inspectRoutes(app);
-
-  expect(extract(context).routes[0]).toMatchObject({
-    authorization: "dynamic",
-    roles: [],
-    public: false,
-  });
+  const inspected = await app.boot({ inspect: true });
+  expect(extract(inspected.ctx).routes[0]).toMatchObject({ authorization: "dynamic", roles: [], public: false });
 
   const handle = await app.boot();
-
   expect((await fetch(url(handle) + "/p")).status).toBe(401);
-  expect(await documents(handle.ctx)).toEqual(await documents(context));
+  expect(await documents(handle.ctx)).toEqual(await documents(inspected.ctx));
 });
 
-test("production routers generate deterministic documents with connections denied and no secrets", async () => {
+test("the reference app inspects deterministically with connections denied and no secrets", async () => {
   vi.stubEnv("APP_ENV", "production");
+  for (const name of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "AUTH_ADMIN_PASSWORD", "MONGO_URI", "REDIS_URL"]) vi.stubEnv(name, undefined);
+  const connect = vi.spyOn(Socket.prototype, "connect").mockImplementation(() => { throw new Error("network forbidden"); });
 
-  for (const name of [
-    "JWT_ACCESS_SECRET",
-    "JWT_REFRESH_SECRET",
-    "AUTH_ADMIN_PASSWORD",
-    "MONGO_URI",
-    "REDIS_URL",
-  ])
-    vi.stubEnv(name, undefined);
+  const { boot } = await import("../src/boot/boot.js");
+  const inspect = () => boot({ rootDir: resolve("example"), mode: "backend", inspect: true, handleSignals: false });
 
-  const connect = vi
-    .spyOn(Socket.prototype, "connect")
-    .mockImplementation(() => {
-      throw new Error("network forbidden");
-    });
+  const first = await inspect();
+  expect(first.ctx.routes.all()).toHaveLength(28);
+  const documentsFirst = await documents(first.ctx);
+  await first.shutdown();
 
-  const context = await inspectRoutes({ rootDir: resolve("example") });
+  const second = await inspect();
+  expect(await documents(second.ctx)).toEqual(documentsFirst);
+  await second.shutdown();
 
-  expect(context.routes.all()).toHaveLength(28);
-
-  const first = await documents(context);
-
-  expect(
-    await documents(await inspectRoutes({ rootDir: resolve("example") })),
-  ).toEqual(first);
-
-  expect(first.openapi.warnings).toEqual([]);
-  expect(first.postman.warnings).toEqual([]);
+  expect(documentsFirst.openapi.warnings).toEqual([]);
+  expect(documentsFirst.postman.warnings).toEqual([]);
   expect(connect).not.toHaveBeenCalled();
 });
 
 const cli = resolve("packages/cli/src/bin.ts");
 
 test.each([
-  ["routes", "--offline", "--runtime"],
+  ["routes", "--offline"],
+  ["routes", "--runtime"],
   ["routes", "--ofline"],
-  ["spec", "--offline", "--openapi"],
-  ["spec", "--openapi", "--offline"],
+  ["spec", "--offline", "--openapi", "x.json"],
   ["spec", "--unknown"],
   ["spec", "--url", "one", "--url", "two"],
-])("CLI rejects invalid inspection arguments: %j", async (...args) => {
+])("CLI rejects removed or invalid inspection arguments: %j", async (...args) => {
   const app = await fixture();
-
-  const result = spawnSync(
-    process.execPath,
-    ["--import", "tsx", cli, ...args],
-    { cwd: app.rootDir, encoding: "utf8" },
-  );
-
+  const result = spawnSync(process.execPath, ["--import", "tsx", cli, ...args], { cwd: app.rootDir, encoding: "utf8" });
   expect(result.status, result.stdout + result.stderr).toBe(2);
-  expect(result.stderr).toMatch(/option|requires|Conflicting/);
+  expect(result.stderr).toMatch(/option|requires|removed in 0\.11/);
 });
 
-test("CLI writes offline specs for a freshly generated production app", async () => {
+test("CLI writes specs for a freshly generated production app without services", async () => {
   const app = await fixture();
 
   const run = (cwd: string, args: string[]) => {
-    const result = spawnSync(
-      process.execPath,
-      ["--import", "tsx", cli, ...args],
-      {
-        cwd,
-        encoding: "utf8",
-        timeout: 10_000,
-        env: {
-          ...process.env,
-          APP_ENV: "production",
-          JWT_ACCESS_SECRET: "",
-          JWT_REFRESH_SECRET: "",
-          MONGO_URI: "invalid",
-          REDIS_URL: "invalid",
-        },
-      },
-    );
-
+    const result = spawnSync(process.execPath, ["--import", "tsx", cli, ...args], {
+      cwd,
+      encoding: "utf8",
+      timeout: 20_000,
+      env: { ...process.env, APP_ENV: "production", JWT_ACCESS_SECRET: "", JWT_REFRESH_SECRET: "", MONGO_URI: "invalid", REDIS_URL: "invalid" },
+    });
     expect(result.status, result.stdout + result.stderr).toBe(0);
-
     return result.stdout;
   };
 
   run(app.rootDir, ["init", "generated", "--preset", "production"]);
-
   const root = app.rootDir + "/generated";
 
-  expect(run(root, ["routes", "--offline"])).toContain("28 endpoint(s)");
-
-  run(root, [
-    "spec",
-    "--offline",
-    "--openapi",
-    "openapi.json",
-    "--postman",
-    "postman.json",
-    "--url",
-    "https://example.test",
-  ]);
-
-  const doc = JSON.parse(await readFile(root + "/openapi.json", "utf8"));
-
-  expect(doc.paths["/api/v1/hello"]).toBeDefined();
-  expect(doc.servers).toEqual([{ url: "https://example.test" }]);
+  expect(run(root, ["routes"])).toContain("28 endpoint(s)");
+  run(root, ["spec", "--openapi", "docs/openapi.json", "--postman", "docs/collection.json"]);
+  const { readFile } = await import("node:fs/promises");
+  const openapi = JSON.parse(await readFile(root + "/docs/openapi.json", "utf8"));
+  expect(Object.keys(openapi.paths)).toContain("/api/v1/auth/login");
 });

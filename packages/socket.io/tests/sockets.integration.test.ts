@@ -54,7 +54,7 @@ test("inspection skips socket setup and bootstrap", async () => {
 
   const handle = await app.boot({ inspect: true });
 
-  expect(handle.ctx.sockets).toBeUndefined();
+  expect(() => (handle.ctx.sockets as { of(name: string): unknown }).of("/probe")).toThrow(/not available during inspection/);
   expect(handle.providers).toEqual([expect.objectContaining({ capability: "sockets", skipped: "inspect" })]);
   expect(handle.server!.listening).toBe(false);
 });

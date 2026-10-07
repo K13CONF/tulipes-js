@@ -18,16 +18,14 @@ integration(
 
     const app = await fixture({
       "package.json": JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } }),
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: [
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
           {
             name: "REDIS_URL",
             type: "url",
             default: redisUrl,
             description: "Isolated test Redis",
           },
-        ],
-      }),
+        ] } }),
       "modules/probe/module.config.js": `
       import { defineConfig } from '@tulipes/core/config';
       import { z } from 'zod/v4';

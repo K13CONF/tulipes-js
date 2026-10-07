@@ -4,9 +4,16 @@
   "type": "module",
   "version": "0.0.0",
   "tulipes": {
-    "offline": true,
     "tier": "sys",
-    "priority": 0
+    "priority": 0,
+    "env": [
+      {
+        "name": "PORT",
+        "type": "number",
+        "default": 3000,
+        "description": "HTTP listener port"
+      }
+    ]
   },
   "dependencies": {
     "@tulipes/core": "^0.10.1"

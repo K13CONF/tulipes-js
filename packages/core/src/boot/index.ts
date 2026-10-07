@@ -25,6 +25,5 @@ export {
 } from "./providers.js";
 
 export { requireModels, requireQueues } from "./contracts.js";
-export { inspectRoutes, type InspectionContext } from "./inspect.js";
 /** For providers: import one conventional file, funnelling failures into the report. */
 export { importFile } from "./import-file.js";

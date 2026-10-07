@@ -1,10 +1,18 @@
 import { randomUUID } from "node:crypto";
 import type { RequestHandler } from "express";
-import { defineRoutes } from "@tulipes/core/http";
+import type { BackendCtx } from "@tulipes/core/boot";
 
-export default defineRoutes(({ app, runtime }) => {
-  const middleware = runtime(async ({ Environment }) => {
-    const { appCache } = await import("../helpers/cache/index.js");
+import { appCache } from "../helpers/cache/index.js";
+import { lazy } from "../helpers/lazy.js";
+
+/**
+ * The sys core module loads first, so what it mounts on `ctx.app` runs on
+ * every request of every later module: this is the global middleware slot.
+ */
+export default function coreRoutes({ app, Environment }: BackendCtx): void {
+  // The cache client opens on first use; built on the first request so
+  // inspection never touches Redis.
+  app.use(lazy(() => {
     const cache = appCache(Environment);
     return (async (_req, res, next) => {
       res.setHeader("X-Request-Id", randomUUID());
@@ -12,6 +20,5 @@ export default defineRoutes(({ app, runtime }) => {
       res.setHeader("X-Stats-Sample", String(served));
       next();
     }) satisfies RequestHandler;
-  });
-  app.use(middleware(handler => handler));
-});
+  }));
+}

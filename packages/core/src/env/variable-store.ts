@@ -23,7 +23,7 @@ export interface StoredVariable {
  *
  * Fail-closed on the read side too: asking for a variable no module declared
  * throws immediately instead of returning undefined — an undeclared read is
- * always a bug (either a typo, or a missing meta.variables.json entry), and
+ * always a bug (either a typo, or a missing tulipes.env entry in the module's package.json), and
  * surfacing it at the call site beats debugging an undefined downstream.
  */
 export class VariableStore {
@@ -47,7 +47,7 @@ export class VariableStore {
     const stored = this.#variables.get(name);
     if (!stored) {
       throw new Error(
-        `Environment variable "${name}" was never declared by any module's meta.variables.json`,
+        `Environment variable "${name}" was never declared by any module (package.json tulipes.env)`,
       );
     }
     return stored.value as T;

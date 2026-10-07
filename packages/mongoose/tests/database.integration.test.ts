@@ -26,16 +26,14 @@ integration(
   async () => {
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: [
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
           {
             name: "MONGO_URI",
             type: "url",
             default: mongo,
             description: "Test database",
           },
-        ],
-      }),
+        ] } }),
       "modules/probe/models/broken.model.js": `export default { name: 'Broken' };`,
     });
 
@@ -52,16 +50,14 @@ integration(
   async () => {
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: [
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
           {
             name: "MONGO_URI",
             type: "url",
             default: mongo,
             description: "Test database",
           },
-        ],
-      }),
+        ] } }),
       "modules/probe/models/broken.model.js": `
       import { Schema } from 'mongoose';
       const schema = new Schema({});
@@ -87,16 +83,14 @@ integration(
 
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: [
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
           {
             name: "MONGO_URI",
             type: "url",
             default: mongo,
             description: "Test database",
           },
-        ],
-      }),
+        ] } }),
     });
 
     await app.write(
@@ -121,16 +115,14 @@ integration(
   async () => {
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: [
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
           {
             name: "MONGO_URI",
             type: "url",
             default: mongo,
             description: "Test database",
           },
-        ],
-      }),
+        ] } }),
     });
 
     const handle = await app.boot({ mode: "script", shutdownTimeoutMs: 50 });

@@ -22,20 +22,18 @@ Usage:
                                  --no-queues | --no-sockets  (production only) leave a provider out
   tulipes dev [entry]          run with tsx in watch mode (default entry: app.ts), sync first
   tulipes sync                 regenerate types/config.d.ts and .env.example
-  tulipes env:check            validate env against every meta.variables.json (CI-friendly)
+  tulipes env:check            validate env against every module's tulipes.env (CI-friendly)
   tulipes config:check         load every settings namespace from the store and print it
   tulipes routes               list every declared endpoint, with the roles that reach it
   tulipes spec [options]       write an OpenAPI document / Postman collection (needs @tulipes/spec)
                                  --openapi <file>  --postman <file>  --url <base>
-                                 routes/spec: --offline | --runtime
+                                 both inspect the app: no service, secret or .env is needed
   tulipes new module <name>    scaffold a module under ./modules
                                  --model | --no-model    force model/bootstrap files on or off
                                  --queues | --no-queues  force the queues file on or off
                                  --sockets | --no-sockets  force the sockets file on or off
                                  (default: on when package.json declares that provider)
   tulipes update               upgrade the global cli and, inside an app, the app itself
-  --offline loads shared declarations without services or runtime secrets.
-  routes/spec default to --runtime for legacy applications.
   tulipes -v                   print the cli version (and the app's, when they differ)
 `;
 
@@ -64,7 +62,7 @@ export async function main(argv: readonly string[]): Promise<void> {
     case "spec": {
       try {
         const options = inspectionArguments(rest, command);
-        return command === "routes" ? await runRoutes(rootDir, options.offline) : await runSpec(rootDir, options);
+        return command === "routes" ? await runRoutes(rootDir) : await runSpec(rootDir, options);
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
         process.exitCode = 2;
@@ -112,13 +110,11 @@ export async function main(argv: readonly string[]): Promise<void> {
 }
 
 function inspectionArguments(args: readonly string[], command: "routes" | "spec") {
-  const options: { offline?: boolean; openapi?: string; postman?: string; url?: string } = {};
+  const options: { openapi?: string; postman?: string; url?: string } = {};
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
     if (arg === "--offline" || arg === "--runtime") {
-      const offline = arg === "--offline";
-      if (options.offline !== undefined && options.offline !== offline) throw new Error("Conflicting inspection modes");
-      options.offline = offline;
+      throw new Error(`${arg} was removed in 0.11: ${command} always inspects the app without services, secrets or a .env`);
     } else if (command === "spec" && (arg === "--openapi" || arg === "--postman" || arg === "--url")) {
       const value = args[++index];
       if (!value || value.startsWith("-")) throw new Error(`${arg} requires a value`);

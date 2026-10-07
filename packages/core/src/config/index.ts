@@ -2,6 +2,7 @@ export { defineConfig, isConfigDeclaration, declarationJsonSchema, type ConfigDe
 export { declareConfig } from "./declare-config.js";
 export {
   FileSettingsStore,
+  MemorySettingsStore,
   SettingsConflictError,
   SYSTEM_ACTOR,
   type Actor,

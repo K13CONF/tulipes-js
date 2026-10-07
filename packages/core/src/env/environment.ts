@@ -33,7 +33,7 @@ export interface EnvironmentOptions {
 
 /**
  * Boot phases 1–3: load the mode's .env file, discover every module's
- * meta.variables.json, resolve each declared variable with precedence
+ * package.json tulipes.env, resolve each declared variable with precedence
  *
  *   process.env  >  .envs/.env.<APP_ENV>  >  spec default
  *
@@ -61,8 +61,42 @@ export class Environment {
    * with per-variable types once `tulipes sync` has generated config.d.ts.
    */
   get<K extends string>(name: K): Resolved<K> {
+    if (this.#inspecting) {
+      throw new Error(`environment variable "${name}" is not available during inspection — read it inside a handler or a bootstrap, not while building routes`);
+    }
     return this.store.get(name) as Resolved<K>;
   }
+
+  /**
+   * The environment inspection runs with: every declaration validated
+   * (shape, one owner per variable) and no value resolved, so `tulipes
+   * routes` and `tulipes spec` need neither a `.env` nor a secret. Reading a
+   * variable throws with the reason, which is the message a routes file
+   * gets when it reads one while building instead of inside a handler.
+   */
+  static inspection(options: EnvironmentOptions): Environment {
+    const report = new BootReport();
+    const appEnv = Environment.#resolveAppEnv(options.appEnv, report);
+    const envsDir = options.envsDir ?? join(options.rootDir, ".envs");
+    const modulesDir = options.modulesDir ?? join(options.rootDir, "modules");
+    const metas = discoverModuleMeta(modulesDir, report);
+    const owners = new Map<string, string>();
+    for (const meta of metas) {
+      for (const spec of meta.variables) {
+        const existingOwner = owners.get(spec.name);
+        if (existingOwner) {
+          report.add({ scope: "env", module: meta.module, message: `variable "${spec.name}" is already declared by module "${existingOwner}" — one owner per variable` });
+        }
+        owners.set(spec.name, meta.module);
+      }
+    }
+    report.throwIfAny("environment");
+    const environment = new Environment(appEnv, new VariableStore(), join(envsDir, `.env.${appEnv}`));
+    environment.#inspecting = true;
+    return environment;
+  }
+
+  #inspecting = false;
 
   static load(options: EnvironmentOptions): Environment {
     const report = new BootReport();
