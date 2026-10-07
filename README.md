@@ -29,6 +29,7 @@ tulipes init my-api          # --preset production for the full application
 | [`packages/mongoose`](./packages/mongoose) | `@tulipes/mongoose` — the `models` provider |
 | [`packages/bullmq`](./packages/bullmq) | `@tulipes/bullmq` — the `queues` provider |
 | [`packages/socket.io`](./packages/socket.io) | `@tulipes/socket.io` — the `sockets` provider |
+| [`packages/mcp`](./packages/mcp) | `@tulipes/mcp` — `tulipes-mcp`, an MCP server over an app's agent tools |
 | [`example`](./example) | the reference application: six modules, exercising every contract |
 
 Start with **[packages/core/README.md](./packages/core/README.md)** — that is

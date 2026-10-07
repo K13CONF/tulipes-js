@@ -17,6 +17,7 @@ import { createRai, RouteRegistry } from "../http/rai.js";
 import { bindRespond, warnOnRawResponse } from "../http/respond.js";
 import { I18n } from "../i18n/i18n.js";
 import { scanRoutes } from "../http/route-scan.js";
+import { loadAgents } from "../agent/load-agents.js";
 import { loadRoutes } from "./load-routes.js";
 import { loadAppConfigSeed } from "./app-files.js";
 import { printStartupBanner } from "./banner.js";
@@ -371,6 +372,12 @@ async function startBackend(
   handle.ctx.routes.record_(scanRoutes(app, report));
 
   report.throwIfAny("routes");
+
+  // The agent surface needs the scanned routes (method and path of every
+  // tool) and the ACL; it is the last thing built before the server exists.
+  const agentReport = new BootReport();
+  handle.ctx.agent = await loadAgents(explored, handle.ctx as RuntimeCtx, agentReport);
+  agentReport.throwIfAny("agent");
 
   const port = handle.env.store.has("PORT")
     ? Number(handle.env.get("PORT"))

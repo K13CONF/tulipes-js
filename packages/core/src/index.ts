@@ -1,4 +1,5 @@
 export * from "./acl/index.js";
+export * from "./agent/index.js";
 export * from "./boot/index.js";
 export * from "./config/index.js";
 export * from "./db/index.js";

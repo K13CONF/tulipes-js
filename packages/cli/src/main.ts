@@ -7,6 +7,7 @@ import { runUpdate } from "./update.js";
 import { runConfigCheck } from "./config-check.js";
 import { runRoutes } from "./routes.js";
 import { runSpec } from "./spec.js";
+import { runAgentManifest } from "./agent.js";
 import { appCoreVersion, cliVersion, coreVersion } from "./package-info.js";
 
 /**
@@ -28,6 +29,8 @@ Usage:
   tulipes spec [options]       write an OpenAPI document / Postman collection (needs @tulipes/spec)
                                  --openapi <file>  --postman <file>  --url <base>
                                  both inspect the app: no service, secret or .env is needed
+  tulipes agent manifest       print every tool the app exposes to agents, as JSON
+                                 --out <file>  write it instead   --role <role>  only what that role may call
   tulipes new module <name>    scaffold a module under ./modules
                                  --model | --no-model    force model/bootstrap files on or off
                                  --queues | --no-queues  force the queues file on or off
@@ -63,6 +66,20 @@ export async function main(argv: readonly string[]): Promise<void> {
       try {
         const options = inspectionArguments(rest, command);
         return command === "routes" ? await runRoutes(rootDir) : await runSpec(rootDir, options);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 2;
+        return;
+      }
+    }
+    case "agent": {
+      if (rest[0] !== "manifest") {
+        console.error("Usage: tulipes agent manifest [--out <file>] [--role <role>]");
+        process.exitCode = 2;
+        return;
+      }
+      try {
+        return await runAgentManifest(rootDir, agentArguments(rest.slice(1)));
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
         process.exitCode = 2;
@@ -152,4 +169,19 @@ function initArguments(args: readonly string[]): { target?: string; preset: Init
     throw new Error("--no-queues and --no-sockets apply to --preset production only");
   }
   return { target, preset: preset ?? "minimal", features };
+}
+
+function agentArguments(args: readonly string[]): { out?: string; role?: string } {
+  const options: { out?: string; role?: string } = {};
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    const value = args[i + 1];
+    if ((flag === "--out" || flag === "--role") && value && !value.startsWith("--")) {
+      options[flag === "--out" ? "out" : "role"] = value;
+      i++;
+      continue;
+    }
+    throw new Error(`unknown or incomplete option "${flag}" — usage: tulipes agent manifest [--out <file>] [--role <role>]`);
+  }
+  return options;
 }

@@ -29,8 +29,9 @@ global install and always match the app.
 | `tulipes dev [entry]` | regenerate types, then run under tsx watch |
 | `tulipes sync` | regenerate `types/tulipes.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting |
-| `tulipes routes [--offline \| --runtime]` | list declared endpoints |
-| `tulipes spec [--offline \| --runtime] [--openapi file] [--postman file] [--url base]` | generate documents (needs `@tulipes/spec` in the app) |
+| `tulipes routes` | list declared endpoints, through inspection |
+| `tulipes spec [--openapi file] [--postman file] [--url base]` | generate documents through inspection (needs `@tulipes/spec` in the app) |
+| `tulipes agent manifest [--out file] [--role role]` | every tool the app exposes to agents, as JSON, through inspection |
 | `tulipes new module <name> [--model\|--no-model] [--queues\|--no-queues] [--sockets\|--no-sockets]` | scaffold a module for the providers the app declares |
 | `tulipes update` | upgrade the global CLI and, inside an app, its core and CLI ranges |
 | `tulipes -v` | print the CLI version, its bundled core, and the app's core when they differ |

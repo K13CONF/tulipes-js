@@ -13,6 +13,26 @@ what makes it work under nvm.
 
 <a id="unreleased--module-layout-and-plain-routes"></a>
 
+## Unreleased (0.11) — the agent surface
+
+Nothing is required: an app with no `agent/` folder exposes every route as
+a tool and `ctx.agent` exists in every backend process. To make the surface
+reachable, and worth reaching:
+
+1. Add the `agent` module `tulipes init` now scaffolds — copy
+   `modules/agent/` from the reference app (routes, ACL, i18n) and grant
+   `agent:*` to the roles that may discover and run tools. Its two routes
+   declare `agent: false`, so the door is not itself a tool.
+2. Give every `rai()` a `description` written for an agent, or add
+   `agent: false` to endpoints that should stay out (demo routes, the
+   infrastructure console). `tulipes agent manifest --role user` shows what
+   a role would see.
+3. Where a module needs a summary, a shorter list or an action that is not
+   an endpoint, add `agent/<module>.agent.ts` with `defineAgent({ … })` —
+   see the `tulipes-agent-tool` skill.
+4. For Claude Code: `pnpm add -D @tulipes/mcp` and
+   `claude mcp add <app> -- pnpm tulipes-mcp --token <bearer token>`.
+
 ## Unreleased (0.11) — generated model and job types
 
 `tulipes sync` writes `types/tulipes.d.ts` and deletes the `types/config.d.ts`

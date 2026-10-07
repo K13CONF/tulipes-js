@@ -99,6 +99,7 @@ function renderModule(
   sockets: boolean,
 ): [string, string][] {
   const fn = camel(name);
+  const title = name.charAt(0).toUpperCase() + name.slice(1);
   const Model = pascal(name);
 
   const files: [string, string][] = [
@@ -312,6 +313,28 @@ function renderModule(
       `    return { handled: job.data.id };`,
       `  });`,
       `}`,
+      ``,
+    ].join("\n")],
+
+    [`agent/${name}.agent.ts`, [
+      `import { defineAgent } from "@tulipes/core/agent";`,
+      ``,
+      `/**`,
+      ` * What an agent sees of this module. Every route is a tool already —`,
+      ` * name, description, input schema and permission come from its rai() —`,
+      ` * so this file adds what cannot be derived: a summary, which routes to`,
+      ` * expose (\`tools\` omitted exposes them all), and actions that are not`,
+      ` * endpoints:`,
+      ` *`,
+      ` *   action({ id: "${name}:reset", description: "…", input: z.object({ confirm: z.literal(true) }),`,
+      ` *           handler: async (ctx, input, actor) => ({ reset: true }) })`,
+      ` *`,
+      ` * An action's id is a permission, granted in module.acl.ts like any`,
+      ` * other. \`pnpm tulipes agent manifest\` prints the result.`,
+      ` */`,
+      `export default defineAgent({`,
+      `  summary: "${title} — describe in one sentence what this module does.",`,
+      `});`,
       ``,
     ].join("\n")],
 

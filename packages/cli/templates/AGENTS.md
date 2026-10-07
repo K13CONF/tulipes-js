@@ -39,7 +39,7 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    A module's root holds exactly `package.json`, `module.config.ts` and
    `module.acl.ts`; everything else has a folder (`routes/`, `controllers/`,
    `models/`, `schemas/`, `helpers/`, `bootstrap/`, `queues/`, `sockets/`,
-   `i18n/`, `lib/`), and the boot refuses a stray root file.
+   `i18n/`, `agent/`, `lib/`), and the boot refuses a stray root file.
    → skill `tulipes-module`
 3. **Never call `mongoose.model()` yourself.** Models are declarations
    picked up by the framework and read from `ctx.models`. Persisted and
@@ -90,6 +90,12 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
     workspace boundary is what keeps modules independent, and a package
     name makes the dependency visible in package.json — declare it there
     and in `dependsOn`.
+14. **Every endpoint is a tool an agent can call; describe it as one.** The
+   `rai()` name, description and schemas are what the manifest shows, so a
+   bare `id` is a tool with no description. A module's `agent/*.agent.ts`
+   adds a summary, curates the routes and declares actions that are not
+   endpoints; `agent: false` on a `rai()` hides one. → skill
+   `tulipes-agent-tool`
 
 For endpoint changes, read `tulipes-endpoint`: native routers live in
 `routes/*.routes.ts`, plain `(ctx) => Router` functions: build the router from
@@ -131,6 +137,7 @@ luck.
 | `pnpm dev` | run the backend process (regenerates types first) |
 | `pnpm worker` | run the queue-consumer process |
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
+| `pnpm tulipes agent manifest [--role r]` | print every tool the app exposes to agents, offline |
 | `pnpm check` | validate the environment without booting |
 | `pnpm typecheck` | typecheck the whole app |
 | `pnpm tulipes new module <name>` | scaffold a module |

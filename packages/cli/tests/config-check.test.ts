@@ -31,3 +31,38 @@ test("config:check loads every namespace from the store and prints it; invalid s
   expect(second.status).toBe(1);
   expect(second.stderr).toContain('stored setting "probe.greeting"');
 });
+
+test("agent manifest describes every tool offline, filtered by role when asked", async () => {
+  const app = await fixture({
+    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').defineRole('admin').allow('guest', 'probe:read').allow('admin', 'probe:*');`,
+    "modules/probe/routes/probe.routes.js": `
+      import { Router } from 'express';
+      import { z } from 'zod/v4';
+      export default ctx => {
+        const r = Router();
+        r.get('/things/:id', ctx.rai({ id: 'probe:read', name: 'Read a thing' }), (req, res) => res.respond({ data: null }));
+        r.post('/things', ctx.rai({ id: 'probe:write', body: z.object({ name: z.string() }) }), (req, res) => res.respond({ data: null }));
+        return r;
+      };
+    `,
+    "modules/probe/agent/probe.agent.js": `
+      import { defineAgent } from '@tulipes/core/agent';
+      export default defineAgent({ summary: 'Things.', tools: [{ route: '*' }, { id: 'probe:reset', description: 'Reset', handler: () => 0 }] });
+    `,
+  });
+  const run = (...args: string[]) => spawnSync(process.execPath, ["--import", "tsx", cli, "agent", "manifest", ...args], { cwd: app.rootDir, encoding: "utf8", timeout: 20_000, env: { ...process.env, APP_ENV: "production" } });
+
+  const all = run("--out", "docs/agent.json");
+  expect(all.status, all.stdout + all.stderr).toBe(0);
+  expect(all.stdout).toContain("wrote docs/agent.json: 3 tool(s) across 1 module(s)");
+  const manifest = JSON.parse(await readFile(app.rootDir + "/docs/agent.json", "utf8"));
+  expect(manifest.modules).toEqual([{ name: "probe", summary: "Things.", tools: ["probe_read", "probe_write", "probe_reset"] }]);
+  expect(manifest.tools[0]).toMatchObject({ name: "probe_read", read_only: true, transport: { kind: "http", method: "GET", path: "/things/:id" }, input_schema: { required: ["params"] } });
+  expect(manifest.tools[2]).toMatchObject({ name: "probe_reset", transport: { kind: "action" } });
+
+  const guest = run("--role", "guest");
+  expect(guest.status, guest.stderr).toBe(0);
+  expect(JSON.parse(guest.stdout).tools.map((tool: { name: string }) => tool.name)).toEqual(["probe_read"]);
+
+  expect(run("--bogus").status).toBe(2);
+});
