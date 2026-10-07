@@ -71,10 +71,12 @@ integration("a write in one process reaches another's watch within the poll inte
   await first.save(namespace, { greeting: "Hello" }, 0, { id: "system" });
   await second.load(namespace);
 
+  // The collection is shared with every other test's namespaces, which a
+  // fresh store has never seen and reports once; only this one counts.
   const seenByFirst: unknown[] = [];
   const seenBySecond: unknown[] = [];
-  const stopFirst = first.watch((name, stored) => seenByFirst.push([name, stored.version]));
-  const stopSecond = second.watch((name, stored) => seenBySecond.push([name, stored.version, stored.values]));
+  const stopFirst = first.watch((name, stored) => { if (name === namespace) seenByFirst.push([name, stored.version]); });
+  const stopSecond = second.watch((name, stored) => { if (name === namespace) seenBySecond.push([name, stored.version, stored.values]); });
 
   await first.save(namespace, { greeting: "Hi" }, 1, { id: "operator" });
   await expect.poll(() => seenBySecond, { timeout: 5_000 }).toEqual([[namespace, 2, { greeting: "Hi" }]]);

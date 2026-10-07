@@ -74,7 +74,7 @@ integration("a module that only consumes models declares the requirement and get
   expect(handle.providers).toEqual([{ capability: "models", provider: "mongoose", label: expect.stringMatching(/^mongodb:\/\//), ready: true }]);
 });
 
-integration("a bootstrap-only module runs its task in backend mode and is refused without a provider", async () => {
+integration("a bootstrap-only module runs its task in every mode, and one that reads models without a provider fails in bootstrap", async () => {
   const files = {
     "modules/probe/package.json": uriMeta,
     "modules/probe/bootstrap/mark.bootstrap.js": `
@@ -83,14 +83,22 @@ integration("a bootstrap-only module runs its task in backend mode and is refuse
     `,
   };
 
-  const refused = await fixture(files);
-  await expect(refused.boot({ mode: "script" })).rejects.toThrow(/\[probe\] requires capability "models" \(has bootstrap\/ files\)/);
+  // Since 0.11 bootstrap is core's, so a bootstrap/ folder requires no
+  // provider by itself: the task runs and its read of ctx.models is what
+  // fails, with the file and the reason. A module that needs models says
+  // so with `requires: ["models"]`, which is refused before any import.
+  const unprovided = await fixture(files);
+  await expect(unprovided.boot({ mode: "script" })).rejects.toThrow(/\[probe\] bootstrap task .*mark\.bootstrap\.js threw: Cannot read properties of undefined/);
+  const requiring = await fixture({ ...files, "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"], env: uriEnv } }) });
+  await expect(requiring.boot({ mode: "script" })).rejects.toThrow(/\[probe\] requires capability "models"/);
 
   const app = await fixture({ ...files, "package.json": declared });
-  const { readFile } = await import("node:fs/promises");
+  const { readFile, rm } = await import("node:fs/promises");
 
+  // Every mode runs it, scripts included (0.11 decision 7).
   await app.boot({ mode: "script" });
-  await expect(readFile(app.rootDir + "/bootstrapped", "utf8")).rejects.toThrow(); // scripts skip bootstrap
+  expect(await readFile(app.rootDir + "/bootstrapped", "utf8")).toBe("");
+  await rm(app.rootDir + "/bootstrapped");
 
   await app.boot({ listen: false });
   expect(await readFile(app.rootDir + "/bootstrapped", "utf8")).toBe("");
