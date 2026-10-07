@@ -31,8 +31,9 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    is a secret: declared under `tulipes.env` in the module's `package.json`, read with
    `ctx.Environment.get("NAME")`. Everything else is a *setting*: declared
    with a zod schema in that module's `module.config.ts`, stored in the
-   settings store, edited through the console, read live at
-   `ctx.config.<module>`. → skill `tulipes-env-variable`
+   settings store (the `settings` collection here; a JSON file under
+   `config/` in an app without the Mongo store), edited through the
+   console, read live at `ctx.config.<module>`. → skill `tulipes-env-variable`
 2. **A feature is a module, not a layer.** Everything a feature needs —
    routes, models, config, permissions, jobs — lives in one folder under
    `modules/`. Never add a top-level `services/` or `middlewares/` folder.

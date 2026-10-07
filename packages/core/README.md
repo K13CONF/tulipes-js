@@ -321,7 +321,8 @@ call site without core knowing anything about your models.
  2  Module graph     "tulipes" keys → tier / priority / topological sort
  3  Exploration      resolve conventional paths in load order, import nothing
  4  Declarations     config/app.config.ts seed; each module.config.ts schema
- 5  Models, settings providers connect (@tulipes/mongoose: connection → model store)
+ 5  Models, settings providers connect (@tulipes/mongoose: connection → model store;
+    @tulipes/mongoose/settings: the `settings` collection behind ctx.settings)
  6  Settings         every namespace read from the store, seeded on first boot,
                      validated against its schema → ctx.config.<module>
  7  Translations     modules/*/i18n/*.json, one namespace per module
@@ -366,6 +367,9 @@ interface Ctx {
 
 // module.config.ts — this module's settings, stored at config.<module>, kept
 // live: an operator's write through ctx.settings lands without a restart.
+// They persist in config/settings.<APP_ENV>.json until the app declares
+// "providers": { "settings": "@tulipes/mongoose/settings" } — then in the
+// `settings` collection, versioned, with history, propagated to every replica.
 export default defineConfig({
   schema: z.object({
     trialDays: z.number().int().positive().default(14).describe("Free trial length"),

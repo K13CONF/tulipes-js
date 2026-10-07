@@ -109,3 +109,18 @@ entries carry `redacted: true` and no values.
   `sysadmin` grants.
 - Treat a `restart_required_shadowed` response as a warning to fix the
   deployment's environment, not as a successful change.
+
+## Where settings live
+
+The app's root `package.json` selects the store. With
+`"providers": { "settings": "@tulipes/mongoose/settings" }` (the production
+preset) every namespace is one document in the `settings` collection —
+`{ _id: "<module>", values, version, updated_at, updated_by }` — a write is
+refused when its version is stale, the replaced document goes to
+`settings_history`, and other processes pick the change up through a change
+stream on a replica set or by polling otherwise. Without the declaration
+(the minimal preset) the store is `config/settings.<APP_ENV>.json`, watched
+for edits. Neither store validates: the module's schema does, in every
+process, before a value is applied — an invalid document is logged and
+ignored, never applied. `pnpm tulipes config:check` prints what the store
+holds.

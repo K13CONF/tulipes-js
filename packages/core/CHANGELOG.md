@@ -11,6 +11,14 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **The Mongo settings store.** `@tulipes/mongoose/settings` is the
+  `settings` provider: one document per namespace in `settings` (`_id`,
+  `values`, `version`, `updated_at`, `updated_by`), writes refused on a stale
+  version with the current document in the error, the replaced document
+  kept in `settings_history`, other processes' writes delivered by a change
+  stream on a replica set and by polling otherwise. It shares the models
+  provider's connection or opens its own from `MONGO_URI`. The production
+  preset declares it; the minimal preset keeps the file store.
 - **The agent surface.** Every route declared with `rai()` is a tool —
   name from the id (`hello:list-greetings` → `hello_list-greetings`),
   description, a JSON Schema input built from `params`, `query` and `body`

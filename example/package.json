@@ -3,6 +3,7 @@
   "tulipes": {
     "providers": {
       "models": "@tulipes/mongoose",
+      "settings": "@tulipes/mongoose/settings",
       "queues": "@tulipes/bullmq",
       "sockets": "@tulipes/socket.io"
     }

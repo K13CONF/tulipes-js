@@ -2,6 +2,8 @@ import type { HydratedDocument, InferSchemaType, Model, ObtainSchemaGeneric, Sch
 
 export { initDatabase, type BootstrapFn, type ModelDef } from "./database.js";
 export { ModelStore } from "./model-store.js";
+export { MongoSettingsStore, type MongoSettingsStoreOptions, type SettingsDocument, type SettingsHistoryDocument } from "./settings-store.js";
+export { provider as settingsProvider } from "./settings-provider.js";
 export { provider } from "./provider.js";
 export { provider as default } from "./provider.js";
 

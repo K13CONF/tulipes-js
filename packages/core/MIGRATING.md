@@ -13,6 +13,21 @@ what makes it work under nvm.
 
 <a id="unreleased--module-layout-and-plain-routes"></a>
 
+## Unreleased (0.11) — settings in the database
+
+An app that keeps settings in `config/settings.<APP_ENV>.json` changes
+nothing. To move them into MongoDB, as the production preset now does:
+
+1. Add the provider to the root `package.json`:
+   `"tulipes": { "providers": { "settings": "@tulipes/mongoose/settings" } }`
+   (next to `models`; the store shares that connection).
+2. Boot once: every namespace is seeded from its schema's defaults. Values
+   edited in the JSON file are not carried over — set them again through
+   `ctx.settings.set()` or `tulipes config:import` (0.11-S06.4), then delete
+   the file.
+3. Deployments with replicas now see a write everywhere: on a replica set
+   through a change stream, otherwise within the 2s poll.
+
 ## Unreleased (0.11) — the agent surface
 
 Nothing is required: an app with no `agent/` folder exposes every route as
