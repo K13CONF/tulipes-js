@@ -26,11 +26,17 @@
   },
   "pnpm": {
     "overrides": {
-      "pm2>js-yaml": "4.3.2"
+      "pm2>js-yaml": "4.3.2",
+      "basic-ftp": "^6.2.1"
     },
     "onlyBuiltDependencies": [
       "esbuild",
       "msgpackr-extract"
-    ]
+    ],
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-vfj7-8cjw-p6xm"
+      ]
+    }
   }
 }

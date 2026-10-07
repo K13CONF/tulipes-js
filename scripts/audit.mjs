@@ -12,18 +12,25 @@ if (environment !== -1 && extra[environment + 1] === 'production') args.push('--
 const result = spawnSync('pnpm', ['audit', '--json', ...args], { encoding: 'utf8', timeout: 60_000 });
 mkdirSync(dirname(output), { recursive: true });
 writeFileSync(output, (result.stdout ?? '') + (result.stderr ?? ''));
-let findings = 0, blocked = false;
+let blocked = false;
 try {
-  // pnpm audit prints one npm-audit document: advisories keyed by id.
+  // pnpm audit prints one npm-audit document: advisories keyed by id, plus
+  // metadata whenever the registry answered. An advisory ignored through
+  // pnpm.auditConfig is left out of the advisories but still counted in the
+  // metadata and the exit status, so the document decides, not the status.
   const report = JSON.parse(result.stdout ?? '');
-  if (!report || typeof report.advisories !== 'object' || report.advisories === null) blocked = true;
-  else for (const advisory of Object.values(report.advisories)) {
-    findings++;
+  if (!report?.metadata || typeof report.advisories !== 'object' || report.advisories === null) blocked = true;
+  else {
+    for (const advisory of Object.values(report.muted ?? [])) {
+      console.log(`muted by pnpm.auditConfig: ${advisory.module_name ?? advisory.id} — ${advisory.title ?? ''}`);
+    }
+  }
+  if (!blocked) for (const advisory of Object.values(report.advisories)) {
     console.log(`${advisory.severity}: ${advisory.module_name} — ${advisory.title}`);
     if (advisory.severity === 'high' || advisory.severity === 'critical') blocked = true;
   }
 } catch { blocked = true; }
-if (result.error || ![0, 1].includes(result.status) || (result.status !== 0 && findings === 0) || blocked) {
+if (result.error || ![0, 1].includes(result.status) || blocked) {
   console.error('Dependency audit failed; inspect ' + output);
   process.exitCode = 1;
 } else console.log('Dependency audit has no high/critical findings; report: ' + output);

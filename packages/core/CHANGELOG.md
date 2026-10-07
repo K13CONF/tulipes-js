@@ -11,6 +11,18 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- Generated production apps and the workspace override `basic-ftp` to 6.2.1
+  and mute the unfixable braces advisory (GHSA-vfj7-8cjw-p6xm), both in
+  PM2's transitive tree; see the dependency review of 2026-10-07 in
+  `docs/security-model.md`.
+- **`tulipes init` copies the reference application** instead of rendering
+  6,659 lines of string literals: the published CLI packs `example/` into
+  `templates/app` at build time with the workspace versions, applies the app
+  name, pins the framework ranges and drops or overlays what `--no-queues`
+  and `--no-sockets` leave out. The minimal preset is a committed tree. The
+  example gains the files only a generated app had (`ecosystem.config.cjs`,
+  a standalone `tsconfig.json`, the PM2 scripts) and its README, env seeds
+  and `app.config.ts` are the generated ones.
 - **pnpm replaces yarn** for generated apps and the repository. `tulipes init`
   writes `packageManager: pnpm@10.28.0`, a `pnpm-workspace.yaml` naming
   `modules/*`, `pnpm.overrides` in place of `resolutions` and an

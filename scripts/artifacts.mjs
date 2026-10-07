@@ -26,9 +26,10 @@ function verify(dir, expectedCommit) {
     for (const required of ['package/LICENSE', 'package/' + packed.exports['.'].slice(2)]) {
       if (!listing.includes(required)) throw new Error(`Missing packed file: ${required}`);
     }
-    if (name === 'cli' && (packed.bin?.tulipes !== './dist/bin.js' || !listing.includes('package/dist/bin.js') || !listing.includes('package/templates/CLAUDE.md'))) throw new Error('Missing compiled CLI or templates');
+    if (name === 'cli' && (packed.bin?.tulipes !== './dist/bin.js' || !listing.includes('package/dist/bin.js') || !listing.includes('package/templates/CLAUDE.md') || !listing.includes('package/templates/app/package.json') || !listing.includes('package/templates/minimal/package.json') || !listing.includes('package/templates/versions.json'))) throw new Error('Missing compiled CLI or templates');
     if (name === 'core' && (packed.bin || listing.some(path => /^package\/(dist\/cli|templates)\//.test(path)))) throw new Error('Core must not ship the CLI or templates');
-    if (listing.some(path => /\/(?:node_modules|tests|\.envs)\//.test(path))) throw new Error('Unexpected private/test content in archive');
+    // The CLI's templates/app is the reference application and legitimately carries tests and env seeds.
+    if (listing.some(path => !path.startsWith('package/templates/') && /\/(?:node_modules|tests|\.envs)\//.test(path))) throw new Error('Unexpected private/test content in archive');
     // Core must not carry a driver — not as a dependency, and not through an
     // emitted declaration that a consumer's typecheck would need to resolve.
     const extracted = ['mongoose', 'bullmq', 'ioredis', 'socket.io', 'tsx'];

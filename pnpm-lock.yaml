@@ -6,6 +6,7 @@ settings:
 
 overrides:
   pm2>js-yaml: 4.3.2
+  basic-ftp: ^6.2.1
 
 importers:
 
@@ -72,15 +73,18 @@ importers:
       '@types/jsonwebtoken':
         specifier: ^9
         version: 9.0.10
+      '@types/node':
+        specifier: ^24
+        version: 24.19.1
       jsonwebtoken:
         specifier: ^9
         version: 9.0.3
       pm2:
         specifier: ^7.0.4
         version: 7.0.4
-      socket.io-client:
+      tsx:
         specifier: ^4
-        version: 4.8.4
+        version: 4.23.15
       typescript:
         specifier: ^7
         version: 7.0.2
@@ -1001,8 +1005,8 @@ packages:
     resolution: {integrity: sha512-kNOjDqAh7px0XWNI+4QbzoiR/nTkHAWNud2uvnJquD1/x5a7EQZMJT0AczqK0Qn67oY/TTQ1LbUKajZpp3I9tQ==}
     engines: {node: '>=8.0.0'}
 
-  basic-ftp@5.3.1:
-    resolution: {integrity: sha512-bopVNp6ugyA150DDuZfPFdt1KZ5a94ZDiwX4hMgZDzF+GttD80lEy8kj98kbyhLXnPvhtIo93mdnLIjpCAeeOw==}
+  basic-ftp@6.2.2:
+    resolution: {integrity: sha512-LIkJcf/F6bTTfvE3k2YcTxrJsLKKVXiEpHZYkQP6JoqTb7khng7c13ckRTDQbqRh5IkehVH3F00sSlAa2F6DwA==}
     engines: {node: '>=10.0.0'}
 
   bcryptjs@3.0.3:
@@ -2589,7 +2593,7 @@ snapshots:
 
   atomic-sleep@1.0.0: {}
 
-  basic-ftp@5.3.1: {}
+  basic-ftp@6.2.2: {}
 
   bcryptjs@3.0.3: {}
 
@@ -2938,7 +2942,7 @@ snapshots:
 
   get-uri@6.0.5:
     dependencies:
-      basic-ftp: 5.3.1
+      basic-ftp: 6.2.2
       data-uri-to-buffer: 6.0.2
       debug: 4.4.3
     transitivePeerDependencies:

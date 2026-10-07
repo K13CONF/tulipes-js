@@ -24,6 +24,7 @@ test.each([
             advisories: {
               "1": { severity, module_name: "fixture", title: "fixture advisory" },
             },
+            metadata: { vulnerabilities: { [severity]: 1 } },
           }
         : { error: { code: "ERR_PNPM_AUDIT", message: "Registry unavailable" } };
 

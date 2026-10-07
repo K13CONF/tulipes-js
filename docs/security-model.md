@@ -65,6 +65,21 @@ CI retains separate workspace/runtime and complete starter audits. Lower severit
 findings and deprecation notices remain visible; this is a dated inventory,
 not a permanent claim that dependencies are vulnerability-free.
 
+## Dependency review, 2026-10-07
+
+Two high advisories reached PM2's transitive tree after 0.10.1, both denial
+of service and both outside any request path: basic-ftp
+([GHSA-c475-qrg2-pj4r](https://github.com/advisories/GHSA-c475-qrg2-pj4r),
+used by get-uri only to fetch an `ftp://` proxy configuration) and braces
+([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm),
+used by chokidar to expand the watch globs an operator writes). The
+workspace and every generated production app override basic-ftp to the
+patched 6.2.1 line, one major above the range get-uri declares; the braces
+advisory has no fixed release (3.0.3 is the latest), so it is muted through
+`pnpm.auditConfig.ignoreGhsas` with this entry as the reason. The audit gate
+prints muted advisories and still fails on any unmuted high or critical
+finding; revisit both when PM2 updates its dependencies.
+
 ## Release audit follow-up, 2026-09-09
 
 The rc.1 publication gate found a newly listed high-severity advisory affecting

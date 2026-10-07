@@ -47,9 +47,11 @@ helper and Passport middleware before RAI. Route tests cover duplicate URL
 templates, and database tests simulate a driver that never settles forced cleanup.
 
 The CI scaffold check compares generated modules with the reference example.
-When changing a generated contract, update both `cli/init.ts` (and `new-module.ts`
-where applicable) and the example module. Keep existing agent guides in sync if
-changing their instructions.
+When changing a generated contract, change `example/` (the production
+template) or `packages/cli/templates/minimal` (the minimal one), and
+`new-module.ts` when the module scaffold is affected. The parity diff in CI
+proves `tulipes init` reproduces the example; the packed smokes prove the
+archives carry the templates.
 
 ## Coverage and packed installations
 
