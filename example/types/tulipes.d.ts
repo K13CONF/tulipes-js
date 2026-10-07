@@ -8,8 +8,6 @@ declare module "@tulipes/core/env" {
     MONGO_URI: string;
     /** [core] Redis connection string (queues, cache) */
     REDIS_URL: string;
-    /** [core] Public hostname this API is served from; "localhost" means not deployed */
-    PUBLIC_DOMAIN: string;
     /** [core] Lowest level that reaches any destination */
     LOG_LEVEL: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
     /** [core] Pretty coloured logs on stdout; turn off where a collector reads files only */
@@ -18,36 +16,6 @@ declare module "@tulipes/core/env" {
     LOG_FILE: boolean;
     /** [core] Directory for log files, relative to the app root or absolute */
     LOG_DIR: string;
-    /** [core] Base name of the all-levels log file; the process mode and date are appended */
-    LOG_BASENAME: string;
-    /** [core] Base name of the errors-only log file; the process mode and date are appended */
-    LOG_ERROR_BASENAME: string;
-    /** [core] Rotate on this schedule: "daily", "hourly", or milliseconds */
-    LOG_ROTATION_FREQUENCY: string;
-    /** [core] Also rotate once a file reaches this size, e.g. "20m" */
-    LOG_ROTATION_SIZE: string;
-    /** [core] How many rotated files to keep per destination, besides the current one */
-    LOG_RETENTION_FILES: number;
-    /** [security] Largest JSON request body express will parse, e.g. "1mb"; nginx client_max_body_size must be at least this */
-    BODY_LIMIT: string;
-    /** [security] Comma-separated trusted proxy IP addresses or CIDRs; empty ignores forwarded headers. Configure only actual proxy peers. */
-    TRUST_PROXY_CIDRS: string;
-    /** [security] Comma-separated browser origins allowed to read API responses; "*" allows any, empty allows none (same-origin only) */
-    CORS_ORIGINS: string;
-    /** [security] Emit Access-Control-Allow-Credentials for browser credential mode; does not enable cookie authentication or CSRF protection (cannot be combined with CORS_ORIGINS=*) */
-    CORS_CREDENTIALS: boolean;
-    /** [security] Strict-Transport-Security max-age in seconds; 0 disables the header (browsers only honour it over HTTPS) */
-    HSTS_MAX_AGE: number;
-    /** [security] Stable identifier shared by replicas; use a different value for unrelated apps on the same Redis database */
-    RATE_LIMIT_NAMESPACE: string;
-    /** [security] Fixed request window in milliseconds; positive integer, applied on restart */
-    RATE_LIMIT_WINDOW_MS: number;
-    /** [security] Combined login, register and password POST attempts per client per window; positive integer */
-    AUTH_RATE_LIMIT: number;
-    /** [security] All auth requests per client per window, including refresh and credential attempts; positive integer */
-    AUTH_SESSION_RATE_LIMIT: number;
-    /** [security] All settings requests per client per window; positive integer */
-    SETTINGS_RATE_LIMIT: number;
     /** [auth] Signing key for short-lived access tokens */
     JWT_ACCESS_SECRET: string;
     /** [auth] Signing key for refresh tokens; separate from the access key so leaking one cannot mint the other */
@@ -91,8 +59,8 @@ declare module "@tulipes/mongoose" {
     "User": (typeof import("./../modules/users/models/user.model.js"))["default"];
     /** [hello] modules/hello/models/greeting.model.ts */
     "Greeting": (typeof import("./../modules/hello/models/greeting.model.js"))["default"];
-    /** [settings] modules/settings/models/audit-event.model.ts */
-    "AuditEvent": (typeof import("./../modules/settings/models/audit-event.model.js"))["default"];
+    /** [config] modules/config/models/config-audit.model.ts */
+    "ConfigAudit": (typeof import("./../modules/config/models/config-audit.model.js"))["default"];
   }
 }
 

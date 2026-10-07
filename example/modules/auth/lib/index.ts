@@ -7,4 +7,6 @@
 export { auth, currentUser, GUEST, type Auth } from "../helpers/auth.js";
 export { hashPassword, setPassword, verifyPassword } from "../helpers/passwords.js";
 export { endAllSessions, endSession, listSessions } from "../helpers/tokens.js";
+/** Call after writing a user's role or deleting the user: cached identities carry the old authority. */
+export { forgetSession, forgetUser } from "../helpers/session-cache.js";
 export { createAccessCheck } from "../helpers/access-check.js";

@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "script": "tsx",
     "spec": "tulipes spec --openapi docs/openapi.json --postman docs/collection.json",
+    "manifest": "tulipes agent manifest --out docs/agent-manifest.json",
     "test": "vitest run",
     "start": "tsx app.ts",
     "pm2:start": "pm2 start ecosystem.config.cjs",

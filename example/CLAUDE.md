@@ -8,5 +8,6 @@ boot order and the commands.
 This file exists so Claude Code picks that up automatically. The other
 Claude-specific piece is `.claude/skills/`: task-scoped guides — module,
 environment variable, endpoint, response, model, queue, socket, permissions,
-settings, i18n, spec, agent tools and reading boot errors — loaded on demand
-when a task matches one. AGENTS.md points at them by name.
+settings (the config module and the log stream), i18n, spec, agent tools and
+reading boot errors — loaded on demand when a task matches one. AGENTS.md
+points at them by name.

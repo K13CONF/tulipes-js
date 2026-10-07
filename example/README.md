@@ -114,9 +114,14 @@ user?.email          // the hydrated user document, null for a guest
 session?.sid         // this device's session row, null for a guest
 ```
 
-Never re-parse the Authorization header: the pipeline already did,
-and it reloads the user on every request so a demotion or a ban takes
-effect immediately rather than whenever the token expires.
+Never re-parse the Authorization header: the pipeline already did. It
+resolves the session and the user on every request — from the app cache
+(Redis, shared by every replica) when a request resolved them recently,
+from the database otherwise — and every path that revokes (logout,
+refresh reuse, password change, a session ended, a deleted account)
+forgets the cached entry first, so a demotion, a ban or a logout takes
+effect on the very next request on any replica. Code that writes a
+user's role calls `forgetUser()` from `@app/auth` for the same reason.
 
 Sessions are rows, so a signed-in account can see and end its own
 devices — `GET /auth/sessions`, `DELETE /auth/sessions/:sid`. Ending
@@ -130,6 +135,21 @@ logout deletes the refresh row and blacklists the access token's jti
 until it expires; a password change moves a per-user epoch that
 invalidates every token issued before it. Both token collections carry
 TTL indexes.
+
+## The console
+
+`modules/config` is the operator's console: `GET /api/v1/config`
+describes every module — manifest, declared variables (names, types and
+sources; a secret's value never), settings with their schema, live values
+and stored version, endpoints with the roles that reach them — and
+`PATCH /api/v1/config/:module` changes a module's settings: validated by
+its schema, refused on a stale version, audited (names, never values)
+before it lands, applied at once in every replica. Reading needs `admin`;
+writing needs `sysadmin`. Settings live in MongoDB (`settings` and
+`settings_history`) because the root `package.json` declares
+`@tulipes/mongoose/settings`; the request pipeline — proxy trust, CORS,
+HSTS, the body limit, the rate limits — is configured from
+`config.security` this way, so none of it is an environment variable.
 
 ## Logging
 
@@ -153,12 +173,13 @@ Files carry the process mode — `app-backend.log`, `app-worker.log` —
 because backend and worker run at the same time and two processes
 rotating one file will race.
 
-Everything is configured from `modules/core/meta.variables.json`:
-`LOG_LEVEL`, `LOG_CONSOLE`, `LOG_FILE`, `LOG_DIR`, `LOG_BASENAME`,
-`LOG_ERROR_BASENAME`, and rotation via `LOG_ROTATION_FREQUENCY`,
-`LOG_ROTATION_SIZE` and `LOG_RETENTION_FILES` (how many rotated files
-to keep). Rotation happens on whichever of frequency or size trips
-first.
+The destinations are environment, because the logger exists before the
+settings store answers: `LOG_LEVEL`, `LOG_CONSOLE`, `LOG_FILE` and
+`LOG_DIR`, declared in `modules/core/package.json`. The file names and
+the rotation (daily or 20m, whichever trips first; fourteen rotated
+files kept) never needed to differ per deployment, so they are the
+`LOG_FILES` constants in `modules/core/helpers/logger/`. A `sysadmin`
+can watch the files live: `GET /api/v1/settings/logs/stream` (SSE).
 
 ## Responses
 
@@ -247,7 +268,7 @@ redis hold the event loop open, so a script that forgets
 `nginx/{development,staging,production}.conf` are templates with
 `{{DOMAIN}}` and `{{PORT}}` placeholders. The deploy script renders
 the one matching `APP_ENV`, using that same environment's
-`PUBLIC_DOMAIN` and `PORT`, so template, domain and port can never
+the `core.publicDomain` setting and `PORT`, so template, domain and port can never
 disagree:
 
 ```sh
@@ -257,7 +278,7 @@ sudo -E APP_ENV=production pnpm script scripts/deploy-nginx.ts
 
 It writes `sites-available/<domain>`, links `sites-enabled`, runs
 `nginx -t`, then reloads. It refuses when not root, while
-`PUBLIC_DOMAIN` is still `localhost`, or when the conf already exists
+`core.publicDomain` is still `localhost`, or when the conf already exists
 (pass `--force` to overwrite one). Debian/Ubuntu layout.
 
 The rendered conf is HTTP-only with the TLS block commented out —

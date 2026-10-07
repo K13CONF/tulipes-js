@@ -1,3 +1,4 @@
+import { forgetUser } from "@app/auth";
 import type { Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
@@ -41,6 +42,9 @@ export class UsersController {
       const user = await this.ctx.models!.get("User").findOne({ email: req.params.email });
       if (!user) throw new HttpError(404, "notFound");
 
+      // The account leaves every query, so its sessions resolve to nobody on
+      // the cold path; the cached identities would not know, so they go too.
+      await forgetUser(this.ctx, String(user._id));
       await (user as unknown as { softDelete(): Promise<unknown> }).softDelete();
       res.respond({ data: { email: req.params.email, soft_deleted: true } });
     };

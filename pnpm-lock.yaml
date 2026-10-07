@@ -159,6 +159,30 @@ importers:
         specifier: ^1
         version: 1.0.38
 
+  example/modules/config:
+    dependencies:
+      '@app/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@app/core':
+        specifier: workspace:*
+        version: link:../core
+      '@tulipes/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@tulipes/mongoose':
+        specifier: workspace:*
+        version: link:../../../packages/mongoose
+      express:
+        specifier: ^5
+        version: 5.2.1
+      mongoose:
+        specifier: ^8
+        version: 8.24.5(socks@2.8.10)
+      zod:
+        specifier: ^3.25
+        version: 3.25.76
+
   example/modules/core:
     dependencies:
       '@tulipes/core':
@@ -249,18 +273,9 @@ importers:
       '@tulipes/core':
         specifier: workspace:*
         version: link:../../../packages/core
-      '@tulipes/mongoose':
-        specifier: workspace:*
-        version: link:../../../packages/mongoose
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
       express:
         specifier: ^5
         version: 5.2.1
-      mongoose:
-        specifier: ^8
-        version: 8.24.5(socks@2.8.10)
       zod:
         specifier: ^3.25
         version: 3.25.76

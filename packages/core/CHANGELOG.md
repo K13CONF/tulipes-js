@@ -11,6 +11,20 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **The reference app on 0.11 (production preset).** The environment is
+  eleven variables: `PORT`, `MONGO_URI`, `REDIS_URL`, `LOG_LEVEL`,
+  `LOG_CONSOLE`, `LOG_FILE`, `LOG_DIR` and the four auth secrets; proxy
+  trust, CORS, HSTS, the body limit and the rate limits are `security`
+  settings rebuilt from `onChange`, `PUBLIC_DOMAIN` is `core.publicDomain`,
+  and the log file names and rotation are constants. A `config` module
+  serves the console — `GET /config`, `GET /config/:module`,
+  `PATCH /config/:module` (schema-validated, version-checked, audited
+  without values, hot-applied) — and the `settings` module keeps only
+  `GET /settings/logs/stream`. The auth module caches a resolved session
+  in the app cache for `auth.cacheTtlSeconds` (bounded by `accessTtl`) and
+  forgets it on every revocation path, so a hit is one Redis read and a
+  revocation is refused on the next request on any replica; `forgetUser()`
+  is exported for code that writes a role.
 - **The Mongo settings store.** `@tulipes/mongoose/settings` is the
   `settings` provider: one document per namespace in `settings` (`_id`,
   `values`, `version`, `updated_at`, `updated_by`), writes refused on a stale

@@ -117,8 +117,6 @@ export default defineRoutes(({ rai }) => {
     ...process.env, APP_ENV: 'production', LOG_FILE: 'false', LOG_CONSOLE: 'false', PORT: String(appPort),
     JWT_ACCESS_SECRET: randomBytes(32).toString('hex'), JWT_REFRESH_SECRET: randomBytes(32).toString('hex'),
     AUTH_ADMIN_EMAIL: 'ingress@example.test', AUTH_ADMIN_PASSWORD: randomBytes(32).toString('hex'),
-    // The deployed template's own instruction for a single local ingress.
-    TRUST_PROXY_CIDRS: '127.0.0.1/32,::1/128,172.16.0.0/12',
   };
   if (!env.TEST_MONGO_URI || !env.TEST_REDIS_URL) throw new Error('Ingress smoke requires dedicated TEST_MONGO_URI and TEST_REDIS_URL services');
   const mongo = new URL(env.TEST_MONGO_URI);
@@ -127,6 +125,17 @@ export default defineRoutes(({ rai }) => {
 
   run('pnpm', ['install', '--no-frozen-lockfile'], app, env);
   run('pnpm', ['sync'], app, env);
+  // Proxy trust is a setting since 0.11, not a variable: the deployed
+  // template's own instruction for a single local ingress is written to the
+  // store by a one-off script, the way an operator would through the console.
+  writeFileSync(join(app, 'scripts/trust-ingress.ts'), `
+    import { boot } from "@tulipes/core/boot";
+    const handle = await boot({ rootDir: new URL("..", import.meta.url).pathname, mode: "script" });
+    try {
+      await handle.ctx.settings.set("security", { trustProxyCidrs: "127.0.0.1/32,::1/128,172.16.0.0/12" }, { id: "ingress-smoke" });
+    } finally { await handle.shutdown(); }
+  `);
+  run('pnpm', ['script', 'scripts/trust-ingress.ts'], app, env);
 
   const server = spawn(process.execPath, ['--import', 'tsx', 'app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';

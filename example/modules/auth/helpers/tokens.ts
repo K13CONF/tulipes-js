@@ -4,6 +4,7 @@ import type { Request } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 import { currentCredentialVersion } from "./passwords.js";
+import { forgetSession, forgetUser } from "./session-cache.js";
 
 import type { SessionDoc } from "./documents.js";
 
@@ -170,6 +171,10 @@ export async function rotateSession(
         },
       );
 
+    // Either branch changed the row — rotated, or expired by reuse — so a
+    // cached copy of it is stale either way; the next request re-reads.
+    if (previous) await forgetSession(ctx, claims.sid);
+
     // Returning the pre-update row tells us which atomic branch actually ran.
     // Another replay may revoke this pair before its HTTP response is delivered.
     return previous?.refresh_jti === claims.jti ? pair : undefined;
@@ -242,25 +247,28 @@ export async function loadSession(
 
 /**
  * Record that a session is still in use — at most once per `afterSeconds`,
- * because a write on every request would cost more than the field is worth.
+ * because a write on every request would cost more than the field is
+ * worth. Returns whether it wrote, so a cached copy can follow.
  */
 export async function touchSession(
   ctx: Ctx,
   session: SessionDoc,
   afterSeconds: number,
-): Promise<void> {
+): Promise<boolean> {
   const age = Date.now() - (session.last_seen_at?.getTime() ?? 0);
-  if (age < afterSeconds * 1000) return;
+  if (age < afterSeconds * 1000) return false;
 
   const now = new Date();
   session.last_seen_at = now;
   await ctx
     .models!.get("Session")
     .updateOne({ sid: session.sid }, { last_seen_at: now });
+  return true;
 }
 
-/** End one session: the refresh half dies with its row. */
+/** End one session: the refresh half dies with its row, and its cached identity with it. */
 export async function endSession(ctx: Ctx, sid: string): Promise<boolean> {
+  await forgetSession(ctx, sid);
   const result = await ctx.models!.get("Session").deleteOne({ sid });
   return result.deletedCount === 1;
 }
@@ -270,6 +278,7 @@ export async function revokeAccess(
   ctx: Ctx,
   claims: TokenClaims,
 ): Promise<void> {
+  await forgetSession(ctx, claims.sid);
   await ctx
     .models!.get("RevokedToken")
     .updateOne(
@@ -292,6 +301,7 @@ export async function isRevoked(ctx: Ctx, jti: string): Promise<boolean> {
 
 /** Drop stored sessions for a user; this alone does not block concurrent sign-ins. */
 export async function endAllSessions(ctx: Ctx, userId: string): Promise<void> {
+  await forgetUser(ctx, userId);
   await ctx.models!.get("Session").deleteMany({ user: userId });
 }
 

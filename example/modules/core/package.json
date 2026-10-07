@@ -29,13 +29,6 @@
         "description": "Redis connection string (queues, cache)"
       },
       {
-        "name": "PUBLIC_DOMAIN",
-        "type": "string",
-        "group": "deploy",
-        "description": "Public hostname this API is served from; \"localhost\" means not deployed",
-        "default": "localhost"
-      },
-      {
         "name": "LOG_LEVEL",
         "type": "enum",
         "enum": [
@@ -70,41 +63,6 @@
         "group": "logging",
         "description": "Directory for log files, relative to the app root or absolute",
         "default": "logs"
-      },
-      {
-        "name": "LOG_BASENAME",
-        "type": "string",
-        "group": "logging",
-        "description": "Base name of the all-levels log file; the process mode and date are appended",
-        "default": "app"
-      },
-      {
-        "name": "LOG_ERROR_BASENAME",
-        "type": "string",
-        "group": "logging",
-        "description": "Base name of the errors-only log file; the process mode and date are appended",
-        "default": "error"
-      },
-      {
-        "name": "LOG_ROTATION_FREQUENCY",
-        "type": "string",
-        "group": "logging",
-        "description": "Rotate on this schedule: \"daily\", \"hourly\", or milliseconds",
-        "default": "daily"
-      },
-      {
-        "name": "LOG_ROTATION_SIZE",
-        "type": "string",
-        "group": "logging",
-        "description": "Also rotate once a file reaches this size, e.g. \"20m\"",
-        "default": "20m"
-      },
-      {
-        "name": "LOG_RETENTION_FILES",
-        "type": "number",
-        "group": "logging",
-        "description": "How many rotated files to keep per destination, besides the current one",
-        "default": 14
       }
     ]
   },

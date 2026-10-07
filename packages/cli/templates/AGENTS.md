@@ -16,9 +16,10 @@ one contract in depth.
 ## Preset scope
 
 Read the installed modules and package scripts before applying integration examples.
-The minimal preset has core, security and hello only. Auth, users, settings,
-MongoDB, Redis, queues, sockets, shared logger/cache helpers and PM2 examples
-below apply when those modules are installed (the production preset). Minimal
+The minimal preset has core, security, hello and agent only. Auth, users,
+config, settings, MongoDB, Redis, queues, sockets, shared logger/cache helpers
+and PM2 examples below apply when those modules are installed (the production
+preset). Minimal
 requests use the framework guest identity. Grant permissions to roles the app
 actually defines. Use the generated Vitest suite for changes; production tests
 require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
@@ -84,8 +85,9 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
     the auth module's `Credential` model, which is `select: false`.
 12. **When auth is installed, a new feature module's namespace goes in BOTH the `admin` and
     `sysadmin` grants** in `modules/auth/module.acl.ts`. Neither role holds
-    `*` — a wildcard would reach `settings:*` and make the sysadmin
-    boundary a label rather than a rule. → skill `tulipes-settings`
+    `*` — a wildcard would reach `config:write` and `settings:*` and make
+    the sysadmin boundary a label rather than a rule. → skills
+    `tulipes-config`, `tulipes-settings`
 13. **Cross-module imports use the package name** (`@app/users`,
     `@app/core`), never a relative path that climbs out of the module. The
     workspace boundary is what keeps modules independent, and a package

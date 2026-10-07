@@ -507,8 +507,9 @@ edit:
 `tulipes init` also writes an **`AGENTS.md`** — the cross-tool convention every
 coding agent reads — plus a short `CLAUDE.md` pointing at it and task-scoped
 skills under `.claude/skills/`: module, environment variable, endpoint,
-response, model, queue, socket, permissions, settings, i18n, spec, agent tools
-and reading boot errors. They encode the conventions an agent would otherwise
+response, model, queue, socket, permissions, config (settings and the
+console), settings (the log stream), i18n, spec, agent tools and reading boot
+errors. They encode the conventions an agent would otherwise
 guess wrong: declaring variables instead of reaching for `process.env`, why
 `mongoose.model()` is never called directly, where global middleware belongs,
 and how to read an aggregate boot report. The skills are plain markdown, so an

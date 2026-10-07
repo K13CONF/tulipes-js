@@ -31,7 +31,7 @@ understands v4 schemas. The classic `from "zod"` import still validates but
 produces no shape in the document, and `tulipes spec` will say so.
 
 Keep schemas in `modules/<name>/schemas/<name>.schemas.ts` when a route file
-starts to sprawl; the example's users, auth and settings modules do.
+starts to sprawl; the example's users, auth and config modules do.
 
 ## What validation gives you
 

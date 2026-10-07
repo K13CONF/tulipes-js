@@ -53,7 +53,7 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
       return;
     }
 
-    const url = options.url ?? defaultUrl(handle.env);
+    const url = options.url ?? defaultUrl(handle.env, handle.ctx.config.core);
     const warnings = new Set<string>();
 
     if (options.openapi) {
@@ -124,10 +124,20 @@ async function fromCli(): Promise<SpecModule | undefined> {
   }
 }
 
-/** Whatever the app itself would be reachable at, so the document is usable as written. */
-function defaultUrl(env: { store: { has(name: string): boolean }; get(name: string): unknown }): string {
+/**
+ * Whatever the app itself would be reachable at, so the document is usable
+ * as written: the sys core module's `publicDomain` setting (its default
+ * under inspection), a PUBLIC_DOMAIN variable for apps that still declare
+ * one, else localhost on the declared port.
+ */
+function defaultUrl(
+  env: { store: { has(name: string): boolean }; get(name: string): unknown },
+  core: { publicDomain?: unknown } | undefined,
+): string {
   const port = env.store.has("PORT") ? Number(env.get("PORT")) : 3000;
-  const domain = env.store.has("PUBLIC_DOMAIN") ? String(env.get("PUBLIC_DOMAIN")) : "localhost";
+  const domain = typeof core?.publicDomain === "string" && core.publicDomain
+    ? core.publicDomain
+    : env.store.has("PUBLIC_DOMAIN") ? String(env.get("PUBLIC_DOMAIN")) : "localhost";
 
   return domain === "localhost" ? `http://localhost:${port}` : `https://${domain}`;
 }

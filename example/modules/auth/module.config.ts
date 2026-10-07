@@ -19,5 +19,12 @@ export default defineConfig({
      */
     sessionTouchSeconds: z.number().int().positive().default(60)
       .describe("Seconds between two writes of a session's last_seen_at"),
+    /**
+     * A resolved token is kept in the app cache this long, bounded by
+     * accessTtl; 0 disables the cache. Revocations delete the entry, so
+     * the bound only matters while Redis is unreachable at that moment.
+     */
+    cacheTtlSeconds: z.number().int().min(0).max(3600).default(60)
+      .describe("Seconds a resolved session stays in the cache (0 disables it); never longer than accessTtl"),
   }),
 });

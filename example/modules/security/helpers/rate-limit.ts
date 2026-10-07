@@ -4,7 +4,7 @@ import { Router, type RequestHandler } from "express";
 import { Redis } from "ioredis";
 import ipaddr from "ipaddr.js";
 import { HttpError } from "@tulipes/core/http";
-import type { Environment } from "@tulipes/core/env";
+import type { Ctx } from "@tulipes/core/boot";
 
 // One atomic, expiring counter per client and policy, shared by every backend.
 // Rejected requests neither increase the counter nor extend its expiration.
@@ -26,36 +26,70 @@ export interface RateLimitOptions {
   windowMs: number;
   authLimit: number;
   sessionLimit: number;
-  settingsLimit: number;
+  configLimit: number;
 }
 
-const instances = new WeakMap<Environment, ReturnType<typeof createRateLimits>>();
+/** The `rateLimits` setting, as `ctx.config.security.rateLimits`. */
+export interface RateLimitSettings {
+  namespace: string;
+  windowMs: number;
+  auth: number;
+  session: number;
+  config: number;
+}
 
-export function configuredRateLimits(environment: Environment) {
-  const existing = instances.get(environment);
-  if (existing) return existing;
-  const limits = createRateLimits({
-    redisUrl: String(environment.get("REDIS_URL")),
-    namespace: String(environment.get("RATE_LIMIT_NAMESPACE")) + ":" + environment.appEnv,
-    windowMs: Number(environment.get("RATE_LIMIT_WINDOW_MS")),
-    authLimit: Number(environment.get("AUTH_RATE_LIMIT")),
-    sessionLimit: Number(environment.get("AUTH_SESSION_RATE_LIMIT")),
-    settingsLimit: Number(environment.get("SETTINGS_RATE_LIMIT")),
-  });
-  instances.set(environment, limits);
-  return limits;
+type RateLimits = ReturnType<typeof createRateLimits>;
+
+/**
+ * One limiter set per boot, built from the live settings on first use and
+ * rebuilt by module.config's onChange when they change. The routes file
+ * mounts a handler that always delegates to the current set, so a rebuild
+ * never re-mounts anything; the previous set's client is closed once the
+ * new one exists.
+ */
+const instances = new WeakMap<Ctx, { limits: RateLimits; settings: RateLimitSettings }>();
+
+export function configuredRateLimits(ctx: Ctx): RateLimits {
+  const current = instances.get(ctx);
+  if (current) return current.limits;
+  return rebuildRateLimits(ctx, settingsOf(ctx)).limits;
+}
+
+/** @internal module.config onChange and the first request. */
+export function rebuildRateLimits(ctx: Ctx, settings: RateLimitSettings): { limits: RateLimits; settings: RateLimitSettings } {
+  const previous = instances.get(ctx);
+  if (previous && JSON.stringify(previous.settings) === JSON.stringify(settings)) return previous;
+  const next = {
+    settings: { ...settings },
+    limits: createRateLimits({
+      redisUrl: String(ctx.Environment.get("REDIS_URL")),
+      namespace: settings.namespace + ":" + ctx.Environment.appEnv,
+      windowMs: settings.windowMs,
+      authLimit: settings.auth,
+      sessionLimit: settings.session,
+      configLimit: settings.config,
+    }),
+  };
+  instances.set(ctx, next);
+  previous?.limits.close();
+  return next;
+}
+
+function settingsOf(ctx: Ctx): RateLimitSettings {
+  const settings = (ctx.config.security as { rateLimits?: RateLimitSettings } | undefined)?.rateLimits;
+  if (!settings) throw new Error("security settings are not loaded — the rate limiter is built after boot phase 6");
+  return settings;
 }
 
 export function createRateLimits(options: RateLimitOptions) {
-  for (const [name, value] of Object.entries({ RATE_LIMIT_WINDOW_MS: options.windowMs,
-    AUTH_RATE_LIMIT: options.authLimit, AUTH_SESSION_RATE_LIMIT: options.sessionLimit,
-    SETTINGS_RATE_LIMIT: options.settingsLimit })) {
+  for (const [name, value] of Object.entries({ windowMs: options.windowMs,
+    auth: options.authLimit, session: options.sessionLimit, config: options.configLimit })) {
     if (!Number.isSafeInteger(value) || value < 1 || value > 2_147_483_647) {
-      throw new Error(name + " must be a positive integer no greater than 2147483647");
+      throw new Error("rateLimits." + name + " must be a positive integer no greater than 2147483647");
     }
   }
   if (!/^[a-zA-Z0-9:_-]{1,128}$/.test(options.namespace)) {
-    throw new Error("RATE_LIMIT_NAMESPACE must use letters, digits, colon, underscore or hyphen (max 128 including app environment)");
+    throw new Error("rateLimits.namespace must use letters, digits, colon, underscore or hyphen (max 128 including app environment)");
   }
   const redis = new Redis(options.redisUrl, {
     lazyConnect: true, enableOfflineQueue: false, maxRetriesPerRequest: 0,
@@ -104,13 +138,13 @@ export function createRateLimits(options: RateLimitOptions) {
   // The broad quota bounds all auth requests, including refresh, reads and misses.
   auth.use(limit("sessions", options.sessionLimit));
   auth.post(["/login", "/register", "/password"], limit("credentials", options.authLimit));
-  return { auth, settings: limit("settings", options.settingsLimit), close: () => {
+  return { auth, config: limit("config", options.configLimit), close: () => {
     redis.disconnect();
   } };
 }
 
 /** Security owns its connections, including partially initialized boot cleanup. */
-export function closeRateLimits(environment: Environment): void {
-  instances.get(environment)?.close();
-  instances.delete(environment);
+export function closeRateLimits(ctx: Ctx): void {
+  instances.get(ctx)?.limits.close();
+  instances.delete(ctx);
 }
