@@ -29,6 +29,8 @@ tulipes init my-api          # --preset production for the full application
 | [`packages/mongoose`](./packages/mongoose) | `@tulipes/mongoose` — the `models` provider |
 | [`packages/bullmq`](./packages/bullmq) | `@tulipes/bullmq` — the `queues` provider |
 | [`packages/socket.io`](./packages/socket.io) | `@tulipes/socket.io` — the `sockets` provider |
+| [`packages/mcp`](./packages/mcp) | `@tulipes/mcp` — `tulipes-mcp`, an MCP server over an app's agent tools |
+| [`packages/testing`](./packages/testing) | `@tulipes/testing` — boot an app for a test file, call it, sign in as a role |
 | [`example`](./example) | the reference application: six modules, exercising every contract |
 
 Start with **[packages/core/README.md](./packages/core/README.md)** — that is
@@ -42,11 +44,11 @@ itself pulls in no database, queue or socket driver.
 ## Working in here
 
 ```sh
-corepack enable          # once per machine — activates the pinned yarn 4
-yarn install
-yarn typecheck           # every public workspace
-yarn test                # needs TEST_MONGO_URI and TEST_REDIS_URL
-yarn example             # boot the reference app (needs MongoDB and Redis)
+npm install -g pnpm      # once per machine; the pinned pnpm line switches in on first use
+pnpm install
+pnpm typecheck           # every public workspace
+pnpm test                # needs TEST_MONGO_URI and TEST_REDIS_URL
+pnpm example             # boot the reference app (needs MongoDB and Redis)
 ```
 
 The example is not a demo kept alive by hand: CI scaffolds a fresh app with
@@ -66,7 +68,7 @@ Default `tulipes init my-api` creates a minimal API without MongoDB or Redis.
 `--no-sockets` compose it without those providers. Node 24.x is the supported
 runtime. Both presets include Vitest tests.
 
-The 0.10 line is stable: its API is settled and breaking changes wait for 0.11.
+The 0.10 line is stable. 0.11 is the next line, on this branch as a release candidate: it changes the module layout, the configuration model and the runtime (see `packages/core/MIGRATING.md`), and `tulipes migrate 0.11` carries an app across.
 It is not production-proven — no pilot deployment has run this framework, so
 there is no load, backup-restore or multi-replica evidence and no independent
 security review. [Support](docs/support.md) states that in full, and the

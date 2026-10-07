@@ -1,0 +1,52 @@
+{
+  "name": "@tulipes/testing",
+  "version": "0.1.0-rc.1",
+  "description": "Test an app written with Tulipes: boot it once per file on a random port, call its endpoints with the envelope decoded, sign in as a role",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "prepack": "pnpm build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@tulipes/core": "^0.10.0 || ^0.11.0-rc.1"
+  },
+  "devDependencies": {
+    "@tulipes/core": "workspace:*",
+    "@types/node": "^24.2.0",
+    "typescript": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kemora13conf/bp-backend-express.git",
+    "directory": "packages/testing"
+  },
+  "keywords": [
+    "tulipes",
+    "testing",
+    "vitest",
+    "express"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "homepage": "https://github.com/kemora13conf/bp-backend-express/tree/master/packages/testing#readme",
+  "bugs": {
+    "url": "https://github.com/kemora13conf/bp-backend-express/issues"
+  }
+}

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "vitest";
-import { fixture, url } from "./fixture.js";
+import { fixture, url } from "./fixture.ts";
 
 /**
  * S13.4 — the translation guarantee core keeps: `req.t`, `req.hasTranslation`,

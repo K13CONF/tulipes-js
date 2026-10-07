@@ -55,14 +55,13 @@ try {
   const resolutions = Object.fromEntries(manifest.packages.map((pkg) => [pkg.name, 'file:' + join(artifacts, pkg.file)]));
   const cliRoot = join(workspace, 'cli');
   mkdirSync(cliRoot);
-  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'yarn@4.18.0', dependencies: { '@tulipes/cli': resolutions['@tulipes/cli'] }, resolutions }));
-  writeFileSync(join(cliRoot, '.yarnrc.yml'), 'nodeLinker: node-modules\n');
-  run('yarn', ['install'], cliRoot, { ...process.env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
+  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'pnpm@10.28.0', dependencies: { '@tulipes/cli': resolutions['@tulipes/cli'] }, pnpm: { overrides: resolutions } }));
+  run('pnpm', ['install', '--no-frozen-lockfile'], cliRoot);
 
   app = join(workspace, 'app');
   run(process.execPath, [join(cliRoot, 'node_modules/@tulipes/cli/dist/bin.js'), 'init', app, '--preset', 'production'], workspace);
   const pkgFile = join(app, 'package.json');
-  writeFileSync(pkgFile, JSON.stringify({ ...readJson(pkgFile), resolutions }, null, 2));
+  writeFileSync(pkgFile, JSON.stringify({ ...readJson(pkgFile), pnpm: { overrides: resolutions } }, null, 2));
 
   // A probe module: the generated app has no endpoint that reports the client
   // identity it resolved, and that identity is exactly what this tests.
@@ -118,18 +117,27 @@ export default defineRoutes(({ rai }) => {
     ...process.env, APP_ENV: 'production', LOG_FILE: 'false', LOG_CONSOLE: 'false', PORT: String(appPort),
     JWT_ACCESS_SECRET: randomBytes(32).toString('hex'), JWT_REFRESH_SECRET: randomBytes(32).toString('hex'),
     AUTH_ADMIN_EMAIL: 'ingress@example.test', AUTH_ADMIN_PASSWORD: randomBytes(32).toString('hex'),
-    // The deployed template's own instruction for a single local ingress.
-    TRUST_PROXY_CIDRS: '127.0.0.1/32,::1/128,172.16.0.0/12',
   };
   if (!env.TEST_MONGO_URI || !env.TEST_REDIS_URL) throw new Error('Ingress smoke requires dedicated TEST_MONGO_URI and TEST_REDIS_URL services');
   const mongo = new URL(env.TEST_MONGO_URI);
   mongo.pathname = '/tulipes_ingress_' + randomBytes(6).toString('hex');
   Object.assign(env, { MONGO_URI: mongo.href, REDIS_URL: env.TEST_REDIS_URL });
 
-  run('yarn', ['install'], app, { ...env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
-  run('yarn', ['sync'], app, env);
+  run('pnpm', ['install', '--no-frozen-lockfile'], app, env);
+  run('pnpm', ['sync'], app, env);
+  // Proxy trust is a setting since 0.11, not a variable: the deployed
+  // template's own instruction for a single local ingress is written to the
+  // store by a one-off script, the way an operator would through the console.
+  writeFileSync(join(app, 'scripts/trust-ingress.ts'), `
+    import { boot } from "@tulipes/core/boot";
+    const handle = await boot({ rootDir: new URL("..", import.meta.url).pathname, mode: "script" });
+    try {
+      await handle.ctx.settings.set("security", { trustProxyCidrs: "127.0.0.1/32,::1/128,172.16.0.0/12" }, { id: "ingress-smoke" });
+    } finally { await handle.shutdown(); }
+  `);
+  run('pnpm', ['script', 'scripts/trust-ingress.ts'], app, env);
 
-  const server = spawn(process.execPath, ['--import', 'tsx', 'app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const server = spawn(process.execPath, ['app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   server.stdout.on('data', (d) => { output += d; });
   server.stderr.on('data', (d) => { output += d; });

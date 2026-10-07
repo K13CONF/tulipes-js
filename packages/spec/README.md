@@ -13,10 +13,10 @@ routes.
 Requires Node 24.x. Runtime inspection connects configured infrastructure.
 Core 0.9.0-rc.3 adds the native-router `--offline` interface: both
 migrated presets generate specs without MongoDB, Redis or runtime secrets.
-See the [offline inspection guide](../../docs/offline-inspection.md).
+See [inspection](../core/README.md#inspection) in the core README.
 
 Version 0.3.0-rc.5 supports core `^0.9.0-rc.3 || ^0.10.0-rc.1`. Install the candidate
-with `yarn add -D @tulipes/spec@next`. See the core
+with `pnpm add -D @tulipes/spec@next`. See the core
 [migration guide](https://github.com/kemora13conf/bp-backend-express/blob/v0.9.0-rc.3/packages/core/MIGRATING.md#090-rc3--production-security-upgrade-overview)
 when upgrading from an earlier release.
 
@@ -25,8 +25,8 @@ at runtime or offline. Both use the same route scan. Runtime callback acquisitio
 may not change the endpoint structure.
 
 ```sh
-yarn add -D @tulipes/spec@next
-yarn tulipes spec --openapi docs/openapi.json --postman docs/collection.json
+pnpm add -D @tulipes/spec@next
+pnpm tulipes spec --openapi docs/openapi.json --postman docs/collection.json
 ```
 
 ```

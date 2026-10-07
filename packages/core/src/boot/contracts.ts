@@ -1,12 +1,14 @@
 import type { Express, RequestHandler, Router } from "express";
 
-import type { Environment } from "../env/environment.js";
-import type { ProcessMode } from "./boot.js";
-import type { GlobalConfig } from "../config/index.js";
-import type { Acl } from "../acl/acl.js";
-import type { RouteInfo, RouteRegistry } from "../http/rai.js";
-import type { ModuleManifest } from "../modules/manifest.js";
-import type { I18nextInstance, TFunction } from "../i18n/index.js";
+import type { Environment } from "../env/environment.ts";
+import type { ProcessMode } from "./boot.ts";
+import type { GlobalConfig } from "../config/index.ts";
+import type { SettingsApi } from "../config/settings.ts";
+import type { Acl } from "../acl/acl.ts";
+import type { AgentRegistry } from "../agent/registry.ts";
+import type { RouteInfo, RouteRegistry } from "../http/rai.ts";
+import type { ModuleManifest } from "../modules/manifest.ts";
+import type { I18nextInstance, TFunction } from "../i18n/index.ts";
 
 /**
  * The context object threaded through every module-authored function.
@@ -29,7 +31,20 @@ export interface Ctx {
    * that belong to no module.
    */
   modules: readonly ModuleManifest[];
+  /**
+   * Every module's settings, namespaced by short name and kept live: a
+   * write through `ctx.settings` or from another replica replaces the
+   * values in place. Read a value where it is used, never cache it at boot.
+   */
   config: GlobalConfig;
+  /** The write and inspection side of the settings store; reads go through `config`. */
+  settings: SettingsApi;
+  /**
+   * Aborted the moment shutdown begins, before HTTP stops accepting. An SSE
+   * handler ends its response on it; a poller stops its loop. Resources
+   * are closed later, by the cleanup a bootstrap returned.
+   */
+  signal: AbortSignal;
   acl?: Acl;
   /**
    * Set by the "models" provider the app declares in package.json
@@ -42,6 +57,12 @@ export interface Ctx {
   /** Set by the "sockets" provider in the backend process only; augmented like models. */
   sockets?: SocketsCapability;
   app?: Express;
+  /**
+   * Every tool the app exposes to agents — route tools from the RAIs,
+   * actions from `agent/*.agent.ts` — built in the backend branch once
+   * routes are scanned. Absent in worker and script processes.
+   */
+  agent?: AgentRegistry;
   /**
    * Declares an endpoint and gates it. `id` is the Resource Access
    * Identifier, which is also the ACL permission:
@@ -67,45 +88,29 @@ export interface Ctx {
 }
 
 /**
- * Default export of `module.config.ts`. Returns the module's config
- * namespace (stored at `config.<module>`); returning nothing is a valid
- * "this module has no config" answer.
- *
- * Factories run in load order against the growing global config, so a
- * module can read the namespaces of everything it `dependsOn`.
+ * What a bootstrap returns when it opened something: the function that
+ * closes it. Core runs cleanups after traffic drains, in reverse load
+ * order, under the shutdown deadline.
  */
-export type ModuleConfigFn = (
-  ctx: ConfigCtx,
-) => Record<string, unknown> | void | Promise<Record<string, unknown> | void>;
-
-export type LifecycleHook = (ctx: Ctx) => void | Promise<void>;
+export type BootstrapCleanup = () => void | Promise<void>;
 
 /**
- * Optional named exports of `module.config.ts`:
- *   onReady    — after the process is fully up (server listening / worker consuming)
- *   onDrain    — stop long-lived work at the start of shutdown; do not dispose dependencies
- *   onShutdown — dispose resources after traffic drains, in REVERSE load order
- * Drain hooks start in reverse load order, concurrently with traffic draining.
- * Both shutdown phases share the same deadline and aggregate failures.
+ * Default export of `bootstrap/*.bootstrap.ts` — phase 9, every mode, after
+ * settings, translations and ACL and before routes or queues. The one place
+ * a module initializes: seeds and indexes (idempotent, every process runs
+ * them), or a client it keeps open, whose cleanup it returns.
  */
-export interface ModuleLifecycle {
-  module: string;
-  onReady?: LifecycleHook;
-  onDrain?: LifecycleHook;
-  onShutdown?: LifecycleHook;
-}
+export type BootstrapFn = (ctx: RuntimeCtx) => void | BootstrapCleanup | Promise<void | BootstrapCleanup>;
 
 /**
- * Default export of `routes/*.routes.ts` (backend branch only). May mount
- * directly on `ctx.app`, or return a Router for core to `app.use()` —
- * returning one is the recommended style.
+ * Default export of `routes/*.routes.ts`. Returns a Router, which core
+ * mounts under `config.api.prefix` (or `ctx.routes.mount(router, "/other")`
+ * to choose the path), or mounts global middleware on `ctx.app` itself and
+ * returns nothing. Build the router from the context; read `ctx.models`,
+ * `ctx.config` and the environment inside handlers, where they are live —
+ * inspection runs this function with stubs that throw on infrastructure.
  */
 export type RoutesFn = (ctx: BackendCtx) => Router | void | Promise<Router | void>;
-
-/** Configuration runs before ACL, database, queues or Express exist. */
-export type ConfigCtx = Pick<Ctx,
-  "mode" | "Environment" | "modules" | "config" | "rai" | "routes" | "t" | "i18n"
->;
 
 /** Runtime infrastructure is optional, even after its initialization phase. */
 export interface RuntimeCtx extends Ctx {
@@ -116,6 +121,7 @@ export interface RuntimeCtx extends Ctx {
 export interface BackendCtx extends RuntimeCtx {
   mode: "backend";
   app: Express;
+  agent: AgentRegistry;
 }
 
 /**
@@ -139,7 +145,7 @@ export interface ProviderCapabilities {
   sockets: SocketsCapability;
 }
 
-/** Bootstrap tasks only run with a registered model store. */
+/** A bootstrap in a module that owns models may assert the capability is there. */
 export interface DatabaseCtx extends RuntimeCtx {
   models: ModelsCapability;
 }

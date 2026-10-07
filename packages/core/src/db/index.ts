@@ -1,4 +1,4 @@
-import type { Provider } from "../boot/providers.js";
+import type { Provider } from "../boot/providers.ts";
 
 /**
  * `@tulipes/core/db` moved to `@tulipes/mongoose`. What remains here is the
@@ -8,7 +8,7 @@ import type { Provider } from "../boot/providers.js";
  * typecheck with "no exported member" — see MIGRATING.md.
  */
 const moved: Provider<"models"> = {
-  contract: 1,
+  contract: 2,
   capability: "models",
   name: "core/db (moved)",
   async acquire(_ctx, report) {

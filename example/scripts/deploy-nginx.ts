@@ -1,8 +1,8 @@
 /**
  * Install this app's nginx site config.
  *
- *   sudo -E APP_ENV=production yarn script scripts/deploy-nginx.ts
- *   APP_ENV=production yarn script scripts/deploy-nginx.ts --dry-run
+ *   sudo -E APP_ENV=production pnpm script scripts/deploy-nginx.ts
+ *   APP_ENV=production pnpm script scripts/deploy-nginx.ts --dry-run
  *
  * APP_ENV picks everything at once — which template is rendered, and the
  * domain and port rendered into it — so the three can never disagree.
@@ -41,7 +41,7 @@ try {
 
 async function deploy(): Promise<void> {
   const { appEnv } = handle.env;
-  const domain = String(handle.env.get("PUBLIC_DOMAIN")).trim();
+  const domain = String(handle.ctx.config.core?.publicDomain ?? "localhost").trim();
   const port = Number(handle.env.get("PORT"));
 
   const templatePath = join(rootDir, "nginx", `${appEnv}.conf`);
@@ -63,7 +63,7 @@ async function deploy(): Promise<void> {
 
   if (domain === "localhost" || domain === "") {
     return fail(
-      `PUBLIC_DOMAIN is "${domain}" — set a real hostname in .envs/.env.${appEnv} before deploying`,
+      `core.publicDomain is "${domain}" — set a real hostname through the console (PATCH /config/core) before deploying`,
     );
   }
 

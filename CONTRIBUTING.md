@@ -8,10 +8,9 @@ abdelghanielmouak@gmail.com. Report vulnerabilities through [SECURITY.md](SECURI
 Use Node 24.x and the pinned Yarn version:
 
 ```sh
-corepack enable
-yarn install --immutable
-yarn test
-yarn test:types
+pnpm install --frozen-lockfile
+pnpm test
+pnpm test:types
 ```
 
 For boot, database, queue or authentication work, run the complete integration

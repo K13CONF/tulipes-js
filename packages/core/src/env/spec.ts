@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 /**
- * Schema for one entry in a module's `meta.variables.json`.
+ * Schema for one entry of a module's `tulipes.env` (package.json).
  *
- * The file is deliberately plain JSON (not TS): tooling — `.env.example`
+ * The contract is deliberately plain JSON (not TS): tooling — `.env.example`
  * generation, docs, the postman generator — must be able to read a module's
  * env contract without executing its code.
  */

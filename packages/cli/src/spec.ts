@@ -1,22 +1,19 @@
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
-import { importFromApp } from "./app-core.js";
-import { inspectApp } from "./inspection.js";
+import { importFromApp } from "./app-core.ts";
+import { inspectApp } from "./inspection.ts";
 
 /**
  * `tulipes spec` — an OpenAPI document and/or a Postman collection, built
- * from the app's declared routes.
- *
- * Shares the routes command's inspection path: offline declarations when
- * requested, or backend inspection without listening for legacy factories.
+ * from the app's declared routes through the same inspection boot as
+ * `tulipes routes`: no service, no secret, no listener.
  *
  * The generator lives in `@tulipes/spec`, imported lazily: core carries no
  * dependency on it, and an app that never generates a spec never installs
  * it.
  */
 export interface SpecOptions {
-  offline?: boolean;
   openapi?: string;
   postman?: string;
   /** Base URL the documents advertise. */
@@ -47,7 +44,7 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
   const spec = await loadGenerator(rootDir);
   if (!spec) return;
 
-  const handle = await inspectApp(rootDir, options.offline);
+  const handle = await inspectApp(rootDir);
 
   try {
     const source = spec.extract(handle.ctx) as { routes: unknown[]; folders: string[] };
@@ -56,7 +53,7 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
       return;
     }
 
-    const url = options.url ?? (handle.env ? defaultUrl(handle.env) : "http://localhost:3000");
+    const url = options.url ?? defaultUrl(handle.env, handle.ctx.config.core);
     const warnings = new Set<string>();
 
     if (options.openapi) {
@@ -106,7 +103,7 @@ async function loadGenerator(rootDir: string): Promise<SpecModule | undefined> {
     [
       "`tulipes spec` needs the generator package:",
       "",
-      "  yarn add -D @tulipes/spec",
+      "  pnpm add -D @tulipes/spec",
       "",
       "It is separate so an app that never generates a spec never installs it.",
     ].join("\n"),
@@ -127,10 +124,20 @@ async function fromCli(): Promise<SpecModule | undefined> {
   }
 }
 
-/** Whatever the app itself would be reachable at, so the document is usable as written. */
-function defaultUrl(env: { store: { has(name: string): boolean }; get(name: string): unknown }): string {
+/**
+ * Whatever the app itself would be reachable at, so the document is usable
+ * as written: the sys core module's `publicDomain` setting (its default
+ * under inspection), a PUBLIC_DOMAIN variable for apps that still declare
+ * one, else localhost on the declared port.
+ */
+function defaultUrl(
+  env: { store: { has(name: string): boolean }; get(name: string): unknown },
+  core: { publicDomain?: unknown } | undefined,
+): string {
   const port = env.store.has("PORT") ? Number(env.get("PORT")) : 3000;
-  const domain = env.store.has("PUBLIC_DOMAIN") ? String(env.get("PUBLIC_DOMAIN")) : "localhost";
+  const domain = typeof core?.publicDomain === "string" && core.publicDomain
+    ? core.publicDomain
+    : env.store.has("PUBLIC_DOMAIN") ? String(env.get("PUBLIC_DOMAIN")) : "localhost";
 
   return domain === "localhost" ? `http://localhost:${port}` : `https://${domain}`;
 }

@@ -1,14 +1,13 @@
 import { expect, test, vi } from "vitest";
-import { Environment } from "../src/env/environment.js";
-import { sortModules } from "../src/modules/graph.js";
-import type { ModuleManifest } from "../src/modules/manifest.js";
-import { BootReport } from "../src/errors/boot-error.js";
-import { fixture } from "./fixture.js";
+import { Environment } from "../src/env/environment.ts";
+import { sortModules } from "../src/modules/graph.ts";
+import type { ModuleManifest } from "../src/modules/manifest.ts";
+import { BootReport } from "../src/errors/boot-error.ts";
+import { fixture } from "./fixture.ts";
 
 test("environment resolves and attributes deployment overrides while redacting secrets", async () => {
   const app = await fixture({
-    "modules/probe/meta.variables.json": JSON.stringify({
-      variables: [
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
         {
           name: "TEST_CONTRACT_NUMBER",
           type: "number",
@@ -21,8 +20,7 @@ test("environment resolves and attributes deployment overrides while redacting s
           description: "secret",
           required: true,
         },
-      ],
-    }),
+      ] } }),
     ".envs/.env.test":
       "TEST_CONTRACT_NUMBER=2\nTEST_CONTRACT_SECRET=fixture-only\n",
   });
@@ -44,8 +42,7 @@ test("environment resolves and attributes deployment overrides while redacting s
 
 test("environment aggregates all missing required values", async () => {
   const app = await fixture({
-    "modules/probe/meta.variables.json": JSON.stringify({
-      variables: [
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
         {
           name: "TEST_CONTRACT_A",
           type: "string",
@@ -58,8 +55,7 @@ test("environment aggregates all missing required values", async () => {
           description: "b",
           required: true,
         },
-      ],
-    }),
+      ] } }),
   });
 
   expect(() =>
@@ -79,7 +75,7 @@ const module = (
   tier,
   priority,
   dependsOn,
-  requires: [],
+  requires: [], env: [],
 });
 
 test("dependencies outrank priority while sys modules precede app modules", () => {
@@ -120,7 +116,7 @@ test.each([
 );
 
 test("a url variable accepts a replica set's host list and still rejects a malformed one", async () => {
-  const { coerceValue } = await import("../src/env/coerce.js");
+  const { coerceValue } = await import("../src/env/coerce.ts");
   const spec = { name: "MONGO_URI", type: "url", description: "Database" } as const;
   const accepts = (value: string) => coerceValue(spec, value).ok;
 

@@ -37,35 +37,42 @@ the handlers that use them without threading ctx through every signature.
 
 ```ts
 import { Router } from "express";
-import { defineRoutes } from "@tulipes/core/http";
+import type { BackendCtx } from "@tulipes/core/boot";
 
-export default defineRoutes(({ app, rai, routes, runtime }) => {
+import { BillingController } from "../controllers/billing.controllers.js";
+
+export default function billingRoutes(ctx: BackendCtx): Router {
   const router = Router();
-  const billing = runtime(async ctx => {
-    const { BillingController } = await import("../controllers/billing.controllers.js");
-    return new BillingController(ctx);
-  });
-  router.get("/:id", rai({ id: "billing:read", name: "Read an invoice" }),
-    billing(value => value.show()));
-  routes.mount(app, "/invoices", router);
-});
+  const billing = new BillingController(ctx);
+  router.get("/:id", ctx.rai({ id: "billing:read", name: "Read an invoice" }), billing.show());
+  return router;                          // mounted under config.api.prefix
+}
 ```
 
-Set tulipes.offline: true in the module manifest. runtime() acquires each controller
-once at boot, and its binder selects callbacks before listening. Offline inspection
-builds real routers without running acquisition functions or callback selectors.
-Keep service-dependent imports inside runtime(). Pure callbacks need no binding.
+A routes file is a plain function of the context. A returned router is
+mounted under `config.api.prefix`; `ctx.routes.mount(router, "/invoices")`
+chooses another path, and `ctx.routes.mount(parent, "/tenants/:tenant",
+child)` nests one router in another (`Router({ mergeParams: true })` on the
+child for inherited parameters). A file that only mounts global middleware
+on `ctx.app` returns nothing.
+
+**Build with the context, use infrastructure in handlers.** `tulipes routes`
+and `tulipes spec` build every router with nothing acquired: the environment
+is declared but unresolved and `ctx.models`, `ctx.queues` and `ctx.sockets`
+are stubs that throw. So a controller keeps `ctx` and reads `ctx.models`
+inside its handlers (as every controller in this app does), and a middleware
+that needs a variable or a client is built on its first request:
+
+```ts
+import { lazy } from "@app/core";
+app.use(lazy(() => express.json({ limit: String(Environment.get("BODY_LIMIT")) })));
+```
 
 Use router.use for shared middleware, router.param for parameter callbacks, and
-router.route for chained method registrations. The same binder supports all
-callback kinds, including error handlers. Preserve native registration order.
-Parameter callbacks run before endpoint RAI; authorization-sensitive loading
-belongs after rai() or behind an appropriate earlier authorization check.
-
-Use routes.mount for nested/shared prefixes, including named parameters. Set
-Router({mergeParams:true}) on children needing inherited parameter values.
-Existing RoutesFn factories remain supported with --runtime. After changes run
-the app tests, tulipes routes --offline and yarn spec; inspect generated diffs.
+router.route for chained method registrations. Preserve native registration
+order. Parameter callbacks run before the endpoint's RAI; authorization-sensitive
+loading belongs after rai() or behind an earlier authorization check. After
+changes run the app tests, `tulipes routes` and `pnpm spec`; inspect generated diffs.
 
 ## The RAI is not optional
 
@@ -86,8 +93,14 @@ This exists because the pipeline authenticates rather than rejects: an
 undeclared route is not merely undocumented, it is reachable by `guest`.
 Grant the id in `module.acl.ts` — to `guest` if the endpoint is public.
 
-`tulipes routes --offline` lists every declared endpoint with the roles that reach
-it.
+`tulipes routes` lists every declared endpoint with the roles that reach it,
+without a service, a secret or a `.env`.
+
+The same declaration is the endpoint's **tool definition**: `tulipes agent
+manifest` lists every route as a tool an agent may call, with the `name`,
+`description` and schemas as written here. Write the description for a model
+choosing between tools; `agent: false` keeps a route out of the manifest.
+→ skill `tulipes-agent-tool`
 
 ## Responses and errors
 

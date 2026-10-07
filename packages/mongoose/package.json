@@ -1,10 +1,11 @@
 {
   "name": "@tulipes/mongoose",
-  "version": "0.1.1",
+  "version": "0.2.0-rc.1",
   "description": "Mongoose models provider for Tulipes apps: connection, model registration and bootstrap behind core's models capability",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./settings": "./src/settings-provider.ts"
   },
   "files": [
     "dist",
@@ -14,16 +15,17 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
-    "prepack": "yarn build"
+    "prepack": "pnpm build"
   },
   "publishConfig": {
     "access": "public",
     "exports": {
-      ".": "./dist/index.js"
+      ".": "./dist/index.js",
+      "./settings": "./dist/settings-provider.js"
     }
   },
   "peerDependencies": {
-    "@tulipes/core": "^0.10.0",
+    "@tulipes/core": "^0.10.0 || ^0.11.0-rc.1",
     "mongoose": "^8"
   },
   "devDependencies": {

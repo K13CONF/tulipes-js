@@ -1,5 +1,5 @@
 import type { Redis } from "ioredis";
-import { BaseCache } from "./types.js";
+import { BaseCache } from "./types.ts";
 
 /**
  * Redis-backed cache. Values are JSON-serialized; keys are namespaced by

@@ -10,8 +10,8 @@ import {
   red,
 } from "colorette";
 
-import type { BootHandle } from "./boot.js";
-import type { ModuleManifest } from "../modules/manifest.js";
+import type { BootHandle } from "./boot.ts";
+import type { ModuleManifest } from "../modules/manifest.ts";
 
 /**
  * The end-of-boot banner: one glance answers every "is it actually up?"
@@ -59,6 +59,14 @@ export function printStartupBanner(
       rows.push([capability[0]!.toUpperCase() + capability.slice(1), gray("no provider declared")]);
     }
   }
+
+  const namespaces = ctx.settings.namespaces();
+  rows.push([
+    "Settings",
+    namespaces.length
+      ? `${cyan(ctx.settings.status().label)}  ${dim("·")}  ${gray(namespaces.map((name) => `${name} v${ctx.settings.describe(name).stored.version}`).join(", "))}`
+      : gray("no module declares settings"),
+  ]);
 
   rows.push([
     "Modules",

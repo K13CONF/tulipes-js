@@ -1,8 +1,8 @@
 import type { Response } from "express";
 import type { Environment } from "@tulipes/core/env";
 import { HttpError } from "@tulipes/core/http";
-import { AccessLease } from "./access-lease.js";
-import { tailLogs, type Tail } from "./log-tail.js";
+import { AccessLease } from "./access-lease.ts";
+import { tailLogs, type Tail } from "./log-tail.ts";
 
 export const LOG_STREAM_LIMITS = Object.freeze({
   connections: 4,

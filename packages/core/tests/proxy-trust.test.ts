@@ -1,7 +1,7 @@
 import express from "express";
 import { expect, test } from "vitest";
 import { z } from "zod/v4";
-import { trustedProxies } from "../../../example/modules/security/helpers/proxy.js";
+import { trustedProxies } from "../../../example/modules/security/helpers/proxy.ts";
 
 async function inspect(trust: string, forwardedFor: string) {
   const app = express();

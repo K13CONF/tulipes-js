@@ -1,8 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { inspectRoutes } from "../src/boot/inspect.js";
-import { fixture } from "./fixture.js";
+import { fixture } from "./fixture.ts";
 
 /**
  * The provider seam, exercised with a fake provider written into the app —
@@ -18,11 +17,11 @@ const fakeProvider = (options: { fail?: "report" | "throw" | "silent"; ownTwice?
   import { appendFileSync } from 'node:fs';
   const log = line => appendFileSync(new URL('./log.txt', import.meta.url), line + '\\n');
   export default {
-    contract: ${JSON.stringify(options.contract ?? 1)},
+    contract: ${JSON.stringify(options.contract ?? 2)},
     capability: ${JSON.stringify(options.capability ?? "models")},
     name: 'fake',
-    async acquire({ ctx, files, runBootstrap }, report, own) {
-      log('acquire mode=' + ctx.mode + ' bootstrap=' + runBootstrap + ' modules=' + files.map(f => f.module.name).join(','));
+    async acquire({ ctx, files }, report, own) {
+      log('acquire mode=' + ctx.mode + ' config=' + JSON.stringify(ctx.config) + ' modules=' + files.map(f => f.module.name).join(','));
       const resource = { dispose: () => log('dispose'), forceDispose: () => log('force'), status: () => ({ label: 'fake://' + ctx.mode, ready: true }) };
       own(resource);
       ${options.ownTwice ? "own(resource);" : ""}
@@ -43,7 +42,13 @@ test("a declared provider is acquired once, exposed on ctx and disposed on shutd
     "providers/fake.js": fakeProvider(),
     "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"] } }),
     "modules/probe/module.config.js": `
-      export default (ctx) => ({ seen: ctx.models === undefined });
+      import { defineConfig } from '@tulipes/core/config';
+      import { z } from 'zod/v4';
+      export default defineConfig({ schema: z.object({ seen: z.boolean().default(false) }) });
+    `,
+    "modules/probe/bootstrap/probe.bootstrap.js": `
+      import { appendFileSync } from 'node:fs';
+      export default (ctx) => appendFileSync(new URL('../../../providers/log.txt', import.meta.url), 'bootstrap models=' + (ctx.models ? 'available' : 'missing') + ' seen=' + ctx.config.probe.seen + '\\n');
     `,
   });
 
@@ -52,13 +57,14 @@ test("a declared provider is acquired once, exposed on ctx and disposed on shutd
 
   expect(models.get("User")).toBe("model:User");
   // Config factories run before acquisition: the slot is not there yet.
-  expect(handle.ctx.config.probe).toEqual({ seen: true });
+  // The provider was acquired before any namespace loaded; bootstrap saw both.
+  expect(handle.ctx.config.probe).toEqual({ seen: false });
   expect(handle.providers).toEqual([{ capability: "models", provider: "fake", label: "fake://script", ready: true }]);
-  expect(await readLog(app.rootDir)).toEqual(["acquire mode=script bootstrap=false modules=probe"]);
+  expect(await readLog(app.rootDir)).toEqual(["acquire mode=script config={} modules=probe", "bootstrap models=available seen=false"]);
 
   await handle.shutdown();
 
-  expect(await readLog(app.rootDir)).toEqual(["acquire mode=script bootstrap=false modules=probe", "dispose"]);
+  expect(await readLog(app.rootDir)).toEqual(["acquire mode=script config={} modules=probe", "bootstrap models=available seen=false", "dispose"]);
 });
 
 test("a module that requires models is refused before any module code is imported", async () => {
@@ -72,25 +78,19 @@ test("a module that requires models is refused before any module code is importe
   );
 });
 
-test("models/ and bootstrap/ directories imply the models requirement", async () => {
-  for (const file of ["modules/probe/models/user.model.js", "modules/probe/bootstrap/seed.bootstrap.js"]) {
-    const app = await fixture({ [file]: `throw new Error('model code imported');` });
+test("a models/ directory implies the models requirement", async () => {
+  const app = await fixture({ "modules/probe/models/user.model.js": `throw new Error('model code imported');` });
 
-    await expect(app.boot({ mode: "script" })).rejects.toThrow(
-      new RegExp(`\\[probe\\] requires capability "models" \\(has ${file.includes("models/") ? "models" : "bootstrap"}/ files\\)`),
-    );
-  }
+  await expect(app.boot({ mode: "script" })).rejects.toThrow(/\[probe\] requires capability "models" \(has models\/ files\)/);
 });
 
 test("an installed but undeclared provider is never imported, even with MONGO_URI set", async () => {
   const app = await fixture({
     "providers/fake.js": `throw new Error('provider imported without a declaration');`,
-    "modules/probe/meta.variables.json": JSON.stringify({
-      variables: [
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
         { name: "PORT", type: "number", default: 0, description: "Ephemeral HTTP port" },
         { name: "MONGO_URI", type: "url", default: "mongodb://127.0.0.1:1/unused", description: "Leftover" },
-      ],
-    }),
+      ] } }),
   });
 
   const handle = await app.boot({ mode: "script" });
@@ -119,7 +119,7 @@ test("a provider that fails after owning its resource is still disposed and the 
 test("owning twice, a foreign contract or a mismatched capability are provider errors", async () => {
   const cases: [Parameters<typeof fakeProvider>[0], RegExp][] = [
     [{ ownTwice: true }, /called own\(\) twice/],
-    [{ contract: 2 }, /implements provider contract 2; this core supports 1/],
+    [{ contract: 1 }, /implements provider contract 1; this core supports 2/],
     [{ capability: "queues" }, /provides capability "queues" but is declared for "models"/],
   ];
   for (const [options, message] of cases) {
@@ -181,21 +181,24 @@ test("declaration typos fail closed in both the app manifest and a module manife
   await expect(module.boot({ mode: "script" })).rejects.toThrow(/\[probe\] package\.json "tulipes" key: requires\.0 — /);
 });
 
-test("offline inspection validates declarations without resolving or importing the provider", async () => {
+test("inspection validates declarations without resolving or importing the provider", async () => {
   const declaredButAbsent = await fixture({
     "package.json": declare({ models: "@tulipes/not-installed-anywhere" }),
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { offline: true, requires: ["models"] } }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"] } }),
     "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest');`,
   });
 
-  await expect(inspectRoutes({ rootDir: declaredButAbsent.rootDir })).resolves.toMatchObject({ routes: expect.anything() });
+  const inspected = await declaredButAbsent.boot({ inspect: true });
+  expect(inspected.providers).toEqual([expect.objectContaining({ capability: "models", provider: "@tulipes/not-installed-anywhere", skipped: "inspect" })]);
+  expect(() => (inspected.ctx.models as { get(name: string): unknown }).get("User")).toThrow(/ctx\.models is not available during inspection/);
+  await inspected.shutdown();
 
   const unmet = await fixture({
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { offline: true, requires: ["models"] } }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"] } }),
     "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest');`,
   });
 
-  await expect(inspectRoutes({ rootDir: unmet.rootDir })).rejects.toThrow(/\[probe\] requires capability "models"/);
+  await expect(unmet.boot({ inspect: true })).rejects.toThrow(/\[probe\] requires capability "models"/);
 });
 
 /** A provider whose resource can serve and drain, logging the order of events. */
@@ -203,7 +206,7 @@ const servingProvider = (options: { consumers?: number; serve?: boolean } = {}) 
   import { appendFileSync } from 'node:fs';
   const log = line => appendFileSync(new URL('./log.txt', import.meta.url), line + '\\n');
   export default {
-    contract: 1, capability: 'queues', name: 'fake-queues',
+    contract: 2, capability: 'queues', name: 'fake-queues',
     async acquire({ ctx }, report, own) {
       own({
         ${options.serve === false ? "" : `serve: () => { log('serve mode=' + ctx.mode); return ${options.consumers ?? 1}; },`}
@@ -247,17 +250,18 @@ test("serve() runs in worker mode only and its count gates the worker", async ()
   expect(await readLog(cannotServe.rootDir)).toEqual(["drain", "dispose"]);
 });
 
-test("drain() runs before module onShutdown and dispose() after it, in one shutdown", async () => {
+test("ctx.signal aborts and drain() runs before bootstrap cleanups, and dispose() after them, in one shutdown", async () => {
   const app = await fixture({
     "package.json": declare({ queues: "./providers/queues.js" }),
     "providers/queues.js": servingProvider(),
     "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["queues"] } }),
-    "modules/probe/module.config.js": `
+    "modules/probe/bootstrap/probe.bootstrap.js": `
       import { appendFileSync } from 'node:fs';
-      const log = line => appendFileSync(new URL('../../providers/log.txt', import.meta.url), line + '\\n');
-      export default () => ({});
-      export function onDrain() { log('module onDrain'); }
-      export function onShutdown(ctx) { log('module onShutdown queues=' + (ctx.queues ? 'available' : 'gone')); }
+      const log = line => appendFileSync(new URL('../../../providers/log.txt', import.meta.url), line + '\\n');
+      export default (ctx) => {
+        ctx.signal.addEventListener('abort', () => log('module abort'));
+        return () => log('module cleanup queues=' + (ctx.queues ? 'available' : 'gone'));
+      };
     `,
   });
 
@@ -265,9 +269,9 @@ test("drain() runs before module onShutdown and dispose() after it, in one shutd
   await handle.shutdown();
 
   const log = await readLog(app.rootDir);
-  // onDrain and drain run concurrently; both precede onShutdown, which precedes dispose.
-  expect(log.slice(0, 2).sort()).toEqual(["drain", "module onDrain"]);
-  expect(log.slice(2)).toEqual(["module onShutdown queues=available", "dispose"]);
+  // The abort and the provider drain both precede the cleanup, which precedes dispose.
+  expect(log.slice(0, 2).sort()).toEqual(["drain", "module abort"]);
+  expect(log.slice(2)).toEqual(["module cleanup queues=available", "dispose"]);
 });
 
 test("a queues/ directory implies the queues requirement", async () => {
@@ -281,7 +285,7 @@ const transportProvider = `
   import { appendFileSync } from 'node:fs';
   const log = line => appendFileSync(new URL('./log.txt', import.meta.url), line + '\\n');
   export default {
-    contract: 1, capability: 'sockets', name: 'fake-sockets', situations: ['backend'],
+    contract: 2, capability: 'sockets', name: 'fake-sockets', situations: ['backend'],
     async acquire({ ctx, situation }, report, own) {
       log('acquire situation=' + situation);
       own({
@@ -317,7 +321,9 @@ test("a backend-only provider attaches before listen and is skipped elsewhere wi
     // Worker mode refuses for lack of consumers, but the skipped provider is not the reason.
     if (handle instanceof Error) expect(handle.message).toMatch(/zero processors/);
     else {
-      expect(handle.ctx.sockets).toBeUndefined();
+      // Inspection hands out a stub that throws on use; the other modes hand out nothing.
+      if (situation === "inspect") expect(() => (handle.ctx.sockets as { of(name: string): unknown }).of("/probe")).toThrow(/not available during inspection/);
+      else expect(handle.ctx.sockets).toBeUndefined();
       expect(handle.providers).toEqual([expect.objectContaining({ capability: "sockets", skipped: situation, ready: true })]);
       await handle.shutdown();
     }
@@ -339,4 +345,53 @@ test("a sockets/ directory implies the sockets requirement", async () => {
   const app = await fixture({ "modules/probe/sockets/live.sockets.js": `throw new Error('socket code imported');` });
 
   await expect(app.boot({ mode: "script" })).rejects.toThrow(/\[probe\] requires capability "sockets" \(has sockets\/ files\)/);
+});
+
+test("a declared settings provider's store is what the manager loads, writes and watches, and it never lands on ctx", async () => {
+  const app = await fixture({
+    "package.json": declare({ settings: "./providers/store.js" }),
+    "providers/store.js": `
+      import { appendFileSync } from 'node:fs';
+      import { MemorySettingsStore } from '@tulipes/core/config';
+      const log = line => appendFileSync(new URL('./log.txt', import.meta.url), line + '\\n');
+      class Store extends MemorySettingsStore {
+        constructor() { super('fake store'); }
+        async save(namespace, values, expectedVersion, actor) { log('save ' + namespace + ' v' + expectedVersion + ' by ' + actor.id); return super.save(namespace, values, expectedVersion, actor); }
+        watch(listener) { globalThis.__push = (namespace, stored) => listener(namespace, stored); return () => log('unwatch'); }
+      }
+      export default {
+        contract: 2, capability: 'settings', name: 'fake-store',
+        async acquire({ ctx }, report, own) {
+          log('acquire models=' + (ctx.models ? 'present' : 'absent'));
+          own({ dispose: () => log('dispose'), status: () => ({ label: 'fake store', ready: true }) });
+          return new Store();
+        },
+      };
+    `,
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module" }),
+    "modules/probe/module.config.js": `
+      import { defineConfig } from '@tulipes/core/config';
+      import { z } from 'zod/v4';
+      export default defineConfig({ schema: z.object({ greeting: z.string().default('Hello') }) });
+    `,
+  });
+
+  const handle = await app.boot({ mode: "script" });
+  try {
+    // ctx.settings is core's manager; the provider's store sits behind it.
+    expect(handle.ctx.settings.status()).toEqual({ label: "fake store", ready: true });
+    expect(handle.providers).toEqual([{ capability: "settings", provider: "fake-store", label: "fake store", ready: true }]);
+    expect(handle.ctx.config.probe).toEqual({ greeting: "Hello" });
+
+    await handle.ctx.settings.set("probe", { greeting: "Hi" }, { id: "operator" });
+    expect(handle.ctx.config.probe).toEqual({ greeting: "Hi" });
+
+    (globalThis as unknown as { __push: (namespace: string, stored: unknown) => void }).__push("probe", { values: { greeting: "Elsewhere" }, version: 3, updated_at: "now", updated_by: { id: "other" } });
+    await expect.poll(() => handle.ctx.config.probe).toEqual({ greeting: "Elsewhere" });
+  } finally {
+    await handle.shutdown();
+  }
+  expect(await readLog(app.rootDir)).toEqual(["acquire models=absent", "save probe v0 by system", "save probe v1 by operator", "unwatch", "dispose"]);
+  // No file store was used: the declaration replaced it.
+  await expect(readFile(join(app.rootDir, "config/settings.development.json"), "utf8")).rejects.toThrow();
 });

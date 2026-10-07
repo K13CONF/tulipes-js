@@ -1,6 +1,6 @@
-import type { SpecSource, SpecRoute } from "./extract.js";
-import { pathParams, toOpenApiPath } from "./extract.js";
-import { toJsonSchema, type JsonSchema } from "./json-schema.js";
+import type { SpecSource, SpecRoute } from "./extract.ts";
+import { pathParams, toOpenApiPath } from "./extract.ts";
+import { toJsonSchema, type JsonSchema } from "./json-schema.ts";
 
 /**
  * OpenAPI 3.1 — chosen over 3.0 because its schema dialect *is* JSON

@@ -6,7 +6,7 @@ import {
   type Query,
 } from "mongoose";
 
-import type { Actor, SoftDeleteFields } from "./types.js";
+import type { Actor, SoftDeleteFields } from "./types.ts";
 
 /** Option carried on a query/aggregation to opt out of the soft-delete filter. */
 interface SoftDeleteOptions {

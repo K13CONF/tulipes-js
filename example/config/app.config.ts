@@ -1,4 +1,3 @@
-import { apiPrefix } from "./routes.js";
 import type { AppConfigFn } from "@tulipes/core/boot";
 
 /**
@@ -10,7 +9,7 @@ import type { AppConfigFn } from "@tulipes/core/boot";
  *
  * Add a key here when two or more modules share a value. Config belonging
  * to ONE feature goes in that module's `module.config.ts` instead, where
- * `yarn sync` types it for you — that is where `users.maxSessions` and
+ * `pnpm sync` types it for you — that is where `users.maxSessions` and
  * `users.signupMode` live. A value that differs per deployment belongs in
  * neither: declare it in a module's `meta.variables.json` and read it with
  * `Environment.get`, the way MONGO_URI, CORS_ORIGINS and BODY_LIMIT do.
@@ -27,12 +26,12 @@ const appConfig = (() => ({
   },
 
   /**
-   * Route prefixing. Modules build paths from this instead of hardcoding
-   * "/api/v1", so versioning the whole API is a one-line change in config/routes.ts:
-   * `router.get(`${config.api!.prefix}/users`, …)`.
+   * Route prefixing. A router a routes file returns is mounted under this
+   * prefix, so versioning the whole API is a one-line change here; a module
+   * that wants another path says so with `ctx.routes.mount(router, "/x")`.
    */
   api: {
-    prefix: apiPrefix,
+    prefix: "/api/v1",
   },
 
   /**
@@ -65,7 +64,7 @@ export default appConfig;
 
 /**
  * Types these keys at every call site: `config.pagination!.maxLimit` is a
- * number, not `unknown`. `yarn sync` does this automatically for
+ * number, not `unknown`. `pnpm sync` does this automatically for
  * module.config.ts factories; the app-level seed types itself here.
  * Partial because the config object is empty until this factory runs.
  */

@@ -1,6 +1,6 @@
 import type { Provider } from "@tulipes/core/boot";
 
-import { initSockets } from "./load-sockets.js";
+import { initSockets } from "./load-sockets.ts";
 
 /**
  * The "sockets" provider an app selects with
@@ -13,7 +13,7 @@ import { initSockets } from "./load-sockets.js";
  * phase disconnects clients alongside the HTTP drain, exactly as before.
  */
 export const provider: Provider<"sockets"> = {
-  contract: 1,
+  contract: 2,
   capability: "sockets",
   name: "socket.io",
   situations: ["backend"],

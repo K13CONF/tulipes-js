@@ -8,12 +8,22 @@ export class AccessLease {
   #pending: Promise<boolean> | undefined;
   #abort: AbortController | undefined;
 
+  readonly #authorize: (signal: AbortSignal) => Promise<boolean>;
+  readonly #intervalMs: number;
+  readonly #timeoutMs: number;
+  readonly #onInvalid: () => void;
+
   constructor(
-    private readonly authorize: (signal: AbortSignal) => Promise<boolean>,
-    private readonly intervalMs: number,
-    private readonly timeoutMs: number,
-    private readonly onInvalid: () => void,
-  ) {}
+    authorize: (signal: AbortSignal) => Promise<boolean>,
+    intervalMs: number,
+    timeoutMs: number,
+    onInvalid: () => void,
+  ) {
+    this.#authorize = authorize;
+    this.#intervalMs = intervalMs;
+    this.#timeoutMs = timeoutMs;
+    this.#onInvalid = onInvalid;
+  }
 
   get valid(): boolean {
     return !this.#closed && Date.now() < this.#expiresAt;
@@ -37,7 +47,7 @@ export class AccessLease {
     const started = Date.now();
     const deadline = Math.min(
       this.#expiresAt || Infinity,
-      started + this.timeoutMs,
+      started + this.#timeoutMs,
     );
     const abort = new AbortController();
     this.#abort = abort;
@@ -47,7 +57,7 @@ export class AccessLease {
 
     // The race bounds the response wait; close() also tracks the underlying work.
     // Abort stops cooperative callbacks but is not proof a driver query stopped.
-    this.#pending = Promise.resolve().then(() => this.authorize(abort.signal));
+    this.#pending = Promise.resolve().then(() => this.#authorize(abort.signal));
     const stopped = new Promise<never>((_resolve, reject) => {
       cancelled = () => reject(new Error("Authorization check stopped"));
       abort.signal.addEventListener("abort", cancelled, { once: true });
@@ -63,15 +73,15 @@ export class AccessLease {
       if (!allowed) throw new HttpError(403, "forbidden");
 
       // A slow successful query must not extend a stale decision's lifetime.
-      this.#expiresAt = started + this.intervalMs + this.timeoutMs;
+      this.#expiresAt = started + this.#intervalMs + this.#timeoutMs;
       this.#timer = setTimeout(() => {
         if (!this.valid) {
-          this.onInvalid();
+          this.#onInvalid();
           return;
         }
 
-        void this.#check().catch(() => this.onInvalid());
-      }, Math.max(0, started + this.intervalMs - Date.now()));
+        void this.#check().catch(() => this.#onInvalid());
+      }, Math.max(0, started + this.#intervalMs - Date.now()));
       this.#timer.unref();
     } catch (error) {
       if (this.#closed) return;

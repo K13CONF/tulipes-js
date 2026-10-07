@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 // Every published package, in release order; core first because its version names the tag.
-const packages = ['core', 'spec', 'mongoose', 'bullmq', 'socket.io', 'cli'];
+const packages = ['core', 'spec', 'mongoose', 'bullmq', 'socket.io', 'mcp', 'testing', 'cli'];
 const digest = file => 'sha512-' + createHash('sha512').update(readFileSync(file)).digest('base64');
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: 'inherit', ...options });
 const readJson = file => JSON.parse(readFileSync(file, 'utf8'));
@@ -26,9 +26,11 @@ function verify(dir, expectedCommit) {
     for (const required of ['package/LICENSE', 'package/' + packed.exports['.'].slice(2)]) {
       if (!listing.includes(required)) throw new Error(`Missing packed file: ${required}`);
     }
-    if (name === 'cli' && (packed.bin?.tulipes !== './dist/bin.js' || !listing.includes('package/dist/bin.js') || !listing.includes('package/templates/CLAUDE.md'))) throw new Error('Missing compiled CLI or templates');
+    if (name === 'cli' && (packed.bin?.tulipes !== './dist/bin.js' || !listing.includes('package/dist/bin.js') || !listing.includes('package/templates/CLAUDE.md') || !listing.includes('package/templates/app/package.json') || !listing.includes('package/templates/minimal/package.json') || !listing.includes('package/templates/versions.json'))) throw new Error('Missing compiled CLI or templates');
     if (name === 'core' && (packed.bin || listing.some(path => /^package\/(dist\/cli|templates)\//.test(path)))) throw new Error('Core must not ship the CLI or templates');
-    if (listing.some(path => /\/(?:node_modules|tests|\.envs)\//.test(path))) throw new Error('Unexpected private/test content in archive');
+    if (name === 'mcp' && (packed.bin?.['tulipes-mcp'] !== './dist/bin.js' || !listing.includes('package/dist/bin.js') || packed.dependencies?.['@tulipes/core'])) throw new Error('The MCP server must ship its binary and reach core as a peer only');
+    // The CLI's templates/app is the reference application and legitimately carries tests and env seeds.
+    if (listing.some(path => !path.startsWith('package/templates/') && /\/(?:node_modules|tests|\.envs)\//.test(path))) throw new Error('Unexpected private/test content in archive');
     // Core must not carry a driver — not as a dependency, and not through an
     // emitted declaration that a consumer's typecheck would need to resolve.
     const extracted = ['mongoose', 'bullmq', 'ioredis', 'socket.io', 'tsx'];
@@ -51,7 +53,9 @@ function prepare(dir) {
     const source = readJson(`packages/${name}/package.json`);
     if (readFileSync(`packages/${name}/LICENSE`, 'utf8') !== readFileSync('LICENSE', 'utf8')) throw new Error('Package license differs from root LICENSE');
     const file = `${name}-${source.version}.tgz`;
-    run('yarn', ['workspace', source.name, 'pack', '--out', join(dir, file)]);
+    // pnpm names a scoped archive "tulipes-core-<version>.tgz"; the manifest keeps the short form.
+    run('pnpm', ['--filter', source.name, 'pack', '--pack-destination', resolve(dir)]);
+    renameSync(join(dir, `${source.name.replace('@', '').replace('/', '-')}-${source.version}.tgz`), join(dir, file));
     manifest.packages.push({ name: source.name, version: source.version, file, integrity: digest(join(dir, file)) });
   }
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');

@@ -1,8 +1,8 @@
 import type { Express } from "express";
 
-import { BootReport } from "../errors/boot-error.js";
-import { RAI_TAG, MOUNT_PATH, type RaiTag, type RouteRecord } from "./rai.js";
-import { routePath } from "./paths.js";
+import { BootReport } from "../errors/boot-error.ts";
+import { RAI_TAG, MOUNT_PATH, type RaiTag, type RouteRecord } from "./rai.ts";
+import { routePath } from "./paths.ts";
 
 /**
  * Validate each endpoint's execution chain. Middleware remains trusted app

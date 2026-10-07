@@ -1,14 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, vi } from "vitest";
-import { fixture } from "./fixture.js";
+import { fixture } from "./fixture.ts";
 
 const valid = {
   JWT_ACCESS_SECRET: "fixture-access-key-long-enough",
   JWT_REFRESH_SECRET: "fixture-refresh-key-long-enough",
   AUTH_ADMIN_EMAIL: "fixture@example.test",
   AUTH_ADMIN_PASSWORD: "fixture-password-long-enough",
-  JWT_ACCESS_TTL: "15m",
-  JWT_REFRESH_TTL: "30d",
 };
 
 test.each([
@@ -26,16 +24,14 @@ test.each([
     for (const [key, value] of Object.entries(values)) vi.stubEnv(key, value);
 
     const app = await fixture({
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: Object.keys(valid).map((name) => ({
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: Object.keys(valid).map((name) => ({
           name,
           type: "secret",
           required: true,
           description: name,
-        })),
-      }),
-      "modules/probe/module.config.ts": await readFile(
-        "example/modules/auth/module.config.ts",
+        })) } }),
+      "modules/probe/bootstrap/credentials.bootstrap.ts": await readFile(
+        "example/modules/auth/bootstrap/credentials.bootstrap.ts",
         "utf8",
       ),
     });
@@ -64,16 +60,14 @@ test.each(["staging", "production", "development"] as const)(
     for (const [key, value] of Object.entries(valid)) vi.stubEnv(key, value);
 
     const app = await fixture({
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: Object.keys(valid).map((name) => ({
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: Object.keys(valid).map((name) => ({
           name,
           type: "secret",
           required: true,
           description: name,
-        })),
-      }),
-      "modules/probe/module.config.ts": await readFile(
-        "example/modules/auth/module.config.ts",
+        })) } }),
+      "modules/probe/bootstrap/credentials.bootstrap.ts": await readFile(
+        "example/modules/auth/bootstrap/credentials.bootstrap.ts",
         "utf8",
       ),
     });

@@ -1,0 +1,21 @@
+{
+  "name": "@app/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "tulipes": {
+    "tier": "app",
+    "priority": 950,
+    "dependsOn": [
+      "auth",
+      "core"
+    ]
+  },
+  "dependencies": {
+    "@app/auth": "workspace:*",
+    "@app/core": "workspace:*",
+    "@tulipes/core": "workspace:*",
+    "express": "^5",
+    "zod": "^3.25"
+  }
+}

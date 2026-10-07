@@ -1,7 +1,7 @@
 import type { Ctx } from "@tulipes/core/boot";
 import type { Auth } from "@tulipes/core/http";
-import type { UserDoc } from "./documents.js";
-import { isRevoked, loadSession } from "./tokens.js";
+import type { UserDoc } from "./documents.ts";
+import { isRevoked, loadSession } from "./tokens.ts";
 
 /** Capture the authenticated token identity, then reload its authority on demand. */
 export function createAccessCheck(

@@ -3,9 +3,10 @@ import jwt from "jsonwebtoken";
 import type { Request } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
-import { currentCredentialVersion } from "./passwords.js";
+import { currentCredentialVersion } from "./passwords.ts";
+import { forgetSession, forgetUser } from "./session-cache.ts";
 
-import type { SessionDoc } from "./documents.js";
+import type { SessionDoc } from "./documents.ts";
 
 /**
  * What a verified token tells us. Roles are never trusted from here.
@@ -42,12 +43,10 @@ const secret = (ctx: Ctx, typ: "access" | "refresh"): string =>
     ),
   );
 
+// Read at signing time, never cached: token policy is a setting an operator
+// changes without a restart.
 const ttl = (ctx: Ctx, typ: "access" | "refresh"): string =>
-  String(
-    ctx.Environment.get(
-      typ === "access" ? "JWT_ACCESS_TTL" : "JWT_REFRESH_TTL",
-    ),
-  );
+  String(typ === "access" ? ctx.config.auth?.accessTtl ?? "15m" : ctx.config.auth?.refreshTtl ?? "30d");
 
 /**
  * Mint a pair for an existing session.
@@ -172,6 +171,10 @@ export async function rotateSession(
         },
       );
 
+    // Either branch changed the row — rotated, or expired by reuse — so a
+    // cached copy of it is stale either way; the next request re-reads.
+    if (previous) await forgetSession(ctx, claims.sid);
+
     // Returning the pre-update row tells us which atomic branch actually ran.
     // Another replay may revoke this pair before its HTTP response is delivered.
     return previous?.refresh_jti === claims.jti ? pair : undefined;
@@ -244,25 +247,28 @@ export async function loadSession(
 
 /**
  * Record that a session is still in use — at most once per `afterSeconds`,
- * because a write on every request would cost more than the field is worth.
+ * because a write on every request would cost more than the field is
+ * worth. Returns whether it wrote, so a cached copy can follow.
  */
 export async function touchSession(
   ctx: Ctx,
   session: SessionDoc,
   afterSeconds: number,
-): Promise<void> {
+): Promise<boolean> {
   const age = Date.now() - (session.last_seen_at?.getTime() ?? 0);
-  if (age < afterSeconds * 1000) return;
+  if (age < afterSeconds * 1000) return false;
 
   const now = new Date();
   session.last_seen_at = now;
   await ctx
     .models!.get("Session")
     .updateOne({ sid: session.sid }, { last_seen_at: now });
+  return true;
 }
 
-/** End one session: the refresh half dies with its row. */
+/** End one session: the refresh half dies with its row, and its cached identity with it. */
 export async function endSession(ctx: Ctx, sid: string): Promise<boolean> {
+  await forgetSession(ctx, sid);
   const result = await ctx.models!.get("Session").deleteOne({ sid });
   return result.deletedCount === 1;
 }
@@ -272,6 +278,7 @@ export async function revokeAccess(
   ctx: Ctx,
   claims: TokenClaims,
 ): Promise<void> {
+  await forgetSession(ctx, claims.sid);
   await ctx
     .models!.get("RevokedToken")
     .updateOne(
@@ -294,6 +301,7 @@ export async function isRevoked(ctx: Ctx, jti: string): Promise<boolean> {
 
 /** Drop stored sessions for a user; this alone does not block concurrent sign-ins. */
 export async function endAllSessions(ctx: Ctx, userId: string): Promise<void> {
+  await forgetUser(ctx, userId);
   await ctx.models!.get("Session").deleteMany({ user: userId });
 }
 

@@ -45,18 +45,21 @@ export async function appBoot(rootDir: string): Promise<BootFn> {
 }
 
 /**
- * Registers the TypeScript loader before any app file is imported.
- *
- * The published CLI runs as plain node while an app's modules are
- * TypeScript, so without this every dynamic import of a `.ts` file fails
- * to resolve. The hook is process-wide, so it also covers imports the
- * app's own core makes afterwards. Harmless when the app is compiled.
+ * An app's modules are TypeScript and the CLI imports them as they are:
+ * Node strips the types natively (every supported Node does), so there is
+ * no loader to register. What this checks is that the node running the
+ * CLI is one of those — a node too old to strip types would fail later,
+ * on the first module file, with a syntax error that says nothing about
+ * the cause.
  */
-export async function registerTypeScript(): Promise<void> {
-  try {
-    const tsx = (await import("tsx/esm/api")) as { register?: () => void };
-    tsx.register?.();
-  } catch {
-    // No tsx available: a compiled app still boots fine without it.
+export function requireNativeTypeScript(): void {
+  const features = process.features as { typescript?: string | false };
+  if (!features.typescript) {
+    throw new Error(`Node ${process.versions.node} cannot run TypeScript natively — Tulipes apps need Node 24 (or 22.18+)`);
   }
+}
+
+/** @deprecated Since 0.11 nothing is registered; kept for callers written against 0.10. */
+export async function registerTypeScript(): Promise<void> {
+  requireNativeTypeScript();
 }

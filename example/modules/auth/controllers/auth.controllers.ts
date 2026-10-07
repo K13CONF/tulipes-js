@@ -7,9 +7,9 @@ import {
   type FieldIssue,
 } from "@tulipes/core/http";
 
-import { auth } from "../helpers/auth.js";
-import type { PasswordIdentity, UserDoc } from "../helpers/documents.js";
-import { setPassword } from "../helpers/passwords.js";
+import { auth } from "../helpers/auth.ts";
+import type { PasswordIdentity, UserDoc } from "../helpers/documents.ts";
+import { setPassword } from "../helpers/passwords.ts";
 import {
   endSession,
   listSessions,
@@ -19,7 +19,7 @@ import {
   revokeAccess,
   verify,
   type TokenClaims,
-} from "../helpers/tokens.js";
+} from "../helpers/tokens.ts";
 
 interface Credentials {
   email?: string;
@@ -43,7 +43,11 @@ interface Credentials {
  * message and there is no second string to keep in step.
  */
 export class AuthController {
-  constructor(private readonly ctx: Ctx) {}
+  readonly #ctx: Ctx;
+
+  constructor(ctx: Ctx) {
+    this.#ctx = ctx;
+  }
 
   /** Creates the account and its credential. */
   register(): RequestHandler {
@@ -61,14 +65,14 @@ export class AuthController {
       // The guards above threw unless both are present — a narrowing
       // TypeScript cannot make through the issues array.
 
-      if (this.ctx.config.users?.signupMode !== "open") {
-        const mode = this.ctx.config.users?.signupMode ?? "closed";
+      if (this.#ctx.config.users?.signupMode !== "open") {
+        const mode = this.#ctx.config.users?.signupMode ?? "closed";
         throw new HttpError(403, req.t("registrationClosed", { mode }), {
           code: "REGISTRATION_CLOSED",
         });
       }
 
-      const User = this.ctx.models!.get<UserDoc>("User");
+      const User = this.#ctx.models!.get<UserDoc>("User");
       const normalised = email!.toLowerCase();
       if (await User.countDocuments({ email: normalised }).limit(1)) {
         // Deliberately the same shape as any other validation failure: a
@@ -79,13 +83,13 @@ export class AuthController {
 
       const user = await User.create({ email: normalised, role: "user" });
       const credentialVersion = await setPassword(
-        this.ctx,
+        this.#ctx,
         String(user._id),
         password!,
       );
 
       const tokens = await startSession(
-        this.ctx,
+        this.#ctx,
         String(user._id),
         credentialVersion,
         originOf(req),
@@ -114,7 +118,7 @@ export class AuthController {
 
           try {
             const tokens = await startSession(
-              this.ctx,
+              this.#ctx,
               String(user._id),
               credentialVersion,
               originOf(req),
@@ -145,11 +149,11 @@ export class AuthController {
         throw new HttpError(422, "refreshRequired", { field: "refresh_token" });
       }
 
-      const claims = verify(this.ctx, refresh_token, "refresh");
+      const claims = verify(this.#ctx, refresh_token, "refresh");
       if (!claims)
         throw new HttpError(401, "refreshInvalid", { field: "refresh_token" });
 
-      const user = await this.ctx
+      const user = await this.#ctx
         .models!.get<UserDoc>("User")
         .findById(claims.sub)
         .lean();
@@ -157,7 +161,7 @@ export class AuthController {
 
       // Rotation also detects reuse and expires this device's token family.
       // A duplicate client request has the same consequence as token theft.
-      const tokens = await rotateSession(this.ctx, claims);
+      const tokens = await rotateSession(this.#ctx, claims);
       if (!tokens)
         throw new HttpError(401, "refreshUsed", { field: "refresh_token" });
 
@@ -172,12 +176,12 @@ export class AuthController {
 
       // Deleting the row kills the refresh half: no session, no rotation,
       // and the next request carrying this access token resolves to guest.
-      if (session) await endSession(this.ctx, session.sid);
+      if (session) await endSession(this.#ctx, session.sid);
 
       // Blacklisting the access token is what makes logout take effect
       // now, rather than whenever the token would have expired.
       const access = this.#accessClaims(req);
-      if (access) await revokeAccess(this.ctx, access);
+      if (access) await revokeAccess(this.#ctx, access);
 
       res.respond({
         data: {
@@ -221,7 +225,7 @@ export class AuthController {
   sessions(): RequestHandler {
     return async (req: Request, res: Response) => {
       const { user, session } = req.auth;
-      const rows = await listSessions(this.ctx, String(user!._id));
+      const rows = await listSessions(this.#ctx, String(user!._id));
 
       res.respond({
         data: rows.map((row) => ({
@@ -245,12 +249,12 @@ export class AuthController {
 
       // Scoped to the caller's own sessions: a sid is guessable enough
       // that ending anyone else's must not be one request away.
-      const owned = await listSessions(this.ctx, String(user!._id));
+      const owned = await listSessions(this.#ctx, String(user!._id));
       if (!owned.some((row) => row.sid === sid)) {
         throw new HttpError(404, "noSuchSession", { field: "sid" });
       }
 
-      await endSession(this.ctx, String(sid));
+      await endSession(this.#ctx, String(sid));
       res.respond({ data: { message: req.t("sessionEnded"), sid } });
     };
   }
@@ -266,7 +270,7 @@ export class AuthController {
       const expectedVersion = req.auth.session?.credential_version;
       if (!expectedVersion) throw new HttpError(401, "invalidCredentials");
       const credentialVersion = await setPassword(
-        this.ctx,
+        this.#ctx,
         userId,
         password!,
         expectedVersion,
@@ -276,7 +280,7 @@ export class AuthController {
       // request — a fresh session keeps this client signed in while the
       // other devices are signed out.
       const tokens = await startSession(
-        this.ctx,
+        this.#ctx,
         userId,
         credentialVersion,
         originOf(req),
@@ -303,6 +307,6 @@ export class AuthController {
   #accessClaims(req: Request): TokenClaims | undefined {
     const header = req.header("authorization") ?? "";
     if (!header.startsWith("Bearer ")) return undefined;
-    return verify(this.ctx, header.slice(7), "access");
+    return verify(this.#ctx, header.slice(7), "access");
   }
 }

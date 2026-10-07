@@ -1,12 +1,16 @@
-import { FULL_FEATURES, runInit, type InitFeatures, type InitPreset } from "./init.js";
-import { runSync } from "./sync.js";
-import { runEnvCheck } from "./env-check.js";
-import { runNewModule } from "./new-module.js";
-import { runDev } from "./dev.js";
-import { runUpdate } from "./update.js";
-import { runRoutes } from "./routes.js";
-import { runSpec } from "./spec.js";
-import { appCoreVersion, cliVersion, coreVersion } from "./package-info.js";
+import { FULL_FEATURES, runInit, type InitFeatures, type InitPreset } from "./init.ts";
+import { runSync } from "./sync.ts";
+import { runEnvCheck } from "./env-check.ts";
+import { runNewModule } from "./new-module.ts";
+import { runDev } from "./dev.ts";
+import { runUpdate } from "./update.ts";
+import { runConfigCheck } from "./config-check.ts";
+import { runRoutes } from "./routes.ts";
+import { runSpec } from "./spec.ts";
+import { runAgentManifest } from "./agent.ts";
+import { runMigrate } from "./migrate.ts";
+import { runConfigImport } from "./config-import.ts";
+import { appCoreVersion, cliVersion, coreVersion } from "./package-info.ts";
 
 /**
  * The `tulipes` CLI. Deliberately dependency-free argument handling — a
@@ -19,21 +23,25 @@ Usage:
   tulipes init [dir]           scaffold a minimal API (no mongo/redis)
                                  --minimal | --preset minimal | --preset production
                                  --no-queues | --no-sockets  (production only) leave a provider out
-  tulipes dev [entry]          run with tsx in watch mode (default entry: app.ts), sync first
-  tulipes sync                 regenerate types/config.d.ts and .env.example
-  tulipes env:check            validate env against every meta.variables.json (CI-friendly)
+  tulipes dev [entry]          run the entrypoint with node --watch (default: app.ts), sync first
+  tulipes sync                 regenerate types/tulipes.d.ts and .env.example
+  tulipes env:check            validate env against every module's tulipes.env (CI-friendly)
+  tulipes config:check         load every settings namespace from the store and print it
   tulipes routes               list every declared endpoint, with the roles that reach it
   tulipes spec [options]       write an OpenAPI document / Postman collection (needs @tulipes/spec)
                                  --openapi <file>  --postman <file>  --url <base>
-                                 routes/spec: --offline | --runtime
+                                 both inspect the app: no service, secret or .env is needed
+  tulipes migrate 0.11         rewrite an app generated on 0.10 to the 0.11 layout and contracts
+  tulipes config:import        carry .envs values that became settings into the store
+                                 --env <APP_ENV>  --from <file>  --dry-run
+  tulipes agent manifest       print every tool the app exposes to agents, as JSON
+                                 --out <file>  write it instead   --role <role>  only what that role may call
   tulipes new module <name>    scaffold a module under ./modules
                                  --model | --no-model    force model/bootstrap files on or off
                                  --queues | --no-queues  force the queues file on or off
                                  --sockets | --no-sockets  force the sockets file on or off
                                  (default: on when package.json declares that provider)
   tulipes update               upgrade the global cli and, inside an app, the app itself
-  --offline loads shared declarations without services or runtime secrets.
-  routes/spec default to --runtime for legacy applications.
   tulipes -v                   print the cli version (and the app's, when they differ)
 `;
 
@@ -54,13 +62,45 @@ export async function main(argv: readonly string[]): Promise<void> {
     }
     case "sync":
       return runSync(rootDir);
+    case "config:check":
+      return runConfigCheck(rootDir);
+    case "config:import": {
+      try {
+        return await runConfigImport(rootDir, importArguments(rest));
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 2;
+        return;
+      }
+    }
+    case "migrate":
+      if (rest.length !== 1) {
+        console.error("Usage: tulipes migrate 0.11");
+        process.exitCode = 2;
+        return;
+      }
+      return runMigrate(rootDir, rest[0]!);
     case "env:check":
       return runEnvCheck(rootDir);
     case "routes":
     case "spec": {
       try {
         const options = inspectionArguments(rest, command);
-        return command === "routes" ? await runRoutes(rootDir, options.offline) : await runSpec(rootDir, options);
+        return command === "routes" ? await runRoutes(rootDir) : await runSpec(rootDir, options);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 2;
+        return;
+      }
+    }
+    case "agent": {
+      if (rest[0] !== "manifest") {
+        console.error("Usage: tulipes agent manifest [--out <file>] [--role <role>]");
+        process.exitCode = 2;
+        return;
+      }
+      try {
+        return await runAgentManifest(rootDir, agentArguments(rest.slice(1)));
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
         process.exitCode = 2;
@@ -108,13 +148,11 @@ export async function main(argv: readonly string[]): Promise<void> {
 }
 
 function inspectionArguments(args: readonly string[], command: "routes" | "spec") {
-  const options: { offline?: boolean; openapi?: string; postman?: string; url?: string } = {};
+  const options: { openapi?: string; postman?: string; url?: string } = {};
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
     if (arg === "--offline" || arg === "--runtime") {
-      const offline = arg === "--offline";
-      if (options.offline !== undefined && options.offline !== offline) throw new Error("Conflicting inspection modes");
-      options.offline = offline;
+      throw new Error(`${arg} was removed in 0.11: ${command} always inspects the app without services, secrets or a .env`);
     } else if (command === "spec" && (arg === "--openapi" || arg === "--postman" || arg === "--url")) {
       const value = args[++index];
       if (!value || value.startsWith("-")) throw new Error(`${arg} requires a value`);
@@ -152,4 +190,35 @@ function initArguments(args: readonly string[]): { target?: string; preset: Init
     throw new Error("--no-queues and --no-sockets apply to --preset production only");
   }
   return { target, preset: preset ?? "minimal", features };
+}
+
+function agentArguments(args: readonly string[]): { out?: string; role?: string } {
+  const options: { out?: string; role?: string } = {};
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    const value = args[i + 1];
+    if ((flag === "--out" || flag === "--role") && value && !value.startsWith("--")) {
+      options[flag === "--out" ? "out" : "role"] = value;
+      i++;
+      continue;
+    }
+    throw new Error(`unknown or incomplete option "${flag}" — usage: tulipes agent manifest [--out <file>] [--role <role>]`);
+  }
+  return options;
+}
+
+function importArguments(args: readonly string[]): { env?: string; from?: string; dryRun?: boolean } {
+  const options: { env?: string; from?: string; dryRun?: boolean } = {};
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    const value = args[i + 1];
+    if (flag === "--dry-run") { options.dryRun = true; continue; }
+    if ((flag === "--env" || flag === "--from") && value && !value.startsWith("--")) {
+      options[flag === "--env" ? "env" : "from"] = value;
+      i++;
+      continue;
+    }
+    throw new Error(`unknown or incomplete option "${flag}" — usage: tulipes config:import [--env <APP_ENV>] [--from <file>] [--dry-run]`);
+  }
+  return options;
 }

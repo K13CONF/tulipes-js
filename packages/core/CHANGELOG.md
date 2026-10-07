@@ -9,7 +9,146 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
-## [Unreleased]
+## [0.11.0-rc.1] — 2026-10-07
+
+The 0.11 line as a release candidate: every entry below is breaking for an app
+on 0.10, and `tulipes migrate 0.11` carries most of it across; the migration
+guide lists the rest. Published packages: core `0.11.0-rc.1`, `@tulipes/cli`
+`0.2.0-rc.1`, `@tulipes/spec` `0.3.2-rc.1`, `@tulipes/mongoose` `0.2.0-rc.1`,
+`@tulipes/bullmq` `0.2.0-rc.1`, `@tulipes/socket.io` `0.1.2-rc.1`, and the first
+`@tulipes/mcp` and `@tulipes/testing` at `0.1.0-rc.1`.
+
+- **`@tulipes/testing`.** `useTestApp({ rootDir, env, settings }, { beforeAll,
+  afterAll })` boots the app once per test file on a free port and shuts it
+  down; `app.request()` and the `get`/`post`/`patch`/`delete` shorthands
+  decode the envelope and type it; `app.api()` prefixes the configured API
+  prefix; `app.register()`, `app.login()` and `app.as(role)` use the auth
+  module the production preset ships. The reference suite is one file per
+  module under `modules/<name>/tests/` on it, with the app-level parity test
+  in `tests/`; both presets' vitest configs run files one after another.
+- **`tulipes migrate 0.11` and `tulipes config:import`.** The CLI rewrites
+  an app generated on 0.10: pnpm manifest and workspace file, node scripts
+  and compiler flags, the variables file into `tulipes.env`, `index.ts`
+  into `lib/`, `schemas.ts` into `schemas/`, `.ts` specifiers, declared
+  fields for parameter properties, plain routes functions with static
+  controller imports (other `runtime()` uses keep their semantics through a
+  generated helper), `defineConfig` written from the config factory, the
+  lifecycle exports moved into a bootstrap file, `inspectRoutes()` into an
+  inspection boot, and the root's devDependencies completed for what its
+  own files import. `config/migration-0.11.json` records which variables
+  became which settings; `config:import` reads it and the env file and
+  writes the values through the app's store, validated by each schema.
+  The upgrade harness runs a real 0.10 app through both.
+- **Production without tsx.** Node strips types natively, so generated
+  apps run `node app.ts`, `tulipes dev` is `node --watch`, PM2 runs node
+  directly and `tsx` is gone from every manifest. Relative imports name
+  `.ts` files, `tsconfig` sets `allowImportingTsExtensions`,
+  `rewriteRelativeImportExtensions` and `erasableSyntaxOnly`, and
+  `types/tulipes.d.ts` uses `.ts` specifiers. The CLI refuses a node that
+  cannot strip types with the reason instead of a late syntax error. The
+  workspace packages follow the same rules (their emitted JavaScript still
+  carries `.js` specifiers), so every test and harness runs on plain node.
+- **The reference app on 0.11 (production preset).** The environment is
+  eleven variables: `PORT`, `MONGO_URI`, `REDIS_URL`, `LOG_LEVEL`,
+  `LOG_CONSOLE`, `LOG_FILE`, `LOG_DIR` and the four auth secrets; proxy
+  trust, CORS, HSTS, the body limit and the rate limits are `security`
+  settings rebuilt from `onChange`, `PUBLIC_DOMAIN` is `core.publicDomain`,
+  and the log file names and rotation are constants. A `config` module
+  serves the console — `GET /config`, `GET /config/:module`,
+  `PATCH /config/:module` (schema-validated, version-checked, audited
+  without values, hot-applied) — and the `settings` module keeps only
+  `GET /settings/logs/stream`. The auth module caches a resolved session
+  in the app cache for `auth.cacheTtlSeconds` (bounded by `accessTtl`) and
+  forgets it on every revocation path, so a hit is one Redis read and a
+  revocation is refused on the next request on any replica; `forgetUser()`
+  is exported for code that writes a role.
+- **The Mongo settings store.** `@tulipes/mongoose/settings` is the
+  `settings` provider: one document per namespace in `settings` (`_id`,
+  `values`, `version`, `updated_at`, `updated_by`), writes refused on a stale
+  version with the current document in the error, the replaced document
+  kept in `settings_history`, other processes' writes delivered by a change
+  stream on a replica set and by polling otherwise. It shares the models
+  provider's connection or opens its own from `MONGO_URI`. The production
+  preset declares it; the minimal preset keeps the file store.
+- **The agent surface.** Every route declared with `rai()` is a tool —
+  name from the id (`hello:list-greetings` → `hello_list-greetings`),
+  description, a JSON Schema input built from `params`, `query` and `body`
+  (path parameters without a schema included), the permission, and
+  `read_only` for `GET`. `agent/*.agent.ts` exports `defineAgent({ summary,
+  tools })`: a summary, a curated list of routes (`"*"`, `"<module>:*"` or
+  an id), and `action({ id, description, input, handler })` tools that are
+  not endpoints, gated like a route — ACL on the id, then the schema, then
+  the handler. `agent: false` on a RAI hides an endpoint. `ctx.agent`
+  (backend only) gives `manifest(role)`, `tools(role)`, `find(name)` and
+  `invoke(name, input, actor, req?)`; `tulipes agent manifest` writes the
+  document from an inspection boot; the generated apps carry an `agent`
+  module serving `GET <prefix>/agent/tools` and `POST <prefix>/agent/tools/:name`;
+  the new `@tulipes/mcp` package (`tulipes-mcp`) serves that door to MCP
+  clients, calling every tool through the app's own HTTP with a bearer token.
+- **Generated model and job types.** `tulipes sync` now writes
+  `types/tulipes.d.ts` (replacing `types/config.d.ts`, which it removes)
+  with two more augmentations: `KnownModels` in `@tulipes/mongoose`, one
+  entry per model file keyed by the model's literal name and typed as the
+  file's default export, so `ctx.models.get("User")` returns the model
+  mongoose infers from that schema; and `KnownJobs` in `@tulipes/bullmq`,
+  derived from each queue file's new `jobs` export (`{ [queue]: zodSchema }`),
+  so `queues.add()` and `job.data` in the processor agree on the payload. A
+  queue listed in `jobs` is defined without a separate `define()` call and
+  `add()` validates every payload with its schema. Names codegen does not
+  know keep the caller-side generic and untyped (`any`) payloads.
+- **The module root is three files.** `package.json` (with the env contract
+  under `tulipes.env`, replacing `meta.variables.json`), `module.config.ts`
+  and `module.acl.ts`; public exports move to `lib/index.ts` behind
+  `package.json` `exports`, request schemas to `schemas/`. A stray root file
+  refuses the boot with the folder it belongs in. `dependsOn` is derived
+  from a module's scoped dependencies.
+- **Plain routes and one inspection.** A routes file is `(ctx) => Router |
+  void`; a returned router is mounted under `config.api.prefix`, and
+  `ctx.routes.mount(router, path)` chooses another. `defineRoutes()`,
+  `runtime()`, `tulipes.offline`, `inspectRoutes` and the `--offline` /
+  `--runtime` flags are gone: `tulipes routes` and `tulipes spec` run
+  `boot({ inspect: true })`, which mounts every route with the environment
+  declared but unresolved, providers as stubs that throw on use, settings
+  as defaults and no bootstrap — no service, secret or `.env` needed.
+- **Settings declarations.** `module.config.ts` has one export,
+  `defineConfig({ schema, onChange })`: a zod schema with a default for every
+  field. Values live in a settings store — core's file store under
+  `config/settings.<APP_ENV>.json`, or the store a `settings` provider
+  supplies — seeded on first boot, validated on every write, edited at
+  runtime through `ctx.settings.set()` and read live at `ctx.config.<module>`;
+  a field tagged `.meta({ restart: true })` persists and applies on the next
+  boot. The factory form and the `onReady`/`onDrain`/`onShutdown` exports are
+  refused by name.
+- **Bootstrap is the lifecycle.** `bootstrap/*.bootstrap.ts` runs in every
+  mode (scripts included) after settings, translations and ACL and before
+  routes or queues, and may return its cleanup, run after traffic drains in
+  reverse load order. `ctx.signal` aborts when shutdown begins. A
+  `bootstrap/` directory no longer implies a models provider.
+- **Provider contract 2.** Core runs bootstrap; `ProviderContext.runBootstrap`
+  is gone; a `settings` capability joins models, queues and sockets, acquired
+  with models before the settings load while queues and sockets are acquired
+  after bootstrap. `tulipes config:check` prints every namespace. The
+  reference app's token lifetimes, signup mode, session cap and greeting
+  became settings (32 → 27 environment variables); its production credential
+  check is a bootstrap.
+- Generated production apps and the workspace override `basic-ftp` to 6.2.1
+  and mute the unfixable braces advisory (GHSA-vfj7-8cjw-p6xm), both in
+  PM2's transitive tree; see the dependency review of 2026-10-07 in
+  `docs/security-model.md`.
+- **`tulipes init` copies the reference application** instead of rendering
+  6,659 lines of string literals: the published CLI packs `example/` into
+  `templates/app` at build time with the workspace versions, applies the app
+  name, pins the framework ranges and drops or overlays what `--no-queues`
+  and `--no-sockets` leave out. The minimal preset is a committed tree. The
+  example gains the files only a generated app had (`ecosystem.config.cjs`,
+  a standalone `tsconfig.json`, the PM2 scripts) and its README, env seeds
+  and `app.config.ts` are the generated ones.
+- **pnpm replaces yarn** for generated apps and the repository. `tulipes init`
+  writes `packageManager: pnpm@10.28.0`, a `pnpm-workspace.yaml` naming
+  `modules/*`, `pnpm.overrides` in place of `resolutions` and an
+  `onlyBuiltDependencies` allow-list; the `.yarnrc.yml` is gone. `tulipes
+  update` defaults to pnpm when no lockfile says otherwise. Existing apps
+  follow the pnpm section of [MIGRATING.md](./MIGRATING.md).
 
 ## [0.10.1] — 2026-09-12
 
@@ -506,7 +645,7 @@ generated types, ACL, the model store, queues, sockets, the three process
 modes (`backend`, `worker`, `script`), the startup banner, and the CLI —
 `init`, `dev`, `sync`, `env:check`, `new module`, `update`.
 
-[Unreleased]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.3...HEAD
+[0.11.0-rc.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.10.1...v0.11.0-rc.1
 [0.9.0-rc.3]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.2...v0.9.0-rc.3
 [0.9.0-rc.2]: https://github.com/kemora13conf/bp-backend-express/compare/v0.9.0-rc.1...v0.9.0-rc.2
 [0.9.0-rc.1]: https://github.com/kemora13conf/bp-backend-express/compare/v0.8.0...v0.9.0-rc.1

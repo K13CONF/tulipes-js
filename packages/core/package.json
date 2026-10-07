@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/core",
-  "version": "0.10.1",
+  "version": "0.11.0-rc.1",
   "description": "Module-based Express framework runtime: convention-driven boot pipeline, env contracts, ACL and the provider seam for models, queues and sockets",
   "type": "module",
   "exports": {
@@ -9,6 +9,7 @@
     "./modules": "./src/modules/index.ts",
     "./boot": "./src/boot/index.ts",
     "./acl": "./src/acl/index.ts",
+    "./agent": "./src/agent/index.ts",
     "./db": "./src/db/index.ts",
     "./queues": "./src/queues/index.ts",
     "./sockets": "./src/sockets/index.ts",
@@ -27,7 +28,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
-    "prepack": "yarn build"
+    "prepack": "pnpm build"
   },
   "publishConfig": {
     "access": "public",
@@ -37,6 +38,7 @@
       "./modules": "./dist/modules/index.js",
       "./boot": "./dist/boot/index.js",
       "./acl": "./dist/acl/index.js",
+      "./agent": "./dist/agent/index.js",
       "./db": "./dist/db/index.js",
       "./queues": "./dist/queues/index.js",
       "./sockets": "./dist/sockets/index.js",
@@ -52,7 +54,7 @@
     "express": "^5",
     "i18next": "^26.4.2",
     "i18next-fs-backend": "^2.6.7",
-    "zod": "^3.24.1"
+    "zod": "^3.25"
   },
   "devDependencies": {
     "@types/express": "^5",

@@ -6,7 +6,65 @@
   "tulipes": {
     "tier": "sys",
     "priority": 0,
-    "offline": true
+    "env": [
+      {
+        "name": "PORT",
+        "type": "number",
+        "group": "http",
+        "description": "HTTP port the backend process listens on",
+        "default": 3000
+      },
+      {
+        "name": "MONGO_URI",
+        "type": "url",
+        "group": "database",
+        "required": true,
+        "description": "MongoDB connection string"
+      },
+      {
+        "name": "REDIS_URL",
+        "type": "url",
+        "group": "redis",
+        "required": true,
+        "description": "Redis connection string (queues, cache)"
+      },
+      {
+        "name": "LOG_LEVEL",
+        "type": "enum",
+        "enum": [
+          "fatal",
+          "error",
+          "warn",
+          "info",
+          "debug",
+          "trace"
+        ],
+        "group": "logging",
+        "description": "Lowest level that reaches any destination",
+        "default": "info"
+      },
+      {
+        "name": "LOG_CONSOLE",
+        "type": "boolean",
+        "group": "logging",
+        "description": "Pretty coloured logs on stdout; turn off where a collector reads files only",
+        "default": true
+      },
+      {
+        "name": "LOG_FILE",
+        "type": "boolean",
+        "group": "logging",
+        "description": "Write JSON-line log files under LOG_DIR",
+        "default": true
+      },
+      {
+        "name": "LOG_DIR",
+        "type": "string",
+        "group": "logging",
+        "description": "Directory for log files, relative to the app root or absolute",
+        "default": "logs"
+      }
+    ]
   },
   "dependencies": {
     "@tulipes/core": "workspace:*",
@@ -17,6 +75,6 @@
     "pino-roll": "^3"
   },
   "exports": {
-    ".": "./index.ts"
+    ".": "./lib/index.ts"
   }
 }

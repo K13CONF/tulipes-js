@@ -1,0 +1,5 @@
+{
+  "noSuchTool": "Aucun outil nommé « {{name}} »",
+  "routeTool": "« {{name}} » est un point d'accès — appelez {{method}} {{path}}",
+  "invalidToolName": "Un nom d'outil contient des lettres, des chiffres, _ et -"
+}

@@ -1,7 +1,7 @@
 /**
  * Example maintenance script. Run it with:
  *
- *   yarn script scripts/count-greetings.ts
+ *   pnpm script scripts/count-greetings.ts
  *
  * Script mode runs every phase the backend runs — environment, modules,
  * config, ACL, database, models, queue producers — and then starts nothing.
