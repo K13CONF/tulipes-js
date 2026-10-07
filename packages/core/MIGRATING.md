@@ -13,6 +13,26 @@ what makes it work under nvm.
 
 <a id="unreleased--module-layout-and-plain-routes"></a>
 
+## Unreleased (0.11) — the two commands
+
+Most of the 0.11 sections below are what `tulipes migrate 0.11` does by
+itself on an app generated on 0.10, leaving a `TODO 0.11:` comment and a
+line in its report wherever it cannot decide. The order:
+
+```sh
+corepack enable                 # pnpm 10 is pinned by the migrated manifest
+tulipes migrate 0.11            # from the app root, with the 0.11 CLI
+pnpm install
+tulipes config:import --env production   # once per environment, from its .envs file
+pnpm sync && pnpm typecheck     # the TODOs are where this may still fail
+```
+
+Then review `config/migration-0.11.json` and delete it, declare
+`"settings": "@tulipes/mongoose/settings"` if the app should keep its
+settings in MongoDB, and delete from `.envs/` the variables the record
+names. The sections below say what each rewrite is and what to do by hand
+where the command stopped.
+
 ## Unreleased (0.11) — production without tsx
 
 Node 24 (and 22.18+) runs TypeScript as it is, so nothing transpiles any

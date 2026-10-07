@@ -455,6 +455,8 @@ loader — a running app installs only the HTTP runtime.
 | `tulipes routes` | list every declared endpoint with the roles that reach it; no service, secret or `.env` |
 | `tulipes spec [--openapi file] [--postman file] [--url base]` | generate documents from the same inspection |
 | `tulipes config:check` | load every settings namespace from the store and print it |
+| `tulipes migrate 0.11` | rewrite an app generated on 0.10 to the 0.11 layout and contracts |
+| `tulipes config:import` | carry env values that became settings into the store |
 | `tulipes new module <name>` | scaffold a module with every contract |
 | `tulipes update` | upgrade the global CLI and, inside an app, the app itself |
 | `tulipes -v` | print the CLI version, and the app's when they differ |

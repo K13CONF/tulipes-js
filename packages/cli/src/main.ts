@@ -8,6 +8,8 @@ import { runConfigCheck } from "./config-check.ts";
 import { runRoutes } from "./routes.ts";
 import { runSpec } from "./spec.ts";
 import { runAgentManifest } from "./agent.ts";
+import { runMigrate } from "./migrate.ts";
+import { runConfigImport } from "./config-import.ts";
 import { appCoreVersion, cliVersion, coreVersion } from "./package-info.ts";
 
 /**
@@ -29,6 +31,9 @@ Usage:
   tulipes spec [options]       write an OpenAPI document / Postman collection (needs @tulipes/spec)
                                  --openapi <file>  --postman <file>  --url <base>
                                  both inspect the app: no service, secret or .env is needed
+  tulipes migrate 0.11         rewrite an app generated on 0.10 to the 0.11 layout and contracts
+  tulipes config:import        carry .envs values that became settings into the store
+                                 --env <APP_ENV>  --from <file>  --dry-run
   tulipes agent manifest       print every tool the app exposes to agents, as JSON
                                  --out <file>  write it instead   --role <role>  only what that role may call
   tulipes new module <name>    scaffold a module under ./modules
@@ -59,6 +64,22 @@ export async function main(argv: readonly string[]): Promise<void> {
       return runSync(rootDir);
     case "config:check":
       return runConfigCheck(rootDir);
+    case "config:import": {
+      try {
+        return await runConfigImport(rootDir, importArguments(rest));
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 2;
+        return;
+      }
+    }
+    case "migrate":
+      if (rest.length !== 1) {
+        console.error("Usage: tulipes migrate 0.11");
+        process.exitCode = 2;
+        return;
+      }
+      return runMigrate(rootDir, rest[0]!);
     case "env:check":
       return runEnvCheck(rootDir);
     case "routes":
@@ -182,6 +203,22 @@ function agentArguments(args: readonly string[]): { out?: string; role?: string 
       continue;
     }
     throw new Error(`unknown or incomplete option "${flag}" — usage: tulipes agent manifest [--out <file>] [--role <role>]`);
+  }
+  return options;
+}
+
+function importArguments(args: readonly string[]): { env?: string; from?: string; dryRun?: boolean } {
+  const options: { env?: string; from?: string; dryRun?: boolean } = {};
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    const value = args[i + 1];
+    if (flag === "--dry-run") { options.dryRun = true; continue; }
+    if ((flag === "--env" || flag === "--from") && value && !value.startsWith("--")) {
+      options[flag === "--env" ? "env" : "from"] = value;
+      i++;
+      continue;
+    }
+    throw new Error(`unknown or incomplete option "${flag}" — usage: tulipes config:import [--env <APP_ENV>] [--from <file>] [--dry-run]`);
   }
   return options;
 }
