@@ -4,12 +4,12 @@ import { setTimeout } from "node:timers/promises";
 import express from "express";
 import { Redis } from "ioredis";
 import { expect, test, vi } from "vitest";
-import { errorHandler } from "../src/http/error-handler.js";
+import { errorHandler } from "../src/http/error-handler.ts";
 import {
   createRateLimits,
   type RateLimitOptions,
-} from "../../../example/modules/security/helpers/rate-limit.js";
-import { trustedProxies } from "../../../example/modules/security/helpers/proxy.js";
+} from "../../../example/modules/security/helpers/rate-limit.ts";
+import { trustedProxies } from "../../../example/modules/security/helpers/proxy.ts";
 
 const options = (): RateLimitOptions => ({
   redisUrl: process.env.TEST_REDIS_URL ?? "redis://127.0.0.1:1",

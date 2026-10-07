@@ -4,7 +4,7 @@ import { importFile, type Ctx } from "@tulipes/core/boot";
 import type { BootReport } from "@tulipes/core/errors";
 import type { ModuleFiles } from "@tulipes/core/modules";
 
-import { ModelStore } from "./model-store.js";
+import { ModelStore } from "./model-store.ts";
 
 /**
  * Model files are pure definitions — no factory, no ctx. The loader turns

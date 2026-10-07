@@ -1,9 +1,9 @@
 import type { Express } from "express";
-import { BootReport } from "../errors/boot-error.js";
-import type { RouteRegistry } from "../http/rai.js";
-import type { ModuleFiles } from "../modules/explorer.js";
-import { importFile } from "./import-file.js";
-import type { BackendCtx, RoutesFn } from "./contracts.js";
+import { BootReport } from "../errors/boot-error.ts";
+import type { RouteRegistry } from "../http/rai.ts";
+import type { ModuleFiles } from "../modules/explorer.ts";
+import { importFile } from "./import-file.ts";
+import type { BackendCtx, RoutesFn } from "./contracts.ts";
 
 /**
  * Backend branch and inspection alike: every `routes/*.routes.ts` is a

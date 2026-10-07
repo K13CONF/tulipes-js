@@ -1,7 +1,7 @@
 import { appCache } from "@app/core";
 import type { Ctx } from "@tulipes/core/boot";
 
-import type { SessionAttrs, UserAttrs } from "./documents.js";
+import type { SessionAttrs, UserAttrs } from "./documents.ts";
 
 /**
  * What a bearer token resolves to, kept in the app cache (Redis in

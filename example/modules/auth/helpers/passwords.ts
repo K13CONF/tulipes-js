@@ -1,9 +1,9 @@
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
-import type { CredentialDoc } from "./documents.js";
+import type { CredentialDoc } from "./documents.ts";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
-import { forgetUser } from "./session-cache.js";
+import { forgetUser } from "./session-cache.ts";
 
 /**
  * bcryptjs — pure JavaScript, so installs never need a native toolchain.

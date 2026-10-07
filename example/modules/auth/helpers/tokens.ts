@@ -3,10 +3,10 @@ import jwt from "jsonwebtoken";
 import type { Request } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
-import { currentCredentialVersion } from "./passwords.js";
-import { forgetSession, forgetUser } from "./session-cache.js";
+import { currentCredentialVersion } from "./passwords.ts";
+import { forgetSession, forgetUser } from "./session-cache.ts";
 
-import type { SessionDoc } from "./documents.js";
+import type { SessionDoc } from "./documents.ts";
 
 /**
  * What a verified token tells us. Roles are never trusted from here.

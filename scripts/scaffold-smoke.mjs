@@ -167,11 +167,11 @@ try {
         assert.equal((await fetch(base + '/health')).status, 200);`}
       } finally { await worker?.shutdown(); await backend.shutdown(); }
     `);
-    run(process.execPath, ['--import', 'tsx', 'smoke.mjs'], app, env);
+    run(process.execPath, ['smoke.mjs'], app, env);
     run(process.execPath, [join(scripts, 'start-smoke.mjs')], app, env);
     if (preset === 'production') {
       copyFileSync(join(scripts, 'pm2-smoke.mjs'), join(app, 'pm2-smoke.mjs'));
-      run(process.execPath, ['--import', 'tsx', 'pm2-smoke.mjs'], app, { ...env, PM2_HOME: join(workspace, 'pm2') });
+      run(process.execPath, ['pm2-smoke.mjs'], app, { ...env, PM2_HOME: join(workspace, 'pm2') });
     }
     console.log(`${variant}: ${registry ? 'registry' : 'packed'} install, generated types, tests, specs, backend/shutdown${preset === 'production' && features.queues ? ' and worker' : ''} passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   }

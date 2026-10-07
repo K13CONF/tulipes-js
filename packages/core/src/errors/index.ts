@@ -3,4 +3,4 @@ export {
   TulipesBootError,
   type BootIssue,
   type BootScope,
-} from "./boot-error.js";
+} from "./boot-error.ts";

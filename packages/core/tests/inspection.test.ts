@@ -2,11 +2,11 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { Socket } from "node:net";
 import { expect, test, vi } from "vitest";
-import type { Ctx } from "../src/boot/contracts.js";
-import { extract } from "../../spec/src/extract.js";
-import { toOpenApi } from "../../spec/src/openapi.js";
-import { toPostman } from "../../spec/src/postman.js";
-import { fixture, url } from "./fixture.js";
+import type { Ctx } from "../src/boot/contracts.ts";
+import { extract } from "../../spec/src/extract.ts";
+import { toOpenApi } from "../../spec/src/openapi.ts";
+import { toPostman } from "../../spec/src/postman.ts";
+import { fixture, url } from "./fixture.ts";
 
 /**
  * Inspection is the normal boot with nothing acquired: every route mounted
@@ -249,7 +249,7 @@ test("the reference app inspects deterministically with connections denied and n
   for (const name of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "AUTH_ADMIN_PASSWORD", "MONGO_URI", "REDIS_URL"]) vi.stubEnv(name, undefined);
   const connect = vi.spyOn(Socket.prototype, "connect").mockImplementation(() => { throw new Error("network forbidden"); });
 
-  const { boot } = await import("../src/boot/boot.js");
+  const { boot } = await import("../src/boot/boot.ts");
   const inspect = () => boot({ rootDir: resolve("example"), mode: "backend", inspect: true, handleSignals: false });
 
   const first = await inspect();
@@ -277,7 +277,7 @@ test.each([
   ["spec", "--url", "one", "--url", "two"],
 ])("CLI rejects removed or invalid inspection arguments: %j", async (...args) => {
   const app = await fixture();
-  const result = spawnSync(process.execPath, ["--import", "tsx", cli, ...args], { cwd: app.rootDir, encoding: "utf8" });
+  const result = spawnSync(process.execPath, [cli, ...args], { cwd: app.rootDir, encoding: "utf8" });
   expect(result.status, result.stdout + result.stderr).toBe(2);
   expect(result.stderr).toMatch(/option|requires|removed in 0\.11/);
 });
@@ -286,7 +286,7 @@ test("CLI writes specs for a freshly generated production app without services",
   const app = await fixture();
 
   const run = (cwd: string, args: string[]) => {
-    const result = spawnSync(process.execPath, ["--import", "tsx", cli, ...args], {
+    const result = spawnSync(process.execPath, [cli, ...args], {
       cwd,
       encoding: "utf8",
       timeout: 20_000,

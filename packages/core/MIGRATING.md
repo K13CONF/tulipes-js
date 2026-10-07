@@ -13,6 +13,30 @@ what makes it work under nvm.
 
 <a id="unreleased--module-layout-and-plain-routes"></a>
 
+## Unreleased (0.11) — production without tsx
+
+Node 24 (and 22.18+) runs TypeScript as it is, so nothing transpiles any
+more. `tulipes migrate 0.11` (0.11-S06.3) performs the mechanical part;
+by hand:
+
+1. In `tsconfig.json`, next to `moduleResolution`, add
+   `"allowImportingTsExtensions": true`, `"rewriteRelativeImportExtensions": true`
+   and `"erasableSyntaxOnly": true`.
+2. Rewrite every relative import of your own files from `.js` to `.ts`
+   (`from "../controllers/x.controllers.js"` → `.ts`); package imports do
+   not change.
+3. Replace what native stripping refuses and `erasableSyntaxOnly` now
+   reports: parameter properties (`constructor(private readonly ctx: Ctx) {}`
+   becomes a declared field assigned in the constructor), `enum`, and
+   runtime `namespace`s.
+4. In `package.json`: `"start": "node app.ts"`, `"worker": "node worker.ts"`,
+   `"script": "node"`; remove `tsx` from `devDependencies` and `esbuild`
+   from `pnpm.onlyBuiltDependencies`. In `ecosystem.config.cjs` set
+   `interpreter: "node"`. In `vitest.config.ts` drop
+   `execArgv: ["--import", "tsx"]`.
+5. `pnpm install`, then `pnpm sync`: the generated types now use `.ts`
+   specifiers.
+
 ## Unreleased (0.11) — the reference app: environment, console, auth cache
 
 Generated apps are the user's code, so these are steps, not library changes.

@@ -11,7 +11,7 @@ import { Redis } from "ioredis";
 import type { QueuesCapability } from "@tulipes/core/boot";
 import type { BootReport } from "@tulipes/core/errors";
 
-import type { JobData } from "./index.js";
+import type { JobData } from "./index.ts";
 
 /**
  * The shape of one entry in a queue file's `jobs` export — what a zod

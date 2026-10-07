@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { SettingsConflictError } from "@tulipes/core/config";
-import { fixture } from "../../core/tests/fixture.js";
-import { MongoSettingsStore } from "../src/settings-store.js";
+import { fixture } from "../../core/tests/fixture.ts";
+import { MongoSettingsStore } from "../src/settings-store.ts";
 
 /**
  * S02 — the Mongo settings store against the real driver: the document

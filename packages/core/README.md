@@ -449,7 +449,7 @@ loader — a running app installs only the HTTP runtime.
 | Command | What it does |
 |---|---|
 | `tulipes init [dir] [--minimal \| --preset minimal \| --preset production] [--no-queues] [--no-sockets]` | scaffold an application; no services; the opt-outs compose the production preset without that provider |
-| `tulipes dev [entry]` | regenerate types, then run under tsx watch |
+| `tulipes dev [entry]` | regenerate types, then run the entrypoint with `node --watch` |
 | `tulipes sync` | regenerate `types/tulipes.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting — a CI gate |
 | `tulipes routes` | list every declared endpoint with the roles that reach it; no service, secret or `.env` |

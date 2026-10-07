@@ -1,4 +1,4 @@
-import type { VariableSpec, VariableValue } from "./spec.js";
+import type { VariableSpec, VariableValue } from "./spec.ts";
 
 /**
  * Which of the three sources supplied the value, in precedence order.

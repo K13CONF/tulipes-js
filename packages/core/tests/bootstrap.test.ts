@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "vitest";
-import { fixture } from "./fixture.js";
+import { fixture } from "./fixture.ts";
 
 const log = (line: string) => `appendFileSync(new URL('../../../log.txt', import.meta.url), ${line} + '\\n')`;
 const readLog = async (rootDir: string) =>

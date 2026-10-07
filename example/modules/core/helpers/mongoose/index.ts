@@ -1,16 +1,16 @@
 import type { SchemaOptions } from "mongoose";
 
-export { baseModelPlugin } from "./plugins/base.plugin.js";
-export { softDeletePlugin } from "./plugins/soft-delete.plugin.js";
-export { timestampsPlugin } from "./plugins/timestamps.plugin.js";
-export { registerBasePlugins } from "./register.js";
+export { baseModelPlugin } from "./plugins/base.plugin.ts";
+export { softDeletePlugin } from "./plugins/soft-delete.plugin.ts";
+export { timestampsPlugin } from "./plugins/timestamps.plugin.ts";
+export { registerBasePlugins } from "./register.ts";
 export type {
   Actor,
   BaseDocument,
   SoftDeleteFields,
   SoftDeleteMethods,
   Timestamps,
-} from "./plugins/types.js";
+} from "./plugins/types.ts";
 
 /**
  * Serialization conventions every model spreads into its schema options.

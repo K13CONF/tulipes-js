@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 
-import { appCoreVersion, cliVersion, packageRoot } from "./package-info.js";
+import { appCoreVersion, cliVersion, packageRoot } from "./package-info.ts";
 
 const PACKAGE = "@tulipes/core";
 const CLI = "@tulipes/cli";

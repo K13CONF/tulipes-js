@@ -1,4 +1,4 @@
-export { Environment, appEnvs, type AppEnv, type EnvironmentOptions } from "./environment.js";
+export { Environment, appEnvs, type AppEnv, type EnvironmentOptions } from "./environment.ts";
 
 /**
  * Augmentation target for the generated `types/tulipes.d.ts` (`tulipes sync`):
@@ -13,9 +13,9 @@ export {
   VariableStore,
   type DescribedVariable,
   type VariableSource,
-} from "./variable-store.js";
-export { coerceValue } from "./coerce.js";
-export { discoverModuleMeta, LEGACY_META_FILENAME, type ModuleMeta } from "./meta-discovery.js";
+} from "./variable-store.ts";
+export { coerceValue } from "./coerce.ts";
+export { discoverModuleMeta, LEGACY_META_FILENAME, type ModuleMeta } from "./meta-discovery.ts";
 export {
   metaFileSchema,
   variableSpecSchema,
@@ -24,4 +24,4 @@ export {
   type VariableSpec,
   type VariableType,
   type VariableValue,
-} from "./spec.js";
+} from "./spec.ts";

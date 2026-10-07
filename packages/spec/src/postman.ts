@@ -1,7 +1,7 @@
-import type { SpecRoute, SpecSource } from "./extract.js";
-import { pathParams, toPostmanPath } from "./extract.js";
-import { exampleFor, toJsonSchema, type JsonSchema } from "./json-schema.js";
-import type { GeneratedDocument } from "./openapi.js";
+import type { SpecRoute, SpecSource } from "./extract.ts";
+import { pathParams, toPostmanPath } from "./extract.ts";
+import { exampleFor, toJsonSchema, type JsonSchema } from "./json-schema.ts";
+import type { GeneratedDocument } from "./openapi.ts";
 
 /**
  * Postman Collection v2.1.

@@ -1,7 +1,7 @@
-export { QueueManager, QueueRegistry, type JobSchema, type JobSchemas } from "./queue-manager.js";
-export { initQueues, type QueuesFn } from "./load-queues.js";
-export { provider } from "./provider.js";
-export { provider as default } from "./provider.js";
+export { QueueManager, QueueRegistry, type JobSchema, type JobSchemas } from "./queue-manager.ts";
+export { initQueues, type QueuesFn } from "./load-queues.ts";
+export { provider } from "./provider.ts";
+export { provider as default } from "./provider.ts";
 
 /**
  * Augmentation target for the generated `types/tulipes.d.ts` (`tulipes sync`):

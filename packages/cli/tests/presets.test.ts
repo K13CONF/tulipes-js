@@ -2,14 +2,14 @@ import { spawnSync } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
-import { fixture } from "../../core/tests/fixture.js";
+import { fixture } from "../../core/tests/fixture.ts";
 
 const cli = resolve("packages/cli/src/bin.ts");
 
 function init(rootDir: string, args: string[]) {
   return spawnSync(
     process.execPath,
-    ["--import", "tsx", cli, "init", ...args],
+    [cli, "init", ...args],
     {
       cwd: rootDir,
       encoding: "utf8",
@@ -74,7 +74,7 @@ test("the default preset declares no infrastructure and supplies runnable test/s
 
   const check = spawnSync(
     process.execPath,
-    ["--import", "tsx", app.rootDir + "/api/verify.ts"],
+    [app.rootDir + "/api/verify.ts"],
     {
       encoding: "utf8",
       timeout: 10_000,

@@ -5,15 +5,15 @@ import { Strategy as LocalStrategy } from "passport-local";
 import type { Ctx } from "@tulipes/core/boot";
 import type { Auth } from "@tulipes/core/http";
 
-import { verifyPassword } from "./passwords.js";
+import { verifyPassword } from "./passwords.ts";
 import {
   isRevoked,
   loadSession,
   touchSession,
   type TokenClaims,
-} from "./tokens.js";
-import { GUEST } from "./auth.js";
-import { readIdentity, writeIdentity } from "./session-cache.js";
+} from "./tokens.ts";
+import { GUEST } from "./auth.ts";
+import { readIdentity, writeIdentity } from "./session-cache.ts";
 import type {
   CredentialDoc,
   PasswordIdentity,
@@ -21,7 +21,7 @@ import type {
   SessionDoc,
   UserAttrs,
   UserDoc,
-} from "./documents.js";
+} from "./documents.ts";
 
 /**
  * Two strategies, both stateless as far as passport is concerned

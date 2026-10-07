@@ -1,4 +1,4 @@
-import { BaseCache } from "./types.js";
+import { BaseCache } from "./types.ts";
 
 interface Entry {
   value: unknown;

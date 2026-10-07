@@ -1,6 +1,6 @@
 import type { BootstrapCleanup } from "@tulipes/core/boot";
 
-import { closeCache } from "../helpers/cache/index.js";
+import { closeCache } from "../helpers/cache/index.ts";
 
 /**
  * The app cache opens lazily on first use, so there is nothing to open here;

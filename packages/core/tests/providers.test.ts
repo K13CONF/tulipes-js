@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { fixture } from "./fixture.js";
+import { fixture } from "./fixture.ts";
 
 /**
  * The provider seam, exercised with a fake provider written into the app —

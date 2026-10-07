@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-import { baseModelPlugin } from "./plugins/base.plugin.js";
+import { baseModelPlugin } from "./plugins/base.plugin.ts";
 
 let registered = false;
 

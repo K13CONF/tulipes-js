@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, vi } from "vitest";
-import { fixture } from "./fixture.js";
+import { fixture } from "./fixture.ts";
 
 const valid = {
   JWT_ACCESS_SECRET: "fixture-access-key-long-enough",

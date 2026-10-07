@@ -1,14 +1,14 @@
-import { FULL_FEATURES, runInit, type InitFeatures, type InitPreset } from "./init.js";
-import { runSync } from "./sync.js";
-import { runEnvCheck } from "./env-check.js";
-import { runNewModule } from "./new-module.js";
-import { runDev } from "./dev.js";
-import { runUpdate } from "./update.js";
-import { runConfigCheck } from "./config-check.js";
-import { runRoutes } from "./routes.js";
-import { runSpec } from "./spec.js";
-import { runAgentManifest } from "./agent.js";
-import { appCoreVersion, cliVersion, coreVersion } from "./package-info.js";
+import { FULL_FEATURES, runInit, type InitFeatures, type InitPreset } from "./init.ts";
+import { runSync } from "./sync.ts";
+import { runEnvCheck } from "./env-check.ts";
+import { runNewModule } from "./new-module.ts";
+import { runDev } from "./dev.ts";
+import { runUpdate } from "./update.ts";
+import { runConfigCheck } from "./config-check.ts";
+import { runRoutes } from "./routes.ts";
+import { runSpec } from "./spec.ts";
+import { runAgentManifest } from "./agent.ts";
+import { appCoreVersion, cliVersion, coreVersion } from "./package-info.ts";
 
 /**
  * The `tulipes` CLI. Deliberately dependency-free argument handling — a
@@ -21,7 +21,7 @@ Usage:
   tulipes init [dir]           scaffold a minimal API (no mongo/redis)
                                  --minimal | --preset minimal | --preset production
                                  --no-queues | --no-sockets  (production only) leave a provider out
-  tulipes dev [entry]          run with tsx in watch mode (default entry: app.ts), sync first
+  tulipes dev [entry]          run the entrypoint with node --watch (default: app.ts), sync first
   tulipes sync                 regenerate types/tulipes.d.ts and .env.example
   tulipes env:check            validate env against every module's tulipes.env (CI-friendly)
   tulipes config:check         load every settings namespace from the store and print it

@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import { inspectApp } from "./inspection.js";
+import { inspectApp } from "./inspection.ts";
 
 /**
  * `tulipes agent manifest` — every tool the app exposes to agents, from

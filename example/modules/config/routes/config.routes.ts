@@ -1,8 +1,8 @@
 import { Router } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
 
-import { ConfigController } from "../controllers/config.controllers.js";
-import { changeBody, moduleParam } from "../schemas/config.schemas.js";
+import { ConfigController } from "../controllers/config.controllers.ts";
+import { changeBody, moduleParam } from "../schemas/config.schemas.ts";
 
 export default function configRoutes(ctx: BackendCtx): void {
   const { rai, routes, config } = ctx;

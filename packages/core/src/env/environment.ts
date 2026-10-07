@@ -2,12 +2,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseDotenv } from "dotenv";
 
-import { BootReport } from "../errors/boot-error.js";
-import { coerceValue } from "./coerce.js";
-import { discoverModuleMeta, type ModuleMeta } from "./meta-discovery.js";
-import { VariableStore, type VariableSource } from "./variable-store.js";
-import type { VariableValue } from "./spec.js";
-import type { KnownVariables } from "./index.js";
+import { BootReport } from "../errors/boot-error.ts";
+import { coerceValue } from "./coerce.ts";
+import { discoverModuleMeta, type ModuleMeta } from "./meta-discovery.ts";
+import { VariableStore, type VariableSource } from "./variable-store.ts";
+import type { VariableValue } from "./spec.ts";
+import type { KnownVariables } from "./index.ts";
 
 /** Falls back to the broad VariableValue until codegen narrows the key. */
 type Resolved<K extends string> = K extends keyof KnownVariables

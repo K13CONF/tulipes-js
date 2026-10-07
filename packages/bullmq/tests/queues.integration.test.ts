@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Queue } from "bullmq";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "../../core/tests/fixture.js";
-import type { QueueManager } from "../src/index.js";
+import { fixture } from "../../core/tests/fixture.ts";
+import type { QueueManager } from "../src/index.ts";
 
 const redisUrl = process.env.TEST_REDIS_URL;
 const integration = test.skipIf(!redisUrl);
@@ -99,7 +99,7 @@ integration(
 integration(
   "releases Redis connections even if a queue fails to close",
   async () => {
-    const { QueueManager } = await import("../src/queue-manager.js");
+    const { QueueManager } = await import("../src/queue-manager.ts");
     const { BootReport } = await import("@tulipes/core/errors");
     const manager = new QueueManager(redisUrl!);
     const name = `probe.${randomUUID()}`;

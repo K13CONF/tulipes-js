@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { ModuleManifest } from "./manifest.js";
+import type { ModuleManifest } from "./manifest.ts";
 
 /**
  * Boot phase 5: given the sorted module list, resolve every conventional file
@@ -18,14 +18,14 @@ import type { ModuleManifest } from "./manifest.js";
 export type SourceExtension = ".ts" | ".js";
 
 /**
- * In dev the app runs straight from TypeScript (via tsx) so conventions
+ * The app runs straight from TypeScript (Node strips the types) so conventions
  * resolve to .ts files; a compiled deployment runs .js. Crucially the
  * verdict must describe the APP's files, never core's own compilation —
  * the published core is always .js while the app it boots is usually .ts.
  *
  * Heuristic fallback (no module dirs to probe): the entry script's
  * extension, then core's own file. The URL alone isn't trustworthy there:
- * tsx's tsImport presents modules under a .js URL while only the .ts
+ * a loader can present modules under a .js URL while only the .ts
  * source exists on disk, so a .js verdict is confirmed against the disk.
  */
 export function detectSourceExtension(): SourceExtension {

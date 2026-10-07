@@ -2,8 +2,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { BootReport } from "../errors/boot-error.js";
-import { variableSpecSchema, type VariableSpec } from "./spec.js";
+import { BootReport } from "../errors/boot-error.ts";
+import { variableSpecSchema, type VariableSpec } from "./spec.ts";
 
 /** Where a module declared its variables before 0.11; its presence is an error naming the move. */
 export const LEGACY_META_FILENAME = "meta.variables.json";

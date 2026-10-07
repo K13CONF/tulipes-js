@@ -2,10 +2,10 @@ import type {
   BackendCtx,
   RoutesFn,
   BootstrapFn,
-} from "../src/boot/index.js";
-import { requireModels, requireQueues } from "../src/boot/index.js";
+} from "../src/boot/index.ts";
+import { requireModels, requireQueues } from "../src/boot/index.ts";
 import { Router } from "express";
-import { defineConfig } from "../src/config/index.js";
+import { defineConfig } from "../src/config/index.ts";
 import { z } from "zod/v4";
 import type {
   RequestHandler,
@@ -45,7 +45,7 @@ requireQueues(backend).queue("users.welcome");
 // The agent surface exists in the backend branch only, typed from the registry.
 void backend.agent.manifest("admin").tools[0]?.input_schema;
 void backend.agent.invoke("hello_reset-counts", { confirm: true }, { isAuthenticated: true, user: null, session: null, role: "admin" });
-declare const script: import("../src/boot/index.js").Ctx;
+declare const script: import("../src/boot/index.ts").Ctx;
 // @ts-expect-error A worker or script context may carry no agent registry.
 script.agent.manifest();
 

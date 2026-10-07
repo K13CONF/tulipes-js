@@ -2,8 +2,8 @@ import { Router } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
 import { z } from "zod/v4";
 
-import { UsersController } from "../controllers/users.controllers.js";
-import { createBody, emailParam, listQuery, userShape } from "../schemas/users.schemas.js";
+import { UsersController } from "../controllers/users.controllers.ts";
+import { createBody, emailParam, listQuery, userShape } from "../schemas/users.schemas.ts";
 
 export default function usersRoutes(ctx: BackendCtx): void {
   const { rai, routes } = ctx;

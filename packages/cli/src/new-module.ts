@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 
 import { BootReport } from "@tulipes/core/errors";
 import { readProviderDeclarations } from "@tulipes/core/boot";
-import { coreVersion } from "./package-info.js";
+import { coreVersion } from "./package-info.ts";
 
 /**
  * `tulipes new module <name>` — scaffold every contract a module can hold,
@@ -188,7 +188,7 @@ function renderModule(
       `import type { Request, RequestHandler, Response } from "express";`,
       `import type { Ctx } from "@tulipes/core/boot";`,
       ``,
-      `import { describe${Model} } from "../helpers/${name}.helpers.js";`,
+      `import { describe${Model} } from "../helpers/${name}.helpers.ts";`,
       ``,
       `/**`,
       ` * One class per controller, holding the context. Each method returns a`,
@@ -199,7 +199,11 @@ function renderModule(
       ` * one with a stub context and call the method.`,
       ` */`,
       `export class ${Model}Controller {`,
-      `  constructor(private readonly ctx: Ctx) {}`,
+      `  readonly #ctx: Ctx;`,
+      ``,
+      `  constructor(ctx: Ctx) {`,
+      `    this.#ctx = ctx;`,
+      `  }`,
       ``,
       `  index(): RequestHandler {`,
       `    return (req: Request, res: Response): void => {`,
@@ -210,7 +214,7 @@ function renderModule(
       `        data: {`,
       `          module: describe${Model}(),`,
       `          title: req.t("title"),`,
-      `          app: this.ctx.config.app?.name,`,
+      `          app: this.#ctx.config.app?.name,`,
       `        },`,
       `      });`,
       `    };`,
@@ -223,7 +227,7 @@ function renderModule(
       `import { Router } from "express";`,
       `import type { BackendCtx } from "@tulipes/core/boot";`,
       ``,
-      `import { ${Model}Controller } from "../controllers/${name}.controllers.js";`,
+      `import { ${Model}Controller } from "../controllers/${name}.controllers.ts";`,
       ``,
       `/**`,
       ` * A plain function of the context: build the router, declare a RAI on`,

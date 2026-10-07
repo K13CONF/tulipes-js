@@ -15,7 +15,7 @@ import { setTimeout } from "node:timers/promises";
 import {
   LOG_TAIL_LIMITS,
   tailLogs,
-} from "../../../example/modules/settings/helpers/log-tail.js";
+} from "../../../example/modules/settings/helpers/log-tail.ts";
 
 async function fixture(run: (dir: string) => Promise<void>) {
   const dir = mkdtempSync(join(tmpdir(), "tulipes-tail-"));

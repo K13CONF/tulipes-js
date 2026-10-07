@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { variableSpecSchema, type VariableSpec } from "../env/spec.js";
+import { variableSpecSchema, type VariableSpec } from "../env/spec.ts";
 
 /**
  * A module's ordering metadata lives under the "tulipes" key of its

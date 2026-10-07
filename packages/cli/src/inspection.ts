@@ -1,6 +1,6 @@
 import type { BootHandle } from "@tulipes/core/boot";
 
-import { appBoot, registerTypeScript } from "./app-core.js";
+import { appBoot, requireNativeTypeScript } from "./app-core.ts";
 
 /**
  * `tulipes routes` and `tulipes spec` boot the app in inspection: every
@@ -10,7 +10,7 @@ import { appBoot, registerTypeScript } from "./app-core.js";
  * file that touches infrastructure while building fails here with its path.
  */
 export async function inspectApp(rootDir: string): Promise<BootHandle> {
-  await registerTypeScript();
+  requireNativeTypeScript();
   const boot = await appBoot(rootDir);
   return boot({ rootDir, mode: "backend", handleSignals: false, inspect: true });
 }

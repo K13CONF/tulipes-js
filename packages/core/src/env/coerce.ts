@@ -1,4 +1,4 @@
-import type { VariableSpec, VariableValue } from "./spec.js";
+import type { VariableSpec, VariableValue } from "./spec.ts";
 
 /**
  * Turn a raw value (a string from the shell / .env file, or a typed JSON

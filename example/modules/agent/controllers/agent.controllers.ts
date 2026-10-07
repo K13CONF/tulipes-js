@@ -9,11 +9,15 @@ import { roleOf } from "@tulipes/core/http";
  * through the same middleware.
  */
 export class AgentController {
-  constructor(private readonly ctx: BackendCtx) {}
+  readonly #ctx: BackendCtx;
+
+  constructor(ctx: BackendCtx) {
+    this.#ctx = ctx;
+  }
 
   tools(): RequestHandler {
     return (req: Request, res: Response) => {
-      res.respond({ data: this.ctx.agent.manifest(roleOf(req)) });
+      res.respond({ data: this.#ctx.agent.manifest(roleOf(req)) });
     };
   }
 
@@ -21,7 +25,7 @@ export class AgentController {
     return async (req: Request, res: Response) => {
       const name = String(req.params.name);
       const actor = { ...req.auth, role: roleOf(req) };
-      res.respond({ data: await this.ctx.agent.invoke(name, req.body, actor, req) });
+      res.respond({ data: await this.#ctx.agent.invoke(name, req.body, actor, req) });
     };
   }
 }

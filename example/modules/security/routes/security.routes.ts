@@ -5,9 +5,9 @@ import { pinoHttp } from "pino-http";
 import type { BackendCtx } from "@tulipes/core/boot";
 import { lazy, logger } from "@app/core";
 
-import { corsOptions, helmetOptions } from "../helpers/hardening.js";
-import { trustedProxies } from "../helpers/proxy.js";
-import { configuredRateLimits } from "../helpers/rate-limit.js";
+import { corsOptions, helmetOptions } from "../helpers/hardening.ts";
+import { trustedProxies } from "../helpers/proxy.ts";
+import { configuredRateLimits } from "../helpers/rate-limit.ts";
 
 /**
  * Every piece here is configured from `ctx.config.security`, which is live:

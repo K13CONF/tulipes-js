@@ -3,14 +3,18 @@ import { requireModels, requireQueues, type Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 
 export class GreetingsController {
-  constructor(private readonly ctx: Ctx) {}
+  readonly #ctx: Ctx;
+
+  constructor(ctx: Ctx) {
+    this.#ctx = ctx;
+  }
 
   list(): RequestHandler {
     return async (req: Request, res: Response) => {
       // ?page and ?per_page, already clamped by config.pagination — so
       // every list endpoint in every module paginates the same way.
       const { per_page, skip } = req.page;
-      const Greeting = requireModels(this.ctx).get("Greeting");
+      const Greeting = requireModels(this.#ctx).get("Greeting");
 
       const [greetings, total_items] = await Promise.all([
         Greeting.find().select("name message times_used -_id")
@@ -27,12 +31,12 @@ export class GreetingsController {
   use(): RequestHandler {
     return async (req: Request, res: Response) => {
       const name = String(req.params.name);
-      const greeting = await requireModels(this.ctx).get("Greeting").findOne({ name }).lean();
+      const greeting = await requireModels(this.#ctx).get("Greeting").findOne({ name }).lean();
       if (!greeting) throw new HttpError(404, "noSuchGreeting", { vars: { name } });
 
       // Slow or retryable work belongs in a job, not in the request. Run
       // `pnpm worker` in another terminal to see it processed.
-      await requireQueues(this.ctx).add("hello.count-greeting", "count", { name });
+      await requireQueues(this.#ctx).add("hello.count-greeting", "count", { name });
       res.respond({ status: 202, data: { name, queued: true } });
     };
   }

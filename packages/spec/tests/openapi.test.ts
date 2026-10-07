@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { toOpenApi } from "../src/openapi.js";
-import type { SpecRoute, SpecSource } from "../src/extract.js";
+import { toOpenApi } from "../src/openapi.ts";
+import type { SpecRoute, SpecSource } from "../src/extract.ts";
 
 function source(route: Partial<SpecRoute> = {}): SpecSource {
   return {

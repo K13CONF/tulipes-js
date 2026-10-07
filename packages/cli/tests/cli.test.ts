@@ -2,10 +2,10 @@ import { access, readFile } from "node:fs/promises";
 import { expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
-import { runNewModule } from "../src/new-module.js";
-import { runSync } from "../src/sync.js";
-import { runInit } from "../src/init.js";
-import { fixture } from "../../core/tests/fixture.js";
+import { runNewModule } from "../src/new-module.ts";
+import { runSync } from "../src/sync.ts";
+import { runInit } from "../src/init.ts";
+import { fixture } from "../../core/tests/fixture.ts";
 
 test("a generated kebab-case module produces valid TypeScript configuration declarations", async () => {
   const app = await fixture({
@@ -20,7 +20,7 @@ test("a generated kebab-case module produces valid TypeScript configuration decl
 
   const result = spawnSync(
     resolve("node_modules/.bin/tsc"),
-    [path, "--noEmit", "--skipLibCheck"],
+    [path, "--noEmit", "--skipLibCheck", "--allowImportingTsExtensions"],
     { encoding: "utf8" },
   );
 
@@ -96,7 +96,7 @@ test.each([false, true])(
 
     const result = spawnSync(
       process.execPath,
-      ["--import", "tsx", app.rootDir + "/generated/check-auth.ts"],
+      [app.rootDir + "/generated/check-auth.ts"],
       {
         encoding: "utf8",
         timeout: 5_000,
@@ -159,15 +159,15 @@ test("sync types models from their files and job data from the queues' schemas",
   await runSync(app.rootDir);
 
   const dts = await readFile(app.rootDir + "/types/tulipes.d.ts", "utf8");
-  expect(dts).toContain('"Thing": (typeof import("./../modules/probe/models/thing.model.js"))["default"];');
+  expect(dts).toContain('"Thing": (typeof import("./../modules/probe/models/thing.model.ts"))["default"];');
   expect(dts).not.toContain("Dynamic");
-  expect(dts).toContain('JobsOf<typeof import("./../modules/probe/queues/plain.queues.js")>,');
-  expect(dts).toContain('JobsOf<typeof import("./../modules/probe/queues/probe.queues.js")> {}');
+  expect(dts).toContain('JobsOf<typeof import("./../modules/probe/queues/plain.queues.ts")>,');
+  expect(dts).toContain('JobsOf<typeof import("./../modules/probe/queues/probe.queues.ts")> {}');
   await expect(access(app.rootDir + "/types/config.d.ts")).rejects.toThrow();
 
   const result = spawnSync(
     resolve("node_modules/.bin/tsc"),
-    ["--noEmit", "--skipLibCheck", "--strict", "--module", "nodenext", "--target", "es2022", "types/tulipes.d.ts", "types/probe.ts"],
+    ["--noEmit", "--skipLibCheck", "--strict", "--module", "nodenext", "--target", "es2022", "--allowImportingTsExtensions", "types/tulipes.d.ts", "types/probe.ts"],
     { cwd: app.rootDir, encoding: "utf8" },
   );
   expect(result.status, result.stdout + result.stderr).toBe(0);

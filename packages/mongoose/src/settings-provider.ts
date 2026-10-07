@@ -2,7 +2,7 @@ import { createConnection, type Connection } from "mongoose";
 
 import type { Provider } from "@tulipes/core/boot";
 
-import { MongoSettingsStore } from "./settings-store.js";
+import { MongoSettingsStore } from "./settings-store.ts";
 
 /** Well-known infra variable, declared by the app's sys core module. */
 const MONGO_URI = "MONGO_URI";

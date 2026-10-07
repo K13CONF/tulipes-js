@@ -2,7 +2,7 @@ import type { Connection, Model } from "mongoose";
 
 import type { ModelsCapability } from "@tulipes/core/boot";
 
-import type { KnownModel, KnownModelName } from "./index.js";
+import type { KnownModel, KnownModelName } from "./index.ts";
 
 /**
  * What `ctx.models` is once this provider is in the compilation. Core's
@@ -37,8 +37,12 @@ declare module "@tulipes/core/boot" {
 export class ModelStore implements ModelsCapability {
   /** name → { model, owning module } */
   readonly #models = new Map<string, { model: Model<never>; owner: string }>();
+  /** The boot's own connection, for scripts and tests that need the driver. */
+  readonly connection: Connection;
 
-  constructor(readonly connection: Connection) {}
+  constructor(connection: Connection) {
+    this.connection = connection;
+  }
 
   /** @internal Database loader only. */
   register_(name: string, model: Model<never>, owner: string): void {

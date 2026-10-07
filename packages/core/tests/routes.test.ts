@@ -1,8 +1,8 @@
 import express from "express";
 import { describe, expect, test } from "vitest";
-import { createRai, RouteRegistry } from "../src/http/rai.js";
-import { scanRoutes } from "../src/http/route-scan.js";
-import { BootReport } from "../src/errors/boot-error.js";
+import { createRai, RouteRegistry } from "../src/http/rai.ts";
+import { scanRoutes } from "../src/http/route-scan.ts";
+import { BootReport } from "../src/errors/boot-error.ts";
 
 const respond: express.RequestHandler = (_req, res) => {
   res.json({ reached: true });

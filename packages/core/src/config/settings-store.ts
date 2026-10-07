@@ -42,9 +42,16 @@ export interface SettingsStore {
 }
 
 export class SettingsConflictError extends Error {
-  constructor(readonly namespace: string, readonly current: StoredSettings | undefined, readonly expectedVersion: number) {
+  readonly namespace: string;
+  readonly current: StoredSettings | undefined;
+  readonly expectedVersion: number;
+
+  constructor(namespace: string, current: StoredSettings | undefined, expectedVersion: number) {
     super(`settings "${namespace}": version ${expectedVersion} is stale, the store holds version ${current?.version ?? 0}`);
     this.name = "SettingsConflictError";
+    this.namespace = namespace;
+    this.current = current;
+    this.expectedVersion = expectedVersion;
   }
 }
 
@@ -55,8 +62,11 @@ export class SettingsConflictError extends Error {
  */
 export class MemorySettingsStore implements SettingsStore {
   readonly #entries = new Map<string, StoredSettings>();
+  readonly #label: string;
 
-  constructor(private readonly label = "memory") {}
+  constructor(label = "memory") {
+    this.#label = label;
+  }
 
   async load(namespace: string): Promise<StoredSettings | undefined> {
     return this.#entries.get(namespace);
@@ -71,7 +81,7 @@ export class MemorySettingsStore implements SettingsStore {
   }
 
   status(): { label: string; ready: boolean } {
-    return { label: this.label, ready: true };
+    return { label: this.#label, ready: true };
   }
 }
 

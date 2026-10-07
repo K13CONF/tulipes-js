@@ -1,8 +1,8 @@
 import { Router } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
 
-import { AgentController } from "../controllers/agent.controllers.js";
-import { toolInput, toolName } from "../schemas/agent.schemas.js";
+import { AgentController } from "../controllers/agent.controllers.ts";
+import { toolInput, toolName } from "../schemas/agent.schemas.ts";
 
 export default function agentRoutes(ctx: BackendCtx): void {
   const { rai, routes, config } = ctx;

@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "../../core/tests/fixture.js";
+import { fixture } from "../../core/tests/fixture.ts";
 // Brings this package's ModelsCapability augmentation into the test program.
-import type { ModelStore } from "../src/index.js";
+import type { ModelStore } from "../src/index.ts";
 
 const mongo = process.env.TEST_MONGO_URI;
 const integration = test.skipIf(!mongo);

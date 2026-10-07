@@ -1,14 +1,14 @@
 import type { Express, RequestHandler, Router } from "express";
 
-import type { Environment } from "../env/environment.js";
-import type { ProcessMode } from "./boot.js";
-import type { GlobalConfig } from "../config/index.js";
-import type { SettingsApi } from "../config/settings.js";
-import type { Acl } from "../acl/acl.js";
-import type { AgentRegistry } from "../agent/registry.js";
-import type { RouteInfo, RouteRegistry } from "../http/rai.js";
-import type { ModuleManifest } from "../modules/manifest.js";
-import type { I18nextInstance, TFunction } from "../i18n/index.js";
+import type { Environment } from "../env/environment.ts";
+import type { ProcessMode } from "./boot.ts";
+import type { GlobalConfig } from "../config/index.ts";
+import type { SettingsApi } from "../config/settings.ts";
+import type { Acl } from "../acl/acl.ts";
+import type { AgentRegistry } from "../agent/registry.ts";
+import type { RouteInfo, RouteRegistry } from "../http/rai.ts";
+import type { ModuleManifest } from "../modules/manifest.ts";
+import type { I18nextInstance, TFunction } from "../i18n/index.ts";
 
 /**
  * The context object threaded through every module-authored function.

@@ -1,5 +1,5 @@
-export { defineConfig, isConfigDeclaration, declarationJsonSchema, type ConfigDeclaration, type FieldMeta } from "./define-config.js";
-export { declareConfig } from "./declare-config.js";
+export { defineConfig, isConfigDeclaration, declarationJsonSchema, type ConfigDeclaration, type FieldMeta } from "./define-config.ts";
+export { declareConfig } from "./declare-config.ts";
 export {
   FileSettingsStore,
   MemorySettingsStore,
@@ -8,14 +8,14 @@ export {
   type Actor,
   type SettingsStore,
   type StoredSettings,
-} from "./settings-store.js";
+} from "./settings-store.ts";
 export {
   Settings,
   SettingsValidationError,
   type SettingsApi,
   type SettingsDescription,
   type SettingsWrite,
-} from "./settings.js";
+} from "./settings.ts";
 
 /**
  * The global config: one plain object, namespaced by module short-name —

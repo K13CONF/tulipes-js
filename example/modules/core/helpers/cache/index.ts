@@ -1,14 +1,14 @@
 import { Redis } from "ioredis";
 import type { Environment } from "@tulipes/core/env";
 
-import { MemoryCache } from "./memory-cache.js";
-import { RedisCache } from "./redis-cache.js";
-import type { Cache } from "./types.js";
+import { MemoryCache } from "./memory-cache.ts";
+import { RedisCache } from "./redis-cache.ts";
+import type { Cache } from "./types.ts";
 
-export type { Cache } from "./types.js";
-export { BaseCache } from "./types.js";
-export { MemoryCache } from "./memory-cache.js";
-export { RedisCache } from "./redis-cache.js";
+export type { Cache } from "./types.ts";
+export { BaseCache } from "./types.ts";
+export { MemoryCache } from "./memory-cache.ts";
+export { RedisCache } from "./redis-cache.ts";
 
 let active: { cache: Cache; redis?: Redis } | undefined;
 

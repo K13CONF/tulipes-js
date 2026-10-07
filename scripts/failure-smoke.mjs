@@ -117,7 +117,7 @@ try {
   run('pnpm', ['install', '--no-frozen-lockfile'], { cwd: app, env });
   run('pnpm', ['sync'], { cwd: app, env });
 
-  server = spawn(process.execPath, ['--import', 'tsx', 'app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, ['app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   server.stdout.on('data', (d) => { output += d; });
   server.stderr.on('data', (d) => { output += d; });

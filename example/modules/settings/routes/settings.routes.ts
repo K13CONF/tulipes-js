@@ -1,8 +1,8 @@
 import { Router } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
 
-import { SettingsController } from "../controllers/settings.controllers.js";
-import { logQuery } from "../schemas/settings.schemas.js";
+import { SettingsController } from "../controllers/settings.controllers.ts";
+import { logQuery } from "../schemas/settings.schemas.ts";
 
 /**
  * One endpoint: the log stream. Everything the console used to do here —

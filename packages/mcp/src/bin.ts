@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-import { AgentBridge } from "./bridge.js";
-import { createServer } from "./server.js";
+import { AgentBridge } from "./bridge.ts";
+import { createServer } from "./server.ts";
 
 const HELP = `tulipes-mcp — serve a Tulipes app's agent tools over MCP (stdio)
 

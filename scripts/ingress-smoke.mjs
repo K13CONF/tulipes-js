@@ -137,7 +137,7 @@ export default defineRoutes(({ rai }) => {
   `);
   run('pnpm', ['script', 'scripts/trust-ingress.ts'], app, env);
 
-  const server = spawn(process.execPath, ['--import', 'tsx', 'app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const server = spawn(process.execPath, ['app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   server.stdout.on('data', (d) => { output += d; });
   server.stderr.on('data', (d) => { output += d; });

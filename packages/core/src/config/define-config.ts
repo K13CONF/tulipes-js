@@ -1,6 +1,6 @@
 import { z } from "zod/v4";
 
-import type { Ctx } from "../boot/contracts.js";
+import type { Ctx } from "../boot/contracts.ts";
 
 /**
  * The one export of `module.config.ts`: what this module's settings look

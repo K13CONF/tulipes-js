@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 
-import { BootReport, type BootScope } from "../errors/boot-error.js";
+import { BootReport, type BootScope } from "../errors/boot-error.ts";
 
 /**
  * Dynamic-import one conventional module file, funneling failures into the

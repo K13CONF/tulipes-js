@@ -1,9 +1,9 @@
 import { defineConfig } from "@tulipes/core/config";
 import { z } from "zod/v4";
 
-import { corsOptions } from "./helpers/hardening.js";
-import { rebuildRateLimits } from "./helpers/rate-limit.js";
-import { trustedProxies } from "./helpers/proxy.js";
+import { corsOptions } from "./helpers/hardening.ts";
+import { rebuildRateLimits } from "./helpers/rate-limit.ts";
+import { trustedProxies } from "./helpers/proxy.ts";
 
 /**
  * Everything the request pipeline is configured with. None of it is a

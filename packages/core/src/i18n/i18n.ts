@@ -4,10 +4,10 @@ import type { Request } from "express";
 import i18next, { type i18n as I18nextInstance, type TFunction } from "i18next";
 import FsBackend from "i18next-fs-backend";
 
-import type { AppEnv } from "../env/environment.js";
-import type { BootReport } from "../errors/boot-error.js";
-import type { ModuleFiles } from "../modules/explorer.js";
-import { resolveLocale } from "./locale.js";
+import type { AppEnv } from "../env/environment.ts";
+import type { BootReport } from "../errors/boot-error.ts";
+import type { ModuleFiles } from "../modules/explorer.ts";
+import { resolveLocale } from "./locale.ts";
 
 /**
  * Boot phase 6b — translations.

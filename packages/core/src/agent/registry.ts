@@ -1,14 +1,14 @@
 import type { Request } from "express";
 import { z } from "zod/v4";
 
-import type { Acl } from "../acl/acl.js";
-import type { RuntimeCtx } from "../boot/contracts.js";
-import type { BootReport } from "../errors/boot-error.js";
-import { HttpError, ValidationError, type FieldIssue } from "../http/error-handler.js";
-import type { RouteInfo, RouteRecord, RouteRegistry } from "../http/rai.js";
-import { codeOfIssue, type ValidatableSchema } from "../http/schema.js";
-import type { ModuleManifest } from "../modules/manifest.js";
-import type { ActionTool, AgentDeclaration, RouteTool, ToolActor } from "./define-agent.js";
+import type { Acl } from "../acl/acl.ts";
+import type { RuntimeCtx } from "../boot/contracts.ts";
+import type { BootReport } from "../errors/boot-error.ts";
+import { HttpError, ValidationError, type FieldIssue } from "../http/error-handler.ts";
+import type { RouteInfo, RouteRecord, RouteRegistry } from "../http/rai.ts";
+import { codeOfIssue, type ValidatableSchema } from "../http/schema.ts";
+import type { ModuleManifest } from "../modules/manifest.ts";
+import type { ActionTool, AgentDeclaration, RouteTool, ToolActor } from "./define-agent.ts";
 
 export type JsonSchema = Record<string, unknown>;
 

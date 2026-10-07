@@ -3,8 +3,8 @@ import passport from "passport";
 import type { BackendCtx } from "@tulipes/core/boot";
 import { lazy } from "@app/core";
 
-import { AuthController } from "../controllers/auth.controllers.js";
-import { authenticate, configurePassport } from "../helpers/passport.js";
+import { AuthController } from "../controllers/auth.controllers.ts";
+import { authenticate, configurePassport } from "../helpers/passport.ts";
 import {
   credentials,
   newPassword,
@@ -12,7 +12,7 @@ import {
   registration,
   sidParam,
   tokenPair,
-} from "../schemas/auth.schemas.js";
+} from "../schemas/auth.schemas.ts";
 
 export default function authRoutes(ctx: BackendCtx): void {
   const { app, rai, routes, config } = ctx;

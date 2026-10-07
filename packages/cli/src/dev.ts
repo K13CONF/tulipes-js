@@ -1,26 +1,22 @@
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
 
-import { runSync } from "./sync.js";
+import { runSync } from "./sync.ts";
+import { requireNativeTypeScript } from "./app-core.ts";
 
 /**
  * `tulipes dev [entry]` — sync first (generated types must never be stale
- * when the dev server starts), then hand off to tsx in watch mode.
- *
- * tsx is resolved from core's own dependencies rather than trusting PATH,
- * so the command works in any workspace layout.
+ * when the dev server starts), then run the entrypoint with node itself in
+ * watch mode. Node strips the types natively, so there is no loader to
+ * resolve and nothing to transpile: what runs in development is what PM2
+ * runs in production.
  */
 export async function runDev(rootDir: string, entry: string): Promise<void> {
+  requireNativeTypeScript();
   await runSync(rootDir);
-
-  const require = createRequire(import.meta.url);
-  const tsxPackage = require.resolve("tsx/package.json");
-  const tsxCli = join(dirname(tsxPackage), "dist", "cli.mjs");
 
   const child = spawn(
     process.execPath,
-    [tsxCli, "watch", "--clear-screen=false", entry],
+    ["--watch", "--watch-preserve-output", entry],
     { cwd: rootDir, stdio: "inherit" },
   );
   child.on("exit", (code) => {

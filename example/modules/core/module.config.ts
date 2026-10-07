@@ -1,7 +1,7 @@
 import { defineConfig } from "@tulipes/core/config";
 import { z } from "zod/v4";
 
-import { registerBasePlugins } from "./helpers/mongoose/index.js";
+import { registerBasePlugins } from "./helpers/mongoose/index.ts";
 
 /**
  * Declaration time (boot phase 4) is before models compile (phase 5), which

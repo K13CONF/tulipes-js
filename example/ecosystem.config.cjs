@@ -23,9 +23,9 @@ const modes = (processMode) => ({
 /** Shared by both apps. */
 const common = {
   cwd: __dirname,
-  // The app runs from TypeScript, so PM2 drives it through tsx. Point
-  // script at the compiled entrypoint instead once you add a build.
-  interpreter: "./node_modules/.bin/tsx",
+  // Node 24 strips types natively, so PM2 runs the TypeScript entrypoints
+  // with node itself: no loader, no build step, nothing to point elsewhere.
+  interpreter: "node",
   // Fork, not cluster: Socket.IO needs sticky sessions or the Redis
   // adapter before a second instance is safe, and bootstrap tasks would
   // run once per instance. Scale out only after wiring the adapter.
