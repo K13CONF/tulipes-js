@@ -1035,7 +1035,7 @@ test("an authenticated request on a cache hit performs no database read", async 
 
 test("a revocation on one replica is refused on the very next request on another", async () => {
   const next = await boot({
-    rootDir: fileURLToPath(new URL("../", import.meta.url)),
+    rootDir,
     appEnv: "test",
     handleSignals: false,
   });

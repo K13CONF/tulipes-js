@@ -38,8 +38,23 @@ export function appCache(environment: Environment): Cache {
   return active.cache;
 }
 
-/** Call from a module's onShutdown — the redis driver holds a connection. */
+/**
+ * The cache bootstrap's cleanup: the redis driver holds a connection. QUIT
+ * is the orderly close, but with the offline queue off it is refused on a
+ * client that is not ready — a process stopping while the first connection
+ * is still being made, or during an outage — so that client is dropped.
+ */
 export async function closeCache(): Promise<void> {
-  await active?.redis?.quit();
+  const redis = active?.redis;
   active = undefined;
+  if (!redis) return;
+  if (redis.status === "ready") {
+    try {
+      await redis.quit();
+      return;
+    } catch {
+      // fall through: the connection went away between the check and QUIT
+    }
+  }
+  redis.disconnect();
 }
