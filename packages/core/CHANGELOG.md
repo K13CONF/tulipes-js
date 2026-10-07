@@ -11,6 +11,17 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **Generated model and job types.** `tulipes sync` now writes
+  `types/tulipes.d.ts` (replacing `types/config.d.ts`, which it removes)
+  with two more augmentations: `KnownModels` in `@tulipes/mongoose`, one
+  entry per model file keyed by the model's literal name and typed as the
+  file's default export, so `ctx.models.get("User")` returns the model
+  mongoose infers from that schema; and `KnownJobs` in `@tulipes/bullmq`,
+  derived from each queue file's new `jobs` export (`{ [queue]: zodSchema }`),
+  so `queues.add()` and `job.data` in the processor agree on the payload. A
+  queue listed in `jobs` is defined without a separate `define()` call and
+  `add()` validates every payload with its schema. Names codegen does not
+  know keep the caller-side generic and `unknown` payloads.
 - **The module root is three files.** `package.json` (with the env contract
   under `tulipes.env`, replacing `meta.variables.json`), `module.config.ts`
   and `module.acl.ts`; public exports move to `lib/index.ts` behind

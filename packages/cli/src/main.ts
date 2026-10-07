@@ -21,7 +21,7 @@ Usage:
                                  --minimal | --preset minimal | --preset production
                                  --no-queues | --no-sockets  (production only) leave a provider out
   tulipes dev [entry]          run with tsx in watch mode (default entry: app.ts), sync first
-  tulipes sync                 regenerate types/config.d.ts and .env.example
+  tulipes sync                 regenerate types/tulipes.d.ts and .env.example
   tulipes env:check            validate env against every module's tulipes.env (CI-friendly)
   tulipes config:check         load every settings namespace from the store and print it
   tulipes routes               list every declared endpoint, with the roles that reach it

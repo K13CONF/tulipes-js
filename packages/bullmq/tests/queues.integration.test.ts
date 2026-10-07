@@ -127,3 +127,61 @@ integration(
     }
   },
 );
+
+const withQueues = (name: string, files: Record<string, string>) => fixture({
+  "package.json": JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } }),
+  "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
+    { name: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" },
+  ] } }),
+  "modules/probe/queues/probe.queues.js": `
+    import { z } from 'zod/v4';
+    export const jobs = { ${JSON.stringify(name)}: z.object({ id: z.string(), tries: z.number().int().default(1) }) };
+    export default () => {};
+  `,
+  ...files,
+});
+
+integration("a jobs export defines its queue and validates every payload a producer adds", async () => {
+  const name = `probe.${randomUUID()}`;
+  const app = await withQueues(name, {});
+  const handle = await app.boot({ mode: "script" });
+  const queues = handle.ctx.queues as QueueManager;
+
+  try {
+    expect(queues.names()).toContain(name);
+    await expect(queues.add(name, "run", { id: 1 })).rejects.toThrow(
+      /^Job data for queue "probe\.[^"]+" is invalid — id: Invalid input: expected string, received number$/,
+    );
+    await expect(queues.add(name, "run", { id: "x", tries: 1.5 })).rejects.toThrow(/tries: /);
+    await queues.add(name, "run", { id: "x" });
+
+    const [job] = await queues.queue(name).getWaiting();
+    expect(job?.data).toEqual({ id: "x", tries: 1 }); // the schema's default travelled
+  } finally {
+    await queues.queue(name).obliterate({ force: true });
+    await handle.shutdown();
+  }
+});
+
+integration("a queue with a schema from two modules is a boot error naming the first", async () => {
+  const name = `probe.${randomUUID()}`;
+  const app = await withQueues(name, {
+    "modules/other/package.json": JSON.stringify({ name: "@test/other", type: "module", dependencies: { "@test/probe": "*" } }),
+    "modules/other/queues/other.queues.js": `
+      import { z } from 'zod/v4';
+      export const jobs = { ${JSON.stringify(name)}: z.object({}) };
+      export default () => {};
+    `,
+  });
+
+  await expect(app.boot({ mode: "script" })).rejects.toThrow(/\[other\][\s\S]*already defined by module "probe"/);
+});
+
+integration("a jobs export that is not schemas is refused with the file", async () => {
+  const name = `probe.${randomUUID()}`;
+  const app = await withQueues(name, {
+    "modules/probe/queues/probe.queues.js": `export const jobs = { ${JSON.stringify(name)}: { parse: () => {} } }; export default () => {};`,
+  });
+
+  await expect(app.boot({ mode: "script" })).rejects.toThrow(/probe\.queues\.js: jobs\["probe\.[^"]+"\] is not a schema/);
+});

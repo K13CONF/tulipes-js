@@ -27,7 +27,7 @@ global install and always match the app.
 |---|---|
 | `tulipes init [dir] [--minimal \| --preset minimal \| --preset production] [--no-queues] [--no-sockets]` | scaffold an application; no services. The two opt-outs apply to the production preset and leave that provider, its files, dependencies and worker process out |
 | `tulipes dev [entry]` | regenerate types, then run under tsx watch |
-| `tulipes sync` | regenerate `types/config.d.ts` and `.env.example` |
+| `tulipes sync` | regenerate `types/tulipes.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting |
 | `tulipes routes [--offline \| --runtime]` | list declared endpoints |
 | `tulipes spec [--offline \| --runtime] [--openapi file] [--postman file] [--url base]` | generate documents (needs `@tulipes/spec` in the app) |

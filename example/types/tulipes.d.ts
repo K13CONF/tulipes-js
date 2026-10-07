@@ -79,4 +79,27 @@ declare module "@tulipes/core/config" {
   }
 }
 
+declare module "@tulipes/mongoose" {
+  interface KnownModels {
+    /** [auth] modules/auth/models/credential.model.ts */
+    "Credential": (typeof import("./../modules/auth/models/credential.model.js"))["default"];
+    /** [auth] modules/auth/models/revoked-token.model.ts */
+    "RevokedToken": (typeof import("./../modules/auth/models/revoked-token.model.js"))["default"];
+    /** [auth] modules/auth/models/session.model.ts */
+    "Session": (typeof import("./../modules/auth/models/session.model.js"))["default"];
+    /** [users] modules/users/models/user.model.ts */
+    "User": (typeof import("./../modules/users/models/user.model.js"))["default"];
+    /** [hello] modules/hello/models/greeting.model.ts */
+    "Greeting": (typeof import("./../modules/hello/models/greeting.model.js"))["default"];
+    /** [settings] modules/settings/models/audit-event.model.ts */
+    "AuditEvent": (typeof import("./../modules/settings/models/audit-event.model.js"))["default"];
+  }
+}
+
+declare module "@tulipes/bullmq" {
+  interface KnownJobs extends
+    JobsOf<typeof import("./../modules/users/queues/users.queues.js")>,
+    JobsOf<typeof import("./../modules/hello/queues/hello.queues.js")> {}
+}
+
 export {};

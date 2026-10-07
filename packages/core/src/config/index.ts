@@ -22,7 +22,7 @@ export {
  * the settings `modules/users/module.config.ts` declares live at `config.users`,
  * kept live by the settings manager.
  *
- * Augmentation target for the generated `types/config.d.ts` (`tulipes sync`):
+ * Augmentation target for the generated `types/tulipes.d.ts` (`tulipes sync`):
  * codegen adds one property per module, typed as its schema's output.
  * Declared in THIS module (not re-exported) because TypeScript module
  * augmentation only merges with the module that declares the interface.
