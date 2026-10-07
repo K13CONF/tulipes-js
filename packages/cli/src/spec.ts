@@ -106,7 +106,7 @@ async function loadGenerator(rootDir: string): Promise<SpecModule | undefined> {
     [
       "`tulipes spec` needs the generator package:",
       "",
-      "  yarn add -D @tulipes/spec",
+      "  pnpm add -D @tulipes/spec",
       "",
       "It is separate so an app that never generates a spec never installs it.",
     ].join("\n"),

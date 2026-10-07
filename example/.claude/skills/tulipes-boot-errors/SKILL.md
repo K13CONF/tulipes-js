@@ -59,16 +59,16 @@ runs, check in this order:
 2. **Directory** — routes in `routes/`, models in `models/`, and so on.
    Nested subfolders are not scanned.
 3. **The module is registered** — it needs a `package.json` and a
-   `yarn install` after creation. The startup banner lists every module it
+   `pnpm install` after creation. The startup banner lists every module it
    found; if yours is missing, the problem is there.
 4. **`export default`** — every contract file except models exports a
    function as its default.
 
 ## Other symptoms
 
-- **Types are `unknown` or a new variable is not typed** → run `yarn sync`.
+- **Types are `unknown` or a new variable is not typed** → run `pnpm sync`.
 - **Worker exits immediately** → no processors registered; it refuses to
   idle. Add a `*.queues.ts` with `process()`.
 - **Env change has no effect** → `process.env` beats the file. Check for a
   shell export or container variable of the same name.
-- To validate configuration without booting the whole app: `yarn check`.
+- To validate configuration without booting the whole app: `pnpm check`.

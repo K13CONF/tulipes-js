@@ -130,7 +130,7 @@ async function updateApp(
 ): Promise<void> {
   const range = `^${latest}`;
   const changed = manifests.filter(({ path }) => rewrite(path, range));
-  // The app's own CLI devDependency moves with it, so `yarn dev` and friends
+  // The app's own CLI devDependency moves with it, so `pnpm dev` and friends
   // keep matching the framework they generate for.
   if (rewrite(join(rootDir, "package.json"), `^${latestCli}`, CLI)) changed.push({ path: join(rootDir, "package.json") });
 
@@ -274,10 +274,10 @@ function detectManager(rootDir: string): "yarn" | "npm" | "pnpm" {
       readFileSync(join(rootDir, "package.json"), "utf8"),
     ) as Manifest;
     const pinned = manifest.packageManager ?? "";
-    if (pinned.startsWith("pnpm")) return "pnpm";
+    if (pinned.startsWith("yarn")) return "yarn";
     if (pinned.startsWith("npm")) return "npm";
   } catch {
     // fall through
   }
-  return "yarn";
+  return "pnpm";
 }

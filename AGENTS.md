@@ -14,13 +14,13 @@ framework.
 
 | Command | Use |
 |---|---|
-| `corepack enable && yarn install` | once per machine; yarn 4 is pinned |
-| `yarn typecheck` | every public workspace |
-| `yarn test` | the suite; needs `TEST_MONGO_URI` and `TEST_REDIS_URL` |
-| `yarn test:types` | the `.test-d.ts` type fixtures |
-| `yarn test:coverage` | the suite with the thresholds CI enforces |
-| `yarn example` | boot the reference app (MongoDB and Redis required) |
-| `yarn install --immutable` | what CI runs — a stale lockfile fails the build |
+| `pnpm install` | pnpm 10 is pinned through `packageManager`; `npm install -g pnpm` once per machine |
+| `pnpm typecheck` | every public workspace |
+| `pnpm test` | the suite; needs `TEST_MONGO_URI` and `TEST_REDIS_URL` |
+| `pnpm test:types` | the `.test-d.ts` type fixtures |
+| `pnpm test:coverage` | the suite with the thresholds CI enforces |
+| `pnpm example` | boot the reference app (MongoDB and Redis required) |
+| `pnpm install --frozen-lockfile` | what CI runs — a stale lockfile fails the build |
 
 Integration tests skip without services and CI refuses that, so run them with
 both variables set before claiming a suite passed.

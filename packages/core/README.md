@@ -30,7 +30,7 @@ TulipesBootError: Boot aborted during "environment" — 3 issue(s):
 
 ## Quick start
 
-Requires Node 24.x and Corepack. The 0.10 line is stable — its API is settled
+Requires Node 24.x and pnpm. The 0.10 line is stable — its API is settled
 and breaking changes wait for 0.11 — but no production pilot has run it yet;
 the [compatibility policy](../../docs/support.md) says exactly what that leaves
 unproven.
@@ -39,14 +39,13 @@ unproven.
 npm install -g @tulipes/cli
 tulipes init my-api
 cd my-api
-corepack enable
-yarn install
-yarn sync
-yarn typecheck
-yarn check
-yarn test
-yarn spec
-yarn dev
+pnpm install
+pnpm sync
+pnpm typecheck
+pnpm check
+pnpm test
+pnpm spec
+pnpm dev
 ```
 
 Open http://localhost:3000/api/v1/hello or http://localhost:3000/health.
@@ -426,7 +425,7 @@ only in development.
 
 The command line is its own package, [`@tulipes/cli`](https://www.npmjs.com/package/@tulipes/cli):
 install it globally to scaffold, and generated apps also list it in
-`devDependencies` so `yarn dev`, `yarn sync` and `yarn tulipes …` need no
+`devDependencies` so `pnpm dev`, `pnpm sync` and `pnpm tulipes …` need no
 global install. Core itself ships no binary, no templates and no TypeScript
 loader — a running app installs only the HTTP runtime.
 
@@ -454,7 +453,7 @@ boots the application and requires its declared services. `routes` and `spec`
 default to runtime inspection, which connects configured infrastructure and runs
 config/route factories and shutdown hooks, while skipping bootstrap, sockets,
 listening and readiness. `--offline` builds opted-in native routers and loads ACL
-without services, runtime config or secrets. Both new presets use it in `yarn spec`.
+without services, runtime config or secrets. Both new presets use it in `pnpm spec`.
 See [offline inspection](../../docs/offline-inspection.md) for migration and limits.
 This interface is available from core `0.10.0`; use `@tulipes/core` with
 `@tulipes/spec` and the providers your app declares.
@@ -542,8 +541,8 @@ router.post(
 ```
 
 ```sh
-yarn add -D @tulipes/spec
-yarn tulipes spec --openapi docs/openapi.json --postman docs/collection.json
+pnpm add -D @tulipes/spec
+pnpm tulipes spec --openapi docs/openapi.json --postman docs/collection.json
 ```
 
 One declaration validates the request and documents it, so the two cannot

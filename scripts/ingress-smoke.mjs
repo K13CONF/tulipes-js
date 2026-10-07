@@ -55,14 +55,13 @@ try {
   const resolutions = Object.fromEntries(manifest.packages.map((pkg) => [pkg.name, 'file:' + join(artifacts, pkg.file)]));
   const cliRoot = join(workspace, 'cli');
   mkdirSync(cliRoot);
-  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'yarn@4.18.0', dependencies: { '@tulipes/cli': resolutions['@tulipes/cli'] }, resolutions }));
-  writeFileSync(join(cliRoot, '.yarnrc.yml'), 'nodeLinker: node-modules\n');
-  run('yarn', ['install'], cliRoot, { ...process.env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
+  writeFileSync(join(cliRoot, 'package.json'), JSON.stringify({ private: true, packageManager: 'pnpm@10.28.0', dependencies: { '@tulipes/cli': resolutions['@tulipes/cli'] }, pnpm: { overrides: resolutions } }));
+  run('pnpm', ['install', '--no-frozen-lockfile'], cliRoot);
 
   app = join(workspace, 'app');
   run(process.execPath, [join(cliRoot, 'node_modules/@tulipes/cli/dist/bin.js'), 'init', app, '--preset', 'production'], workspace);
   const pkgFile = join(app, 'package.json');
-  writeFileSync(pkgFile, JSON.stringify({ ...readJson(pkgFile), resolutions }, null, 2));
+  writeFileSync(pkgFile, JSON.stringify({ ...readJson(pkgFile), pnpm: { overrides: resolutions } }, null, 2));
 
   // A probe module: the generated app has no endpoint that reports the client
   // identity it resolved, and that identity is exactly what this tests.
@@ -126,8 +125,8 @@ export default defineRoutes(({ rai }) => {
   mongo.pathname = '/tulipes_ingress_' + randomBytes(6).toString('hex');
   Object.assign(env, { MONGO_URI: mongo.href, REDIS_URL: env.TEST_REDIS_URL });
 
-  run('yarn', ['install'], app, { ...env, YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' });
-  run('yarn', ['sync'], app, env);
+  run('pnpm', ['install', '--no-frozen-lockfile'], app, env);
+  run('pnpm', ['sync'], app, env);
 
   const server = spawn(process.execPath, ['--import', 'tsx', 'app.ts'], { cwd: app, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';

@@ -70,7 +70,7 @@ rai({ id: "auth:sessions", name: "List sessions", folder: "sessions" })
 ## Generating
 
 ```sh
-yarn spec     # tulipes spec --offline --openapi docs/openapi.json --postman docs/collection.json
+pnpm spec     # tulipes spec --offline --openapi docs/openapi.json --postman docs/collection.json
 ```
 
 Offline generation builds native router factories wrapped in defineRoutes().

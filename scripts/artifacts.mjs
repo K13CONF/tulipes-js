@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -51,7 +51,9 @@ function prepare(dir) {
     const source = readJson(`packages/${name}/package.json`);
     if (readFileSync(`packages/${name}/LICENSE`, 'utf8') !== readFileSync('LICENSE', 'utf8')) throw new Error('Package license differs from root LICENSE');
     const file = `${name}-${source.version}.tgz`;
-    run('yarn', ['workspace', source.name, 'pack', '--out', join(dir, file)]);
+    // pnpm names a scoped archive "tulipes-core-<version>.tgz"; the manifest keeps the short form.
+    run('pnpm', ['--filter', source.name, 'pack', '--pack-destination', resolve(dir)]);
+    renameSync(join(dir, `${source.name.replace('@', '').replace('/', '-')}-${source.version}.tgz`), join(dir, file));
     manifest.packages.push({ name: source.name, version: source.version, file, integrity: digest(join(dir, file)) });
   }
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');

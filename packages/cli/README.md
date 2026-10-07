@@ -16,11 +16,11 @@ loader it carries.
 ```sh
 npm install -g @tulipes/cli@next
 tulipes init my-api            # minimal preset; --preset production for the full app
-cd my-api && corepack enable && yarn install && yarn dev
+cd my-api && pnpm install && pnpm dev
 ```
 
-Generated apps also list `@tulipes/cli` in `devDependencies`, so `yarn dev`,
-`yarn sync`, `yarn spec` and `yarn tulipes new module <name>` work without a
+Generated apps also list `@tulipes/cli` in `devDependencies`, so `pnpm dev`,
+`pnpm sync`, `pnpm spec` and `pnpm tulipes new module <name>` work without a
 global install and always match the app.
 
 | Command | What it does |

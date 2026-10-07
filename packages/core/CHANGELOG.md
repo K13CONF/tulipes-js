@@ -11,6 +11,13 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **pnpm replaces yarn** for generated apps and the repository. `tulipes init`
+  writes `packageManager: pnpm@10.28.0`, a `pnpm-workspace.yaml` naming
+  `modules/*`, `pnpm.overrides` in place of `resolutions` and an
+  `onlyBuiltDependencies` allow-list; the `.yarnrc.yml` is gone. `tulipes
+  update` defaults to pnpm when no lockfile says otherwise. Existing apps
+  follow the pnpm section of [MIGRATING.md](./MIGRATING.md).
+
 ## [0.10.1] — 2026-09-12
 
 A patch release: nothing in the runtime changed, and no migration is needed.

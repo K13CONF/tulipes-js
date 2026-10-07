@@ -42,11 +42,11 @@ itself pulls in no database, queue or socket driver.
 ## Working in here
 
 ```sh
-corepack enable          # once per machine — activates the pinned yarn 4
-yarn install
-yarn typecheck           # every public workspace
-yarn test                # needs TEST_MONGO_URI and TEST_REDIS_URL
-yarn example             # boot the reference app (needs MongoDB and Redis)
+npm install -g pnpm      # once per machine; the pinned pnpm line switches in on first use
+pnpm install
+pnpm typecheck           # every public workspace
+pnpm test                # needs TEST_MONGO_URI and TEST_REDIS_URL
+pnpm example             # boot the reference app (needs MongoDB and Redis)
 ```
 
 The example is not a demo kept alive by hand: CI scaffolds a fresh app with

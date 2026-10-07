@@ -18,7 +18,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
-    "prepack": "yarn build"
+    "prepack": "pnpm build"
   },
   "publishConfig": {
     "access": "public",
@@ -35,7 +35,8 @@
   },
   "devDependencies": {
     "@types/node": "^24.2.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "@tulipes/spec": "workspace:*"
   },
   "repository": {
     "type": "git",
@@ -55,5 +56,13 @@
   "homepage": "https://github.com/kemora13conf/bp-backend-express/tree/master/packages/cli#readme",
   "bugs": {
     "url": "https://github.com/kemora13conf/bp-backend-express/issues"
+  },
+  "peerDependencies": {
+    "@tulipes/spec": "^0.3.1"
+  },
+  "peerDependenciesMeta": {
+    "@tulipes/spec": {
+      "optional": true
+    }
   }
 }

@@ -9,7 +9,7 @@ No release is created just by merging a feature PR.
    `@tulipes/core`, `@tulipes/spec`, `@tulipes/mongoose`, `@tulipes/bullmq`,
    `@tulipes/socket.io` and `@tulipes/cli`; every one whose bytes changed needs a new version
    before publication, and each provider's core peer range must admit the core
-   it ships with. Note that `yarn pack` rewrites `workspace:*` devDependencies to
+   it ships with. Note that `pnpm pack` rewrites `workspace:*` devDependencies to
    the concrete core version, so **every workspace package's archive changes
    whenever core's version does**: bump them all with core, even without source
    changes, or the immutable-version preflight refuses the repack.

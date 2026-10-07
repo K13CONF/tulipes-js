@@ -33,7 +33,7 @@ Produce from anywhere with the context:
 await queues!.add("billing.send-invoice", "send", { invoiceId: invoice.id });
 ```
 
-Run a consumer with `yarn worker`. Without it, jobs pile up in Redis and
+Run a consumer with `pnpm worker`. Without it, jobs pile up in Redis and
 nothing processes them — that is the correct behaviour, not a bug.
 
 ## Rules

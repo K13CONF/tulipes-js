@@ -1,4 +1,5 @@
-import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, mkdir, readdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { onTestFinished, vi } from "vitest";
@@ -10,7 +11,7 @@ export async function fixture(files: Record<string, string> = {}) {
   const rootDir = await mkdtemp(join(tmpdir(), "tulipes-test-"));
   const handles: BootHandle[] = [];
 
-  await symlink(resolve("node_modules"), join(rootDir, "node_modules"), "dir");
+  await linkWorkspace(join(rootDir, "node_modules"));
 
   const write = async (file: string, contents: string) => {
     const path = join(rootDir, file);
@@ -62,6 +63,42 @@ export async function fixture(files: Record<string, string> = {}) {
       return handle;
     },
   };
+}
+
+/**
+ * A fixture app resolves packages the way a flat install would. pnpm keeps
+ * the workspace in two layers: the root's own direct dependencies at
+ * node_modules, and everything else (every workspace package and transitive
+ * dependency, linked once) in the virtual store's hoisted directory. The
+ * fixture links both into one flat directory, scope by scope, root last so a
+ * root dependency wins where both layers carry a name.
+ */
+async function linkWorkspace(target: string): Promise<void> {
+  const layers = [resolve("node_modules/.pnpm/node_modules"), resolve("node_modules")].filter((layer) => existsSync(layer));
+
+  const link = (from: string, to: string) =>
+    symlink(from, to, "dir").catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+    });
+
+  await mkdir(target, { recursive: true });
+
+  for (const layer of layers) {
+    for (const entry of await readdir(layer)) {
+      if (entry.startsWith(".")) continue;
+
+      if (!entry.startsWith("@")) {
+        await link(join(layer, entry), join(target, entry));
+        continue;
+      }
+
+      await mkdir(join(target, entry), { recursive: true });
+
+      for (const inner of await readdir(join(layer, entry))) {
+        await link(join(layer, entry, inner), join(target, entry, inner));
+      }
+    }
+  }
 }
 
 export function url(handle: BootHandle): string {
