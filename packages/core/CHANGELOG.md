@@ -9,6 +9,30 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [0.11.0-rc.2] — 2026-10-08
+
+A second candidate for the CLI fix below; core's own code is unchanged since
+rc.1, and every package is republished at `-rc.2` because packing rewrites its
+core dependency. Published packages: core `0.11.0-rc.2`, `@tulipes/cli`
+`0.2.0-rc.2`, `@tulipes/spec` `0.3.2-rc.2`, `@tulipes/mongoose` and
+`@tulipes/bullmq` `0.2.0-rc.2`, `@tulipes/socket.io` `0.1.2-rc.2`,
+`@tulipes/mcp` and `@tulipes/testing` `0.1.0-rc.2`.
+
+- **`tulipes update` never downgrades.** It moved to npm's `latest` tag
+  without comparing, so on rc.1 it rewrote an app to `^0.10.1` and
+  reinstalled the global CLI at 0.1.1. It now raises a plain version range
+  only when the target is newer, and leaves `workspace:`, `file:` and
+  compound ranges as written. Do not run the rc.1 CLI's `tulipes update` on
+  an rc.1 app.
+- **`tulipes update` moves every `@tulipes` package together.** Providers,
+  spec, testing and the CLI devDependency go to the version paired with the
+  new core instead of staying on a line whose peer range refuses it. Every
+  version is fetched before any manifest is written.
+- **The agent surface is experimental.** `@tulipes/core/agent`, the
+  manifest, the `agent` module's routes, `tulipes agent manifest` and
+  `@tulipes/mcp` are outside the 0.11 compatibility promise
+  (`docs/support.md`). No code change.
+
 ## [0.11.0-rc.1] — 2026-10-07
 
 The 0.11 line as a release candidate: every entry below is breaking for an app
