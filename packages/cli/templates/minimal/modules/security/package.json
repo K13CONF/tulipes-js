@@ -1,0 +1,16 @@
+{
+  "name": "@tulipes-example/security",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "tulipes": {
+    "offline": true,
+    "tier": "sys",
+    "priority": 10
+  },
+  "dependencies": {
+    "@tulipes/core": "^0.10.1",
+    "express": "^5",
+    "helmet": "^8"
+  }
+}

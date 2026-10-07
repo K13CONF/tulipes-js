@@ -1,0 +1,14 @@
+{
+  "name": "@tulipes-example/hello",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "tulipes": {
+    "offline": true
+  },
+  "dependencies": {
+    "@tulipes/core": "^0.10.1",
+    "express": "^5",
+    "zod": "^3.25"
+  }
+}

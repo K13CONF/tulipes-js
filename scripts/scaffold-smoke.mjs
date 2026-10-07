@@ -51,7 +51,7 @@ try {
   if (preset === 'production') {
     // The installed generator must carry the browser policy with its auth code.
     const guide = readFileSync(join(app, 'docs/browser-auth.md'), 'utf8');
-    const template = readFileSync(join(cliRoot, 'node_modules/@tulipes/cli/templates/browser-auth.md'), 'utf8');
+    const template = readFileSync(join(cliRoot, 'node_modules/@tulipes/cli/templates/app/docs/browser-auth.md'), 'utf8');
     if (guide !== template) throw new Error('Generated browser authentication guide differs from the packed template');
   }
 
@@ -84,20 +84,31 @@ try {
   }
   // Installation evidence, not runtime evidence: can the app, and can its
   // installed core, resolve the driver at all? Minimal must say no everywhere.
+  // pnpm installs each package with only its own dependencies, so a driver the
+  // app never declares (mongodb under mongoose, bullmq under its provider) is
+  // reached through the package that declares it, never from the app root.
   const probe = run(process.execPath, ['--input-type=module', '-e', `
     import { createRequire } from 'node:module';
     const targets = ['mongoose', 'mongodb', 'bson', '@tulipes/mongoose', 'bullmq', '@tulipes/bullmq', 'ioredis', 'socket.io', '@tulipes/socket.io'];
+    const owners = { mongodb: 'mongoose', bson: 'mongoose', bullmq: '@tulipes/bullmq', 'socket.io': '@tulipes/socket.io' };
     const tooling = ['tsx', 'esbuild', '@tulipes/cli'];
-    const from = anchor => Object.fromEntries(targets.map(t => { try { createRequire(anchor).resolve(t); return [t, true]; } catch { return [t, false]; } }));
+    const tryResolve = (anchor, t) => { try { return createRequire(anchor).resolve(t); } catch { return undefined; } };
+    const from = anchor => Object.fromEntries(targets.map(t => [t, Boolean(tryResolve(anchor, t))]));
+    const reach = anchor => Object.fromEntries(targets.map(t => {
+      if (tryResolve(anchor, t)) return [t, true];
+      const owner = owners[t] && tryResolve(anchor, owners[t]);
+      return [t, Boolean(owner && tryResolve(owner, t))];
+    }));
     const coreEntry = createRequire(process.argv[1]).resolve('@tulipes/core');
-    const fromCore = Object.fromEntries(tooling.map(t => { try { createRequire(coreEntry).resolve(t); return [t, true]; } catch { return [t, false]; } }));
-    console.log(JSON.stringify({ app: from(process.argv[1]), core: from(coreEntry), cli: from(process.argv[2]), tooling_from_core: fromCore }));
+    const fromCore = Object.fromEntries(tooling.map(t => [t, Boolean(tryResolve(coreEntry, t))]));
+    console.log(JSON.stringify({ app: reach(process.argv[1]), core: from(coreEntry), cli: from(process.argv[2]), tooling_from_core: fromCore }));
   `, pkgFile, bin], app, env);
   const resolved = JSON.parse(probe.trim().split('\n').at(-1));
   writeFileSync(join(logs, 'resolve.json'), JSON.stringify(resolved, null, 2));
   // Minimal: absent from the app, from core's own directory and from the
-  // launcher. Production: present for the app (its modules and providers own
-  // them), never through the launcher; core's directory sees them only by hoisting.
+  // launcher. Production: reachable from the app (its modules and providers
+  // own them), never through the launcher; core's directory sees them only
+  // through the store's hoisted directory, which is recorded, not asserted.
   const expectations = preset === 'minimal' ? { app: false, core: false, cli: false } : { app: true, cli: false };
   // A production variant without a provider must not carry that provider's driver either.
   const omitted = new Set([...(features.queues ? [] : ['bullmq', '@tulipes/bullmq']), ...(features.sockets ? [] : ['socket.io', '@tulipes/socket.io'])]);

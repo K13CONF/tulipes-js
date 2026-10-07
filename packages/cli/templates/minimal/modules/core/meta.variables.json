@@ -1,0 +1,10 @@
+{
+  "variables": [
+    {
+      "name": "PORT",
+      "type": "number",
+      "default": 3000,
+      "description": "HTTP listener port"
+    }
+  ]
+}

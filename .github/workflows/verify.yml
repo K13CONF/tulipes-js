@@ -63,7 +63,7 @@ jobs:
           diff "$RUNNER_TEMP/scaffold/config/routes.ts" example/config/routes.ts
           diff -r "$RUNNER_TEMP/scaffold/nginx" example/nginx
           diff "$RUNNER_TEMP/scaffold/docs/browser-auth.md" example/docs/browser-auth.md
-          diff packages/cli/templates/browser-auth.md example/docs/browser-auth.md
+          diff "$RUNNER_TEMP/scaffold/README.md" <(sed "s/tulipes-example/scaffold/; s/ *<!-- feature:[a-z]* -->//" example/README.md)
       - uses: actions/upload-artifact@v4
         with:
           name: release-packages

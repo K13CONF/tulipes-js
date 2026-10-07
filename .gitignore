@@ -20,3 +20,7 @@ logs/
 coverage/
 reports/
 .artifacts/
+
+# packed into the CLI at prepack from example/ and packages/*/package.json
+packages/cli/templates/app/
+packages/cli/templates/versions.json
