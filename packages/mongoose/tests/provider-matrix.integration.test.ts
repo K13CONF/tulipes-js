@@ -14,7 +14,8 @@ const mongo = process.env.TEST_MONGO_URI;
 const integration = test.skipIf(!mongo);
 
 const declared = JSON.stringify({ type: "module", tulipes: { providers: { models: "@tulipes/mongoose" } } });
-const uriMeta = JSON.stringify({ variables: [{ name: "MONGO_URI", type: "url", default: mongo, description: "Test database" }] });
+const uriEnv = [{ name: "MONGO_URI", type: "url", default: mongo, description: "Test database" }];
+const uriMeta = JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: uriEnv } });
 const openConnections = () => mongoose.connections.filter((c) => c.readyState !== 0);
 
 beforeEach(() => {
@@ -28,7 +29,7 @@ afterEach(async () => {
 });
 
 integration("a MONGO_URI without a declaration connects nothing, even with the provider installed", async () => {
-  const app = await fixture({ "modules/probe/meta.variables.json": uriMeta });
+  const app = await fixture({ "modules/probe/package.json": uriMeta });
   const before = mongoose.connections.length;
 
   const handle = await app.boot({ mode: "script" });
@@ -52,7 +53,7 @@ integration("an unreachable database fails inside the provider, after ownership,
   vi.stubEnv("MONGO_URI", "mongodb://127.0.0.1:1/unreachable");
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/meta.variables.json": JSON.stringify({ variables: [{ name: "MONGO_URI", type: "url", required: true, description: "Test database" }] }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [{ name: "MONGO_URI", type: "url", required: true, description: "Test database" }] } }),
   });
 
   await expect(app.boot({ mode: "script" })).rejects.toThrow(/database connection failed \(MONGO_URI\)/);
@@ -62,8 +63,7 @@ integration("an unreachable database fails inside the provider, after ownership,
 integration("a module that only consumes models declares the requirement and gets an empty store", async () => {
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"] } }),
-    "modules/probe/meta.variables.json": uriMeta,
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"], env: uriEnv } }),
   });
 
   const handle = await app.boot({ mode: "script" });
@@ -76,7 +76,7 @@ integration("a module that only consumes models declares the requirement and get
 
 integration("a bootstrap-only module runs its task in backend mode and is refused without a provider", async () => {
   const files = {
-    "modules/probe/meta.variables.json": uriMeta,
+    "modules/probe/package.json": uriMeta,
     "modules/probe/bootstrap/mark.bootstrap.js": `
       import { writeFileSync } from 'node:fs';
       export default async (ctx) => { writeFileSync(new URL('../../../bootstrapped', import.meta.url), ctx.models.names().join(',')); };
@@ -104,7 +104,7 @@ integration("two boots in one process own separate connections and the app's glo
 
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/meta.variables.json": uriMeta,
+    "modules/probe/package.json": uriMeta,
     "modules/probe/models/thing.model.js": `
       import { Schema } from 'mongoose';
       export default { name: 'Thing', schema: new Schema({ name: String }) };
@@ -137,7 +137,7 @@ integration("two boots in one process own separate connections and the app's glo
 integration("a bootstrap failure is reported with the module and file, and the connection is released", async () => {
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/meta.variables.json": uriMeta,
+    "modules/probe/package.json": uriMeta,
     "modules/probe/bootstrap/explode.bootstrap.js": `export default async () => { throw new Error('seed exploded'); };`,
   });
 
@@ -149,7 +149,7 @@ integration("duplicate model names across modules name both owners and abort bef
   const model = `import { Schema } from 'mongoose'; export default { name: 'Shared', schema: new Schema({}) };`;
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/meta.variables.json": uriMeta,
+    "modules/probe/package.json": uriMeta,
     "modules/probe/models/shared.model.js": model,
     "modules/other/package.json": JSON.stringify({ name: "@test/other", type: "module", tulipes: { dependsOn: ["probe"] } }),
     "modules/other/models/shared.model.js": model,

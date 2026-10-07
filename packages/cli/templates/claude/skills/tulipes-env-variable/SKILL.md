@@ -1,6 +1,6 @@
 ---
 name: tulipes-env-variable
-description: Use when adding or changing any configuration value in a Tulipes app — API keys, connection strings, feature toggles, limits — or when tempted to read process.env. Covers the split between environment variables (meta.variables.json) and settings (the module.config.ts schema), the resolution precedence and typed reads.
+description: Use when adding or changing any configuration value in a Tulipes app — API keys, connection strings, feature toggles, limits — or when tempted to read process.env. Covers the split between environment variables (tulipes.env in package.json) and settings (the module.config.ts schema), the resolution precedence and typed reads.
 ---
 
 # Adding a configuration value
@@ -39,26 +39,29 @@ throws, so a typo can never reach production as `undefined`.
 1. Choose the owning module. Infra shared by everything (`PORT`,
    `MONGO_URI`, `REDIS_URL`) belongs to the sys `core` module; anything
    feature-specific belongs to that feature's module.
-2. Declare it in that module's `meta.variables.json`:
+2. Declare it under `tulipes.env` in that module's `package.json`:
 
 ```json
 {
-  "variables": [
-    {
-      "name": "STRIPE_API_KEY",
-      "type": "secret",
-      "group": "billing",
-      "required": true,
-      "description": "Server-side Stripe key"
-    },
-    {
-      "name": "BILLING_TRIAL_DAYS",
-      "type": "number",
-      "group": "billing",
-      "description": "Free trial length",
-      "default": 14
-    }
-  ]
+  "name": "@app/billing",
+  "tulipes": {
+    "env": [
+        {
+          "name": "STRIPE_API_KEY",
+          "type": "secret",
+          "group": "billing",
+          "required": true,
+          "description": "Server-side Stripe key"
+        },
+        {
+          "name": "BILLING_TRIAL_DAYS",
+          "type": "number",
+          "group": "billing",
+          "description": "Free trial length",
+          "default": 14
+        }
+    ]
+  }
 }
 ```
 
@@ -97,7 +100,7 @@ values always win, which is why deployments need no file.
 
 - `Environment.get()` on an undeclared name **throws**. If you added the
   entry and still get the error, you did not run `pnpm sync`, or you
-  edited a different module's meta file than the one you are reading from.
+  edited a different module's manifest than the one you are reading from.
 - `APP_ENV` (not `NODE_ENV`) selects the env file.
 - A missing `required` variable is not a runtime surprise — the boot
   aborts and lists every missing variable at once.

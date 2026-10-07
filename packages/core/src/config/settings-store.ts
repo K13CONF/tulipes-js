@@ -48,6 +48,33 @@ export class SettingsConflictError extends Error {
   }
 }
 
+/**
+ * A store that keeps nothing: every namespace reads as never written, so
+ * the manager seeds the defaults, and a save is remembered only for the
+ * life of the process. Inspection uses it; tests can.
+ */
+export class MemorySettingsStore implements SettingsStore {
+  readonly #entries = new Map<string, StoredSettings>();
+
+  constructor(private readonly label = "memory") {}
+
+  async load(namespace: string): Promise<StoredSettings | undefined> {
+    return this.#entries.get(namespace);
+  }
+
+  async save(namespace: string, values: Record<string, unknown>, expectedVersion: number, actor: Actor): Promise<StoredSettings> {
+    const current = this.#entries.get(namespace);
+    if ((current?.version ?? 0) !== expectedVersion) throw new SettingsConflictError(namespace, current, expectedVersion);
+    const stored: StoredSettings = { values, version: expectedVersion + 1, updated_at: new Date().toISOString(), updated_by: actor };
+    this.#entries.set(namespace, stored);
+    return stored;
+  }
+
+  status(): { label: string; ready: boolean } {
+    return { label: this.label, ready: true };
+  }
+}
+
 type FileDocument = Record<string, StoredSettings>;
 
 /**

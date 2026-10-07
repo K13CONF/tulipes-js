@@ -85,7 +85,7 @@ test-only databases; application data must never be supplied to this suite.
 
 ## Offline inspection
 
-`pnpm test packages/core/tests/inspection.test.ts` exercises offline loading and
+`pnpm test packages/core/tests/inspection.test.ts` exercises the inspection boot and
 runtime route/schema parity. It includes the production starter with connections
 denied and secrets absent. Its runtime HTTP assertions need local port access.
 Both starter app suites retain the same parity assertion against a real boot.

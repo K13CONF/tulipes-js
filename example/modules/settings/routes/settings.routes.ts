@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { defineRoutes } from "@tulipes/core/http";
-import { apiPrefix } from "../../../config/routes.js";
+import type { BackendCtx } from "@tulipes/core/boot";
+
+import { SettingsController } from "../controllers/settings.controllers.js";
 import {
   localeParams,
   logQuery,
@@ -9,16 +10,12 @@ import {
   translationsBody,
   variableName,
   variableValue,
-} from "../schemas.js";
+} from "../schemas/settings.schemas.js";
 
-export default defineRoutes(({ app, rai, routes, runtime }) => {
+export default function settingsRoutes(ctx: BackendCtx): void {
+  const { rai, routes, config } = ctx;
   const router = Router();
-  const settings = runtime(async (ctx) => {
-    const { SettingsController } = await import(
-      "../controllers/settings.controllers.js"
-    );
-    return new SettingsController(ctx);
-  });
+  const settings = new SettingsController(ctx);
 
   router.get(
     "/modules",
@@ -29,7 +26,7 @@ export default defineRoutes(({ app, rai, routes, runtime }) => {
         "Manifest, declared variables with their full spec and resolved source, config, i18n and routes",
       folder: "settings",
     }),
-    settings((value) => value.modules()),
+    settings.modules(),
   );
 
   router.get(
@@ -42,7 +39,7 @@ export default defineRoutes(({ app, rai, routes, runtime }) => {
       params: variableName,
       query: revealQuery,
     }),
-    settings((value) => value.variable()),
+    settings.variable(),
   );
 
   router.put(
@@ -55,7 +52,7 @@ export default defineRoutes(({ app, rai, routes, runtime }) => {
       params: variableName,
       body: variableValue,
     }),
-    settings((value) => value.setVariable()),
+    settings.setVariable(),
   );
 
   router.get(
@@ -66,7 +63,7 @@ export default defineRoutes(({ app, rai, routes, runtime }) => {
       folder: "settings",
       params: localeParams,
     }),
-    settings((value) => value.translations()),
+    settings.translations(),
   );
 
   router.put(
@@ -80,7 +77,7 @@ export default defineRoutes(({ app, rai, routes, runtime }) => {
       params: localeParams,
       body: translationsBody,
     }),
-    settings((value) => value.setTranslations()),
+    settings.setTranslations(),
   );
 
   router.post(
@@ -94,7 +91,7 @@ export default defineRoutes(({ app, rai, routes, runtime }) => {
       folder: "settings",
       body: rebootBody,
     }),
-    settings((value) => value.reboot()),
+    settings.reboot(),
   );
 
   router.get(
@@ -106,8 +103,8 @@ export default defineRoutes(({ app, rai, routes, runtime }) => {
       folder: "settings",
       query: logQuery,
     }),
-    settings((value) => value.logStream()),
+    settings.logStream(),
   );
 
-  routes.mount(app, `${apiPrefix}/settings`, router);
-});
+  routes.mount(router, `${config.api!.prefix}/settings`);
+}

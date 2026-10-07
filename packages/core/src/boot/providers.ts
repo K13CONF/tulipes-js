@@ -316,6 +316,25 @@ export async function disposeProviders(acquired: readonly AcquiredProvider[], cl
   }
 }
 
+/**
+ * What a declared capability is during inspection: anything that touches it
+ * throws with the reason. `requireModels()` still sees a value, because the
+ * app did declare the provider; only using it is the mistake, and it is one
+ * a routes file makes by building with infrastructure instead of handling
+ * requests with it.
+ */
+export function inspectionStub(capability: ProviderCapability): object {
+  const message = `ctx.${capability} is not available during inspection — use it inside a handler or a bootstrap, not while building routes`;
+  return new Proxy(Object.create(null) as object, {
+    get(_target, property) {
+      // Awaiting a stub must not look like a thenable.
+      if (property === "then" || property === Symbol.toStringTag || property === Symbol.toPrimitive) return undefined;
+      throw new Error(message);
+    },
+    has: () => false,
+  });
+}
+
 export interface AcquiredStatus extends ProviderStatus {
   capability: string;
   provider: string;

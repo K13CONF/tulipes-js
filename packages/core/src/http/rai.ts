@@ -106,9 +106,34 @@ export class RouteRegistry {
   currentModule = "(app)";
   #checker: AccessChecker | undefined;
   #records: RouteRecord[] = [];
+  #app: Express | undefined;
+  #prefix = "";
 
-  /** Mount a router with a prefix preserved for inspection, including named parameters. */
-  mount(parent: Express | Router, path: string, router: Router): void {
+  /** @internal The backend branch binds the app and the configured prefix before any routes file runs. */
+  bind_(app: Express, prefix: string): void {
+    this.#app = app;
+    this.#prefix = prefix.replace(/\/$/, "");
+  }
+
+  /** Where a returned router lands: `config.api.prefix`, or the root. */
+  get prefix(): string {
+    return this.#prefix;
+  }
+
+  /**
+   * Mount a router with its prefix preserved for inspection, including named
+   * parameters. `mount(router)` mounts on the app under the configured
+   * prefix, `mount(router, "/ops")` under another path, and
+   * `mount(parent, "/tenants/:tenant", child)` nests one router in another.
+   */
+  mount(router: Router, path?: string): void;
+  mount(parent: Express | Router, path: string, router: Router): void;
+  mount(first: Express | Router, second?: string, third?: Router): void {
+    const nested = third !== undefined;
+    const parent = nested ? first : this.#app;
+    const router = nested ? third : (first as Router);
+    const path = nested ? second! : (second ?? this.#prefix);
+    if (!parent) throw new Error("routes.mount(router) needs the HTTP app — call it from a routes file, in the backend branch");
     if (path !== "" && !routePath.test(path)) {
       throw new Error(`unsupported router mount "${path}" — use a literal path with named :parameters`);
     }

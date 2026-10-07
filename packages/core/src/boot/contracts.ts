@@ -96,9 +96,12 @@ export type BootstrapCleanup = () => void | Promise<void>;
 export type BootstrapFn = (ctx: RuntimeCtx) => void | BootstrapCleanup | Promise<void | BootstrapCleanup>;
 
 /**
- * Default export of `routes/*.routes.ts` (backend branch only). May mount
- * directly on `ctx.app`, or return a Router for core to `app.use()` —
- * returning one is the recommended style.
+ * Default export of `routes/*.routes.ts`. Returns a Router, which core
+ * mounts under `config.api.prefix` (or `ctx.routes.mount(router, "/other")`
+ * to choose the path), or mounts global middleware on `ctx.app` itself and
+ * returns nothing. Build the router from the context; read `ctx.models`,
+ * `ctx.config` and the environment inside handlers, where they are live —
+ * inspection runs this function with stubs that throw on infrastructure.
  */
 export type RoutesFn = (ctx: BackendCtx) => Router | void | Promise<Router | void>;
 

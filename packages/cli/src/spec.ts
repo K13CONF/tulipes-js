@@ -6,17 +6,14 @@ import { inspectApp } from "./inspection.js";
 
 /**
  * `tulipes spec` — an OpenAPI document and/or a Postman collection, built
- * from the app's declared routes.
- *
- * Shares the routes command's inspection path: offline declarations when
- * requested, or backend inspection without listening for legacy factories.
+ * from the app's declared routes through the same inspection boot as
+ * `tulipes routes`: no service, no secret, no listener.
  *
  * The generator lives in `@tulipes/spec`, imported lazily: core carries no
  * dependency on it, and an app that never generates a spec never installs
  * it.
  */
 export interface SpecOptions {
-  offline?: boolean;
   openapi?: string;
   postman?: string;
   /** Base URL the documents advertise. */
@@ -47,7 +44,7 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
   const spec = await loadGenerator(rootDir);
   if (!spec) return;
 
-  const handle = await inspectApp(rootDir, options.offline);
+  const handle = await inspectApp(rootDir);
 
   try {
     const source = spec.extract(handle.ctx) as { routes: unknown[]; folders: string[] };
@@ -56,7 +53,7 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
       return;
     }
 
-    const url = options.url ?? (handle.env ? defaultUrl(handle.env) : "http://localhost:3000");
+    const url = options.url ?? defaultUrl(handle.env);
     const warnings = new Set<string>();
 
     if (options.openapi) {

@@ -33,7 +33,7 @@ services: `TEST_MONGO_URI=mongodb://127.0.0.1:27017/tulipes_tests TEST_REDIS_URL
 Use test-only data: the suite creates users and sessions. `pnpm spec` writes
 OpenAPI/Postman documents offline, without services or runtime secrets.
 Change the shared API prefix in `config/routes.ts`. Runtime middleware stays
-with endpoints in `routes/*.routes.ts`, wrapped in `defineRoutes()`.
+with endpoints in `routes/*.routes.ts`, plain functions of the context.
 Staging/production boot rejects development credentials and equal JWT keys.
 Auth, settings and deployment examples are application policy you own.
 
@@ -44,11 +44,11 @@ before writing your own:
 
 | File | Contract |
 |---|---|
-| `meta.variables.json` | the module's environment contract |
-| `module.config.ts` | config factory + `onReady` / `onShutdown` hooks |
+| `package.json` `tulipes.env` | the module's environment contract |
+| `module.config.ts` | `defineConfig({ schema })`: this module's settings |
 | `module.acl.ts` | permission grants on `hello:*` |
 | `routes/*.routes.ts` | native routers, shared middleware and RAI schemas |
-| `controllers/` | the work; acquired once through runtime() |
+| `controllers/` | the work; constructed from the context while routes build |
 | `helpers/` | pure logic, no framework |
 | `i18n/<locale>.json` | this module's strings — the module is the namespace |
 | `sockets/*.sockets.ts` | a claimed Socket.IO namespace | <!-- feature:sockets -->

@@ -60,7 +60,6 @@ jobs:
           diff -r -x package.json -x node_modules "$RUNNER_TEMP/scaffold/modules" example/modules
           diff "$RUNNER_TEMP/scaffold/tests/app.test.ts" example/tests/app.test.ts
           diff "$RUNNER_TEMP/scaffold/vitest.config.ts" example/vitest.config.ts
-          diff "$RUNNER_TEMP/scaffold/config/routes.ts" example/config/routes.ts
           diff -r "$RUNNER_TEMP/scaffold/nginx" example/nginx
           diff "$RUNNER_TEMP/scaffold/docs/browser-auth.md" example/docs/browser-auth.md
           diff "$RUNNER_TEMP/scaffold/README.md" <(sed "s/tulipes-example/scaffold/; s/ *<!-- feature:[a-z]* -->//" example/README.md)

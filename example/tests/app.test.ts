@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { z } from "zod/v4";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { boot, inspectRoutes, type BootHandle } from "@tulipes/core/boot";
+import { boot, type BootHandle } from "@tulipes/core/boot";
 import { extract, toOpenApi, toPostman } from "@tulipes/spec";
 
 let handle: BootHandle;
@@ -68,16 +68,23 @@ test("unknown endpoints return the error envelope", async () => {
   expect(await response.json()).toMatchObject({ success: false, data: null });
 });
 
-test("offline declarations describe the mounted runtime routes and schemas", async () => {
-  const context = await inspectRoutes({
+test("an inspection boot describes the same routes and schemas as the running app", async () => {
+  const inspection = await boot({
     rootDir: fileURLToPath(new URL("../", import.meta.url)),
+    mode: "backend",
+    inspect: true,
+    handleSignals: false,
   });
 
-  const offline = { ...extract(context), app: { name: "parity" } };
-  const runtime = { ...extract(handle.ctx), app: { name: "parity" } };
+  try {
+    const inspected = { ...extract(inspection.ctx), app: { name: "parity" } };
+    const runtime = { ...extract(handle.ctx), app: { name: "parity" } };
 
-  expect(await toOpenApi(offline)).toEqual(await toOpenApi(runtime));
-  expect(await toPostman(offline)).toEqual(await toPostman(runtime));
+    expect(await toOpenApi(inspected)).toEqual(await toOpenApi(runtime));
+    expect(await toPostman(inspected)).toEqual(await toPostman(runtime));
+  } finally {
+    await inspection.shutdown();
+  }
 });
 
 const tokens = z.object({

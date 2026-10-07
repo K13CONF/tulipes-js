@@ -1,4 +1,4 @@
-import type { BootHandle, DatabaseCtx, InspectionContext, ModelsCapability, Provider } from "../src/boot/index.js";
+import type { BootHandle, DatabaseCtx, ModelsCapability, Provider } from "../src/boot/index.js";
 import { requireModels } from "../src/boot/index.js";
 import type { BootReport } from "../src/errors/index.js";
 
@@ -10,12 +10,8 @@ import type { BootReport } from "../src/errors/index.js";
  * cannot, because the built-in store's augmentation is part of it.
  */
 
-declare const inspection: InspectionContext;
 declare const database: DatabaseCtx;
 declare const handle: BootHandle;
-
-// @ts-expect-error Offline inspection acquires nothing.
-inspection.models;
 
 // The slot exists after phase 8; its members come from the provider's augmentation.
 const models: ModelsCapability = database.models;

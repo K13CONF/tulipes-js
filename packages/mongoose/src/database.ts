@@ -54,7 +54,7 @@ export async function initDatabase(
   if (!uri) {
     report.add({
       scope: "providers",
-      message: `provider "mongoose" is selected but "${MONGO_URI}" is not declared/set — declare it in a sys module's meta.variables.json and set it`,
+      message: `provider "mongoose" is selected but "${MONGO_URI}" is not declared/set — declare it in a sys module's package.json tulipes.env and set it`,
     });
     return undefined;
   }

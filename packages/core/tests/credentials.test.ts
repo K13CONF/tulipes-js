@@ -24,14 +24,12 @@ test.each([
     for (const [key, value] of Object.entries(values)) vi.stubEnv(key, value);
 
     const app = await fixture({
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: Object.keys(valid).map((name) => ({
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: Object.keys(valid).map((name) => ({
           name,
           type: "secret",
           required: true,
           description: name,
-        })),
-      }),
+        })) } }),
       "modules/probe/bootstrap/credentials.bootstrap.ts": await readFile(
         "example/modules/auth/bootstrap/credentials.bootstrap.ts",
         "utf8",
@@ -62,14 +60,12 @@ test.each(["staging", "production", "development"] as const)(
     for (const [key, value] of Object.entries(valid)) vi.stubEnv(key, value);
 
     const app = await fixture({
-      "modules/probe/meta.variables.json": JSON.stringify({
-        variables: Object.keys(valid).map((name) => ({
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: Object.keys(valid).map((name) => ({
           name,
           type: "secret",
           required: true,
           description: name,
-        })),
-      }),
+        })) } }),
       "modules/probe/bootstrap/credentials.bootstrap.ts": await readFile(
         "example/modules/auth/bootstrap/credentials.bootstrap.ts",
         "utf8",

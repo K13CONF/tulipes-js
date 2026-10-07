@@ -160,6 +160,6 @@ test("the production preset composes without queues or sockets: no files, depend
   const greetings = await readFile(root + "/modules/hello/controllers/greetings.controllers.ts", "utf8");
   expect(greetings).not.toContain("requireQueues");
   // The app still declares REDIS_URL: the cache and rate limiter are app-owned.
-  const meta = JSON.parse(await readFile(root + "/modules/core/meta.variables.json", "utf8"));
-  expect(meta.variables.some((v: { name: string }) => v.name === "REDIS_URL")).toBe(true);
+  const core = JSON.parse(await readFile(root + "/modules/core/package.json", "utf8"));
+  expect(core.tulipes.env.some((v: { name: string }) => v.name === "REDIS_URL")).toBe(true);
 });

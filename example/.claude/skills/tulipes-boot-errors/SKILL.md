@@ -30,6 +30,9 @@ problems the report has not reached yet.
 | `module graph` | `dependsOn "x" — no such module exists` | Typo, or you used the package name. `dependsOn` takes short names (`"users"`). |
 | `module graph` | `dependency cycle: a → b → a` | Mutual dependency. Move the shared part into the core module or a third module. |
 | `module graph` | `sys module cannot depend on app module` | A sys module needs something app-tier. Either it is not really sys, or the dependency belongs in `lib/`. |
+| `modules` | `x does not belong at the module root` | Only `package.json`, `module.config.ts` and `module.acl.ts` live there; the message names the folder the file belongs in. |
+| `modules` | `tulipes.offline is gone` / `meta.variables.json moved to package.json` | The 0.10 forms. Delete the flag; move the variables under `tulipes.env`. |
+| `routes` | `routes function threw: ctx.models is not available during inspection` | A routes file or a controller constructor touched infrastructure while building. Move the read into the handler, or build the middleware with `lazy()`. |
 | `config` | `module.config must default-export defineConfig({ schema })` | Missing/misspelled `export default`, or the 0.10 factory form: values now live in the settings store. |
 | `config` | `module.config exports "onReady"` | The 0.10 lifecycle exports. Initialization is a `bootstrap/*.bootstrap.ts` file, which may return its cleanup; long-lived work ends on `ctx.signal`. |
 | `config` | `field "x" has no default — every setting needs one` | Give the field a `.default()`; an operator is never asked for a value the process needs to boot. |

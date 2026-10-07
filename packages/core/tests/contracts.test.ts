@@ -7,8 +7,7 @@ import { fixture } from "./fixture.js";
 
 test("environment resolves and attributes deployment overrides while redacting secrets", async () => {
   const app = await fixture({
-    "modules/probe/meta.variables.json": JSON.stringify({
-      variables: [
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
         {
           name: "TEST_CONTRACT_NUMBER",
           type: "number",
@@ -21,8 +20,7 @@ test("environment resolves and attributes deployment overrides while redacting s
           description: "secret",
           required: true,
         },
-      ],
-    }),
+      ] } }),
     ".envs/.env.test":
       "TEST_CONTRACT_NUMBER=2\nTEST_CONTRACT_SECRET=fixture-only\n",
   });
@@ -44,8 +42,7 @@ test("environment resolves and attributes deployment overrides while redacting s
 
 test("environment aggregates all missing required values", async () => {
   const app = await fixture({
-    "modules/probe/meta.variables.json": JSON.stringify({
-      variables: [
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
         {
           name: "TEST_CONTRACT_A",
           type: "string",
@@ -58,8 +55,7 @@ test("environment aggregates all missing required values", async () => {
           description: "b",
           required: true,
         },
-      ],
-    }),
+      ] } }),
   });
 
   expect(() =>
@@ -79,7 +75,7 @@ const module = (
   tier,
   priority,
   dependsOn,
-  requires: [],
+  requires: [], env: [],
 });
 
 test("dependencies outrank priority while sys modules precede app modules", () => {

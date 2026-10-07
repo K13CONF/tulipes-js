@@ -18,7 +18,7 @@
     "check": "tulipes env:check",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "spec": "tulipes spec --offline --openapi docs/openapi.json --postman docs/collection.json"
+    "spec": "tulipes spec --openapi docs/openapi.json --postman docs/collection.json"
   },
   "dependencies": {
     "@tulipes/core": "^0.10.1",

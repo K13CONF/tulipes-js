@@ -61,7 +61,7 @@ export async function runNewModule(
       "  pnpm install     # the module is a workspace package",
       "  pnpm sync        # regenerate config types and .env.example",
       "",
-      `Delete unused files; keep route files wrapped in defineRoutes for offline inspection.`,
+      `Delete unused files; routes files stay plain functions of the context.`,
       ...(models
         ? declared.models
           ? []
@@ -121,7 +121,7 @@ function renderModule(
       type: "module",
       // dependsOn "core" because the helpers below import from it. The npm
       // dependency makes it resolve; dependsOn makes the ordering explicit.
-      tulipes: { offline: true, tier: "app", priority: 100, dependsOn: ["core"] },
+      tulipes: { tier: "app", priority: 100, dependsOn: ["core"] },
       dependencies: {
         "@tulipes/core": `^${coreVersion()}`,
         [`${scope}/core`]: "workspace:*",
@@ -131,10 +131,6 @@ function renderModule(
         ...(sockets && { "@tulipes/socket.io": "^0.1.1" }),
       },
     })],
-
-    // Empty on purpose: add an entry the moment this module needs a value
-    // that differs per deployment, then run `pnpm sync`.
-    ["meta.variables.json", json({ variables: [] })],
 
     ["module.config.ts", [
       `import { defineConfig } from "@tulipes/core/config";`,
@@ -224,18 +220,23 @@ function renderModule(
 
     [`routes/${name}.routes.ts`, [
       `import { Router } from "express";`,
-      `import { defineRoutes } from "@tulipes/core/http";`,
+      `import type { BackendCtx } from "@tulipes/core/boot";`,
       ``,
-      `export default defineRoutes(({ rai, runtime }) => {`,
+      `import { ${Model}Controller } from "../controllers/${name}.controllers.js";`,
+      ``,
+      `/**`,
+      ` * A plain function of the context: build the router, declare a RAI on`,
+      ` * every endpoint, return it and core mounts it under config.api.prefix`,
+      ` * (or call ctx.routes.mount(router, "/other")). Read models, settings and`,
+      ` * the environment inside handlers, not here — inspection builds this`,
+      ` * router with nothing acquired.`,
+      ` */`,
+      `export default function ${fn}Routes(ctx: BackendCtx): Router {`,
       `  const router = Router();`,
-      `  const controller = runtime(async ctx => {`,
-      `    const { ${Model}Controller } = await import("../controllers/${name}.controllers.js");`,
-      `    return new ${Model}Controller(ctx);`,
-      `  });`,
-      `  router.get("/${name}", rai({ id: "${name}:read", name: "List ${name}" }),`,
-      `    controller(value => value.index()));`,
+      `  const controller = new ${Model}Controller(ctx);`,
+      `  router.get("/${name}", ctx.rai({ id: "${name}:read", name: "List ${name}" }), controller.index());`,
       `  return router;`,
-      `});`,
+      `}`,
       ``,
     ].join("\n")],
 

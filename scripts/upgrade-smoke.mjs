@@ -154,8 +154,8 @@ try {
   if (rewrittenImports === 0 || rewrittenManifests === 0) throw new Error('Migration touched nothing');
   install(app, env);
   for (const script of ['sync', 'typecheck']) run('pnpm', [script], app, env);
-  run(process.execPath, ['--import', guard, newBin, 'routes', '--offline'], app, env);
-  run(process.execPath, ['--import', guard, newBin, 'spec', '--offline', '--openapi', 'docs/openapi.json', '--postman', 'docs/collection.json'], app, env);
+  run(process.execPath, ['--import', guard, newBin, 'routes'], app, env);
+  run(process.execPath, ['--import', guard, newBin, 'spec', '--openapi', 'docs/openapi.json', '--postman', 'docs/collection.json'], app, env);
   const spec = readJson(join(app, 'docs/openapi.json'));
   if (!spec.paths['/api/v1/auth/login']) throw new Error('Migrated app lost its routes');
   // The migrated app now reaches the provider: with an unreachable database it

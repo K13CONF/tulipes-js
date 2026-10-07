@@ -14,7 +14,7 @@ const redisUrl = process.env.TEST_REDIS_URL;
 const integration = test.skipIf(!redisUrl);
 
 const declared = JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } });
-const redisMeta = JSON.stringify({ variables: [{ name: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" }] });
+const redisMeta = JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [{ name: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" }] } });
 const queueFile = (name: string) => `
   export default (ctx, queues) => {
     queues.define(${JSON.stringify(name)});
@@ -38,7 +38,7 @@ async function clientNames(): Promise<string[]> {
 }
 
 integration("a REDIS_URL without a declaration starts nothing, even with the provider installed", async () => {
-  const app = await fixture({ "modules/probe/meta.variables.json": redisMeta });
+  const app = await fixture({ "modules/probe/package.json": redisMeta });
   const before = (await clientNames()).length;
 
   const handle = await app.boot({ mode: "script" });
@@ -57,7 +57,7 @@ integration("a declared provider without REDIS_URL is a boot error naming the va
 
 integration("a queues file without a declaration is refused before it is imported", async () => {
   const app = await fixture({
-    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/package.json": redisMeta,
     "modules/probe/queues/work.queues.js": `throw new Error('queue file imported');`,
   });
 
@@ -68,7 +68,7 @@ integration("a producer-only module declares the requirement and can enqueue int
   const name = `probe.${randomUUID()}`;
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/package.json": redisMeta,
     "modules/probe/queues/work.queues.js": queueFile(name),
     "modules/producer/package.json": JSON.stringify({ name: "@test/producer", type: "module", tulipes: { dependsOn: ["probe"], requires: ["queues"] } }),
   });
@@ -92,7 +92,7 @@ integration("the worker serves every processor and reports it; a queue-free work
   const name = `probe.${randomUUID()}`;
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/package.json": redisMeta,
     "modules/probe/module.config.js": `import { defineConfig } from '@tulipes/core/config'; import { z } from 'zod/v4'; export default defineConfig({ schema: z.object({}) });`,
     "modules/probe/queues/work.queues.js": queueFile(name),
   });
@@ -109,7 +109,7 @@ integration("the worker serves every processor and reports it; a queue-free work
   await queues.queue(name).obliterate({ force: true });
   await worker.shutdown();
 
-  const idle = await fixture({ "package.json": declared, "modules/probe/meta.variables.json": redisMeta });
+  const idle = await fixture({ "package.json": declared, "modules/probe/package.json": redisMeta });
   await expect(idle.boot({ mode: "worker" })).rejects.toThrow(/worker mode started with zero processors/);
 });
 
@@ -117,7 +117,7 @@ integration("disposing the provider leaves the application's own Redis client co
   const name = `probe.${randomUUID()}`;
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/package.json": redisMeta,
     "modules/probe/module.config.js": `import { defineConfig } from '@tulipes/core/config'; import { z } from 'zod/v4'; export default defineConfig({ schema: z.object({}) });`,
     "modules/probe/bootstrap/probe.bootstrap.js": `
       import { Redis } from 'ioredis';
@@ -154,7 +154,7 @@ integration("driver errors on producers and consumers never escape as unhandled 
   const name = `probe.${randomUUID()}`;
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/package.json": redisMeta,
     "modules/probe/module.config.js": `import { defineConfig } from '@tulipes/core/config'; import { z } from 'zod/v4'; export default defineConfig({ schema: z.object({}) });`,
     "modules/probe/queues/work.queues.js": queueFile(name),
   });
@@ -183,7 +183,7 @@ integration("shutting down while a consumer is still connecting rejects nothing"
   const name = `probe.${randomUUID()}`;
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/meta.variables.json": redisMeta,
+    "modules/probe/package.json": redisMeta,
     "modules/probe/module.config.js": `import { defineConfig } from '@tulipes/core/config'; import { z } from 'zod/v4'; export default defineConfig({ schema: z.object({}) });`,
     "modules/probe/queues/work.queues.js": queueFile(name),
   });

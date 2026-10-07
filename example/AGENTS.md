@@ -28,7 +28,7 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
 1. **Never read `process.env` directly, and keep the environment small.**
    A value is an environment variable only if boot needs it before the
    database answers (connection strings, the port, log destination) or it
-   is a secret: declared in a module's `meta.variables.json`, read with
+   is a secret: declared under `tulipes.env` in the module's `package.json`, read with
    `ctx.Environment.get("NAME")`. Everything else is a *setting*: declared
    with a zod schema in that module's `module.config.ts`, stored in the
    settings store, edited through the console, read live at
@@ -36,6 +36,10 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
 2. **A feature is a module, not a layer.** Everything a feature needs —
    routes, models, config, permissions, jobs — lives in one folder under
    `modules/`. Never add a top-level `services/` or `middlewares/` folder.
+   A module's root holds exactly `package.json`, `module.config.ts` and
+   `module.acl.ts`; everything else has a folder (`routes/`, `controllers/`,
+   `models/`, `schemas/`, `helpers/`, `bootstrap/`, `queues/`, `sockets/`,
+   `i18n/`, `lib/`), and the boot refuses a stray root file.
    → skill `tulipes-module`
 3. **Never call `mongoose.model()` yourself.** Models are declarations
    picked up by the framework and read from `ctx.models`. Persisted and
@@ -43,7 +47,7 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    camelCase is for TypeScript-only names. → skill `tulipes-model`
 4. **Global middleware belongs to a sys-tier module**, not to the
    entrypoint. `app.ts` stays three lines. → skill `tulipes-endpoint`
-5. **Run `pnpm sync` after touching any `meta.variables.json` or a
+5. **Run `pnpm sync` after touching a module's `tulipes.env` or a
    settings schema in `module.config.ts`.** It regenerates `types/config.d.ts`
    and `.env.example`; stale generated types are a lie. `module.config.ts`
    has exactly one export, `defineConfig({ schema })`; initialization and
@@ -56,7 +60,7 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    key and the code derives from it. Never hand-roll an error shape.
    → skill `tulipes-response`
 7. **Every route declares a RAI**: put `rai({ id: "x:read" })` first in
-   each endpoint handler chain, including routes inside `defineRoutes()`.
+   each endpoint handler chain, including routes on a nested router.
    The id is also the ACL permission, and core refuses to boot if a route
    is missing one. Public is `acl.allow("guest", "x:read")`, never a
    missing check. → skill `tulipes-endpoint`
@@ -85,14 +89,18 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
     and in `dependsOn`.
 
 For endpoint changes, read `tulipes-endpoint`: native routers live in
-`routes/*.routes.ts`. Use `defineRoutes()` and `runtime()` for offline inspection;
-keep shared middleware and param callbacks beside their endpoints.
+`routes/*.routes.ts`, plain `(ctx) => Router` functions: build the router from
+the context, return it for the configured prefix, and read models, settings
+and the environment inside handlers, never while building — `tulipes routes`
+and `tulipes spec` build every router with nothing acquired. Global
+middleware that needs the environment is built on its first request with
+`lazy()` from `@app/core`.
 
 ## Where things go
 
 | Decision | Location |
 |---|---|
-| Connection string, secret, or anything boot needs before the database answers | that module's `meta.variables.json` |
+| Connection string, secret, or anything boot needs before the database answers | `tulipes.env` in that module's `package.json` |
 | Policy shared by ≥2 modules and the same everywhere (pagination, locales) | `config/app.config.ts` |
 | A value an operator may change at runtime (limits, modes, toggles, lifetimes) | a field in that module's `module.config.ts` schema, read at `ctx.config.<module>` |
 | Opening a client, seeding rows, ensuring indexes, and closing them again | that module's `bootstrap/*.bootstrap.ts`, returning the cleanup |
@@ -100,7 +108,7 @@ keep shared middleware and param callbacks beside their endpoints.
 | The shape of a request body/query | a zod schema on the route's `rai()` |
 | Middleware for every request | a sys-tier module's routes file |
 | Middleware for one feature's routes | that module's own `Router` |
-| Helper used by ≥2 modules | the sys core module, exported from its `index.ts` and imported as `@app/core` |
+| Helper used by ≥2 modules | the sys core module, exported from its `lib/index.ts` and imported as `@app/core` |
 | Helper used by one module | that module's `helpers/` |
 | One-off task (backfill, export, admin chore) | `scripts/`, booted with `mode: "script"` |
 | Anything you would `console.log` | `moduleLogger(ctx.Environment, "<module>", ctx.mode)` from `@app/core` |

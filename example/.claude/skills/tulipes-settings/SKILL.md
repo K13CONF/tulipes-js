@@ -43,7 +43,7 @@ deliberately promoted to `sysadmin`.
 
 ## Where a written variable actually lands
 
-**Always `.envs/.env.<APP_ENV>` — never `meta.variables.json`.** That file
+**Always `.envs/.env.<APP_ENV>` — never the module's `tulipes.env`.** That declaration
 is the module's committed contract: rewriting a default there would change
 it for every environment and be lost on the next deploy. The env file is
 what exists to hold per-deployment values.
@@ -103,7 +103,7 @@ entries carry `redacted: true` and no values.
 
 - Never add a `settings:*` grant to another role. If someone needs part of
   it, give them `sysadmin`, or split the ids.
-- Never widen a write to `meta.variables.json`. It is a contract, not
+- Never widen a write to a module's `tulipes.env`. It is a contract, not
   storage.
 - A new feature module needs its namespace in **both** the `admin` and
   `sysadmin` grants.

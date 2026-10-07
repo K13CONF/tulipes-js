@@ -11,6 +11,20 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+- **The module root is three files.** `package.json` (with the env contract
+  under `tulipes.env`, replacing `meta.variables.json`), `module.config.ts`
+  and `module.acl.ts`; public exports move to `lib/index.ts` behind
+  `package.json` `exports`, request schemas to `schemas/`. A stray root file
+  refuses the boot with the folder it belongs in. `dependsOn` is derived
+  from a module's scoped dependencies.
+- **Plain routes and one inspection.** A routes file is `(ctx) => Router |
+  void`; a returned router is mounted under `config.api.prefix`, and
+  `ctx.routes.mount(router, path)` chooses another. `defineRoutes()`,
+  `runtime()`, `tulipes.offline`, `inspectRoutes` and the `--offline` /
+  `--runtime` flags are gone: `tulipes routes` and `tulipes spec` run
+  `boot({ inspect: true })`, which mounts every route with the environment
+  declared but unresolved, providers as stubs that throw on use, settings
+  as defaults and no bootstrap — no service, secret or `.env` needed.
 - **Settings declarations.** `module.config.ts` has one export,
   `defineConfig({ schema, onChange })`: a zod schema with a default for every
   field. Values live in a settings store — core's file store under

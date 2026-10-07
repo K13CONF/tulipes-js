@@ -35,7 +35,6 @@ export {
   type RouteRecord,
 } from "./rai.js";
 export { scanRoutes } from "./route-scan.js";
-export { defineRoutes, type DefinedRoutes, type RouterFactory, type RouterCtx, type RuntimeBinder } from "./define-routes.js";
 export {
   codeOfIssue,
   fieldOf,
