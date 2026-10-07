@@ -59,8 +59,10 @@ export async function runUpdate(rootDir: string): Promise<void> {
 
   if (cliIsGlobal) {
     didSomething = true;
-    if (current === latestCli) {
-      console.log(`cli already on ${latestCli}`);
+    // `latest` can be behind a candidate installed from `next`; an update
+    // never moves backwards.
+    if (atOrAhead(current, latestCli)) {
+      console.log(`cli already on ${current}${current === latestCli ? "" : ` (latest is ${latestCli})`}`);
     } else {
       await updateGlobalCli(cliRoot, current, latestCli);
     }
@@ -132,10 +134,11 @@ async function updateApp(
   const changed = manifests.filter(({ path }) => rewrite(path, range));
   // The app's own CLI devDependency moves with it, so `pnpm dev` and friends
   // keep matching the framework they generate for.
-  if (rewrite(join(rootDir, "package.json"), `^${latestCli}`, CLI)) changed.push({ path: join(rootDir, "package.json") });
+  const root = join(rootDir, "package.json");
+  if (existsSync(root) && rewrite(root, `^${latestCli}`, CLI) && !changed.some(({ path }) => path === root)) changed.push({ path: root });
 
   if (changed.length === 0) {
-    console.log(`app already on ${PACKAGE}@${range}`);
+    console.log(`app already on ${PACKAGE} ${current ?? range}${current && current !== latest ? ` (latest is ${latest})` : ""}`);
     return;
   }
 
@@ -236,14 +239,22 @@ function dependsOnCore(path: string): boolean {
   }
 }
 
-/** Returns true when the file actually changed. */
-function rewrite(path: string, range: string, name: string = PACKAGE): boolean {
+/**
+ * Raises `name` to `range` wherever the manifest declares it; returns true
+ * when the file actually changed. Only a plain version range (`^x.y.z`,
+ * `~x.y.z`, `x.y.z`) whose floor is below the target is rewritten: a floor
+ * at or above it is a candidate ahead of `latest`, and anything else —
+ * `workspace:*`, `file:`, a compound range — is the app's own choice.
+ */
+export function rewrite(path: string, range: string, name: string = PACKAGE): boolean {
   const manifest = JSON.parse(readFileSync(path, "utf8")) as Manifest;
+  const target = floorOf(range)!;
 
   let touched = false;
   for (const field of ["dependencies", "devDependencies"] as const) {
     const deps = manifest[field];
-    if (deps?.[name] !== undefined && deps[name] !== range) {
+    const floor = deps?.[name] === undefined ? undefined : floorOf(deps[name]);
+    if (deps && floor && compareVersions(floor, target) < 0) {
       deps[name] = range;
       touched = true;
     }
@@ -263,7 +274,42 @@ async function run(command: string, args: string[], cwd: string): Promise<number
   });
 }
 
-function detectManager(rootDir: string): "yarn" | "npm" | "pnpm" {
+const VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/** The lowest version a plain range admits, or undefined for any other range. */
+function floorOf(range: string): string | undefined {
+  const version = range.trim().replace(/^[\^~]|^=/, "").replace(/^v/, "");
+  return VERSION.test(version) ? version : undefined;
+}
+
+/** True when `version` is a version at or above `latest`; an unknown version is never ahead. */
+function atOrAhead(version: string, latest: string): boolean {
+  return VERSION.test(version) && VERSION.test(latest) && compareVersions(version, latest) >= 0;
+}
+
+/** Semver precedence: negative, zero or positive as `a` sorts before, with or after `b`. */
+export function compareVersions(a: string, b: string): number {
+  const [, ...left] = VERSION.exec(a)!;
+  const [, ...right] = VERSION.exec(b)!;
+  for (let i = 0; i < 3; i++) {
+    const difference = Number(left[i]) - Number(right[i]);
+    if (difference !== 0) return Math.sign(difference);
+  }
+  const [preA, preB] = [left[3], right[3]];
+  if (preA === undefined || preB === undefined) return preA === preB ? 0 : preA === undefined ? 1 : -1;
+  const [idsA, idsB] = [preA.split("."), preB.split(".")];
+  for (let i = 0; i < Math.min(idsA.length, idsB.length); i++) {
+    const [x, y] = [idsA[i]!, idsB[i]!];
+    if (x === y) continue;
+    const [numX, numY] = [/^\d+$/.test(x), /^\d+$/.test(y)];
+    if (numX && numY) return Math.sign(Number(x) - Number(y));
+    if (numX !== numY) return numX ? -1 : 1;
+    return x < y ? -1 : 1;
+  }
+  return Math.sign(idsA.length - idsB.length);
+}
+
+export function detectManager(rootDir: string): "yarn" | "npm" | "pnpm" {
   if (existsSync(join(rootDir, "yarn.lock"))) return "yarn";
   if (existsSync(join(rootDir, "pnpm-lock.yaml"))) return "pnpm";
   if (existsSync(join(rootDir, "package-lock.json"))) return "npm";
