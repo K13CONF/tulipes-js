@@ -34,24 +34,27 @@ every package to `latest`.
 ## Evidence
 
 Local runs are on macOS (Darwin 25.2), Node 24.14.0, pnpm 10.28.0, with
-MongoDB 7.0 and Redis on localhost, on 2026-10-08. No Docker: Docker
-Desktop's daemon did not start on this machine, so the two Docker
-harnesses are the release owner's step (below).
+MongoDB 7.0 and Redis on localhost and Docker 29.5.2 (Docker Desktop,
+reached through its `docker.raw.sock`), on 2026-10-08. CI is
+[run 37841490225](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225) on PR [#31](https://github.com/kemora13conf/bp-backend-express/pull/31),
+head `d9b1b2a`, Node 24.21 and 24.0.0 on Ubuntu 24.04 with MongoDB 8 and
+Redis 7 service containers, macOS for the second minimal entry; the
+push-triggered run on the same head (37841433109) passed identically.
 
 | Check | Local | CI |
 |---|---|---|
-| `pnpm install --frozen-lockfile` | pass | pending |
-| `pnpm typecheck`, `pnpm test:types` | pass, on the stable ranges | pending |
-| `pnpm test` with `REQUIRE_INTEGRATION_TESTS=1` | 33 files, 277 passed, 0 skipped (on `7120d25`, before the version bump) | pending |
-| Reference app: `pnpm typecheck`, `pnpm test` with services | typecheck pass; 7 files, 43 passed | pending (inside the production smoke) |
+| `pnpm install --frozen-lockfile` | pass | pass on every job |
+| `pnpm typecheck`, `pnpm test:types` | pass, on the stable ranges | pass on both tests jobs ([tests 24](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113531688297)) |
+| `pnpm test` with `REQUIRE_INTEGRATION_TESTS=1` | 33 files, 277 passed, 0 skipped (on `7120d25`, before the version bump) | 277 passed, 0 skipped, with services, on [tests 24](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113531688297) and [24.0.0](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113531688153); coverage thresholds met (the job is green) |
+| Reference app: `pnpm typecheck`, `pnpm test` with services | typecheck pass; 7 files, 43 passed | pass inside the production smoke ([production](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113532872447)) |
 | `tulipes agent manifest --role admin` on the reference app | two actions, no `transport` | — |
-| `scripts/artifacts.mjs prepare` + `verify` | eight archives verified | pending |
-| `scaffold-smoke.mjs minimal` | pass, 12.7 s | pending |
-| `scaffold-smoke.mjs production --offline-only`, `--no-queues --no-sockets --offline-only` | pass, both (network connections denied) | pending |
-| `scaffold-smoke.mjs production` (online: backend, worker, login, PM2) | pass, 64.1 s (packed install, generated types, tests, specs, backend/shutdown and worker) | pending |
-| `upgrade-smoke.mjs` (0.10.1 app → `migrate 0.11` + `config:import`) | pass, onto the eight 0.11.0 archives | pending |
-| `ingress-smoke.mjs` | not run (Docker); last evidence `v0.10.0-rc.3`, nothing in ingress moved since | not in the matrix |
-| `failure-smoke.mjs` (incl. settings propagation) | not run (Docker) | not in the matrix |
+| `scripts/artifacts.mjs prepare` + `verify` | eight archives verified | pass ([pack](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113532692763)) |
+| `scaffold-smoke.mjs minimal` | pass, 12.7 s | pass on [Ubuntu](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113532872619) and [macOS](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113532872587) |
+| `scaffold-smoke.mjs production --offline-only`, `--no-queues --no-sockets --offline-only` | pass, both (network connections denied) | pass ([offline](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113532872588), [composition](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113532872438)) |
+| `scaffold-smoke.mjs production` (online: backend, worker, login, PM2) | pass, 64.1 s (packed install, generated types, tests, specs, backend/shutdown and worker) | pass ([production](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113532872447)) |
+| `upgrade-smoke.mjs` (0.10.1 app → `migrate 0.11` + `config:import`) | pass, onto the eight 0.11.0 archives | pass ([upgrade](https://github.com/kemora13conf/bp-backend-express/actions/runs/37841490225/job/113532872468)) |
+| `ingress-smoke.mjs` | pass, 9/9 checks, [recorded](../design/ingress-evidence.md) (the harness's probe module updated to the 0.11 shape) | not in the matrix |
+| `failure-smoke.mjs` (incl. settings propagation) | pass, all twelve scenarios, [recorded](../design/failure-evidence.md) | not in the matrix |
 | Production preset cold start on Node 24 | median 532 ms wall to the banner, `ready in` 339 ms, five runs, [recorded](../design/0.11-measurements.md) | the matrix does not measure it |
 
 Source under release: `342bba4`, `fa1925c`, `3e08208`, `002f15e`, `da52b5e`
@@ -61,14 +64,13 @@ record, docs only) is open separately.
 
 ## Steps left for the release owner
 
-1. Review and merge PR #30 (docs), then the release PR; let the matrix run
-   with services and fill the CI column from its jobs.
-2. With Docker running: `node scripts/ingress-smoke.mjs` and
-   `node scripts/failure-smoke.mjs` against the packed 0.11.0 archives, and
-   record both in `docs/design/`. The plan's cross-replica revocation case
-   is not in `failure-smoke.mjs`; the auth cache lives in the shared Redis
-   and every revocation path deletes the entry (security model, S08b), so
-   the case is a verification of that design, not a gap in it.
+1. Review and merge PR #30 (docs), then the release PR #31 — its matrix is
+   green and recorded above.
+2. ~~With Docker running: the two Docker harnesses.~~ Done locally, both
+   recorded in `docs/design/`. The plan's cross-replica revocation case is
+   not in `failure-smoke.mjs`; the auth cache lives in the shared Redis and
+   every revocation path deletes the entry (security model, S08b), so the
+   case is a verification of that design, not a gap in it.
 3. Tag `v0.11.0` on the merge commit; the publish workflow verifies and
    uploads with `latest`.
 4. Post-publication: digests against the run's manifest, dist-tags, the

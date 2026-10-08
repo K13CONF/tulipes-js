@@ -33,6 +33,20 @@ restarted under the rate limiter.
 | Redis restarted | the limiter resumed within ~1 s |
 | SIGTERM with a replica-set member still down | exit code 0 in ~16 ms |
 
+### Rerun against 0.11.0 (2026-10-08)
+
+The same harness against the packed `0.11.0` archives (Node 24.14.0, macOS
+arm64, Docker 29.5.2), now with the settings store on the replica set and
+the scenario the 0.11 plan added. Every scenario above held, with the
+election landing on `127.0.0.1:27101` this time and shutdown with a member
+down exiting 0 in 15 ms, plus:
+
+| Scenario | Observed |
+|---|---|
+| Settings propagation | a write from a script process reached the running backend in **~2 ms** (the change stream on the replica set, not the 2 s poll) |
+
+Raw results in `reports/failure-smoke/` as before.
+
 What this does **not** establish: that an unacknowledged write did not commit.
 The harness deliberately records what a client can observe afterwards rather
 than claiming a rollback — a write whose acknowledgment was lost may still have
