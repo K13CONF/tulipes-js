@@ -6,9 +6,9 @@ import { agentDeclarationProblems, isAgentDeclaration, type AgentDeclaration } f
 import { AgentRegistry } from "./registry.ts";
 
 /**
- * Backend branch and inspection, after the route scan: import every
- * `agent/*.agent.ts` (at most one per module — the folder is a
- * declaration, not a collection of handlers) and build `ctx.agent`.
+ * Every mode, after the ACL: import every `agent/*.agent.ts` (at most one
+ * per module — the folder is a declaration, not a collection of handlers)
+ * and build `ctx.agent`.
  */
 export async function loadAgents(
   explored: readonly ModuleFiles[],

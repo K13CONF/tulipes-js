@@ -291,11 +291,20 @@ function migrateModule(rootDir: string, dir: string, name: string, report: Migra
   const configFile = join(dir, "module.config.ts");
   if (existsSync(configFile)) migrateModuleConfig(rootDir, dir, name, configFile, manifest, report);
 
-  // routes: defineRoutes/runtime → plain functions
+  // routes: defineRoutes/runtime → plain functions; `agent: false` gone
   const routesDir = join(dir, "routes");
   if (existsSync(routesDir)) {
     for (const file of readdirSync(routesDir).filter((entry) => entry.endsWith(".ts"))) {
       migrateRoutesFile(join(routesDir, file), dir, name, report);
+      stripAgentOptOut(join(routesDir, file), `${label}/routes/${file}`, report);
+    }
+  }
+
+  // agent: tools with route references → actions only (0.11.0-rc.3)
+  const agentDir = join(dir, "agent");
+  if (existsSync(agentDir)) {
+    for (const file of readdirSync(agentDir).filter((entry) => entry.endsWith(".agent.ts"))) {
+      migrateAgentFile(join(agentDir, file), `${label}/agent/${file}`, report);
     }
   }
 
@@ -612,6 +621,30 @@ function migrateRoutesFile(file: string, moduleDir: string, name: string, report
   writeFileSync(file, next);
   report.changed.push(`${label}: defineRoutes/runtime → plain routes function${statics.length ? ` (${statics.length} controller(s) imported statically)` : ""}`);
   void name;
+}
+
+/** Routes are not tools since 0.11.0-rc.3, so the opt-out on a RAI means nothing. */
+function stripAgentOptOut(file: string, label: string, report: MigrationReport): void {
+  const source = readFileSync(file, "utf8");
+  const next = source
+    .replace(/^\s*agent:\s*false,?\s*\n/gm, "")
+    .replace(/,\s*agent:\s*false(?=\s*[,}])/g, "")
+    .replace(/\{\s*agent:\s*false,\s*/g, "{ ");
+  if (next === source) return;
+  writeFileSync(file, next);
+  report.changed.push(`${label}: agent: false removed (routes are not tools)`);
+}
+
+/** `tools: [{ route }, action()]` → `actions: [action()]`: a module declares only what it offers. */
+function migrateAgentFile(file: string, label: string, report: MigrationReport): void {
+  const source = readFileSync(file, "utf8");
+  if (!/\btools\s*:\s*\[/.test(source)) return;
+  const next = source
+    .replace(/\btools\s*:\s*\[/, "actions: [")
+    .replace(/^\s*\{\s*route:[^\n]*\},?\s*\n/gm, "");
+  writeFileSync(file, next);
+  report.changed.push(`${label}: tools → actions, route entries removed (routes are not tools)`);
+  if (/\broute\s*:/.test(next)) report.todos.push(`${label}: a route entry spans several lines — delete it by hand; routes are the API, not tools`);
 }
 
 const RUNTIME_HELPER = `import type { RequestHandler } from "express";

@@ -2,24 +2,28 @@ import { action, defineAgent } from "@tulipes/core/agent";
 import { requireModels } from "@tulipes/core/boot";
 import { z } from "zod/v4";
 
+import { findGreetings } from "../helpers/greetings.ts";
+
 /**
- * What an agent sees of this module. Every route is a tool already — its
- * rai() gives the name, description, input schema and permission — so this
- * file adds what cannot be derived: the summary, which routes to expose,
- * and an action that is not an endpoint. A module without this file
- * exposes every route; `pnpm tulipes agent manifest` prints the result.
+ * What this module offers to agents — an in-app agent module reads it from
+ * `ctx.agent.manifest()`, Claude Code through `tulipes-mcp`. Routes are the
+ * API and are never tools: an action is declared here, with its own id (a
+ * permission granted in module.acl.ts), input schema and handler, and
+ * shares its logic with the routes through helpers/. `pnpm tulipes agent
+ * manifest` prints the result.
  */
 export default defineAgent({
   summary: "Greets callers and counts how often each greeting is used.",
-  tools: [
-    { route: "hello:greet", description: "A greeting in the caller's language" },
-    { route: "hello:greet-name" },
-    { route: "hello:list-greetings", description: "The stored greetings, with how often each was used" },
-    { route: "hello:use-greeting" },
+  actions: [
+    action({
+      id: "hello:list-greetings",
+      description: "The stored greetings, with how often each was used",
+      readOnly: true,
+      handler: async (ctx) => (await findGreetings(ctx))[0],
+    }),
 
-    // An action: the id is a permission like any route's, granted to
-    // admin through hello:* in the auth module's ACL. The ACL decides,
-    // then the schema validates, then this runs.
+    // The ACL decides on the id (admin holds hello:* in the auth module's
+    // ACL), then the schema validates, then this runs.
     action({
       id: "hello:reset-counts",
       description: "Reset the usage counter of every greeting to zero",

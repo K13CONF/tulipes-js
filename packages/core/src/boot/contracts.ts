@@ -58,9 +58,9 @@ export interface Ctx {
   sockets?: SocketsCapability;
   app?: Express;
   /**
-   * Every tool the app exposes to agents — route tools from the RAIs,
-   * actions from `agent/*.agent.ts` — built in the backend branch once
-   * routes are scanned. Absent in worker and script processes.
+   * Every action the modules declare in `agent/*.agent.ts`, built once the
+   * ACL exists, in every mode: the manifest an in-app agent hands a model,
+   * and `invoke()` for each tool call. Present from phase 8 on.
    */
   agent?: AgentRegistry;
   /**
@@ -115,13 +115,13 @@ export type RoutesFn = (ctx: BackendCtx) => Router | void | Promise<Router | voi
 /** Runtime infrastructure is optional, even after its initialization phase. */
 export interface RuntimeCtx extends Ctx {
   acl: Acl;
+  agent: AgentRegistry;
 }
 
 /** Context passed to route factories in the backend branch. */
 export interface BackendCtx extends RuntimeCtx {
   mode: "backend";
   app: Express;
-  agent: AgentRegistry;
 }
 
 /**

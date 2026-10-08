@@ -126,7 +126,7 @@ modules/billing/
 ├── bootstrap/*.bootstrap.ts  initialization, every mode; may return its cleanup
 ├── queues/*.queues.ts        (ctx, queues) => process; `jobs` export declares the schemas
 ├── sockets/*.sockets.ts      (ctx, sockets) => claim a namespace
-└── agent/*.agent.ts          defineAgent({ summary, tools }): what an agent sees
+└── agent/*.agent.ts          defineAgent({ summary, actions }): what the module offers to agents
 ```
 
 ```json
@@ -557,29 +557,34 @@ guess wrong: declaring variables instead of reaching for `process.env`, why
 and how to read an aggregate boot report. The skills are plain markdown, so an
 agent without skill support can read them directly.
 
-**The app is a tool box.** Every endpoint declared with `rai()` is a tool an
-agent can call — its name, description, input schema and permission are
-already there — and a module's `agent/*.agent.ts` adds a summary, curates
-which routes an agent sees and declares actions that are not endpoints:
+**What a module offers to agents is declared apart from its API.** Routes
+are the API; `agent/*.agent.ts` lists the module's actions — an id that is
+also the permission, a description written for a model, a zod input schema
+and a handler — and nothing is derived from the routes. An action and a
+route share logic through the module's helpers:
 
 ```ts
 export default defineAgent({
   summary: "Greets callers and counts how often each greeting is used.",
-  tools: [
-    { route: "hello:list-greetings", description: "The stored greetings, most used first" },
+  actions: [
+    action({ id: "hello:list-greetings", description: "The stored greetings, most used first", readOnly: true,
+             handler: async (ctx) => (await findGreetings(ctx))[0] }),
     action({ id: "hello:reset-counts", description: "Reset every counter", input: z.object({ confirm: z.literal(true) }),
              handler: async (ctx) => ({ reset: (await requireModels(ctx).get("Greeting").updateMany({}, { times_used: 0 })).modifiedCount }) }),
   ],
 });
 ```
 
-`ctx.agent.manifest(role)` is what the generated `agent` module serves at
-`GET <prefix>/agent/tools`, filtered to the caller's role; `ctx.agent.invoke()`
-runs an action through the same gate a route has — ACL on the id, then the
-input schema, then the handler — behind `POST <prefix>/agent/tools/<name>`.
-`tulipes agent manifest` writes the document from an inspection boot, and
+`ctx.agent` exists in every process once the ACL is loaded. An agent module
+inside the app hands `ctx.agent.manifest(role).tools` to a model as its tool
+definitions and routes each call to `ctx.agent.invoke(name, input, actor)`,
+which runs the same gate a route has — ACL on the id, then the input schema,
+then the handler. For agents outside the process the generated `agent`
+module serves the manifest at `GET <prefix>/agent/tools` and runs actions at
+`POST <prefix>/agent/tools/<name>`; `tulipes agent manifest` writes the
+document from an inspection boot, and
 [`@tulipes/mcp`](https://www.npmjs.com/package/@tulipes/mcp) serves it to
-Claude Code over MCP, calling every tool through the app's own HTTP door.
+Claude Code over MCP through that door.
 
 > [!WARNING]
 > **Experimental.** `@tulipes/core/agent`, the manifest's shape, the `agent`

@@ -5,27 +5,25 @@ import type { Acl } from "../acl/acl.ts";
 import type { RuntimeCtx } from "../boot/contracts.ts";
 import type { BootReport } from "../errors/boot-error.ts";
 import { HttpError, ValidationError, type FieldIssue } from "../http/error-handler.ts";
-import type { RouteInfo, RouteRecord, RouteRegistry } from "../http/rai.ts";
+import type { RouteRegistry } from "../http/rai.ts";
 import { codeOfIssue, type ValidatableSchema } from "../http/schema.ts";
 import type { ModuleManifest } from "../modules/manifest.ts";
-import type { ActionTool, AgentDeclaration, RouteTool, ToolActor } from "./define-agent.ts";
+import type { ActionTool, AgentDeclaration, ToolActor } from "./define-agent.ts";
 
 export type JsonSchema = Record<string, unknown>;
 
 /** One tool as an agent sees it — what the manifest and MCP list. */
 export interface AgentTool {
-  /** `^[a-zA-Z0-9_-]{1,64}$`, derived from the id: `hello:list-greetings` → `hello_list-greetings`. */
+  /** `^[a-zA-Z0-9_-]{1,64}$`, derived from the id: `hello:reset-counts` → `hello_reset-counts`. */
   name: string;
   module: string;
-  /** The RAI id, which is also the permission the ACL decides on. */
+  /** The action's id, which is also the permission the ACL decides on. */
   permission: string;
   title?: string;
   description: string;
   input_schema: JsonSchema;
-  /** A tool that changes nothing: GET routes, and actions that say so. */
+  /** A tool that changes nothing, as its declaration says. */
   read_only: boolean;
-  /** How to call it: at its own path, or through the action endpoint. */
-  transport: { kind: "http"; method: string; path: string } | { kind: "action" };
 }
 
 export interface AgentManifest {
@@ -38,8 +36,7 @@ export interface AgentManifest {
 
 interface Resolved {
   tool: AgentTool;
-  info?: RouteInfo;
-  action?: ActionTool;
+  action: ActionTool;
 }
 
 /** Claude's and MCP's tool-name alphabet. */
@@ -50,12 +47,13 @@ export function toolNameOf(id: string): string {
 }
 
 /**
- * `ctx.agent` — every tool the app exposes, built once routes are scanned:
- * route tools from the RAIs, action tools from the `agent/` declarations.
- * The manifest is the same object `tulipes agent manifest` writes and the
- * HTTP transport serves; `invoke()` runs a declared action through the
- * same gate a route has — ACL on the id, input validated, errors as
- * HttpErrors the envelope renders.
+ * `ctx.agent` — every action the app's modules declare, built from the
+ * `agent/` declarations once the ACL exists, in every process mode. The
+ * manifest is the same object `tulipes agent manifest` writes and the
+ * HTTP transport serves; `invoke()` runs an action through the same gate
+ * a route has — ACL on the id, input validated, errors as HttpErrors the
+ * envelope renders. An in-app agent module uses both directly: the
+ * manifest as its tool definitions, `invoke()` for each tool call.
  */
 export class AgentRegistry {
   readonly #tools = new Map<string, Resolved>();
@@ -71,7 +69,7 @@ export class AgentRegistry {
     return this.#warnings;
   }
 
-  /** @internal The backend branch, after the route scan. */
+  /** @internal Every mode, after the ACL. */
   build_(
     ctx: RuntimeCtx,
     modules: readonly ModuleManifest[],
@@ -86,91 +84,29 @@ export class AgentRegistry {
       name: String(app?.name ?? "api"),
       ...(typeof app?.version === "string" && { version: app.version }),
     };
-    const records = ctx.routes.all();
     const owners = new Map<string, string>();
 
     for (const module of modules) {
       const declaration = declarations.get(module.name);
-      const own = records.filter((record) => record.module === module.name && record.info.agent !== false);
       const names: string[] = [];
-      const add = (resolved: Resolved) => {
+      for (const spec of declaration?.actions ?? []) {
+        const resolved = this.#fromAction(module.name, spec);
         const { name, permission } = resolved.tool;
         if (!TOOL_NAME.test(name)) {
           report.add({ scope: "agent", module: module.name, message: `tool "${permission}" has no valid name` });
-          return;
+          continue;
         }
         const owner = owners.get(name);
         if (owner) {
           report.add({ scope: "agent", module: module.name, message: `tool "${name}" (${permission}) is already exposed by ${owner}` });
-          return;
+          continue;
         }
-        owners.set(name, `module "${module.name}" as "${this.#tools.get(name)?.tool.permission ?? permission}"`);
+        owners.set(name, `module "${module.name}" as "${permission}"`);
         this.#tools.set(name, resolved);
         names.push(name);
-      };
-
-      if (declaration?.tools === undefined) {
-        for (const record of own) add(this.#fromRoute(record, {}));
-      } else {
-        for (const spec of declaration.tools) {
-          if ("route" in spec) {
-            const matched = own.filter((record) => matches(spec.route, record.info.id));
-            if (matched.length === 0) {
-              report.add({
-                scope: "agent",
-                module: module.name,
-                message: `route "${spec.route}" matches no endpoint this module declares (known: ${own.map((r) => r.info.id).join(", ") || "none"})`,
-              });
-            }
-            for (const record of matched) add(this.#fromRoute(record, spec));
-          } else {
-            add(this.#fromAction(module.name, spec));
-          }
-        }
       }
       this.#modules.push({ name: module.name, ...(declaration?.summary && { summary: declaration.summary }), tools: names });
     }
-  }
-
-  #fromRoute(record: RouteRecord, overrides: Partial<RouteTool>): Resolved {
-    const { info } = record;
-    const method = record.method.toUpperCase();
-    const properties: Record<string, JsonSchema> = {};
-    const required: string[] = [];
-    for (const segment of ["params", "query", "body"] as const) {
-      const schema = info[segment];
-      if (!schema) continue;
-      const json = this.#jsonSchema(schema, `${info.id} ${segment}`);
-      properties[segment] = json;
-      if (Array.isArray(json.required) && json.required.length > 0) required.push(segment);
-    }
-    // A path parameter the route never described is still one the agent
-    // has to supply: `/greetings/:name` without a params schema lists
-    // `name` as a required string.
-    const named = [...record.path.matchAll(/:(\w+)/g)].map((match) => match[1]!);
-    if (!info.params && named.length > 0) {
-      properties.params = {
-        type: "object",
-        properties: Object.fromEntries(named.map((name) => [name, { type: "string" }])),
-        required: named,
-        additionalProperties: false,
-      };
-      required.unshift("params");
-    }
-    const title = overrides.title ?? info.name;
-    return {
-      info,
-      tool: {
-        name: toolNameOf(info.id),
-        module: record.module,
-        permission: info.id,
-        ...(title && { title }),
-        description: overrides.description ?? info.description ?? info.name ?? info.id,
-        input_schema: { type: "object", properties, required, additionalProperties: false },
-        read_only: method === "GET" || method === "HEAD",
-        transport: { kind: "http", method, path: record.path },
-      },
-    };
   }
 
   #fromAction(module: string, spec: ActionTool): Resolved {
@@ -186,7 +122,6 @@ export class AgentRegistry {
           ? this.#jsonSchema(spec.input, `${spec.id} input`)
           : { type: "object", properties: {}, additionalProperties: false },
         read_only: spec.readOnly === true,
-        transport: { kind: "action" },
       },
     };
   }
@@ -234,11 +169,9 @@ export class AgentRegistry {
   }
 
   /**
-   * Run a declared action as `actor`. The same order as a route: who may
-   * (401 for a guest, 403 for a role without the permission), then what
-   * (422 with field issues), then the handler. A route tool is refused
-   * with its own method and path — it is called there, through the app's
-   * middleware, not around it.
+   * Run an action as `actor`. The same order as a route: who may (401 for
+   * a guest, 403 for a role without the permission), then what (422 with
+   * field issues), then the handler.
    */
   async invoke(name: string, input: unknown, actor: ToolActor, request?: Request): Promise<unknown> {
     const resolved = this.#tools.get(name);
@@ -250,13 +183,6 @@ export class AgentRegistry {
       });
     }
     const { tool, action } = resolved;
-    if (!action || tool.transport.kind !== "action") {
-      throw new HttpError(400, "routeTool", {
-        code: "ROUTE_TOOL",
-        vars: { name, method: (tool.transport as { method: string }).method, path: (tool.transport as { path: string }).path },
-        defaultMessage: `"${name}" is an endpoint — call ${(tool.transport as { method: string }).method} ${(tool.transport as { path: string }).path}`,
-      });
-    }
 
     const allowed = this.#routes?.checker && request
       ? await this.#routes.checker(request, { id: tool.permission, name: tool.title, description: tool.description })
@@ -290,10 +216,4 @@ export class AgentRegistry {
 
     return action.handler(this.#ctx!, parsed, actor);
   }
-}
-
-/** `"*"`, `"hello:*"` or an exact id, with the ACL's namespace meaning. */
-function matches(reference: string, id: string): boolean {
-  if (reference === "*" || reference === id) return true;
-  return reference.endsWith(":*") && id.startsWith(reference.slice(0, -1));
 }

@@ -4,11 +4,11 @@ import { dirname, resolve } from "node:path";
 import { inspectApp } from "./inspection.ts";
 
 /**
- * `tulipes agent manifest` — every tool the app exposes to agents, from
- * the same inspection boot as `tulipes routes`: route tools from the RAIs
- * with method, path and input schema, actions from `agent/*.agent.ts`.
- * No service, secret or `.env` is needed. `--role` narrows it to what one
- * role may call, which is what the HTTP transport serves that role.
+ * `tulipes agent manifest` — every action the modules declare in
+ * `agent/*.agent.ts`, with its input schema, from the same inspection boot
+ * as `tulipes routes`. No service, secret or `.env` is needed. `--role`
+ * narrows it to what one role may call, which is what the HTTP transport
+ * serves that role.
  */
 export interface AgentManifestOptions {
   out?: string;
