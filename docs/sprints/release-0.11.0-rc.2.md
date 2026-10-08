@@ -1,6 +1,6 @@
 # Release — core 0.11.0-rc.2, the `tulipes update` fix
 
-Status: **prepared, not published**. Owning items: 0.11-S09.1 to S09.3 in
+Status: **published** on 2026-10-08 from `b72584a` (merge of #29), tag `v0.11.0-rc.2`, publish run [37704532712](https://github.com/kemora13conf/bp-backend-express/actions/runs/37704532712). Owning items: 0.11-S09.1 to S09.3 in
 [the 0.11 plan](./0.11-plan.md). Publication follows
 [the release procedure](../releasing.md): a reviewed PR with green CI, then
 the `v0.11.0-rc.2` tag on its merge commit.
@@ -48,8 +48,41 @@ Source under release: `342bba4` (S09.1), `fa1925c` (S09.2), `3e08208`
 ## Steps left
 
 1. ~~Open the PR; fill the CI column from its run.~~ Done: #29, whole matrix green.
-2. Merge after review with green CI.
-3. Tag `v0.11.0-rc.2` on the merge commit; the publish workflow verifies and
-   uploads with `--tag next`.
-4. Post-publication: registry digests against the run's manifest,
-   dist-tags, and the `--registry` smokes.
+2. ~~Merge after review with green CI.~~ Done: `b72584a`, after the run on
+   `da52b5e` (the CI column commit) was green too.
+3. ~~Tag `v0.11.0-rc.2` on the merge commit.~~ Done; the publish run's
+   `validate-release`, the whole verification matrix and `publish` passed,
+   and its log shows all eight uploads with `--tag next`.
+4. ~~Post-publication checks.~~ Below.
+
+## Post-publication checks (2026-10-08, macOS, Node 24.14.0)
+
+- **Visibility.** The registry answered 404 for four of the eight versions
+  for about two minutes after the run finished, then served all eight;
+  nothing was republished.
+- **Digests.** The run's `release-packages` artifact downloads and
+  `scripts/artifacts.mjs verify` accepts it against `b72584a` (identity,
+  contents, digests); every package's registry `dist.integrity` equals the
+  manifest's.
+- **Dist-tags.** `next` is rc.2 on all eight. `latest` is unchanged: core
+  0.10.1, cli 0.1.1, spec 0.3.1, the providers 0.1.1, and `@tulipes/mcp`
+  and `@tulipes/testing` still `0.1.0-rc.1` from their first publish, so an
+  untagged install of either gets rc.1. Moving `latest` is the owner's call.
+- **Registry smokes** (`--registry`): minimal passed in 12.1 s; production
+  `--offline-only` and `--no-queues --no-sockets --offline-only` passed with
+  network connections denied. The online production variant was not run
+  here (services); the publish run's `production` job covered the archives.
+- **The fix, from npm.** `@tulipes/cli@0.2.0-rc.2`, installed into a scratch
+  prefix and run with stub `npm`/`pnpm` on `PATH`, against a candidate app
+  (`^0.11.0-rc.2` core and mongoose, `^0.2.0-rc.2` cli) and the live
+  registry (`latest` 0.10.1 / 0.1.1): "cli already on 0.2.0-rc.2 (latest is
+  0.1.1)", manifests unchanged, no install started. One wording defect: with
+  core not installed it reports "app already on @tulipes/core ^0.10.1" (the
+  `latest` range) instead of the declared `^0.11.0-rc.2` (S09 backlog).
+- **What went wrong on the way.** A first attempt ran `npx -y
+  @tulipes/cli@0.2.0-rc.2 update`; npx ran the globally installed rc.1
+  `tulipes` instead, whose `update` reproduced the bug for real: it
+  downgraded the maintainer's global CLI (Node 24.14.0 prefix) to 0.1.1 and
+  a scratch app to `^0.10.1`. The global was reinstalled at 0.2.0-rc.1 at
+  once; the scratch app was discarded. It is also the clearest evidence of
+  the rc.1 defect: never test `update` outside a sandbox.
