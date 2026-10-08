@@ -94,7 +94,7 @@ test("an app on a candidate ahead of latest is left alone — never downgraded",
 
   expect([manifest("package.json"), manifest("modules/users/package.json")]).toEqual(before);
   expect(spawn).not.toHaveBeenCalled();
-  expect(logs).toContain("app already on @tulipes/core 0.11.0-rc.1 (latest is 0.10.1)");
+  expect(logs).toContain("app already at or ahead of @tulipes/core@0.10.1 (installed 0.11.0-rc.1)");
   expect(process.exitCode).toBeUndefined();
 });
 
