@@ -13,7 +13,6 @@ export default function agentRoutes(ctx: BackendCtx): void {
       id: "agent:tools",
       name: "List the tools an agent may call",
       description: "The manifest filtered to the caller's role: route tools with their method and path, actions with their input schema",
-      agent: false,
     }), agent.tools());
 
   router.post("/tools/:name", rai({
@@ -22,7 +21,6 @@ export default function agentRoutes(ctx: BackendCtx): void {
       description: "Runs an action from a module's agent declaration; the action's own permission and input schema apply",
       params: toolName,
       body: toolInput,
-      agent: false,
     }), agent.invoke());
 
   routes.mount(router, `${config.api!.prefix}/agent`);

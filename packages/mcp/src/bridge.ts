@@ -4,9 +4,8 @@ import type { AgentManifest, AgentTool } from "@tulipes/core/agent";
  * The app's agent door, as the reference app mounts it:
  *
  *   GET  <url>/tools        the manifest, filtered to the caller's role
- *   POST <url>/tools/<name> run a declared action
+ *   POST <url>/tools/<name> run an action
  *
- * Route tools are called at their own method and path on the app's origin.
  * Every request carries the same bearer token, so the app's own auth
  * module decides who is calling and its ACL what they may do — this
  * bridge adds no identity of its own.
@@ -32,13 +31,6 @@ export interface CallResult {
   envelope: Envelope;
 }
 
-/** What a route tool takes: the request segments its RAI declared. */
-interface RouteInput {
-  params?: Record<string, unknown>;
-  query?: Record<string, unknown>;
-  body?: unknown;
-}
-
 export class AgentBridge {
   readonly #door: URL;
   readonly #token: string | undefined;
@@ -48,10 +40,6 @@ export class AgentBridge {
     this.#door = new URL(options.url.replace(/\/$/, "") + "/");
     this.#token = options.token;
     this.#fetch = options.fetch ?? globalThis.fetch;
-  }
-
-  get origin(): string {
-    return this.#door.origin;
   }
 
   async manifest(): Promise<AgentManifest> {
@@ -64,22 +52,7 @@ export class AgentBridge {
 
   /** Run one tool with the input an agent supplied, as the app answers it. */
   async call(tool: AgentTool, input: unknown): Promise<CallResult> {
-    if (tool.transport.kind === "action") {
-      return this.#request("POST", new URL(`tools/${encodeURIComponent(tool.name)}`, this.#door), input ?? {});
-    }
-    const { method, path } = tool.transport;
-    const segments = (typeof input === "object" && input !== null ? input : {}) as RouteInput;
-    const filled = path.replace(/:(\w+)/g, (_match, name: string) => {
-      const value = segments.params?.[name];
-      if (value === undefined) throw new Error(`"${tool.name}" needs params.${name}`);
-      return encodeURIComponent(String(value));
-    });
-    const url = new URL(filled, this.origin);
-    for (const [key, value] of Object.entries(segments.query ?? {})) {
-      if (value !== undefined) url.searchParams.set(key, String(value));
-    }
-    const hasBody = method !== "GET" && method !== "HEAD";
-    return this.#request(method, url, hasBody ? segments.body ?? {} : undefined);
+    return this.#request("POST", new URL(`tools/${encodeURIComponent(tool.name)}`, this.#door), input ?? {});
   }
 
   async #request(method: string, url: URL, body?: unknown): Promise<CallResult> {

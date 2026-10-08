@@ -93,12 +93,12 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
     workspace boundary is what keeps modules independent, and a package
     name makes the dependency visible in package.json — declare it there
     and in `dependsOn`.
-14. **Every endpoint is a tool an agent can call; describe it as one.** The
-   `rai()` name, description and schemas are what the manifest shows, so a
-   bare `id` is a tool with no description. A module's `agent/*.agent.ts`
-   adds a summary, curates the routes and declares actions that are not
-   endpoints; `agent: false` on a `rai()` hides one. → skill
-   `tulipes-agent-tool`
+14. **Routes are the API; what a module offers to agents is declared
+   apart.** `agent/<module>.agent.ts` lists the module's actions — id,
+   description, input schema, handler — and nothing is derived from the
+   routes. An action and a route share logic through `helpers/`; neither
+   calls the other. `ctx.agent` carries every action in every process.
+   → skill `tulipes-agent-tool`
 15. **A module's tests live in `modules/<name>/tests/` and boot the app
    through `@tulipes/testing`**: `useTestApp({ rootDir }, { beforeAll,
    afterAll })` once per file, `app.get(app.api("/x"))` with the envelope

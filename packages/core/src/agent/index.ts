@@ -4,8 +4,6 @@ export {
   isAgentDeclaration,
   type ActionTool,
   type AgentDeclaration,
-  type AgentToolSpec,
-  type RouteTool,
   type ToolActor,
 } from "./define-agent.ts";
 export { AgentRegistry, toolNameOf, type AgentManifest, type AgentTool } from "./registry.ts";

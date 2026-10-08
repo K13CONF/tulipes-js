@@ -96,10 +96,8 @@ Grant the id in `module.acl.ts` — to `guest` if the endpoint is public.
 `tulipes routes` lists every declared endpoint with the roles that reach it,
 without a service, a secret or a `.env`.
 
-The same declaration is the endpoint's **tool definition**: `tulipes agent
-manifest` lists every route as a tool an agent may call, with the `name`,
-`description` and schemas as written here. Write the description for a model
-choosing between tools; `agent: false` keeps a route out of the manifest.
+A route is never a tool: what the module offers to agents is declared apart,
+in `agent/<module>.agent.ts`, and shares the route's logic through `helpers/`.
 → skill `tulipes-agent-tool`
 
 ## Responses and errors

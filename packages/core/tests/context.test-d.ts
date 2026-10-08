@@ -42,12 +42,14 @@ requireModels(backend).get("User");
 
 requireQueues(backend).queue("users.welcome");
 
-// The agent surface exists in the backend branch only, typed from the registry.
+// The agent surface is on every runtime context, typed from the registry.
 void backend.agent.manifest("admin").tools[0]?.input_schema;
 void backend.agent.invoke("hello_reset-counts", { confirm: true }, { isAuthenticated: true, user: null, session: null, role: "admin" });
-declare const script: import("../src/boot/index.ts").Ctx;
-// @ts-expect-error A worker or script context may carry no agent registry.
-script.agent.manifest();
+declare const worker: import("../src/boot/index.ts").RuntimeCtx;
+void worker.agent.manifest();
+declare const early: import("../src/boot/index.ts").Ctx;
+// @ts-expect-error Before phase 8 the registry does not exist yet.
+early.agent.manifest();
 
 const routes: RoutesFn = (ctx) => {
   ctx.app.disable("x-powered-by");

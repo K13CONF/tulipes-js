@@ -11,6 +11,22 @@ what makes it work under nvm.
 
 ---
 
+## 0.11.0-rc.3 — actions only
+
+The agent surface no longer derives tools from routes: a module offers
+agents exactly the actions its `agent/*.agent.ts` declares, and `ctx.agent`
+exists in every process (worker and script included) instead of the
+backend alone. From rc.1 or rc.2, after installing the rc.3 CLI:
+
+1. `tulipes migrate 0.11` again. It renames `tools:` to `actions:`, deletes
+   every `{ route: … }` entry and every `agent: false` on a `rai()`, and
+   changes nothing else on a candidate app.
+2. For each route an agent should still be able to call, declare an action
+   with a handler — the reference `hello` module shows the pattern: the
+   query moves to `helpers/`, the route and the action both call it.
+3. The manifest's tools lose their `transport` field; `@tulipes/mcp` and the
+   `agent` module's door call every tool at `POST <prefix>/agent/tools/<name>`.
+
 ## 0.11.0-rc.2 — from rc.1
 
 Nothing to change in the app. Update the CLI first: the rc.1 `tulipes update`
@@ -118,21 +134,16 @@ nothing. To move them into MongoDB, as the production preset now does:
 
 ## 0.11.0-rc.1 — the agent surface
 
-Nothing is required: an app with no `agent/` folder exposes every route as
-a tool and `ctx.agent` exists in every backend process. To make the surface
-reachable, and worth reaching:
+Nothing is required: a module with no `agent/` file offers agents nothing,
+and `ctx.agent` is built in every process. To offer something:
 
-1. Add the `agent` module `tulipes init` now scaffolds — copy
-   `modules/agent/` from the reference app (routes, ACL, i18n) and grant
-   `agent:*` to the roles that may discover and run tools. Its two routes
-   declare `agent: false`, so the door is not itself a tool.
-2. Give every `rai()` a `description` written for an agent, or add
-   `agent: false` to endpoints that should stay out (demo routes, the
-   infrastructure console). `tulipes agent manifest --role user` shows what
-   a role would see.
-3. Where a module needs a summary, a shorter list or an action that is not
-   an endpoint, add `agent/<module>.agent.ts` with `defineAgent({ … })` —
-   see the `tulipes-agent-tool` skill.
+1. Add `agent/<module>.agent.ts` with `defineAgent({ summary, actions })` —
+   an action has an id (its permission), a description written for a model,
+   an optional zod `input` and a handler; see the `tulipes-agent-tool`
+   skill. `tulipes agent manifest --role user` shows what a role would see.
+2. For agents outside the process, add the `agent` module `tulipes init`
+   scaffolds — copy `modules/agent/` from the reference app (routes, ACL,
+   i18n) and grant `agent:*` to the roles that may discover and run tools.
 4. For Claude Code: `pnpm add -D @tulipes/mcp` and
    `claude mcp add <app> -- pnpm tulipes-mcp --token <bearer token>`.
 
