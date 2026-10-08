@@ -24,7 +24,6 @@ export default function settingsRoutes(ctx: BackendCtx): void {
       folder: "settings",
       query: logQuery,
       // A stream is not a tool: it never ends on its own.
-      agent: false,
     }),
     settings.logStream(),
   );

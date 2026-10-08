@@ -3,10 +3,9 @@ import type { BackendCtx } from "@tulipes/core/boot";
 import { roleOf } from "@tulipes/core/http";
 
 /**
- * The HTTP transport over `ctx.agent`: the manifest a role may call, and
- * the action endpoint. Route tools are not invoked here — the manifest
- * gives their method and path, and an agent calls them like any client,
- * through the same middleware.
+ * The HTTP transport over `ctx.agent`, for agents outside the process:
+ * the manifest a role may call, and the action endpoint. An agent inside
+ * the app needs neither — it reads `ctx.agent` directly.
  */
 export class AgentController {
   readonly #ctx: BackendCtx;

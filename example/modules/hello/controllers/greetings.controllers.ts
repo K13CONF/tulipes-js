@@ -2,6 +2,8 @@ import type { Request, RequestHandler, Response } from "express";
 import { requireModels, requireQueues, type Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 
+import { findGreetings } from "../helpers/greetings.ts";
+
 export class GreetingsController {
   readonly #ctx: Ctx;
 
@@ -14,13 +16,7 @@ export class GreetingsController {
       // ?page and ?per_page, already clamped by config.pagination — so
       // every list endpoint in every module paginates the same way.
       const { per_page, skip } = req.page;
-      const Greeting = requireModels(this.#ctx).get("Greeting");
-
-      const [greetings, total_items] = await Promise.all([
-        Greeting.find().select("name message times_used -_id")
-          .skip(skip).limit(per_page).lean(),
-        Greeting.countDocuments(),
-      ]);
+      const [greetings, total_items] = await findGreetings(this.#ctx, { skip, limit: per_page });
 
       // Passing total_items is what marks this a page: respond fills in
       // page, per_page and total_pages from the request and the count.

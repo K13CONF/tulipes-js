@@ -12,7 +12,7 @@ export interface ServerOptions {
 
 /**
  * One MCP server over one app: `tools/list` is the manifest the token's
- * role may call, `tools/call` runs the tool through the app's HTTP door
+ * role may call, `tools/call` runs the action through the app's HTTP door
  * and returns the envelope's data — or its errors, as a tool error, so
  * the agent reads a 403 as "may not" rather than as a crash.
  */
@@ -23,9 +23,8 @@ export async function createServer(bridge: AgentBridge, options: ServerOptions =
     {
       capabilities: { tools: { listChanged: false } },
       instructions: [
-        `Tools of the ${initial.app.name} API. Each tool is an endpoint or a declared action of the app;`,
-        "a tool marked read-only changes nothing. Inputs follow the schema; a route tool takes",
-        "{ params, query, body } segments as its RAI declares them.",
+        `Tools of the ${initial.app.name} app: the actions its modules declare. A tool marked`,
+        "read-only changes nothing. Inputs follow the schema.",
         ...initial.modules.filter((module) => module.summary).map((module) => `${module.name}: ${module.summary}`),
       ].join("\n"),
     },

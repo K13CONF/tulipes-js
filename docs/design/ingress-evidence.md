@@ -64,6 +64,18 @@ deployment documentation now say it explicitly. Not changed: the bind address,
 because narrowing it to `127.0.0.1` would break container and platform
 deployments where binding all interfaces is required.
 
+## Rerun against 0.11.0 (2026-10-08)
+
+The same harness against the packed `0.11.0` archives (Node 24.14.0, macOS
+arm64, Docker 29.5.2): **9/9 checks passed**, with the same observations —
+the proxy identity resolves to `192.168.65.1` and none of the three
+client-supplied `X-Forwarded-*` headers replaces it, nginx answers 413
+before the app, and the `X-Accel-Buffering: no` stream delivers its first
+two events at 109 ms and 209 ms (110 ms and 209 ms without the header).
+Nothing in the committed template changed; the harness's probe module did,
+to the 0.11 shape (no `tulipes.offline`, a plain routes function mounted at
+the root). Raw results in `reports/ingress-smoke/` as before.
+
 ## What this does not establish
 
 A pilot's own topology: additional hops (a load balancer or CDN in front of
