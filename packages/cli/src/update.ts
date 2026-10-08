@@ -147,7 +147,7 @@ async function updateApp(
   const changed = paths.map((path) => ({ path, names: rewrite(path, ranges) })).filter(({ names }) => names.length > 0);
 
   if (changed.length === 0) {
-    console.log(`app already on ${PACKAGE} ${current ?? ranges.get(PACKAGE)}${current && current !== latest ? ` (latest is ${latest})` : ""}`);
+    console.log(`app already at or ahead of ${PACKAGE}@${latest}${current ? ` (installed ${current})` : ""}`);
     return;
   }
 

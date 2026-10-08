@@ -43,11 +43,6 @@ export interface RouteInfo extends RouteSchemas {
    * generated spec can describe the response.
    */
   returns?: ValidatableSchema;
-  /**
-   * `false` keeps this endpoint out of the agent manifest. Every declared
-   * route is a tool otherwise — see `@tulipes/core/agent`.
-   */
-  agent?: boolean;
 }
 
 /** The role a caller has before anyone identifies them. */

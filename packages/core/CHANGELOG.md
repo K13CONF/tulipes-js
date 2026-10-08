@@ -9,38 +9,20 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
-## [0.11.0-rc.2] — 2026-10-08
+## [0.11.0] — 2026-10-08
 
-A second candidate for the CLI fix below; core's own code is unchanged since
-rc.1, and every package is republished at `-rc.2` because packing rewrites its
-core dependency. Published packages: core `0.11.0-rc.2`, `@tulipes/cli`
-`0.2.0-rc.2`, `@tulipes/spec` `0.3.2-rc.2`, `@tulipes/mongoose` and
-`@tulipes/bullmq` `0.2.0-rc.2`, `@tulipes/socket.io` `0.1.2-rc.2`,
-`@tulipes/mcp` and `@tulipes/testing` `0.1.0-rc.2`.
+The 0.11 line, stable: every entry below is breaking for an app on 0.10, and
+`tulipes migrate 0.11` carries most of it across; the migration guide lists
+the rest. Published packages: core `0.11.0`, `@tulipes/cli` `0.2.0`,
+`@tulipes/spec` `0.3.2`, `@tulipes/mongoose` `0.2.0`, `@tulipes/bullmq`
+`0.2.0`, `@tulipes/socket.io` `0.1.2`, and the first `@tulipes/mcp` and
+`@tulipes/testing` at `0.1.0`. The providers, mcp and testing require core
+`^0.11.0` (provider contract 2); spec accepts `^0.10.0 || ^0.11.0`.
+Candidates on `next` before it: rc.1 (2026-10-07) and rc.2 (2026-10-08);
+their `agent/` files and `tulipes update` differ as noted below.
 
-- **`tulipes update` never downgrades.** It moved to npm's `latest` tag
-  without comparing, so on rc.1 it rewrote an app to `^0.10.1` and
-  reinstalled the global CLI at 0.1.1. It now raises a plain version range
-  only when the target is newer, and leaves `workspace:`, `file:` and
-  compound ranges as written. Do not run the rc.1 CLI's `tulipes update` on
-  an rc.1 app.
-- **`tulipes update` moves every `@tulipes` package together.** Providers,
-  spec, testing and the CLI devDependency go to the version paired with the
-  new core instead of staying on a line whose peer range refuses it. Every
-  version is fetched before any manifest is written.
-- **The agent surface is experimental.** `@tulipes/core/agent`, the
-  manifest, the `agent` module's routes, `tulipes agent manifest` and
-  `@tulipes/mcp` are outside the 0.11 compatibility promise
-  (`docs/support.md`). No code change.
-
-## [0.11.0-rc.1] — 2026-10-07
-
-The 0.11 line as a release candidate: every entry below is breaking for an app
-on 0.10, and `tulipes migrate 0.11` carries most of it across; the migration
-guide lists the rest. Published packages: core `0.11.0-rc.1`, `@tulipes/cli`
-`0.2.0-rc.1`, `@tulipes/spec` `0.3.2-rc.1`, `@tulipes/mongoose` `0.2.0-rc.1`,
-`@tulipes/bullmq` `0.2.0-rc.1`, `@tulipes/socket.io` `0.1.2-rc.1`, and the first
-`@tulipes/mcp` and `@tulipes/testing` at `0.1.0-rc.1`.
+The agent surface and `@tulipes/mcp` are **experimental**: outside the
+compatibility promise, may change in any release (`docs/support.md`).
 
 - **`@tulipes/testing`.** `useTestApp({ rootDir, env, settings }, { beforeAll,
   afterAll })` boots the app once per test file on a free port and shuts it
@@ -94,21 +76,34 @@ guide lists the rest. Published packages: core `0.11.0-rc.1`, `@tulipes/cli`
   stream on a replica set and by polling otherwise. It shares the models
   provider's connection or opens its own from `MONGO_URI`. The production
   preset declares it; the minimal preset keeps the file store.
-- **The agent surface.** Every route declared with `rai()` is a tool —
-  name from the id (`hello:list-greetings` → `hello_list-greetings`),
-  description, a JSON Schema input built from `params`, `query` and `body`
-  (path parameters without a schema included), the permission, and
-  `read_only` for `GET`. `agent/*.agent.ts` exports `defineAgent({ summary,
-  tools })`: a summary, a curated list of routes (`"*"`, `"<module>:*"` or
-  an id), and `action({ id, description, input, handler })` tools that are
-  not endpoints, gated like a route — ACL on the id, then the schema, then
-  the handler. `agent: false` on a RAI hides an endpoint. `ctx.agent`
-  (backend only) gives `manifest(role)`, `tools(role)`, `find(name)` and
-  `invoke(name, input, actor, req?)`; `tulipes agent manifest` writes the
+- **The agent surface: actions, declared apart from the API.**
+  `agent/*.agent.ts` exports `defineAgent({ summary, actions })`; an action
+  is `action({ id, description, input, readOnly, handler })` — the id is a
+  permission granted in `module.acl.ts`, the input a zod schema emitted as
+  JSON Schema, and it runs gated like a route: ACL on the id, then the
+  schema, then the handler with the runtime context and the actor. Routes
+  are never tools and nothing is derived from a `rai()`; a module with no
+  `agent/` file offers nothing. `ctx.agent` is built from the declarations
+  after the ACL in every mode (backend, worker, script, inspection) and
+  gives `manifest(role)`, `tools(role)`, `find(name)` and `invoke(name,
+  input, actor, req?)` — what an agent module inside the app hands a model
+  and routes each tool call to. `tulipes agent manifest` writes the
   document from an inspection boot; the generated apps carry an `agent`
-  module serving `GET <prefix>/agent/tools` and `POST <prefix>/agent/tools/:name`;
-  the new `@tulipes/mcp` package (`tulipes-mcp`) serves that door to MCP
-  clients, calling every tool through the app's own HTTP with a bearer token.
+  module serving `GET <prefix>/agent/tools` and `POST <prefix>/agent/tools/:name`
+  for agents outside the process; the new `@tulipes/mcp` package
+  (`tulipes-mcp`) serves that door to MCP clients with a bearer token. (The
+  candidates derived a tool from every route, with `tools`, `{ route }`,
+  `agent: false` and a `transport` field; `tulipes migrate 0.11` rewrites an
+  rc app's files.)
+- **`tulipes update` never downgrades and moves every package together.**
+  It compares by semver and raises a plain version range only when the
+  target is newer, leaves `workspace:`, `file:` and compound ranges alone,
+  and moves every declared `@tulipes/*` package to the version paired with
+  the new core, fetching all of them before writing. (The rc.1 CLI followed
+  npm's `latest` tag blindly and downgraded a candidate app.)
+- **The file settings store polls as a floor.** Besides `fs.watch`, it
+  re-reads its file every 2 s, unref'd, so a change another process wrote
+  is applied even when the watcher drops the event (macOS under load).
 - **Generated model and job types.** `tulipes sync` now writes
   `types/tulipes.d.ts` (replacing `types/config.d.ts`, which it removes)
   with two more augmentations: `KnownModels` in `@tulipes/mongoose`, one

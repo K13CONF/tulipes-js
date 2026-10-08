@@ -100,7 +100,7 @@ export interface BootHandle {
  *   5  models, settings   providers connect; no values are read yet
  *   6  settings           every namespace loaded, seeded, validated → ctx.config
  *   7  translations
- *   8  ACL
+ *   8  ACL, then the agent surface from every agent/*.agent.ts
  *   9  bootstrap          bootstrap/*.bootstrap.ts in load order, every mode
  *  10  queues, sockets    providers acquired against the full context
  *  11  fork               backend | worker | script
@@ -244,6 +244,12 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     ctx.acl = await loadAcl(explored, aclReport);
     aclReport.throwIfAny("acl");
 
+    // Phase 8b — the agent surface: every module's declared actions, gated
+    // by that ACL. Every mode, so a worker's agent job sees the same tools.
+    const agentReport = new BootReport();
+    ctx.agent = await loadAgents(explored, ctx as RuntimeCtx, agentReport);
+    agentReport.throwIfAny("agent");
+
     // Phase 9 — bootstrap, every mode. Inspection acquires nothing and so
     // runs nothing that could open a resource.
     if (!options.inspect) {
@@ -372,12 +378,6 @@ async function startBackend(
   handle.ctx.routes.record_(scanRoutes(app, report));
 
   report.throwIfAny("routes");
-
-  // The agent surface needs the scanned routes (method and path of every
-  // tool) and the ACL; it is the last thing built before the server exists.
-  const agentReport = new BootReport();
-  handle.ctx.agent = await loadAgents(explored, handle.ctx as RuntimeCtx, agentReport);
-  agentReport.throwIfAny("agent");
 
   const port = handle.env.store.has("PORT")
     ? Number(handle.env.get("PORT"))

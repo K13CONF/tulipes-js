@@ -69,7 +69,7 @@ try {
   mkdirSync(join(probe, 'routes'), { recursive: true });
   writeFileSync(join(probe, 'package.json'), JSON.stringify({
     name: '@app/ingress-probe', version: '0.0.0', private: true, type: 'module',
-    tulipes: { offline: true, tier: 'app', priority: 999 },
+    tulipes: { tier: 'app', priority: 999 },
     dependencies: { '@tulipes/core': resolutions['@tulipes/core'], express: '^5' },
   }, null, 2));
   writeFileSync(join(probe, 'module.acl.ts'), `import type { AclBuilder } from "@tulipes/core/acl";
@@ -78,10 +78,10 @@ export default function probeAcl(acl: AclBuilder): void {
 }
 `);
   writeFileSync(join(probe, 'routes/probe.routes.ts'), `import { Router } from "express";
-import { defineRoutes } from "@tulipes/core/http";
+import type { BackendCtx } from "@tulipes/core/boot";
 
 /** Everything the app resolved from the request, as the app sees it. */
-export default defineRoutes(({ rai }) => {
+export default function probeRoutes({ rai, routes }: BackendCtx): void {
   const router = Router();
   router.get("/ingress/echo", rai({ id: "ingress-probe:echo" }), (req, res) => {
     res.respond({ data: {
@@ -109,8 +109,9 @@ export default defineRoutes(({ rai }) => {
       req.on("close", () => clearInterval(timer));
     });
   }
-  return router;
-});
+  // At the root, not under the API prefix: the checks address /ingress/* as the template proxies them.
+  routes.mount(router, "/");
+}
 `);
 
   const env = {

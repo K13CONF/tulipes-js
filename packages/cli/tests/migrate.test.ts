@@ -201,3 +201,57 @@ test("the rewrites are precise", () => {
   expect(rewriteInspection(`import { boot, inspectRoutes } from "@tulipes/core/boot";\nconst c = await inspectRoutes({ rootDir: dir });`)).toBe(`import { boot } from "@tulipes/core/boot";\nconst c = (await boot({ inspect: true, mode: "backend", handleSignals: false, rootDir: dir })).ctx;`);
   expect(parseEnv("# c\nexport A=1\nB='two' # not a comment inside quotes\nC=three # comment\nD=\n")).toEqual({ A: "1", B: "two", C: "three", D: "" });
 });
+
+test("migrate 0.11 on a candidate app touches only the agent surface, and a second run changes nothing", async () => {
+  const app = await fixture({
+    "package.json": JSON.stringify({ name: "app", type: "module", packageManager: "yarn@4.18.0" }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module" }),
+    "modules/probe/routes/probe.routes.ts": `export default function probeRoutes({ rai, routes }) {
+  routes.mount(rai({ id: "probe:tools", name: "Tools", agent: false }), "/tools");
+  routes.mount(rai({
+      id: "probe:invoke",
+      agent: false,
+    }), "/tools/:name");
+}
+`,
+    "modules/probe/agent/probe.agent.ts": `import { action, defineAgent } from "@tulipes/core/agent";
+
+export default defineAgent({
+  summary: "Things.",
+  tools: [
+    { route: "probe:read", description: "Every thing" },
+    { route: "probe:*" },
+    action({ id: "probe:reset", description: "Reset", handler: () => 0 }),
+  ],
+});
+`,
+  });
+
+  const report = migrate(app.rootDir);
+  expect(report.changed).toEqual([
+    "package.json: pnpm workspace, node scripts, no tsx",
+    "modules/probe/routes/probe.routes.ts: agent: false removed (routes are not tools)",
+    "modules/probe/agent/probe.agent.ts: tools → actions, route entries removed (routes are not tools)",
+    expect.stringMatching(/^wrote config\/migration-0\.11\.json/),
+  ]);
+  expect(report.todos).toEqual([]);
+  expect(await readFile(join(app.rootDir, "modules/probe/routes/probe.routes.ts"), "utf8")).toBe(`export default function probeRoutes({ rai, routes }) {
+  routes.mount(rai({ id: "probe:tools", name: "Tools" }), "/tools");
+  routes.mount(rai({
+      id: "probe:invoke",
+    }), "/tools/:name");
+}
+`);
+  expect(await readFile(join(app.rootDir, "modules/probe/agent/probe.agent.ts"), "utf8")).toBe(`import { action, defineAgent } from "@tulipes/core/agent";
+
+export default defineAgent({
+  summary: "Things.",
+  actions: [
+    action({ id: "probe:reset", description: "Reset", handler: () => 0 }),
+  ],
+});
+`);
+
+  // What rc.1 and rc.2 apps rely on: running it again is safe.
+  expect(migrate(app.rootDir).changed).toEqual([expect.stringMatching(/^wrote config\/migration-0\.11\.json/)]);
+});

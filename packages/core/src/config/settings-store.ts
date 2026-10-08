@@ -96,6 +96,7 @@ type FileDocument = Record<string, StoredSettings>;
 export class FileSettingsStore implements SettingsStore {
   readonly file: string;
   #watcher: FSWatcher | undefined;
+  #poll: ReturnType<typeof setInterval> | undefined;
   /** Versions this process has seen per namespace, so a watch only reports real changes. */
   readonly #seen = new Map<string, number>();
 
@@ -124,26 +125,30 @@ export class FileSettingsStore implements SettingsStore {
     const dir = dirname(this.file);
     mkdirSync(dir, { recursive: true });
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = () => {
+      let document: FileDocument;
+      try {
+        document = this.#read();
+      } catch {
+        return; // half-written or invalid: the next change will be read
+      }
+      for (const [namespace, stored] of Object.entries(document)) {
+        if ((this.#seen.get(namespace) ?? 0) >= stored.version) continue;
+        this.#seen.set(namespace, stored.version);
+        listener(namespace, stored);
+      }
+    };
     // Watch the directory, not the file: an atomic replace renames a new
     // inode into place, and a watcher on the old one goes silent.
     this.#watcher = watch(dir, (_event, filename) => {
       if (filename && filename !== basename(this.file)) return;
       clearTimeout(timer);
-      timer = setTimeout(() => {
-        let document: FileDocument;
-        try {
-          document = this.#read();
-        } catch {
-          return; // half-written or invalid: the next change will be read
-        }
-        for (const [namespace, stored] of Object.entries(document)) {
-          if ((this.#seen.get(namespace) ?? 0) >= stored.version) continue;
-          this.#seen.set(namespace, stored.version);
-          listener(namespace, stored);
-        }
-      }, 50);
+      timer = setTimeout(check, 50);
     });
-    // A watcher must never hold a worker or script open on its own.
+    // fs.watch drops events under load on macOS; the poll is the floor, as
+    // it is for the Mongo store. Neither may hold a worker or script open.
+    this.#poll = setInterval(check, 2_000);
+    this.#poll.unref();
     this.#watcher.unref();
     return () => this.dispose();
   }
@@ -155,6 +160,8 @@ export class FileSettingsStore implements SettingsStore {
   dispose(): void {
     this.#watcher?.close();
     this.#watcher = undefined;
+    clearInterval(this.#poll);
+    this.#poll = undefined;
   }
 
   #read(): FileDocument {

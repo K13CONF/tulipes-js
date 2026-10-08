@@ -47,18 +47,24 @@ test("agent manifest describes every tool offline, filtered by role when asked",
     `,
     "modules/probe/agent/probe.agent.js": `
       import { defineAgent } from '@tulipes/core/agent';
-      export default defineAgent({ summary: 'Things.', tools: [{ route: '*' }, { id: 'probe:reset', description: 'Reset', handler: () => 0 }] });
+      export default defineAgent({ summary: 'Things.', actions: [
+        { id: 'probe:read', description: 'Count things', readOnly: true, handler: () => 0 },
+        { id: 'probe:reset', description: 'Reset', handler: () => 0 },
+      ] });
     `,
   });
   const run = (...args: string[]) => spawnSync(process.execPath, [cli, "agent", "manifest", ...args], { cwd: app.rootDir, encoding: "utf8", timeout: 20_000, env: { ...process.env, APP_ENV: "production" } });
 
   const all = run("--out", "docs/agent.json");
   expect(all.status, all.stdout + all.stderr).toBe(0);
-  expect(all.stdout).toContain("wrote docs/agent.json: 3 tool(s) across 1 module(s)");
+  expect(all.stdout).toContain("wrote docs/agent.json: 2 tool(s) across 1 module(s)");
   const manifest = JSON.parse(await readFile(app.rootDir + "/docs/agent.json", "utf8"));
-  expect(manifest.modules).toEqual([{ name: "probe", summary: "Things.", tools: ["probe_read", "probe_write", "probe_reset"] }]);
-  expect(manifest.tools[0]).toMatchObject({ name: "probe_read", read_only: true, transport: { kind: "http", method: "GET", path: "/things/:id" }, input_schema: { required: ["params"] } });
-  expect(manifest.tools[2]).toMatchObject({ name: "probe_reset", transport: { kind: "action" } });
+  expect(manifest.modules).toEqual([{ name: "probe", summary: "Things.", tools: ["probe_read", "probe_reset"] }]);
+  // Routes are the API, not tools: no method, no path, nothing from the RAIs.
+  expect(manifest.tools).toEqual([
+    { name: "probe_read", module: "probe", permission: "probe:read", description: "Count things", read_only: true, input_schema: { type: "object", properties: {}, additionalProperties: false } },
+    { name: "probe_reset", module: "probe", permission: "probe:reset", description: "Reset", read_only: false, input_schema: { type: "object", properties: {}, additionalProperties: false } },
+  ]);
 
   const guest = run("--role", "guest");
   expect(guest.status, guest.stderr).toBe(0);

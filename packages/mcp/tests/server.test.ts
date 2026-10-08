@@ -7,24 +7,19 @@ import { createServer } from "../src/server.ts";
 
 /**
  * A stand-in for the app's agent door, in the envelope every Tulipes
- * endpoint answers with: the manifest, one route tool and one action.
- * What arrives — method, path, query, body, bearer token — is recorded,
- * because that is the whole contract of the bridge.
+ * endpoint answers with: the manifest and two actions. What arrives —
+ * method, path, body, bearer token — is recorded, because that is the
+ * whole contract of the bridge.
  */
 const manifest = {
   app: { name: "probe", version: "1.2.3" },
   authorization: "acl",
-  modules: [{ name: "things", summary: "Keeps things.", tools: ["things_read", "things_rename", "things_reset"] }],
+  modules: [{ name: "things", summary: "Keeps things.", tools: ["things_count", "things_reset"] }],
   tools: [
-    { name: "things_read", module: "things", permission: "things:read", title: "Read a thing", description: "One thing", read_only: true,
-      input_schema: { type: "object", properties: { params: { type: "object", properties: { id: { type: "string" } }, required: ["id"] }, query: { type: "object", properties: { verbose: { type: "boolean" } } } }, required: ["params"], additionalProperties: false },
-      transport: { kind: "http", method: "GET", path: "/api/v1/things/:id" } },
-    { name: "things_rename", module: "things", permission: "things:write", description: "Rename", read_only: false,
-      input_schema: { type: "object", properties: { params: { type: "object" }, body: { type: "object" } }, required: ["params", "body"], additionalProperties: false },
-      transport: { kind: "http", method: "POST", path: "/api/v1/things/:id" } },
+    { name: "things_count", module: "things", permission: "things:count", title: "Count things", description: "How many", read_only: true,
+      input_schema: { type: "object", properties: {}, additionalProperties: false } },
     { name: "things_reset", module: "things", permission: "things:reset", description: "Reset", read_only: false,
-      input_schema: { type: "object", properties: { confirm: { type: "boolean" } }, required: ["confirm"], additionalProperties: false },
-      transport: { kind: "action" } },
+      input_schema: { type: "object", properties: { confirm: { type: "boolean" } }, required: ["confirm"], additionalProperties: false } },
   ],
 };
 
@@ -47,13 +42,11 @@ async function door(): Promise<string> {
     if (req.method === "GET" && url.pathname === "/api/v1/agent/tools") {
       return respond(res, 200, req.headers.authorization === "Bearer secret" ? manifest : { ...manifest, tools: manifest.tools.slice(0, 1) });
     }
+    if (req.method === "POST" && url.pathname === "/api/v1/agent/tools/things_count") return respond(res, 200, 3);
     if (req.method === "POST" && url.pathname === "/api/v1/agent/tools/things_reset") {
       if (req.headers.authorization !== "Bearer secret") return respond(res, 403, null, [{ field: null, message: 'role "guest" may not things:reset', code: "FORBIDDEN" }]);
       if (body?.confirm !== true) return respond(res, 422, null, [{ field: "confirm", message: "Invalid input", code: "INVALID_LITERAL" }]);
       return respond(res, 200, { reset: 3 });
-    }
-    if (url.pathname.startsWith("/api/v1/things/")) {
-      return respond(res, 200, { id: decodeURIComponent(url.pathname.split("/").pop()!), verbose: url.searchParams.get("verbose"), body });
     }
     res.writeHead(404, { "content-type": "text/plain" }).end("nope");
   });
@@ -75,26 +68,23 @@ async function connect(token?: string) {
 }
 
 test("lists the manifest as MCP tools, with the token's role deciding what is listed", async () => {
-  const client = await connect("secret");
-  const { tools } = await client.listTools();
-  expect(tools.map((tool) => tool.name)).toEqual(["things_read", "things_rename", "things_reset"]);
-  expect(tools[0]).toMatchObject({ title: "Read a thing", description: "One thing", annotations: { readOnlyHint: true }, inputSchema: { type: "object", required: ["params"] } });
-  expect(client.getServerVersion()).toEqual({ name: "probe", version: "1.2.3" });
-  expect(client.getInstructions()).toContain("things: Keeps things.");
+  const admin = await connect("secret");
+  const { tools } = await admin.listTools();
+  expect(tools.map((tool) => [tool.name, tool.annotations?.readOnlyHint])).toEqual([["things_count", true], ["things_reset", false]]);
+  expect(tools[0]).toMatchObject({ title: "Count things", description: "How many", inputSchema: { type: "object", properties: {}, additionalProperties: false } });
+  expect(seen.at(-1)).toMatchObject({ method: "GET", url: "/api/v1/agent/tools", auth: "Bearer secret" });
 
   const guest = await connect();
-  expect((await guest.listTools()).tools.map((tool) => tool.name)).toEqual(["things_read"]);
+  expect((await guest.listTools()).tools.map((tool) => tool.name)).toEqual(["things_count"]);
+  expect(seen.at(-1)?.auth).toBeUndefined();
 });
 
-test("a route tool is called at its own method and path with params, query and body; an action through the door", async () => {
+test("every tool is called through the door with the same bearer token", async () => {
   const client = await connect("secret");
 
-  const read = await client.callTool({ name: "things_read", arguments: { params: { id: "a b" }, query: { verbose: true } } });
-  expect(read).toMatchObject({ structuredContent: { id: "a b", verbose: "true" } });
-  expect(seen.at(-1)).toMatchObject({ method: "GET", url: "/api/v1/things/a%20b?verbose=true", auth: "Bearer secret", body: undefined });
-
-  await client.callTool({ name: "things_rename", arguments: { params: { id: "x" }, body: { name: "y" } } });
-  expect(seen.at(-1)).toMatchObject({ method: "POST", url: "/api/v1/things/x", body: { name: "y" } });
+  const count = await client.callTool({ name: "things_count", arguments: {} });
+  expect(count).toMatchObject({ content: [{ type: "text", text: JSON.stringify({ data: 3, meta: {} }) }] });
+  expect(seen.at(-1)).toMatchObject({ method: "POST", url: "/api/v1/agent/tools/things_count", auth: "Bearer secret", body: {} });
 
   const reset = await client.callTool({ name: "things_reset", arguments: { confirm: true } });
   expect(reset).toMatchObject({ structuredContent: { reset: 3 }, content: [{ type: "text", text: JSON.stringify({ data: { reset: 3 }, meta: {} }) }] });
@@ -104,13 +94,12 @@ test("a route tool is called at its own method and path with params, query and b
 test("the app's refusals come back as tool errors the agent can read, never as crashes", async () => {
   const client = await connect("secret");
   expect(await client.callTool({ name: "things_reset", arguments: { confirm: false } })).toMatchObject({ isError: true, content: [{ type: "text", text: "422: confirm: Invalid input (INVALID_LITERAL)" }] });
-  expect(await client.callTool({ name: "things_read", arguments: {} })).toMatchObject({ isError: true, content: [{ type: "text", text: '"things_read" needs params.id' }] });
   expect(await client.callTool({ name: "unknown_tool", arguments: {} })).toMatchObject({ isError: true });
 
   const guest = await connect();
   await guest.listTools();
   // Listed for the token's role only, so a guest never sees the action; the door still answers a direct call with its reason.
   const bridge = new AgentBridge({ url: await door() });
-  const { status, envelope } = await bridge.call(manifest.tools[2] as never, { confirm: true });
+  const { status, envelope } = await bridge.call(manifest.tools[1] as never, { confirm: true });
   expect({ status, code: envelope.errors[0]?.code }).toEqual({ status: 403, code: "FORBIDDEN" });
 });
