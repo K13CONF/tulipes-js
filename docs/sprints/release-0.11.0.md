@@ -1,6 +1,6 @@
 # Release — core 0.11.0, the 0.11 line stable
 
-Status: **prepared, not published**. Owning items: 0.11-S08 (the line),
+Status: **published** on 2026-10-08 from `f5bf21c` (merge of #31, after #30), tag `v0.11.0`, publish run [37843899495](https://github.com/kemora13conf/bp-backend-express/actions/runs/37843899495): `validate-release`, the whole verification matrix and `publish` green; eight uploads with `--tag latest`. Owning items: 0.11-S08 (the line),
 S09 (before stable) and S10 (actions only) in [the 0.11 plan](./0.11-plan.md).
 Publication follows [the release procedure](../releasing.md): a reviewed PR
 with green CI, then the `v0.11.0` tag on its merge commit, which publishes
@@ -64,15 +64,44 @@ record, docs only) is open separately.
 
 ## Steps left for the release owner
 
-1. Review and merge PR #30 (docs), then the release PR #31 — its matrix is
-   green and recorded above.
+1. ~~Review and merge PR #30 (docs), then the release PR #31.~~ Done:
+   #30 as `15c7b31`, #31 as `f5bf21c` after one conflict resolution in the
+   plan's backlog list (`471bc8a`) and a green rerun on it.
 2. ~~With Docker running: the two Docker harnesses.~~ Done locally, both
    recorded in `docs/design/`. The plan's cross-replica revocation case is
    not in `failure-smoke.mjs`; the auth cache lives in the shared Redis and
    every revocation path deletes the entry (security model, S08b), so the
    case is a verification of that design, not a gap in it.
-3. Tag `v0.11.0` on the merge commit; the publish workflow verifies and
-   uploads with `latest`.
-4. Post-publication: digests against the run's manifest, dist-tags, the
-   `--registry` smokes, and `npm install -g @tulipes/cli` followed by
-   `tulipes update` on a candidate app in a sandbox.
+3. ~~Tag `v0.11.0` on the merge commit.~~ Done.
+4. ~~Post-publication checks.~~ Below.
+
+## Post-publication checks (2026-10-08, macOS, Node 24.14.0)
+
+- **Visibility.** All eight versions answered on the registry 278 s after
+  the run finished; nothing was republished.
+- **Digests.** The run's `release-packages` artifact downloads,
+  `scripts/artifacts.mjs verify` accepts it against `f5bf21c`, and every
+  package's registry `dist.integrity` equals the manifest's.
+- **Dist-tags.** `latest` is the stable version on all eight; `next` stays
+  at rc.2. `@tulipes/mcp` and `@tulipes/testing` no longer have an rc on
+  `latest`.
+- **Registry smokes** (`--registry`, installing from npm at exactly the
+  manifest's versions): production `--offline-only` and
+  `--no-queues --no-sockets --offline-only` passed with network connections
+  denied. The minimal and online production variants could not run here:
+  their start step is `pnpm dev` (`node --watch`), and on this machine
+  `node --watch` on a one-line script fails with `EMFILE: too many open
+  files, watch` — file watching is exhausted by the other development
+  servers and Docker Desktop's shared folders, which were not running when
+  the rc.2 registry smokes passed earlier the same day. The app is not in
+  question: the publish run's own `production` job booted the packed
+  archives (backend, worker, login, PM2), and the registry tarballs have
+  those archives' digests byte for byte.
+- **The published CLI's `update`, in a sandbox** (`@tulipes/cli@0.2.0`
+  installed into a scratch prefix, stub `npm`/`pnpm`/`yarn` on `PATH`,
+  the live registry): on an rc.2 app it raised core, mongoose and the CLI
+  devDependency to the stable ranges in the root and the module
+  (`@tulipes/core ^0.11.0, @tulipes/mongoose ^0.2.0, @tulipes/cli ^0.2.0`)
+  and started the install; on a 0.11.0 app it reported "app already at or
+  ahead of @tulipes/core@0.11.0" and changed nothing. The maintainer's
+  global CLI (0.2.0-rc.1) was not touched.
