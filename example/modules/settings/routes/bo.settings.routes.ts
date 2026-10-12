@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
 
-import { SettingsController } from "../controllers/settings.controllers.ts";
+import { BoSettingsController } from "../controllers/bo.settings.controllers.ts";
 import { logQuery } from "../schemas/settings.schemas.ts";
 
 /**
@@ -13,12 +13,12 @@ import { logQuery } from "../schemas/settings.schemas.ts";
 export default function settingsRoutes(ctx: BackendCtx): void {
   const { rai, routes, config } = ctx;
   const router = Router();
-  const settings = new SettingsController(ctx);
+  const settings = new BoSettingsController(ctx);
 
   router.get(
     "/logs/stream",
     rai({
-      id: "settings:logs",
+      id: "settings:bo:logs",
       name: "Stream logs",
       description: "Server-Sent Events over the log files — backend or worker",
       folder: "settings",

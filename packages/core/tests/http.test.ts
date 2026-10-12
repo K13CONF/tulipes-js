@@ -34,7 +34,7 @@ test("res.respond uses the route's declared success status", async () => {
     (req, res) => bindRespond(req, res, {}),
   );
 
-  app.get("/created", rai({ id: "items:create", status: 201 }), (_req, res) => {
+  app.get("/created", rai({ id: "items:web:create", status: 201 }), (_req, res) => {
     res.respond({ data: { id: 1 } });
   });
 
@@ -58,7 +58,7 @@ test("validates and coerces input before the handler and aggregates invalid segm
   app.get(
     "/items/:id",
     rai({
-      id: "items:read",
+      id: "items:web:read",
       params: z.object({ id: z.coerce.number().int().positive() }),
       query: z.object({ count: z.coerce.number().int().positive() }),
     }),
@@ -108,7 +108,7 @@ test.each([
       .defineRole("guest")
       .defineRole("user")
       .defineRole("admin")
-      .allow("admin", "items:read");
+      .allow("admin", "items:web:read");
 
     const app = express();
 
@@ -128,7 +128,7 @@ test.each([
       (req, res) => bindRespond(req, res, {}),
     );
 
-    app.get("/items", rai({ id: "items:read" }), (_req, res) => {
+    app.get("/items", rai({ id: "items:web:read" }), (_req, res) => {
       res.respond({ data: [] });
     });
 
@@ -157,7 +157,7 @@ test.each(["/items", "/items?required=present"])(
 
     app.get(
       "/items",
-      rai({ id: "items:read", query: z.object({ required: z.string() }) }),
+      rai({ id: "items:web:read", query: z.object({ required: z.string() }) }),
       (_req, res) => {
         res.respond({ data: "private" });
       },
@@ -199,7 +199,7 @@ test.each([
       (req, res) => bindRespond(req, res, {}),
     );
 
-    app.get("/items", rai({ id: "items:read" }), (_req, res) => {
+    app.get("/items", rai({ id: "items:web:read" }), (_req, res) => {
       res.respond({ data: "private" });
     });
 
@@ -227,13 +227,13 @@ test.each([false, true])(
 
     const rai = createRai(
       new RouteRegistry(),
-      (role, id) => id === "auth:login" || role === "admin",
+      (role, id) => id === "auth:web:login" || role === "admin",
       (req, res) => bindRespond(req, res, {}),
     );
 
     let restoreAuth = () => {};
 
-    app.get("/login", rai({ id: "auth:login" }), (req, res) => {
+    app.get("/login", rai({ id: "auth:web:login" }), (req, res) => {
       const original = { ...req.auth };
 
       restoreAuth = () => {
@@ -247,7 +247,7 @@ test.each([false, true])(
       res.respond({ data: "signed in" });
     });
 
-    app.get("/private", rai({ id: "items:read" }), (_req, res) => {
+    app.get("/private", rai({ id: "items:web:read" }), (_req, res) => {
       res.respond({ data: "private" });
     });
 
@@ -284,7 +284,7 @@ test.each(["false", 1, {}])(
       (req, res) => bindRespond(req, res, {}),
     );
 
-    app.get("/items", rai({ id: "items:read" }), (_req, res) => {
+    app.get("/items", rai({ id: "items:web:read" }), (_req, res) => {
       res.respond({ data: "private" });
     });
 

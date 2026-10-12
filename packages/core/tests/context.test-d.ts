@@ -6,6 +6,9 @@ import type {
 import { requireModels, requireQueues } from "../src/boot/index.ts";
 import { Router } from "express";
 import { defineConfig } from "../src/config/index.ts";
+import type { AclBuilder } from "../src/acl/index.ts";
+import { parseRai } from "../src/acl/index.ts";
+import { action } from "../src/agent/define-agent.ts";
 import { z } from "zod/v4";
 import type {
   RequestHandler,
@@ -56,7 +59,7 @@ const routes: RoutesFn = (ctx) => {
 };
 
 const bootstrap: BootstrapFn = (ctx) => {
-  void ctx.acl.can("guest", "probe:read");
+  void ctx.acl.can("guest", "probe:web:read");
   void ctx.settings.namespaces();
   ctx.signal.addEventListener("abort", () => undefined);
   // @ts-expect-error Bootstrap runs before Express exists.
@@ -78,3 +81,36 @@ const settingsDeclaration = defineConfig({
 void routes;
 void bootstrap;
 void settingsDeclaration;
+
+// A RAI id is "module:scope:resource[:extra]". Leaving the scope out is
+// caught in the editor; the boot scan is the authority on the rest.
+backend.rai({ id: "users:bo:list" });
+backend.rai({ id: "users:bo:detail:delete" });
+// @ts-expect-error Two segments: the scope is missing.
+backend.rai({ id: "users:read" });
+action({ id: "hello:bo:greetings:reset", description: "Reset", handler: () => 0 });
+// @ts-expect-error An action's id is a RAI too.
+action({ id: "hello:reset", description: "Reset", handler: () => 0 });
+
+const { scope, extra } = parseRai("users:bo:detail:delete");
+const scopeIs: string = scope;
+const extraIs: string | undefined = extra;
+void scopeIs;
+void extraIs;
+
+// Role extras are typed by augmentation, and stay open otherwise.
+declare module "../src/acl/acl.ts" {
+  interface RoleMeta {
+    level?: number;
+  }
+}
+declare const roles: AclBuilder;
+roles.defineRole("admin", { description: "Runs the back office", level: 2, dashboard: "bo" });
+// @ts-expect-error A declared extra keeps its type.
+roles.defineRole("user", { level: "high" });
+// @ts-expect-error The description is a string.
+roles.defineRole("guest", { description: 1 });
+const level: number | undefined = backend.acl.role("admin")?.level;
+const definedBy: string | undefined = backend.acl.role("admin")?.definedBy;
+void level;
+void definedBy;

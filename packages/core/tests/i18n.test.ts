@@ -9,17 +9,17 @@ import { fixture, url } from "./fixture.ts";
  * gaps fall back to the default locale.
  */
 
-const acl = `export default acl => acl.defineRole('guest').allow('guest', 'probe:say').allow('guest', 'probe:fail').allow('guest', 'probe:prose');`;
+const acl = `export default acl => acl.defineRole('guest').allow('guest', 'probe:web:say').allow('guest', 'probe:web:fail').allow('guest', 'probe:web:prose');`;
 const routes = `
   import { Router } from 'express';
   import { HttpError } from '@tulipes/core/http';
   export default ctx => {
     const r = Router();
-    r.get('/say', ctx.rai({ id: 'probe:say' }), (req, res) => {
+    r.get('/say', ctx.rai({ id: 'probe:web:say' }), (req, res) => {
       res.respond({ data: { locale: req.locale, text: req.t('greeting', { name: 'Ada' }), known: req.hasTranslation('greeting'), other: req.t('other:title') } });
     });
-    r.get('/fail', ctx.rai({ id: 'probe:fail' }), () => { throw new HttpError(404, 'notFound'); });
-    r.get('/prose', ctx.rai({ id: 'probe:prose' }), () => { throw new HttpError(400, 'badInput', { defaultMessage: 'The input could not be used' }); });
+    r.get('/fail', ctx.rai({ id: 'probe:web:fail' }), () => { throw new HttpError(404, 'notFound'); });
+    r.get('/prose', ctx.rai({ id: 'probe:web:prose' }), () => { throw new HttpError(400, 'badInput', { defaultMessage: 'The input could not be used' }); });
     return r;
   };
 `;

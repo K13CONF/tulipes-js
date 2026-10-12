@@ -14,14 +14,14 @@ import { fixture, url } from "./fixture.ts";
  * unresolved, providers as stubs, settings as defaults, no bootstrap, no
  * listener. `tulipes routes` and `tulipes spec` run it.
  */
-const acl = `export default acl => { acl.defineRole('guest').allow('guest', 'probe:read'); };`;
+const acl = `export default acl => { acl.defineRole('guest').allow('guest', 'probe:web:read'); };`;
 
 const declaration = `
   import { Router } from 'express';
   import { z } from 'zod/v4';
   export default ({ rai }) => {
     const router = Router();
-    router.get('/probe/:id', rai({ id: 'probe:read', params: z.object({ id: z.string() }), returns: z.object({ id: z.string() }) }),
+    router.get('/probe/:id', rai({ id: 'probe:web:read', params: z.object({ id: z.string() }), returns: z.object({ id: z.string() }) }),
       (req, res) => res.respond({ data: { id: req.params.id } }));
     return router;
   };
@@ -40,7 +40,7 @@ test("inspection mounts every route without resolving a variable, importing a pr
       export default (ctx) => {
         const router = Router();
         const controller = new RuntimeController(ctx);
-        router.get('/probe/:id', ctx.rai({ id: 'probe:read' }), controller.show());
+        router.get('/probe/:id', ctx.rai({ id: 'probe:web:read' }), controller.show());
         return router;
       };`,
     "modules/probe/controllers/runtime.js": `
@@ -75,6 +75,34 @@ test("inspection mounts every route without resolving a variable, importing a pr
 
   // The same app, booted for real, resolves its environment and refuses the missing secret.
   await expect(app.boot()).rejects.toThrow(/PRIVATE_KEY/);
+});
+
+test("routes files are read from scope folders too, in path order, attributed to their module", async () => {
+  const routesFile = (id: string, path: string) => `
+    import { Router } from 'express';
+    export default ({ rai }) => {
+      const router = Router();
+      router.get('${path}', rai({ id: '${id}' }), (req, res) => res.respond({ data: '${id}' }));
+      return router;
+    };`;
+  const app = await fixture({
+    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:*');`,
+    "modules/probe/routes/bo.probe.routes.js": routesFile("probe:bo:list", "/bo/probe"),
+    "modules/probe/routes/web/probe.routes.js": routesFile("probe:web:list", "/probe"),
+    "modules/probe/routes/web/probe.items.routes.js": routesFile("probe:web:items", "/probe/items"),
+    // Not a routes file: the suffix is what the explorer reads, at any depth.
+    "modules/probe/routes/web/notes.md": "a scope folder may hold anything else",
+  });
+
+  const inspected = await app.boot({ inspect: true });
+
+  expect(inspected.ctx.routes.all().map(({ info, module }) => [info.id, module])).toEqual([
+    ["probe:bo:list", "probe"],
+    ["probe:web:items", "probe"],
+    ["probe:web:list", "probe"],
+  ]);
+
+  await inspected.shutdown();
 });
 
 test("a routes file that touches infrastructure while building fails inspection with its path", async () => {
@@ -121,17 +149,17 @@ test("the inspection and the running app describe the same routes, schemas and a
 test("a returned router lands under the configured prefix; mount() chooses another path or nests", async () => {
   const app = await fixture({
     "config/app.config.js": `export default () => ({ api: { prefix: '/api/v2' } });`,
-    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:read', 'probe:nested', 'probe:ops');`,
+    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:web:read', 'probe:web:nested', 'probe:web:ops');`,
     "modules/probe/routes/probe.routes.js": `
       import { Router } from 'express';
       export default ({ rai, routes }) => {
         const router = Router();
-        router.get('/items', rai({ id: 'probe:read' }), (_req, res) => res.respond({ data: 'prefixed' }));
+        router.get('/items', rai({ id: 'probe:web:read' }), (_req, res) => res.respond({ data: 'prefixed' }));
         const tenants = Router({ mergeParams: true });
-        tenants.get('/users/:id', rai({ id: 'probe:nested' }), (req, res) => res.respond({ data: req.params }));
+        tenants.get('/users/:id', rai({ id: 'probe:web:nested' }), (req, res) => res.respond({ data: req.params }));
         routes.mount(router, '/tenants/:tenant', tenants);
         const ops = Router();
-        ops.get('/health', rai({ id: 'probe:ops' }), (_req, res) => res.respond({ data: 'ok' }));
+        ops.get('/health', rai({ id: 'probe:web:ops' }), (_req, res) => res.respond({ data: 'ok' }));
         routes.mount(ops, '/ops');
         return router;
       };`,
@@ -155,8 +183,12 @@ test.each([
   [`export default () => 42;`, /returns a Router or nothing/],
   [declaration.replace("router.get", "router.all"), /all.*unsupported/],
   [declaration.replace("'/probe/:id'", "'/probe/*rest'"), /unsupported route path/],
-  [declaration.replace("id: 'probe:read',", "id: 'probe:read', status: 500,"), /success status/],
-  [declaration.replace("id: 'probe:read',", "id: '',"), /nonempty string/],
+  [declaration.replace("id: 'probe:web:read',", "id: 'probe:web:read', status: 500,"), /success status/],
+  [declaration.replace("id: 'probe:web:read',", "id: '',"), /rai id "" is invalid/],
+  // The 0.11 shape: two segments, no scope.
+  [declaration.replace("id: 'probe:web:read',", "id: 'probe:read',"), /rai id "probe:read" has no scope — since 0\.12 an id is "module:scope:resource\[:extra\]" \(`tulipes migrate 0\.12` rewrites a 0\.11 app\)/],
+  [declaration.replace("id: 'probe:web:read',", "id: 'Probe:web:read',"), /rai id "Probe:web:read" is invalid/],
+  [declaration.replace("id: 'probe:web:read',", "id: 'probe:web:detail:delete:now',"), /is invalid/],
 ])("rejects malformed routes files under inspection: %s", async (source, message) => {
   const app = await fixture({ "modules/probe/routes/probe.routes.js": source });
   await expect(app.boot({ inspect: true })).rejects.toThrow(message);
@@ -169,7 +201,7 @@ test.each(["duplicate id", "duplicate path"])("the scan rejects a %s across modu
     "modules/other/routes/other.routes.js":
       kind === "duplicate id"
         ? declaration
-        : declaration.replace("'probe:read'", "'other:read'").replace("'/probe/:id'", "'/probe/:other'"),
+        : declaration.replace("'probe:web:read'", "'other:web:read'").replace("'/probe/:id'", "'/probe/:other'"),
   });
   await expect(app.boot({ inspect: true })).rejects.toThrow(/already declared/);
 });
@@ -199,7 +231,7 @@ test("the 0.10 forms are refused by name: tulipes.offline, defineRoutes and the 
 });
 
 test("inspection preserves ACL and module graph validation", async () => {
-  const app = await fixture({ "modules/probe/module.acl.js": `export default acl => { acl.allow('unknown', 'probe:read'); };` });
+  const app = await fixture({ "modules/probe/module.acl.js": `export default acl => { acl.allow('unknown', 'probe:web:read'); };` });
   await expect(app.boot({ inspect: true })).rejects.toThrow(/unknown/);
 
   const broken = await fixture({
@@ -231,7 +263,7 @@ test("a custom access checker installed while building stays dynamic under inspe
     "modules/probe/routes/probe.routes.js": `
       export default ({ app, rai, routes }) => {
         routes.setAccessChecker(async () => false);
-        app.get('/p', rai({ id: 'probe:read' }), () => { throw new Error('denied handler ran'); });
+        app.get('/p', rai({ id: 'probe:web:read' }), () => { throw new Error('denied handler ran'); });
       };`,
     "modules/probe/module.acl.js": acl,
   });
@@ -304,4 +336,16 @@ test("CLI writes specs for a freshly generated production app without services",
   const { readFile } = await import("node:fs/promises");
   const openapi = JSON.parse(await readFile(root + "/docs/openapi.json", "utf8"));
   expect(Object.keys(openapi.paths)).toContain("/api/v1/auth/login");
+  expect(openapi.paths["/api/v1/auth/login"].post).toMatchObject({ operationId: "auth:web:login", "x-tulipes-scope": "web", "x-tulipes-roles": ["admin", "guest", "sysadmin"] });
+  expect(openapi["x-tulipes-roles"].map((role: { name: string }) => role.name)).toEqual(["guest", "user", "admin", "sysadmin"]);
+
+  // One surface: the back office alone.
+  expect(run(root, ["routes", "--scope", "bo"])).toContain('7 endpoint(s) in scope "bo"');
+  run(root, ["spec", "--openapi", "docs/bo.json", "--scope", "bo"]);
+  const backOffice = JSON.parse(await readFile(root + "/docs/bo.json", "utf8"));
+  expect(backOffice["x-tulipes-scopes"]).toEqual(["bo"]);
+  expect(Object.keys(backOffice.paths)).not.toContain("/api/v1/auth/login");
+  expect(Object.keys(backOffice.paths)).toContain("/users/deleted");
+
+  expect(run(root, ["roles", "--role", "admin"])).toMatch(/admin\s+Runs the back office\s+\(auth\)\n\s+level=2\n/);
 });

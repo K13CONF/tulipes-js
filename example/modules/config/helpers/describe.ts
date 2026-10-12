@@ -31,7 +31,6 @@ export function describeModule(ctx: Ctx, name: string): Record<string, unknown> 
     }));
 
   const settings = ctx.settings.namespaces().includes(name) ? ctx.settings.describe(name) : undefined;
-  const grants = ctx.acl?.describe() ?? [];
   const routes = ctx.routes.all()
     .filter((record) => record.module === name)
     .map((record) => ({
@@ -39,7 +38,8 @@ export function describeModule(ctx: Ctx, name: string): Record<string, unknown> 
       method: record.method.toUpperCase(),
       path: record.path,
       name: record.info.name ?? null,
-      roles: ctx.routes.checker ? "dynamic" : rolesFor(grants, record.info.id),
+      // The ACL resolves who holds the id exactly as it gates the request.
+      roles: ctx.routes.checker ? "dynamic" : (ctx.acl?.rolesFor(record.info.id) ?? []),
     }));
 
   return {
@@ -63,10 +63,18 @@ export function describeModule(ctx: Ctx, name: string): Record<string, unknown> 
   };
 }
 
-function rolesFor(grants: { role: string; resource: string }[], id: string): string[] {
-  const namespace = `${id.split(":")[0]}:*`;
-  const roles = grants
-    .filter(({ resource }) => resource === id || resource === "*" || resource === namespace)
-    .map(({ role }) => role);
-  return [...new Set(roles)].sort();
+/**
+ * Every role the app defines, with the description and extras it was
+ * defined with — so the console can say who "admin" is, not just that it
+ * exists — and the grants each one holds.
+ */
+export function describeRoles(ctx: Ctx): Record<string, unknown>[] {
+  const grants = ctx.acl?.describe() ?? [];
+  return (ctx.acl?.describeRoles() ?? []).map(({ name, definedBy, description, ...extras }) => ({
+    name,
+    description: description ?? null,
+    defined_by: definedBy,
+    extras,
+    grants: grants.filter(({ role }) => role === name).map(({ resource }) => resource).sort(),
+  }));
 }

@@ -7,6 +7,6 @@ import type { AclBuilder } from "@tulipes/core/acl";
  * grants `admin` the `*` wildcard.
  */
 export default function configAcl(acl: AclBuilder): void {
-  acl.allow("admin", "config:read", "config:describe");
+  acl.allow("admin", "config:bo:read", "config:bo:describe");
   acl.allow("sysadmin", "config:*");
 }

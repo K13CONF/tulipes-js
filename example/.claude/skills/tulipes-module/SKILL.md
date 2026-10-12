@@ -21,11 +21,12 @@ touching anything else.
 
 ## Steps
 
-1. Scaffold: `pnpm tulipes new module billing`. It creates every
+1. Scaffold: `pnpm tulipes new module billing` (add `--scope bo` for a
+   back-office module; the default is `web`). It creates every
    contract — package.json (scope detected from siblings), a settings
    declaration, ACL, helper, a controller class, a plain routes function
-   declaring a RAI, model, a bootstrap that may return its cleanup, queue and
-   socket. Delete the ones this feature does not need. The module root holds
+   declaring the RAI `billing:web:list`, model, a bootstrap that may return
+   its cleanup, queue and socket. Delete the ones this feature does not need. The module root holds
    only `package.json`, `module.config.ts` and `module.acl.ts`; everything
    else has a folder, and the boot refuses a stray root file.
 2. Set ordering in `modules/billing/package.json`:
@@ -40,7 +41,11 @@ touching anything else.
 
 3. `pnpm install` — the module is a workspace, so the package manager must
    link it before imports resolve.
-4. Put endpoints and shared middleware in native `routes/*.routes.ts` factories.
+4. Put endpoints and shared middleware in native routes factories, named
+   scope-first: `routes/web.billing.routes.ts`, `routes/bo.billing.routes.ts`,
+   or `routes/web/billing.invoices.routes.ts` when one scope has several
+   files. Every id they declare is `billing:<scope>:<resource>[:<extra>]`.
+   → skill `tulipes-permissions`
    Add optional files as needed:
    `models/`, `queues/`, `sockets/`, `bootstrap/`, `module.acl.ts`,
    `i18n/` — the module is its own i18n namespace. → skill `tulipes-i18n`

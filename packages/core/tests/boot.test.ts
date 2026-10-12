@@ -33,13 +33,13 @@ test("drains active requests before running bootstrap cleanups", async () => {
   const state = probe({ closed: false, started: false });
   const app = await fixture({
     "modules/probe/bootstrap/probe.bootstrap.js": bootstrap(`return () => { state.closed = true; };`),
-    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:read');`,
+    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:web:read');`,
     "modules/probe/routes/probe.routes.js": `
       import { Router } from 'express';
       const state = globalThis.__probe;
       export default ctx => {
         const r = Router();
-        r.get('/slow', ctx.rai({ id: 'probe:read' }), async (req, res) => {
+        r.get('/slow', ctx.rai({ id: 'probe:web:read' }), async (req, res) => {
           state.started = true;
           await new Promise(resolve => { state.release = resolve; });
           res.respond({ data: { closed: state.closed } });
@@ -174,18 +174,18 @@ test("ctx.signal ends an idle SSE before HTTP waits while ordinary requests keep
       ctx.signal.addEventListener('abort', () => { state.aborts++; state.stream?.end(); });
       return () => { state.closed = true; };
     `),
-    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:read', 'probe:stream');`,
+    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:web:read', 'probe:web:stream');`,
     "modules/probe/routes/probe.routes.js": `
       import { Router } from 'express';
       const state = globalThis.__probe;
       export default ctx => {
         const r = Router();
-        r.get('/stream', ctx.rai({ id: 'probe:stream' }), (req, res) => {
+        r.get('/stream', ctx.rai({ id: 'probe:web:stream' }), (req, res) => {
           state.stream = res;
           res.writeHead(200, { 'Content-Type': 'text/event-stream' });
           res.write('event: ready\\ndata: {}\\n\\n');
         });
-        r.get('/slow', ctx.rai({ id: 'probe:read' }), async (req, res) => {
+        r.get('/slow', ctx.rai({ id: 'probe:web:read' }), async (req, res) => {
           state.started = true;
           await new Promise(resolve => { state.release = resolve; });
           res.respond({ data: { closed: state.closed } });

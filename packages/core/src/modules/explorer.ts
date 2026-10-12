@@ -53,8 +53,8 @@ function probeSourceExtension(modules: readonly ModuleManifest[]): SourceExtensi
         existsSync(join(module.dir, `module.config${ext}`)) ||
         existsSync(join(module.dir, `module.acl${ext}`)) ||
         COLLECTIONS.some(
-          ([, dirName, suffix]) =>
-            listWithSuffix(join(module.dir, dirName), suffix + ext).length > 0,
+          ([, dirName, suffix, nested]) =>
+            listWithSuffix(join(module.dir, dirName), suffix + ext, nested).length > 0,
         );
       if (ext === ".ts") sawTs ||= hit;
       else sawJs ||= hit;
@@ -72,6 +72,7 @@ export interface ModuleFiles {
   configFile?: string;
   /** `module.acl.<ext>` — permission grants for this module's resources. */
   aclFile?: string;
+  /** Every `*.routes.<ext>` under `routes/`, scope folders (routes/web/) included. */
   routeFiles: readonly string[];
   modelFiles: readonly string[];
   bootstrapFiles: readonly string[];
@@ -81,14 +82,19 @@ export interface ModuleFiles {
   agentFiles: readonly string[];
 }
 
-/** dir name → file suffix, e.g. routes/users.routes.ts */
+/**
+ * dir name → file suffix → whether subfolders are read, e.g.
+ * routes/web.users.routes.ts. Only `routes/` nests: a module with several
+ * routes files for one scope groups them in a folder named after it
+ * (routes/web/hello.routes.ts). Every other collection stays flat.
+ */
 const COLLECTIONS = [
-  ["routeFiles", "routes", ".routes"],
-  ["modelFiles", "models", ".model"],
-  ["bootstrapFiles", "bootstrap", ".bootstrap"],
-  ["queueFiles", "queues", ".queues"],
-  ["socketFiles", "sockets", ".sockets"],
-  ["agentFiles", "agent", ".agent"],
+  ["routeFiles", "routes", ".routes", true],
+  ["modelFiles", "models", ".model", false],
+  ["bootstrapFiles", "bootstrap", ".bootstrap", false],
+  ["queueFiles", "queues", ".queues", false],
+  ["socketFiles", "sockets", ".sockets", false],
+  ["agentFiles", "agent", ".agent", false],
 ] as const;
 
 export interface ExploreOptions {
@@ -119,23 +125,31 @@ export function exploreModules(
     const aclFile = join(module.dir, `module.acl${ext}`);
     if (existsSync(aclFile)) files.aclFile = aclFile;
 
-    for (const [key, dirName, suffix] of COLLECTIONS) {
-      files[key] = listWithSuffix(join(module.dir, dirName), suffix + ext);
+    for (const [key, dirName, suffix, nested] of COLLECTIONS) {
+      files[key] = listWithSuffix(join(module.dir, dirName), suffix + ext, nested);
     }
 
     return files;
   });
 }
 
-function listWithSuffix(dir: string, suffix: string): string[] {
+function listWithSuffix(dir: string, suffix: string, nested = false): string[] {
+  // Sorted on the full path, so the order within a module is deterministic:
+  // routes/bo.users.routes.ts, routes/web.users.routes.ts, routes/web/….
+  return collect(dir, suffix, nested).sort();
+}
+
+function collect(dir: string, suffix: string, nested: boolean): string[] {
   let entries;
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {
     return []; // directory absent — the module doesn't use this feature
   }
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(suffix))
-    .map((entry) => join(dir, entry.name))
-    .sort(); // deterministic order within a module
+  return entries.flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isFile() && entry.name.endsWith(suffix)) return [path];
+    if (nested && entry.isDirectory()) return collect(path, suffix, nested);
+    return [];
+  });
 }

@@ -8,7 +8,8 @@ function source(route: Partial<SpecRoute> = {}): SpecSource {
     folders: ["items"],
     routes: [
       {
-        id: "items:create",
+        id: "items:web:create",
+        scope: "web",
         method: "POST",
         path: "/items",
         module: "items",
@@ -62,7 +63,7 @@ test("does not claim a bearer policy when authorization is dynamic", async () =>
   expect(paths["/items"]!.post).not.toHaveProperty("security");
 
   expect(result.warnings).toContain(
-    "items:create: custom access checker; authorization cannot be described statically",
+    "items:web:create: custom access checker; authorization cannot be described statically",
   );
 });
 

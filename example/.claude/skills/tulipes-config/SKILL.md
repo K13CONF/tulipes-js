@@ -61,8 +61,8 @@ object is replaced in place when a write lands.
 | `GET /config/:module` | the same for one module |
 | `PATCH /config/:module` | `{ values: { … }, version? }` — a patch over the stored values, validated by the module's schema (422 with the field), refused when `version` is not the stored one (409 `STALE_VERSION`), audited before it lands, applied at once in every replica |
 
-`config:read` and `config:describe` are granted to `admin` and `sysadmin`;
-`config:write` to `sysadmin` only. The audit (`config_audit_events`) holds
+`config:bo:read` and `config:bo:describe` are granted to `admin` and `sysadmin`;
+`config:bo:write` to `sysadmin` only. The audit (`config_audit_events`) holds
 the namespace, the field names, the version the caller read, the actor and
 the client IP — never a value — and is acknowledged by a majority before
 the write happens: a change nobody can account for is worse than one that

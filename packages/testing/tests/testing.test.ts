@@ -8,7 +8,7 @@ import { bootTestApp, useTestApp } from "../src/index.ts";
  * preset's register and login endpoints.
  */
 const files = {
-  "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').defineRole('user').allow('guest', 'probe:read', 'auth:register', 'auth:login').allow('user', 'probe:write');`,
+  "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').defineRole('user').allow('guest', 'probe:web:read', 'auth:web:register', 'auth:web:login').allow('user', 'probe:web:write');`,
   "modules/probe/module.config.js": `
     import { defineConfig } from '@tulipes/core/config';
     import { z } from 'zod/v4';
@@ -24,10 +24,10 @@ const files = {
         if (token?.startsWith('user:')) req.auth = { isAuthenticated: true, user: { _id: token.slice(5), role: 'user' }, session: null };
         next();
       });
-      r.get('/things', ctx.rai({ id: 'probe:read' }), (req, res) => res.respond({ data: { greeting: ctx.config.probe.greeting, q: req.query.q ?? null, port: process.env.PORT } }));
-      r.post('/things', ctx.rai({ id: 'probe:write' }), (req, res) => res.respond({ status: 201, data: { echoed: req.body, by: req.auth.user._id } }));
-      r.post('/auth/register', ctx.rai({ id: 'auth:register' }), (req, res) => res.respond({ status: 201, data: { user: { id: 'u-' + req.body.email.length }, access_token: 'user:u-' + req.body.email.length, refresh_token: 'r' } }));
-      r.post('/auth/login', ctx.rai({ id: 'auth:login' }), (req, res) => res.respond({ data: { user: { id: 'u' }, access_token: 'user:u', refresh_token: 'r2' } }));
+      r.get('/things', ctx.rai({ id: 'probe:web:read' }), (req, res) => res.respond({ data: { greeting: ctx.config.probe.greeting, q: req.query.q ?? null, port: process.env.PORT } }));
+      r.post('/things', ctx.rai({ id: 'probe:web:write' }), (req, res) => res.respond({ status: 201, data: { echoed: req.body, by: req.auth.user._id } }));
+      r.post('/auth/register', ctx.rai({ id: 'auth:web:register' }), (req, res) => res.respond({ status: 201, data: { user: { id: 'u-' + req.body.email.length }, access_token: 'user:u-' + req.body.email.length, refresh_token: 'r' } }));
+      r.post('/auth/login', ctx.rai({ id: 'auth:web:login' }), (req, res) => res.respond({ data: { user: { id: 'u' }, access_token: 'user:u', refresh_token: 'r2' } }));
       return r;
     };
   `,

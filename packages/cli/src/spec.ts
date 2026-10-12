@@ -18,10 +18,12 @@ export interface SpecOptions {
   postman?: string;
   /** Base URL the documents advertise. */
   url?: string;
+  /** Describe only the routes of this scope — one document per client surface. */
+  scope?: string;
 }
 
 interface SpecModule {
-  extract(ctx: unknown): unknown;
+  extract(ctx: unknown, options?: { scope?: string }): unknown;
   toOpenApi(source: unknown, options: unknown): Promise<{ document: unknown; warnings: string[] }>;
   toPostman(source: unknown, options: unknown): Promise<{ document: unknown; warnings: string[] }>;
 }
@@ -35,6 +37,7 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
         "  tulipes spec --openapi openapi.json",
         "  tulipes spec --postman collection.json",
         "  tulipes spec --openapi openapi.json --postman collection.json --url https://api.example.com",
+        "  tulipes spec --openapi mobile.json --scope mobile",
       ].join("\n"),
     );
     process.exitCode = 2;
@@ -47,9 +50,14 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
   const handle = await inspectApp(rootDir);
 
   try {
-    const source = spec.extract(handle.ctx) as { routes: unknown[]; folders: string[] };
+    const source = spec.extract(handle.ctx, options.scope === undefined ? {} : { scope: options.scope }) as {
+      routes: unknown[];
+      folders: string[];
+    };
     if (source.routes.length === 0) {
-      console.log("no routes declared — nothing to describe");
+      console.log(options.scope === undefined
+        ? "no routes declared — nothing to describe"
+        : `no routes in scope "${options.scope}" — nothing to describe`);
       return;
     }
 
@@ -69,7 +77,8 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
     }
 
     console.log(
-      `\n${source.routes.length} endpoint(s) across ${source.folders.length} folder(s): ` +
+      `\n${source.routes.length} endpoint(s)${options.scope === undefined ? "" : ` in scope "${options.scope}"`} ` +
+        `across ${source.folders.length} folder(s): ` +
         source.folders.join(", "),
     );
 

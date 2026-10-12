@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/mcp",
-  "version": "0.1.0",
+  "version": "0.1.1-rc.1",
   "description": "MCP server over a Tulipes app's agent manifest: its tools, served on stdio, called through the app's own HTTP door",
   "type": "module",
   "bin": {
@@ -53,6 +53,6 @@
     "url": "https://github.com/kemora13conf/bp-backend-express/issues"
   },
   "peerDependencies": {
-    "@tulipes/core": "^0.11.0"
+    "@tulipes/core": "^0.11.0 || ^0.12.0-rc.1"
   }
 }
