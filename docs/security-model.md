@@ -19,7 +19,12 @@ remaining deployment verification.
 
 Untrusted clients reach Express through the operator's TLS reverse proxy. Trusted
 middleware resolves identity before RAI checks, and the ACL fails closed for
-unknown roles or denied permissions. Since 0.11 configuration has two layers:
+unknown roles or denied permissions. Since 0.12 a RAI id is
+`module:scope:resource[:extra]`. The scope (`bo`, `web`, …) is a label the
+ACL does not interpret: it is not a network or tenancy boundary, and a
+back-office endpoint is protected by the roles granted its id, never by the
+word `bo` in it. A prefix grant (`users:bo:*`) reaches every id under it,
+so review prefix grants as carefully as `*`. Since 0.11 configuration has two layers:
 the environment holds what boot needs before the settings store answers (the
 port, the connection strings, the log destinations) and the secrets, and is
 read-only at runtime; everything else is a setting, declared with a schema in

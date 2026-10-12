@@ -9,6 +9,48 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [Unreleased] — 0.12
+
+Breaking for every app on 0.11: every RAI id gains a scope.
+`tulipes migrate 0.12` carries the ids, grants and references across; the
+migration guide says what is left to decide by hand. Not published.
+
+### Changed
+
+- **A RAI id is `module:scope:resource[:extra]`** — `users:bo:list`,
+  `users:mobile:profile`, `users:bo:detail:delete`. Every segment is
+  `[a-z][a-z0-9-]*`. The route scan and agent declarations refuse any
+  other shape with the route or action named; `RouteInfo.id` and
+  `ActionTool.id` are typed `Rai`, so a two-segment id is an editor error.
+- **Grants resolve prefix wildcards at every depth.** `users:bo:*` and
+  `users:bo:detail:*` are valid grants; a prefix covers the bare resource
+  as well as everything under it. `acl.allow()` refuses anything that is
+  not an id, a prefix wildcard or `*`.
+- The explorer reads `*.routes.<ext>` in subfolders of `routes/`, so a
+  module can group several routes files for one scope (`routes/web/`).
+
+### Added
+
+- `defineRole(name, { description, ...extras })`: a role carries a
+  description and any property the app reads back. `RoleMeta` types the
+  extras by augmentation. `acl.role(name)` and `acl.describeRoles()` return
+  frozen records with `name` and `definedBy`.
+- `acl.rolesFor(permission)`: who holds a permission, resolved exactly as
+  a request is. `tulipes routes`, `@tulipes/spec` and the reference
+  console use it instead of their own copies.
+- `parseRai`, `isRai`, `isGrant`, `grantsCovering` and the `Rai` type, from
+  `@tulipes/core/acl` (`parseRai`, `isRai` and `Rai` also from
+  `@tulipes/core/http`).
+- CLI: `tulipes roles [--role r]`; `--scope` on `tulipes routes`,
+  `tulipes spec` and `tulipes new module`; `tulipes migrate 0.12 [--scope s]`.
+- Spec: `extract(ctx, { scope })`, `SpecRoute.scope`, `SpecSource.roles` and
+  `.scopes`; OpenAPI `x-tulipes-scope` per operation and document-level
+  `x-tulipes-roles` / `x-tulipes-scopes`. Postman's default login id is
+  `auth:web:login`.
+- The reference app and `tulipes new module` name routes and controllers
+  scope-first (`routes/web.users.routes.ts`, `BoUsersController`), a
+  convention core does not enforce.
+
 ## [0.11.0] — 2026-10-08
 
 The 0.11 line, stable: every entry below is breaking for an app on 0.10, and

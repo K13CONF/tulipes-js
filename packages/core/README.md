@@ -116,8 +116,10 @@ modules/billing/
 ├── package.json              name, "tulipes" ordering key and env contract
 ├── module.config.ts          defineConfig({ schema }): this module's settings
 ├── module.acl.ts             permission grants
-├── routes/*.routes.ts        (ctx) => Router, mounted under config.api.prefix
-├── controllers/              the work; constructed from the context while routes build
+├── routes/                   (ctx) => Router, mounted under config.api.prefix
+│   ├── web.billing.routes.ts       named scope-first, by convention; any depth is read
+│   └── bo.billing.routes.ts
+├── controllers/              the work; bo.billing.controllers.ts → BoBillingController
 ├── schemas/*.schemas.ts      zod request schemas shared by routes
 ├── helpers/                  pure logic, no framework
 ├── lib/index.ts              the module's public exports (package.json "exports")
@@ -314,6 +316,47 @@ auth state, so changing one request cannot identify another caller.
 app through declaration merging, so `req.auth.user.email` is typed at every
 call site without core knowing anything about your models.
 
+## RAI ids, grants and roles
+
+A RAI id names one endpoint or agent action, and is the permission the ACL
+decides on:
+
+```
+{module}:{scope}:{resource}[:{extra}]
+
+users:bo:list              users:mobile:profile              users:bo:detail:delete
+```
+
+The module is the declaring module's name; the scope is the surface the
+permission serves (`bo`, `web`, `mobile`, whatever the app names); the
+resource is what is reached; the optional extra is a variant of it. Every
+segment is `[a-z][a-z0-9-]*`. `RouteInfo.id` is typed so a two-segment id
+fails in the editor, and the route scan refuses any other shape at boot.
+`parseRai(id)` from `@tulipes/core/http` returns `{ module, scope, resource, extra? }`.
+
+A grant is an id, `*`, or a prefix ending in `:*`, which covers everything
+under it, the bare resource included: `users:bo:detail:*` reaches
+`users:bo:detail` and `users:bo:detail:delete`; `users:bo:*` the users back
+office; `users:*` every users surface.
+
+A role is defined once and may carry a description and any extra the app
+reads back. Augment `RoleMeta` to type the extras:
+
+```ts
+declare module "@tulipes/core/acl" {
+  interface RoleMeta { level?: number }
+}
+
+acl.defineRole("admin", { description: "Runs the back office", level: 2 });
+
+ctx.acl.role("admin");          // { name, definedBy, description, level }, frozen
+ctx.acl.describeRoles();        // every role, in definition order
+ctx.acl.rolesFor("users:bo:list");   // who holds it, resolved like a request
+```
+
+`tulipes roles` prints every role with its grants; `tulipes routes --scope bo`
+and `tulipes spec --scope mobile` show or describe one surface.
+
 ## The boot pipeline
 
 ```
@@ -377,14 +420,15 @@ export default defineConfig({
   onChange(next, ctx) {},                          // optional: rebuild what depends on it
 });
 
-// routes/*.routes.ts — every route declares a RAI, or the boot fails
+// routes/web.billing.routes.ts — every route declares a RAI, or the boot fails.
+// An id is module:scope:resource[:extra], and it is the permission.
 export default function billingRoutes(ctx: Ctx): Router {
   const router = Router();
-  const billing = new BillingController(ctx);   // controllers are classes
+  const billing = new WebBillingController(ctx);   // controllers are classes
 
   router.get(
     `${ctx.config.api!.prefix}/invoices`,
-    ctx.rai({ id: "invoices:read", name: "List invoices" }),
+    ctx.rai({ id: "billing:web:invoices", name: "List invoices" }),
     billing.list(),
   );
   return router;
@@ -418,7 +462,8 @@ export default function billingSockets(ctx: Ctx, sockets: SocketRegistry) {
 
 // module.acl.ts — roles are global, grants are local and namespaced
 export default function billingAcl(acl: AclBuilder) {
-  acl.allow("user", "invoices:read");
+  acl.allow("user", "billing:web:invoices");
+  acl.allow("admin", "billing:bo:*");             // the whole billing back office
 }
 ```
 
@@ -452,10 +497,12 @@ loader — a running app installs only the HTTP runtime.
 | `tulipes dev [entry]` | regenerate types, then run the entrypoint with `node --watch` |
 | `tulipes sync` | regenerate `types/tulipes.d.ts` and `.env.example` |
 | `tulipes env:check` | validate the environment without booting — a CI gate |
-| `tulipes routes` | list every declared endpoint with the roles that reach it; no service, secret or `.env` |
-| `tulipes spec [--openapi file] [--postman file] [--url base]` | generate documents from the same inspection |
+| `tulipes routes [--scope s]` | list every declared endpoint with the roles that reach it; no service, secret or `.env` |
+| `tulipes roles [--role r]` | list every role with its description, extras, defining module and grants |
+| `tulipes spec [--openapi file] [--postman file] [--url base] [--scope s]` | generate documents from the same inspection, for one scope if asked |
 | `tulipes config:check` | load every settings namespace from the store and print it |
 | `tulipes migrate 0.11` | rewrite an app generated on 0.10 to the 0.11 layout and contracts |
+| `tulipes migrate 0.12 [--scope s]` | give every RAI id, grant and reference a scope (`users:read` → `users:web:read`) |
 | `tulipes config:import` | carry env values that became settings into the store |
 | `tulipes new module <name>` | scaffold a module with every contract |
 | `tulipes update` | upgrade the global CLI and, inside an app, the app itself |
@@ -601,8 +648,8 @@ Claude Code over MCP through that door.
 | `@tulipes/core` | everything below |
 | `@tulipes/core/boot` | `boot`, `Ctx`, `BootHandle`, contract types |
 | `@tulipes/core/env` | `Environment`, `KnownVariables` (codegen target), spec types |
-| `@tulipes/core/http` | `HttpError`, `notFoundHandler`, `errorHandler` |
-| `@tulipes/core/acl` | `Acl`, `AclBuilder`, `AclFn` |
+| `@tulipes/core/http` | `HttpError`, `notFoundHandler`, `errorHandler`, `parseRai`, `isRai`, `Rai` |
+| `@tulipes/core/acl` | `Acl`, `AclBuilder`, `AclFn`, `RoleMeta`, `RoleRecord`, `RoleDefinition`, `parseRai`, `isRai`, `isGrant` |
 | `@tulipes/core/agent` | `defineAgent`, `action`, `AgentRegistry`, `AgentManifest` |
 | `@tulipes/testing` | a separate package: `useTestApp`, `bootTestApp`, `TestApp` |
 | `@tulipes/core/db` | migration stub only — the Mongoose provider, `ModelStore`, `ModelDef` and `BootstrapFn` live in [`@tulipes/mongoose`](https://www.npmjs.com/package/@tulipes/mongoose) |
@@ -652,7 +699,7 @@ import { z } from "zod/v4";
 router.post(
   `${base}/users`,
   rai({
-    id: "users:create",
+    id: "users:bo:create",
     name: "Create a user",
     folder: "users",                                    // Postman folder / OpenAPI tag
     body: z.object({ email: z.email("emailInvalid") }),  // validated AND described

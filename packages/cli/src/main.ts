@@ -12,6 +12,7 @@ import { runRoutes } from "./routes.ts";
 import { runSpec } from "./spec.ts";
 import { runAgentManifest } from "./agent.ts";
 import { runMigrate } from "./migrate.ts";
+import { runMigrate012 } from "./migrate-0.12.ts";
 import { runConfigImport } from "./config-import.ts";
 import { appCoreVersion, cliVersion, coreVersion } from "./package-info.ts";
 
@@ -39,6 +40,8 @@ Usage:
                                  --scope <scope>  describe one client surface only
                                  all three inspect the app: no service, secret or .env is needed
   tulipes migrate 0.11         rewrite an app generated on 0.10 to the 0.11 layout and contracts
+  tulipes migrate 0.12         give every RAI id a scope: users:read → users:web:read
+                                 --scope <scope>  the scope to insert (default: web)
   tulipes config:import        carry .envs values that became settings into the store
                                  --env <APP_ENV>  --from <file>  --dry-run
   tulipes agent manifest       print every tool the app exposes to agents, as JSON
@@ -81,13 +84,17 @@ export async function main(argv: readonly string[]): Promise<void> {
         return;
       }
     }
-    case "migrate":
-      if (rest.length !== 1) {
-        console.error("Usage: tulipes migrate 0.11");
+    case "migrate": {
+      const [target, flag, scope, ...extra] = rest;
+      const valid = target !== undefined && (flag === undefined || (flag === "--scope" && scope !== undefined && !scope.startsWith("-") && extra.length === 0));
+      if (!valid) {
+        console.error("Usage: tulipes migrate 0.11 | tulipes migrate 0.12 [--scope <scope>]");
         process.exitCode = 2;
         return;
       }
-      return runMigrate(rootDir, rest[0]!);
+      const options = scope === undefined ? {} : { scope };
+      return target === "0.12" ? runMigrate012(rootDir, options) : runMigrate(rootDir, target, options);
+    }
     case "env:check":
       return runEnvCheck(rootDir);
     case "routes":
