@@ -27,13 +27,13 @@ export default defineAgent({
   summary: "Greets callers and counts how often each greeting is used.",
   actions: [
     action({
-      id: "hello:list-greetings",
+      id: "hello:web:greetings",
       description: "The stored greetings, with how often each was used",
       readOnly: true,
       handler: async (ctx) => (await findGreetings(ctx))[0],
     }),
     action({
-      id: "hello:reset-counts",
+      id: "hello:bo:greetings:reset",
       description: "Reset the usage counter of every greeting to zero",
       input: z.object({ confirm: z.literal(true) }),
       handler: async (ctx) => {
@@ -50,7 +50,9 @@ no service or `.env` needed; `--role admin` shows what one role gets.
 
 ## Rules
 
-- **An action's id is a permission like any route's.** The ACL decides on
+- **An action's id is a RAI like any route's**, `module:scope:resource[:extra]`:
+  the scope says who it is for (`hello:bo:greetings:reset` is a back-office
+  action). The ACL decides on
   it first (401 for a guest, 403 for a role without it), then the `input`
   schema validates (422 with field issues), then the handler runs with the
   runtime context, the parsed input and the actor (`req.auth` plus `role`).
@@ -65,7 +67,7 @@ no service or `.env` needed; `--role admin` shows what one role gets.
   text the model sees before choosing the tool. Say what the tool does, what
   it changes and what it returns; keep `readOnly: true` honest.
 - **One `agent/*.agent.ts` per module.** Tool names come from the id
-  (`hello:reset-counts` → `hello_reset-counts`); a name two modules claim
+  (`hello:bo:greetings:reset` → `hello_bo_greetings_reset`); a name two modules claim
   is a boot error.
 
 ## An agent inside the app

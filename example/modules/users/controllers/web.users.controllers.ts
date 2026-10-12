@@ -1,11 +1,12 @@
-import { forgetUser } from "@app/auth";
 import type { Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 
 /**
  * One class per controller, holding the context. Each method returns a
- * handler, so the routes file stays a table of contents.
+ * handler, so the routes file stays a table of contents. The class is
+ * named after its file — web.users.controllers.ts, WebUsersController —
+ * and serves the users:web:* endpoints; the back office has its own.
  *
  * Every response goes through `res.respond`, which wraps the payload in
  * the app's envelope. Failures are thrown rather than responded — the
@@ -16,7 +17,7 @@ import { HttpError } from "@tulipes/core/http";
  * module's namespace and derives the error code from the key, so
  * "notFound" becomes NOT_FOUND with a translated message.
  */
-export class UsersController {
+export class WebUsersController {
   readonly #ctx: Ctx;
 
   constructor(ctx: Ctx) {
@@ -37,45 +38,6 @@ export class UsersController {
       // Passing total_items is what marks this a page: respond fills in
       // page, per_page and total_pages from the request and the count.
       res.respond({ data: users, meta: { total_items } });
-    };
-  }
-
-  /** Soft delete: the row stays in mongo but leaves every ordinary query. */
-  softDelete(): RequestHandler {
-    return async (req: Request, res: Response) => {
-      const user = await this.#ctx.models!.get("User").findOne({ email: req.params.email });
-      if (!user) throw new HttpError(404, "notFound");
-
-      // The account leaves every query, so its sessions resolve to nobody on
-      // the cold path; the cached identities would not know, so they go too.
-      await forgetUser(this.#ctx, String(user._id));
-      await (user as unknown as { softDelete(): Promise<unknown> }).softDelete();
-      res.respond({ data: { email: req.params.email, soft_deleted: true } });
-    };
-  }
-
-  listDeleted(): RequestHandler {
-    return async (_req: Request, res: Response) => {
-      const deleted = await this.#ctx.models!
-        .get("User")
-        .find({ is_deleted: true })
-        .setOptions({ withDeleted: true } as Record<string, unknown>)
-        .select("email role -_id")
-        .lean();
-
-      res.respond({ data: deleted });
-    };
-  }
-
-  create(): RequestHandler {
-    return async (req: Request, res: Response) => {
-      const { email } = (req.body ?? {}) as { email?: string };
-      // `field` is what puts this against the input in the envelope.
-      if (!email) throw new HttpError(422, "emailRequired", { field: "email" });
-
-      await this.#ctx.models!.get("User").create({ email });
-
-      res.respond({ status: 201, data: { email } });
     };
   }
 

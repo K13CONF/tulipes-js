@@ -336,4 +336,16 @@ test("CLI writes specs for a freshly generated production app without services",
   const { readFile } = await import("node:fs/promises");
   const openapi = JSON.parse(await readFile(root + "/docs/openapi.json", "utf8"));
   expect(Object.keys(openapi.paths)).toContain("/api/v1/auth/login");
+  expect(openapi.paths["/api/v1/auth/login"].post).toMatchObject({ operationId: "auth:web:login", "x-tulipes-scope": "web", "x-tulipes-roles": ["admin", "guest", "sysadmin"] });
+  expect(openapi["x-tulipes-roles"].map((role: { name: string }) => role.name)).toEqual(["guest", "user", "admin", "sysadmin"]);
+
+  // One surface: the back office alone.
+  expect(run(root, ["routes", "--scope", "bo"])).toContain('7 endpoint(s) in scope "bo"');
+  run(root, ["spec", "--openapi", "docs/bo.json", "--scope", "bo"]);
+  const backOffice = JSON.parse(await readFile(root + "/docs/bo.json", "utf8"));
+  expect(backOffice["x-tulipes-scopes"]).toEqual(["bo"]);
+  expect(Object.keys(backOffice.paths)).not.toContain("/api/v1/auth/login");
+  expect(Object.keys(backOffice.paths)).toContain("/users/deleted");
+
+  expect(run(root, ["roles", "--role", "admin"])).toMatch(/admin\s+Runs the back office\s+\(auth\)\n\s+level=2\n/);
 });

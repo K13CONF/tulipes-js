@@ -7,7 +7,7 @@ import { roleOf } from "@tulipes/core/http";
  * the manifest a role may call, and the action endpoint. An agent inside
  * the app needs neither — it reads `ctx.agent` directly.
  */
-export class AgentController {
+export class WebAgentController {
   readonly #ctx: BackendCtx;
 
   constructor(ctx: BackendCtx) {

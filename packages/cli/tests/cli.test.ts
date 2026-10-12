@@ -37,13 +37,13 @@ test("new module names its routes and controllers scope-first and declares a thr
 
   const web = await readFile(app.rootDir + "/modules/billing/routes/web.billing.routes.ts", "utf8");
   expect(web).toContain('ctx.rai({ id: "billing:web:list", name: "List billing" })');
-  expect(web).toContain('from "../controllers/web.billing.controllers.ts"');
+  expect(web).toContain('import { WebBillingController } from "../controllers/web.billing.controllers.ts"');
   expect(await exists(app.rootDir + "/modules/billing/controllers/web.billing.controllers.ts")).toBe(true);
   expect(await readFile(app.rootDir + "/modules/billing/module.acl.ts", "utf8")).toContain('_acl.allow("user", "billing:web:list")');
 
   const bo = await readFile(app.rootDir + "/modules/invoices/routes/bo.invoices.routes.ts", "utf8");
   expect(bo).toContain('id: "invoices:bo:list"');
-  expect(await exists(app.rootDir + "/modules/invoices/controllers/bo.invoices.controllers.ts")).toBe(true);
+  expect(await readFile(app.rootDir + "/modules/invoices/controllers/bo.invoices.controllers.ts", "utf8")).toContain("export class BoInvoicesController {");
 
   // The scaffold boots: the id passes the route scan.
   await app.write("modules/billing/module.acl.ts", `export default (acl) => acl.defineRole("guest").allow("guest", "billing:*");`);

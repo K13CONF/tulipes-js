@@ -9,14 +9,25 @@ Two files: a controller class holding the work, and a shared declaration file wi
 it up. Every route declares a RAI — a Resource Access Identifier — and the
 app refuses to boot if one is missing.
 
-`modules/billing/controllers/billing.controllers.ts`:
+Name both files **scope-first**: the scope is the surface the endpoint
+serves (`web`, `bo`, `mobile`), and it is also the second segment of the
+endpoint's RAI. A convention, not a rule core checks, but it is what lets
+anyone find the back office of a module by looking at its folder.
+
+```
+routes/{scope}.{module}[.{extra}].routes.ts              web.billing.routes.ts, bo.billing.refunds.routes.ts
+controllers/{scope}.{module}[.{extra}].controllers.ts    web.billing.controllers.ts → WebBillingController
+routes/{scope}/{module}[.{extra}].routes.ts              several files for one scope go in a folder
+```
+
+`modules/billing/controllers/web.billing.controllers.ts`:
 
 ```ts
 import type { Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 
-export class BillingController {
+export class WebBillingController {
   constructor(private readonly ctx: Ctx) {}
 
   show(): RequestHandler {
@@ -33,18 +44,18 @@ Each method **returns** a handler rather than being one, so the routes file
 reads as a table of contents and the class can keep private helpers beside
 the handlers that use them without threading ctx through every signature.
 
-`modules/billing/routes/billing.routes.ts`:
+`modules/billing/routes/web.billing.routes.ts`:
 
 ```ts
 import { Router } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
 
-import { BillingController } from "../controllers/billing.controllers.js";
+import { WebBillingController } from "../controllers/web.billing.controllers.ts";
 
 export default function billingRoutes(ctx: BackendCtx): Router {
   const router = Router();
-  const billing = new BillingController(ctx);
-  router.get("/:id", ctx.rai({ id: "billing:read", name: "Read an invoice" }), billing.show());
+  const billing = new WebBillingController(ctx);
+  router.get("/:id", ctx.rai({ id: "billing:web:invoice", name: "Read an invoice" }), billing.show());
   return router;                          // mounted under config.api.prefix
 }
 ```
@@ -76,7 +87,10 @@ changes run the app tests, `tulipes routes` and `pnpm spec`; inspect generated d
 
 ## The RAI is not optional
 
-`id` names a resource and an access to it, and **is** the ACL permission.
+`id` is `module:scope:resource[:extra]` — `billing:web:invoice`,
+`billing:bo:invoice:refund` — and **is** the ACL permission. Leaving the
+scope out (`billing:read`) is a type error and a boot error. → skill
+`tulipes-permissions` for the format and the grants.
 One declaration identifies the endpoint, gates it, marks the route as
 declared, and binds `req.t` to the declaring module's i18n namespace —
 which is why the message above needs no namespace of its own. → skill
@@ -94,7 +108,8 @@ undeclared route is not merely undocumented, it is reachable by `guest`.
 Grant the id in `module.acl.ts` — to `guest` if the endpoint is public.
 
 `tulipes routes` lists every declared endpoint with the roles that reach it,
-without a service, a secret or a `.env`.
+without a service, a secret or a `.env`; `tulipes routes --scope bo` lists one
+surface.
 
 A route is never a tool: what the module offers to agents is declared apart,
 in `agent/<module>.agent.ts`, and shares the route's logic through `helpers/`.
