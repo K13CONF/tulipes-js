@@ -2,8 +2,10 @@ export { Acl, AclBuilder, type RoleDefinition, type RoleMeta, type RoleRecord } 
 export { loadAcl, type AclFn } from "./load-acl.ts";
 export {
   grantsCovering,
+  invalidRai,
   isGrant,
   isRai,
+  isUnscopedRai,
   parseRai,
   RAI_SEGMENT,
   RAI_SHAPE,

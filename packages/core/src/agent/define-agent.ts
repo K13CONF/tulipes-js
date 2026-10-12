@@ -1,4 +1,4 @@
-import { isRai, RAI_SHAPE, type Rai } from "../acl/rai-id.ts";
+import { invalidRai, isRai, type Rai } from "../acl/rai-id.ts";
 import type { RuntimeCtx } from "../boot/contracts.ts";
 import type { Auth } from "../http/index.ts";
 import type { ValidatableSchema } from "../http/schema.ts";
@@ -79,7 +79,7 @@ export function agentDeclarationProblems(declaration: AgentDeclaration): string[
     const at = `actions[${index}]`;
     if (typeof spec !== "object" || spec === null) { problems.push(`${at} must be an object`); return; }
     if ("route" in spec) { problems.push(`${at} is a route reference — routes are the API, not tools`); return; }
-    if (!isRai(spec.id)) problems.push(`${at}.id "${String(spec.id)}" is invalid — expected ${RAI_SHAPE}`);
+    if (!isRai(spec.id)) problems.push(`${at}.id ${invalidRai(spec.id)}`);
     if (typeof spec.description !== "string" || spec.description.length === 0) problems.push(`${at}.description is required`);
     if (typeof spec.handler !== "function") problems.push(`${at}.handler must be a function`);
     if (spec.input !== undefined && typeof (spec.input as { safeParse?: unknown }).safeParse !== "function") {

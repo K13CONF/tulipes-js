@@ -56,6 +56,21 @@ export function isRai(id: unknown): id is Rai {
 }
 
 /**
+ * A 0.11 id, `module:resource`: what an app written before scopes declares.
+ * Recognized only to say so — `tulipes migrate 0.12` rewrites it.
+ */
+export function isUnscopedRai(id: unknown): boolean {
+  return typeof id === "string" && /^[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9-]*$/.test(id);
+}
+
+/** The boot report's explanation for an id that is not a RAI. */
+export function invalidRai(id: unknown): string {
+  return isUnscopedRai(id)
+    ? `"${String(id)}" has no scope — since 0.12 an id is "module:scope:resource[:extra]" (\`tulipes migrate 0.12\` rewrites a 0.11 app)`
+    : `"${String(id)}" is invalid — expected ${RAI_SHAPE}`;
+}
+
+/**
  * Splits an id into its named parts. Throws on an invalid one, so a caller
  * holding `req.rai.id` (which the boot already validated) never checks.
  *

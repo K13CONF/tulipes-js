@@ -150,8 +150,8 @@ describe("grants", () => {
     });
 
     expect(messages(report)).toEqual([
-      expect.stringMatching(/^resource "users:read" is invalid — expected a RAI id \("module:scope:resource\[:extra\]"\)/),
-      expect.stringMatching(/^resource "\*:bo:\*" is invalid/),
+      expect.stringMatching(/^resource "users:read" has no scope — since 0\.12 a grant is "module:scope:resource\[:extra\]" or a prefix wildcard \(`tulipes migrate 0\.12` rewrites a 0\.11 app\)$/),
+      expect.stringMatching(/^resource "\*:bo:\*" is invalid — expected a RAI id/),
       expect.stringMatching(/^resource "users:bo:detail:delete:\*" is invalid/),
     ]);
     expect(report.issues.every(({ scope, module }) => scope === "acl" && module === "auth")).toBe(true);
