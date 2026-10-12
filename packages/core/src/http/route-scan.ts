@@ -1,7 +1,7 @@
 import type { Express } from "express";
 
 import { BootReport } from "../errors/boot-error.ts";
-import { isRai, RAI_SHAPE } from "../acl/rai-id.ts";
+import { invalidRai, isRai } from "../acl/rai-id.ts";
 import { RAI_TAG, MOUNT_PATH, type RaiTag, type RouteRecord } from "./rai.ts";
 import { routePath } from "./paths.ts";
 
@@ -53,7 +53,7 @@ export function scanRoutes(app: Express, report: BootReport): RouteRecord[] {
         continue;
       }
       if (!isRai(tag.info.id)) {
-        report.add({ scope: "routes", module: tag.module, message: `${method} ${path}: rai id "${String(tag.info.id)}" is invalid — expected ${RAI_SHAPE}` });
+        report.add({ scope: "routes", module: tag.module, message: `${method} ${path}: rai id ${invalidRai(tag.info.id)}` });
         continue;
       }
       if (tagOf(stack[0]) !== tag || tags.length !== 1) {

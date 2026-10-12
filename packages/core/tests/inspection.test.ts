@@ -186,7 +186,7 @@ test.each([
   [declaration.replace("id: 'probe:web:read',", "id: 'probe:web:read', status: 500,"), /success status/],
   [declaration.replace("id: 'probe:web:read',", "id: '',"), /rai id "" is invalid/],
   // The 0.11 shape: two segments, no scope.
-  [declaration.replace("id: 'probe:web:read',", "id: 'probe:read',"), /rai id "probe:read" is invalid — expected "module:scope:resource"/],
+  [declaration.replace("id: 'probe:web:read',", "id: 'probe:read',"), /rai id "probe:read" has no scope — since 0\.12 an id is "module:scope:resource\[:extra\]" \(`tulipes migrate 0\.12` rewrites a 0\.11 app\)/],
   [declaration.replace("id: 'probe:web:read',", "id: 'Probe:web:read',"), /rai id "Probe:web:read" is invalid/],
   [declaration.replace("id: 'probe:web:read',", "id: 'probe:web:detail:delete:now',"), /is invalid/],
 ])("rejects malformed routes files under inspection: %s", async (source, message) => {

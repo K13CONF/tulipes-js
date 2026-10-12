@@ -1,5 +1,5 @@
 import { BootReport } from "../errors/boot-error.ts";
-import { grantsCovering, isGrant } from "./rai-id.ts";
+import { grantsCovering, isGrant, isUnscopedRai } from "./rai-id.ts";
 
 /**
  * The extra properties an app puts on a role, typed by augmentation — the
@@ -180,8 +180,11 @@ export class AclBuilder {
     for (const resource of resources) {
       if (!isGrant(resource)) {
         this.#issue(
-          `resource "${resource}" is invalid — expected a RAI id ("module:scope:resource[:extra]"), ` +
-            `a prefix wildcard ("module:*", "module:scope:*", "module:scope:resource:*") or "*"`,
+          isUnscopedRai(resource)
+            ? `resource "${resource}" has no scope — since 0.12 a grant is "module:scope:resource[:extra]" ` +
+                `or a prefix wildcard (\`tulipes migrate 0.12\` rewrites a 0.11 app)`
+            : `resource "${resource}" is invalid — expected a RAI id ("module:scope:resource[:extra]"), ` +
+                `a prefix wildcard ("module:*", "module:scope:*", "module:scope:resource:*") or "*"`,
         );
         continue;
       }
