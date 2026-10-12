@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/cli",
-  "version": "0.2.0",
+  "version": "0.3.0-rc.1",
   "description": "The tulipes command line: scaffold, sync, inspect, describe and run Tulipes apps",
   "type": "module",
   "bin": {
@@ -57,7 +57,7 @@
     "url": "https://github.com/kemora13conf/bp-backend-express/issues"
   },
   "peerDependencies": {
-    "@tulipes/spec": "^0.3.2"
+    "@tulipes/spec": "^0.4.0-rc.1"
   },
   "peerDependenciesMeta": {
     "@tulipes/spec": {
