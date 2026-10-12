@@ -11,7 +11,7 @@ what makes it work under nvm.
 
 ---
 
-## 0.12 — every RAI id has a scope
+## 0.12.0-rc.1 — every RAI id has a scope
 
 A RAI id was `module:resource`. It is now `module:scope:resource[:extra]`,
 where the scope is the surface the endpoint serves: `bo` for a back
@@ -19,9 +19,12 @@ office, `web` for a signed-in client, `mobile`, whatever the app names. An
 app on 0.11 refuses to boot on 0.12 until its ids are rewritten:
 
 ```
-✖ [users] GET /users: rai id "users:read" is invalid — expected
-  "module:scope:resource" or "module:scope:resource:extra", lowercase segments ([a-z][a-z0-9-]*)
+✖ [auth] resource "auth:login" has no scope — since 0.12 a grant is
+  "module:scope:resource[:extra]" or a prefix wildcard (`tulipes migrate 0.12` rewrites a 0.11 app)
 ```
+
+The same line names every grant, and a routes file that survives the ACL
+says `rai id "users:read" has no scope` with its method and path.
 
 From the app root, with the 0.12 CLI:
 

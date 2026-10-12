@@ -9,18 +9,25 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
-## [Unreleased] — 0.12
+## [0.12.0-rc.1] — 2026-10-12
 
-Breaking for every app on 0.11: every RAI id gains a scope.
-`tulipes migrate 0.12` carries the ids, grants and references across; the
-migration guide says what is left to decide by hand. Not published.
+The 0.12 line as a candidate, on npm's `next` tag. Breaking for every app
+on 0.11: every RAI id gains a scope. `tulipes migrate 0.12` carries the
+ids, grants and references across; the migration guide says what is left
+to decide by hand. Packages: core `0.12.0-rc.1`, `@tulipes/cli`
+`0.3.0-rc.1`, `@tulipes/spec` `0.4.0-rc.1` (requires core
+`^0.12.0-rc.1`), `@tulipes/mongoose` and `@tulipes/bullmq` `0.2.1-rc.1`,
+`@tulipes/socket.io` `0.1.3-rc.1`, `@tulipes/mcp` and `@tulipes/testing`
+`0.1.1-rc.1` (no source change; their core peer range admits
+`^0.11.0 || ^0.12.0-rc.1`).
 
 ### Changed
 
 - **A RAI id is `module:scope:resource[:extra]`** — `users:bo:list`,
   `users:mobile:profile`, `users:bo:detail:delete`. Every segment is
   `[a-z][a-z0-9-]*`. The route scan and agent declarations refuse any
-  other shape with the route or action named; `RouteInfo.id` and
+  other shape with the route or action named, and a 0.11 id or grant is
+  reported as having no scope, with the command that rewrites it; `RouteInfo.id` and
   `ActionTool.id` are typed `Rai`, so a two-segment id is an editor error.
 - **Grants resolve prefix wildcards at every depth.** `users:bo:*` and
   `users:bo:detail:*` are valid grants; a prefix covers the bare resource
