@@ -115,6 +115,8 @@ function renderModule(
   const fn = camel(name);
   const title = name.charAt(0).toUpperCase() + name.slice(1);
   const Model = pascal(name);
+  // Named after its file: web.billing.controllers.ts → WebBillingController.
+  const Controller = `${pascal(surface)}${Model}Controller`;
 
   const files: [string, string][] = [
     // One file per locale the app already ships. The module IS the i18n
@@ -206,14 +208,14 @@ function renderModule(
       `import { describe${Model} } from "../helpers/${name}.helpers.ts";`,
       ``,
       `/**`,
-      ` * One class per controller, holding the context. Each method returns a`,
+      ` * One class per controller, named after its file and holding the context. Each method returns a`,
       ` * handler rather than being one, so the routes file stays a table of`,
       ` * contents and private helpers sit beside the handlers that use them.`,
       ` *`,
       ` * Taking ctx in the constructor is what makes it testable: construct`,
       ` * one with a stub context and call the method.`,
       ` */`,
-      `export class ${Model}Controller {`,
+      `export class ${Controller} {`,
       `  readonly #ctx: Ctx;`,
       ``,
       `  constructor(ctx: Ctx) {`,
@@ -242,7 +244,7 @@ function renderModule(
       `import { Router } from "express";`,
       `import type { BackendCtx } from "@tulipes/core/boot";`,
       ``,
-      `import { ${Model}Controller } from "../controllers/${surface}.${name}.controllers.ts";`,
+      `import { ${Controller} } from "../controllers/${surface}.${name}.controllers.ts";`,
       ``,
       `/**`,
       ` * A plain function of the context: build the router, declare a RAI on`,
@@ -256,7 +258,7 @@ function renderModule(
       ` */`,
       `export default function ${fn}Routes(ctx: BackendCtx): Router {`,
       `  const router = Router();`,
-      `  const controller = new ${Model}Controller(ctx);`,
+      `  const controller = new ${Controller}(ctx);`,
       `  router.get("/${name}", ctx.rai({ id: "${name}:${surface}:list", name: "List ${name}" }), controller.index());`,
       `  return router;`,
       `}`,

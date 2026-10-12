@@ -1,23 +1,23 @@
 import { Router } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
 
-import { ConfigController } from "../controllers/config.controllers.ts";
+import { BoConfigController } from "../controllers/bo.config.controllers.ts";
 import { changeBody, moduleParam } from "../schemas/config.schemas.ts";
 
 export default function configRoutes(ctx: BackendCtx): void {
   const { rai, routes, config } = ctx;
   const router = Router();
-  const console = new ConfigController(ctx);
+  const console = new BoConfigController(ctx);
 
   router.get("/", rai({
-      id: "config:read",
+      id: "config:bo:read",
       name: "Describe the app",
       description: "Every module in load order: manifest, declared variables (names, types, sources; secrets never), settings with schema, live values and stored version, endpoints with the roles that reach them",
       folder: "config",
     }), console.app());
 
   router.get("/:module", rai({
-      id: "config:describe",
+      id: "config:bo:describe",
       name: "Describe one module",
       description: "The same description for one module",
       folder: "config",
@@ -25,7 +25,7 @@ export default function configRoutes(ctx: BackendCtx): void {
     }), console.module());
 
   router.patch("/:module", rai({
-      id: "config:write",
+      id: "config:bo:write",
       name: "Change a module's settings",
       description: "A patch over the stored values, validated by the module's schema; a stale version is refused; applied at once in every replica, except fields tagged restart, which apply on the next boot",
       folder: "config",

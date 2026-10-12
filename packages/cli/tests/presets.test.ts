@@ -155,9 +155,9 @@ test("the production preset composes without queues or sockets: no files, depend
   }
   const ecosystem = await readFile(root + "/ecosystem.config.cjs", "utf8");
   expect(ecosystem).not.toContain("worker.ts");
-  const users = await readFile(root + "/modules/users/controllers/users.controllers.ts", "utf8");
+  const users = await readFile(root + "/modules/users/controllers/bo.users.controllers.ts", "utf8");
   expect(users).not.toContain("queues");
-  const greetings = await readFile(root + "/modules/hello/controllers/greetings.controllers.ts", "utf8");
+  const greetings = await readFile(root + "/modules/hello/controllers/web/hello.greetings.controllers.ts", "utf8");
   expect(greetings).not.toContain("requireQueues");
   // The app still declares REDIS_URL: the cache and rate limiter are app-owned.
   const core = JSON.parse(await readFile(root + "/modules/core/package.json", "utf8"));

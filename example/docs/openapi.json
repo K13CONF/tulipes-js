@@ -32,16 +32,43 @@
       "name": "users"
     }
   ],
+  "x-tulipes-roles": [
+    {
+      "name": "guest",
+      "description": "Any request without a valid token",
+      "level": 0
+    },
+    {
+      "name": "user",
+      "description": "A signed-in account",
+      "level": 1
+    },
+    {
+      "name": "admin",
+      "description": "Runs the back office",
+      "level": 2
+    },
+    {
+      "name": "sysadmin",
+      "description": "Administers the deployment and its settings",
+      "level": 3
+    }
+  ],
+  "x-tulipes-scopes": [
+    "bo",
+    "web"
+  ],
   "paths": {
     "/api/v1/agent/tools": {
       "get": {
-        "operationId": "agent:tools",
+        "operationId": "agent:web:tools",
         "tags": [
           "agent"
         ],
         "summary": "List the tools an agent may call",
         "description": "The manifest filtered to the caller's role: route tools with their method and path, actions with their input schema",
-        "x-tulipes-permission": "agent:tools",
+        "x-tulipes-permission": "agent:web:tools",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",
@@ -79,13 +106,14 @@
     },
     "/api/v1/agent/tools/{name}": {
       "post": {
-        "operationId": "agent:invoke",
+        "operationId": "agent:web:invoke",
         "tags": [
           "agent"
         ],
         "summary": "Run a declared action",
         "description": "Runs an action from a module's agent declaration; the action's own permission and input schema apply",
-        "x-tulipes-permission": "agent:invoke",
+        "x-tulipes-permission": "agent:web:invoke",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",
@@ -171,13 +199,14 @@
     },
     "/api/v1/auth/login": {
       "post": {
-        "operationId": "auth:login",
+        "operationId": "auth:web:login",
         "tags": [
           "auth"
         ],
         "summary": "Log in",
         "description": "Exchange email and password for a token pair",
-        "x-tulipes-permission": "auth:login",
+        "x-tulipes-permission": "auth:web:login",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",
@@ -282,13 +311,14 @@
     },
     "/api/v1/auth/logout": {
       "post": {
-        "operationId": "auth:logout",
+        "operationId": "auth:web:logout",
         "tags": [
           "auth"
         ],
         "summary": "Log out",
         "description": "Revoke this session immediately",
-        "x-tulipes-permission": "auth:logout",
+        "x-tulipes-permission": "auth:web:logout",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "sysadmin",
@@ -379,13 +409,14 @@
     },
     "/api/v1/auth/me": {
       "get": {
-        "operationId": "auth:me",
+        "operationId": "auth:web:me",
         "tags": [
           "auth"
         ],
         "summary": "Who am I",
         "description": "The caller and the session behind this request",
-        "x-tulipes-permission": "auth:me",
+        "x-tulipes-permission": "auth:web:me",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "sysadmin",
@@ -476,13 +507,14 @@
     },
     "/api/v1/auth/password": {
       "post": {
-        "operationId": "auth:password",
+        "operationId": "auth:web:password",
         "tags": [
           "auth"
         ],
         "summary": "Change password",
         "description": "Set a new password and end every other session",
-        "x-tulipes-permission": "auth:password",
+        "x-tulipes-permission": "auth:web:password",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "sysadmin",
@@ -617,13 +649,14 @@
     },
     "/api/v1/auth/refresh": {
       "post": {
-        "operationId": "auth:refresh",
+        "operationId": "auth:web:refresh",
         "tags": [
           "auth"
         ],
         "summary": "Refresh tokens",
         "description": "Rotate a refresh token for a new pair",
-        "x-tulipes-permission": "auth:refresh",
+        "x-tulipes-permission": "auth:web:refresh",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",
@@ -722,13 +755,14 @@
     },
     "/api/v1/auth/register": {
       "post": {
-        "operationId": "auth:register",
+        "operationId": "auth:web:register",
         "tags": [
           "auth"
         ],
         "summary": "Register",
         "description": "Create an account and its credential",
-        "x-tulipes-permission": "auth:register",
+        "x-tulipes-permission": "auth:web:register",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",
@@ -815,13 +849,14 @@
     },
     "/api/v1/config/": {
       "get": {
-        "operationId": "config:read",
+        "operationId": "config:bo:read",
         "tags": [
           "config"
         ],
         "summary": "Describe the app",
         "description": "Every module in load order: manifest, declared variables (names, types, sources; secrets never), settings with schema, live values and stored version, endpoints with the roles that reach them",
-        "x-tulipes-permission": "config:read",
+        "x-tulipes-permission": "config:bo:read",
+        "x-tulipes-scope": "bo",
         "x-tulipes-roles": [
           "admin",
           "sysadmin"
@@ -911,13 +946,14 @@
     },
     "/api/v1/config/{module}": {
       "get": {
-        "operationId": "config:describe",
+        "operationId": "config:bo:describe",
         "tags": [
           "config"
         ],
         "summary": "Describe one module",
         "description": "The same description for one module",
-        "x-tulipes-permission": "config:describe",
+        "x-tulipes-permission": "config:bo:describe",
+        "x-tulipes-scope": "bo",
         "x-tulipes-roles": [
           "admin",
           "sysadmin"
@@ -1041,13 +1077,14 @@
         }
       },
       "patch": {
-        "operationId": "config:write",
+        "operationId": "config:bo:write",
         "tags": [
           "config"
         ],
         "summary": "Change a module's settings",
         "description": "A patch over the stored values, validated by the module's schema; a stale version is refused; applied at once in every replica, except fields tagged restart, which apply on the next boot",
-        "x-tulipes-permission": "config:write",
+        "x-tulipes-permission": "config:bo:write",
+        "x-tulipes-scope": "bo",
         "x-tulipes-roles": [
           "sysadmin"
         ],
@@ -1199,13 +1236,14 @@
     },
     "/api/v1/greetings": {
       "get": {
-        "operationId": "hello:list-greetings",
+        "operationId": "hello:web:greetings",
         "tags": [
           "hello"
         ],
         "summary": "List greetings",
         "description": "Reads the seeded rows, clamped by the shared bounds",
-        "x-tulipes-permission": "hello:list-greetings",
+        "x-tulipes-permission": "hello:web:greetings",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "sysadmin",
@@ -1296,13 +1334,14 @@
     },
     "/api/v1/greetings/{name}/use": {
       "post": {
-        "operationId": "hello:use-greeting",
+        "operationId": "hello:web:greetings:use",
         "tags": [
           "hello"
         ],
         "summary": "Use a greeting",
         "description": "Queues a job that counts the use",
-        "x-tulipes-permission": "hello:use-greeting",
+        "x-tulipes-permission": "hello:web:greetings:use",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "sysadmin",
@@ -1403,13 +1442,14 @@
     },
     "/api/v1/hello": {
       "get": {
-        "operationId": "hello:greet",
+        "operationId": "hello:web:greet",
         "tags": [
           "hello"
         ],
         "summary": "Greet",
         "description": "Public greeting, granted to guest",
-        "x-tulipes-permission": "hello:greet",
+        "x-tulipes-permission": "hello:web:greet",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",
@@ -1446,12 +1486,13 @@
     },
     "/api/v1/hello/{name}": {
       "get": {
-        "operationId": "hello:greet-name",
+        "operationId": "hello:web:greet:by-name",
         "tags": [
           "hello"
         ],
         "summary": "Greet by name",
-        "x-tulipes-permission": "hello:greet-name",
+        "x-tulipes-permission": "hello:web:greet:by-name",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",
@@ -1498,12 +1539,13 @@
     },
     "/api/v1/hello/demo/missing": {
       "get": {
-        "operationId": "hello:demo-missing",
+        "operationId": "hello:web:demo:missing",
         "tags": [
           "hello"
         ],
         "summary": "HttpError demo",
-        "x-tulipes-permission": "hello:demo-missing",
+        "x-tulipes-permission": "hello:web:demo:missing",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",
@@ -1540,13 +1582,14 @@
     },
     "/api/v1/hello/secret": {
       "get": {
-        "operationId": "hello:read",
+        "operationId": "hello:web:secret",
         "tags": [
           "hello"
         ],
         "summary": "Read the secret",
-        "description": "Requires a role granted hello:read",
-        "x-tulipes-permission": "hello:read",
+        "description": "Requires a role granted hello:web:secret",
+        "x-tulipes-permission": "hello:web:secret",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "sysadmin",
@@ -1637,13 +1680,14 @@
     },
     "/api/v1/auth/sessions": {
       "get": {
-        "operationId": "auth:sessions",
+        "operationId": "auth:web:sessions",
         "tags": [
           "sessions"
         ],
         "summary": "List sessions",
         "description": "Every device this account is signed in on",
-        "x-tulipes-permission": "auth:sessions",
+        "x-tulipes-permission": "auth:web:sessions",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "sysadmin",
@@ -1734,13 +1778,14 @@
     },
     "/api/v1/auth/sessions/{sid}": {
       "delete": {
-        "operationId": "auth:session-end",
+        "operationId": "auth:web:sessions:end",
         "tags": [
           "sessions"
         ],
         "summary": "End a session",
         "description": "Sign one other device out",
-        "x-tulipes-permission": "auth:session-end",
+        "x-tulipes-permission": "auth:web:sessions:end",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "sysadmin",
@@ -1868,13 +1913,14 @@
     },
     "/api/v1/settings/logs/stream": {
       "get": {
-        "operationId": "settings:logs",
+        "operationId": "settings:bo:logs",
         "tags": [
           "settings"
         ],
         "summary": "Stream logs",
         "description": "Server-Sent Events over the log files — backend or worker",
-        "x-tulipes-permission": "settings:logs",
+        "x-tulipes-permission": "settings:bo:logs",
+        "x-tulipes-scope": "bo",
         "x-tulipes-roles": [
           "sysadmin"
         ],
@@ -2027,14 +2073,155 @@
       }
     },
     "/users/": {
+      "post": {
+        "operationId": "users:bo:create",
+        "tags": [
+          "users"
+        ],
+        "summary": "Create a user",
+        "description": "Adds the account and queues its welcome email",
+        "x-tulipes-permission": "users:bo:create",
+        "x-tulipes-scope": "bo",
+        "x-tulipes-roles": [
+          "admin",
+          "sysadmin"
+        ],
+        "x-tulipes-authorization": "acl",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  }
+                },
+                "required": [
+                  "email"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": true
+                        },
+                        "data": {}
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but not permitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "const": false
+                        },
+                        "data": {
+                          "const": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
-        "operationId": "users:read",
+        "operationId": "users:web:list",
         "tags": [
           "users"
         ],
         "summary": "List users",
         "description": "Page through accounts, clamped by the shared bounds",
-        "x-tulipes-permission": "users:read",
+        "x-tulipes-permission": "users:web:list",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "sysadmin",
@@ -2185,156 +2372,18 @@
             }
           }
         }
-      },
-      "post": {
-        "operationId": "users:create",
-        "tags": [
-          "users"
-        ],
-        "summary": "Create a user",
-        "description": "Adds the account and queues its welcome email",
-        "x-tulipes-permission": "users:create",
-        "x-tulipes-roles": [
-          "admin",
-          "sysadmin"
-        ],
-        "x-tulipes-authorization": "acl",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "email": {
-                    "type": "string",
-                    "format": "email",
-                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
-                  }
-                },
-                "required": [
-                  "email"
-                ]
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/Envelope"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "success": {
-                          "const": true
-                        },
-                        "data": {}
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/Envelope"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "success": {
-                          "const": false
-                        },
-                        "data": {
-                          "const": null
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Authenticated, but not permitted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/Envelope"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "success": {
-                          "const": false
-                        },
-                        "data": {
-                          "const": null
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/Envelope"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "success": {
-                          "const": false
-                        },
-                        "data": {
-                          "const": null
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/users/{email}": {
       "delete": {
-        "operationId": "users:delete",
+        "operationId": "users:bo:delete",
         "tags": [
           "users"
         ],
         "summary": "Soft-delete a user",
         "description": "Flags the account; ordinary queries stop returning it",
-        "x-tulipes-permission": "users:delete",
+        "x-tulipes-permission": "users:bo:delete",
+        "x-tulipes-scope": "bo",
         "x-tulipes-roles": [
           "admin",
           "sysadmin"
@@ -2461,12 +2510,13 @@
     },
     "/users/boom": {
       "get": {
-        "operationId": "users:demo-boom",
+        "operationId": "users:web:demo:boom",
         "tags": [
           "users"
         ],
         "summary": "Unhandled error demo",
-        "x-tulipes-permission": "users:demo-boom",
+        "x-tulipes-permission": "users:web:demo:boom",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",
@@ -2503,12 +2553,13 @@
     },
     "/users/deleted": {
       "get": {
-        "operationId": "users:read-deleted",
+        "operationId": "users:bo:list:deleted",
         "tags": [
           "users"
         ],
         "summary": "List soft-deleted users",
-        "x-tulipes-permission": "users:read-deleted",
+        "x-tulipes-permission": "users:bo:list:deleted",
+        "x-tulipes-scope": "bo",
         "x-tulipes-roles": [
           "admin",
           "sysadmin"
@@ -2598,12 +2649,13 @@
     },
     "/users/missing": {
       "get": {
-        "operationId": "users:demo-missing",
+        "operationId": "users:web:demo:missing",
         "tags": [
           "users"
         ],
         "summary": "HttpError demo",
-        "x-tulipes-permission": "users:demo-missing",
+        "x-tulipes-permission": "users:web:demo:missing",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",
@@ -2640,12 +2692,13 @@
     },
     "/users/ping": {
       "get": {
-        "operationId": "users:ping",
+        "operationId": "users:web:ping",
         "tags": [
           "users"
         ],
         "summary": "Users module status",
-        "x-tulipes-permission": "users:ping",
+        "x-tulipes-permission": "users:web:ping",
+        "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
           "guest",

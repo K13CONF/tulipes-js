@@ -64,11 +64,14 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    `throw new HttpError(404, "notFound")`, where the message is an i18n
    key and the code derives from it. Never hand-roll an error shape.
    → skill `tulipes-response`
-7. **Every route declares a RAI**: put `rai({ id: "x:read" })` first in
-   each endpoint handler chain, including routes on a nested router.
-   The id is also the ACL permission, and core refuses to boot if a route
-   is missing one. Public is `acl.allow("guest", "x:read")`, never a
-   missing check. → skill `tulipes-endpoint`
+7. **Every route declares a RAI**: put `rai({ id: "users:bo:list" })` first
+   in each endpoint handler chain, including routes on a nested router.
+   The id is always `module:scope:resource[:extra]` — `users:mobile:profile`,
+   `users:bo:detail:delete` — where the scope is the surface it serves
+   (`web`, `bo`, …). It is also the ACL permission, and core refuses to boot
+   if a route is missing one or the id has another shape. Public is
+   `acl.allow("guest", "users:web:list")`, never a missing check.
+   → skills `tulipes-endpoint`, `tulipes-permissions`
 8. **Validate input with a zod schema on the RAI** (`body`, `query`,
    `params`, from `zod/v4`) rather than hand-rolled `if` checks. The same
    declaration generates the OpenAPI and Postman documents, so they cannot
@@ -85,7 +88,7 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
     the auth module's `Credential` model, which is `select: false`.
 12. **When auth is installed, a new feature module's namespace goes in BOTH the `admin` and
     `sysadmin` grants** in `modules/auth/module.acl.ts`. Neither role holds
-    `*` — a wildcard would reach `config:write` and `settings:*` and make
+    `*` — a wildcard would reach `config:bo:write` and `settings:*` and make
     the sysadmin boundary a label rather than a rule. → skills
     `tulipes-config`, `tulipes-settings`
 13. **Cross-module imports use the package name** (`@app/users`,
@@ -106,7 +109,11 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    never reach into another module's files from a test.
 
 For endpoint changes, read `tulipes-endpoint`: native routers live in
-`routes/*.routes.ts`, plain `(ctx) => Router` functions: build the router from
+`routes/`, named scope-first — `routes/web.users.routes.ts`,
+`routes/bo.users.routes.ts`, and a folder per scope when one scope has
+several files (`routes/web/hello.greetings.routes.ts`); controllers mirror
+them (`controllers/bo.users.controllers.ts` exports `BoUsersController`).
+They are plain `(ctx) => Router` functions: build the router from
 the context, return it for the configured prefix, and read models, settings
 and the environment inside handlers, never while building — `tulipes routes`
 and `tulipes spec` build every router with nothing acquired. Global
@@ -145,11 +152,13 @@ luck.
 | `pnpm dev` | run the backend process (regenerates types first) |
 | `pnpm worker` | run the queue-consumer process |
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
+| `pnpm tulipes routes [--scope s]` | every endpoint with the roles that reach it, offline |
+| `pnpm tulipes roles [--role r]` | every role with its description, extras and grants, offline |
 | `pnpm tulipes agent manifest [--role r]` | print every tool the app exposes to agents, offline |
 | `pnpm test` | every `tests/` and `modules/*/tests/` file; each boots the app once through `@tulipes/testing` |
 | `pnpm check` | validate the environment without booting |
 | `pnpm typecheck` | typecheck the whole app |
-| `pnpm tulipes new module <name>` | scaffold a module |
+| `pnpm tulipes new module <name> [--scope s]` | scaffold a module (its first endpoint in scope `s`, default `web`) |
 | `tulipes update` | upgrade the global cli and the framework in every manifest |
 | `pnpm script scripts/x.ts` | run a one-off script against the real app |
 

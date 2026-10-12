@@ -13,7 +13,7 @@ import { configuredLogStreams, type LogStreams } from "../helpers/log-stream.ts"
  * while the stream is open, since a stream outlives the request that
  * opened it.
  */
-export class SettingsController {
+export class BoSettingsController {
   readonly #logStreams: LogStreams;
   readonly #ctx: Ctx;
 
@@ -39,7 +39,7 @@ export class SettingsController {
 
       const session = req.auth.session;
       await this.#logStreams.open(res, {
-        authorize: createAccessCheck(this.#ctx, req.auth, "settings:logs"),
+        authorize: createAccessCheck(this.#ctx, req.auth, "settings:bo:logs"),
         userId: req.auth.user ? String(req.auth.user._id) : "",
         expiresAt: session
           ? Math.min(
