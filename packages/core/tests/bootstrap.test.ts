@@ -13,10 +13,10 @@ test("bootstrap runs in every mode, in load order, after settings and ACL and be
       import { z } from 'zod/v4';
       export default defineConfig({ schema: z.object({ greeting: z.string().default('hello') }) });
     `,
-    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:read');`,
+    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:web:read');`,
     "modules/probe/bootstrap/probe.bootstrap.js": `
       import { appendFileSync } from 'node:fs';
-      export default (ctx) => { ${log("'probe mode=' + ctx.mode + ' greeting=' + ctx.config.probe.greeting + ' acl=' + ctx.acl.can('guest', 'probe:read') + ' app=' + (ctx.app === undefined)")}; };
+      export default (ctx) => { ${log("'probe mode=' + ctx.mode + ' greeting=' + ctx.config.probe.greeting + ' acl=' + ctx.acl.can('guest', 'probe:web:read') + ' app=' + (ctx.app === undefined)")}; };
     `,
     "modules/second/package.json": '{"name":"@test/second","type":"module","tulipes":{"dependsOn":["probe"]}}',
     "modules/second/bootstrap/second.bootstrap.js": `

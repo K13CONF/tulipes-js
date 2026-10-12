@@ -8,7 +8,7 @@ test("extracts mounted paths, statuses and custom authorization from the inspect
       import { Router } from 'express';
       export default ctx => {
         const child = Router();
-        child.post('/items', ctx.rai({ id: 'probe:create', status: 201 }), (req, res) => res.respond({ data: {} }));
+        child.post('/items', ctx.rai({ id: 'probe:web:create', status: 201 }), (req, res) => res.respond({ data: {} }));
         ctx.routes.mount(ctx.app, '/catalog', child);
         ctx.routes.setAccessChecker(() => true);
       };

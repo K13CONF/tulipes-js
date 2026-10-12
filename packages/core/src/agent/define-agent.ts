@@ -1,3 +1,4 @@
+import { isRai, RAI_SHAPE, type Rai } from "../acl/rai-id.ts";
 import type { RuntimeCtx } from "../boot/contracts.ts";
 import type { Auth } from "../http/index.ts";
 import type { ValidatableSchema } from "../http/schema.ts";
@@ -13,14 +14,15 @@ export interface ToolActor extends Auth {
 
 /**
  * An action a module offers to agents and to other modules: an id, an
- * input schema and a handler. The id is a RAI-style permission
- * (`hello:reset-counts`), granted in `module.acl.ts` like any other, and
+ * input schema and a handler. The id is a RAI (`hello:bo:greetings:reset`),
+ * the permission granted in `module.acl.ts` like any other, and
  * the handler runs only for an actor whose role holds it, with an input
  * the schema accepted. Routes are the API; an action is never derived
  * from one, and the two share logic through the module's helpers.
  */
 export interface ActionTool<Input = unknown> {
-  id: string;
+  /** A RAI id, `module:scope:resource[:extra]`; also the permission. */
+  id: Rai;
   title?: string;
   description: string;
   /** Validates the input; omitted means the tool takes no input. */
@@ -57,7 +59,7 @@ export function isAgentDeclaration(value: unknown): value is AgentDeclaration {
  * Types a declared action's handler from its input schema, which an object
  * literal inside the `actions` array cannot do by itself:
  *
- *   action({ id: "hello:reset", description: "…", input: z.object({ confirm: z.literal(true) }),
+ *   action({ id: "hello:bo:reset", description: "…", input: z.object({ confirm: z.literal(true) }),
  *            handler: async ({ models }, { confirm }) => … })
  */
 export function action<Input = undefined>(tool: ActionTool<Input>): ActionTool<Input> {
@@ -77,7 +79,7 @@ export function agentDeclarationProblems(declaration: AgentDeclaration): string[
     const at = `actions[${index}]`;
     if (typeof spec !== "object" || spec === null) { problems.push(`${at} must be an object`); return; }
     if ("route" in spec) { problems.push(`${at} is a route reference — routes are the API, not tools`); return; }
-    if (typeof spec.id !== "string" || !ACTION_ID.test(spec.id)) problems.push(`${at}.id must be a "<module>:<action>" permission`);
+    if (!isRai(spec.id)) problems.push(`${at}.id "${String(spec.id)}" is invalid — expected ${RAI_SHAPE}`);
     if (typeof spec.description !== "string" || spec.description.length === 0) problems.push(`${at}.description is required`);
     if (typeof spec.handler !== "function") problems.push(`${at}.handler must be a function`);
     if (spec.input !== undefined && typeof (spec.input as { safeParse?: unknown }).safeParse !== "function") {
@@ -86,5 +88,3 @@ export function agentDeclarationProblems(declaration: AgentDeclaration): string[
   });
   return problems;
 }
-
-const ACTION_ID = /^[a-z0-9-]+:[a-z0-9-]+$/;

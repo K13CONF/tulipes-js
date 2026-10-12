@@ -1,2 +1,12 @@
-export { Acl, AclBuilder } from "./acl.ts";
+export { Acl, AclBuilder, type RoleDefinition, type RoleMeta, type RoleRecord } from "./acl.ts";
 export { loadAcl, type AclFn } from "./load-acl.ts";
+export {
+  grantsCovering,
+  isGrant,
+  isRai,
+  parseRai,
+  RAI_SEGMENT,
+  RAI_SHAPE,
+  type Rai,
+  type RaiParts,
+} from "./rai-id.ts";

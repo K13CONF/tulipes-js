@@ -1,5 +1,6 @@
 import type { Express, Router, Request, RequestHandler, Response } from "express";
 
+import type { Rai } from "../acl/rai-id.ts";
 import { HttpError, ValidationError, type FieldIssue } from "./error-handler.ts";
 import { codeOfIssue, fieldOf, type RouteSchemas, type ValidatableSchema } from "./schema.ts";
 import type { Auth } from "./index.ts";
@@ -8,10 +9,12 @@ import { routePath } from "./paths.ts";
 /**
  * RAI — Resource Access Identifier.
  *
- * `id` names a resource and an access to it ("users:read"), which is also
- * the ACL permission. One declaration therefore does three jobs: it
- * identifies the endpoint, gates it, and marks the route as declared so
- * the boot scan can prove no endpoint was left unguarded.
+ * `id` is `module:scope:resource[:extra]` — `users:bo:list`,
+ * `users:mobile:profile`, `users:bo:detail:delete` — and is also the ACL
+ * permission. One declaration therefore does three jobs: it identifies
+ * the endpoint, gates it, and marks the route as declared so the boot scan
+ * can prove no endpoint was left unguarded. `parseRai(req.rai.id)` splits
+ * it back into its parts.
  *
  * Plugins extend this interface by augmentation — the same pattern as
  * KnownVariables and GlobalConfig — so their fields are typed at the call
@@ -24,8 +27,12 @@ import { routePath } from "./paths.ts";
 export interface RouteInfo extends RouteSchemas {
   /** Default success HTTP status for res.respond and generated documentation. */
   status?: number;
-  /** Resource Access Identifier, e.g. "users:read". Also the permission. */
-  id: string;
+  /**
+   * Resource Access Identifier, `module:scope:resource[:extra]`, e.g.
+   * "users:bo:list". Also the permission. A two-segment id is a type error
+   * here and a boot error in the route scan.
+   */
+  id: Rai;
   /** Human label, for generated documentation. */
   name?: string;
   description?: string;
@@ -172,7 +179,7 @@ export class RouteRegistry {
  * routes file can destructure it and never import anything:
  *
  *   export default function usersRoutes({ rai }: Ctx) {
- *     router.get(path, rai({ id: "users:read", name: "List users" }), handler);
+ *     router.get(path, rai({ id: "users:bo:list", name: "List users" }), handler);
  *   }
  */
 export function createRai(

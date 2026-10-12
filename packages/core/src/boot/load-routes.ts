@@ -6,7 +6,7 @@ import { importFile } from "./import-file.ts";
 import type { BackendCtx, RoutesFn } from "./contracts.ts";
 
 /**
- * Backend branch and inspection alike: every `routes/*.routes.ts` is a
+ * Backend branch and inspection alike: every `*.routes.ts` under `routes/` (scope folders included) is a
  * plain `(ctx) => Router | void` run in module and file order. A returned
  * router is mounted under the configured prefix; a file that mounts on
  * `ctx.app` itself (global middleware) returns nothing. Under inspection
