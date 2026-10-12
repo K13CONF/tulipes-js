@@ -23,9 +23,14 @@ export interface MigrationReport {
 
 const PNPM = "pnpm@10.28.0";
 
-export async function runMigrate(rootDir: string, target: string): Promise<void> {
+export async function runMigrate(rootDir: string, target: string, options: { scope?: string } = {}): Promise<void> {
   if (target !== "0.11") {
-    console.error(`unknown migration target "${target}" — this CLI migrates an app to 0.11`);
+    console.error(`unknown migration target "${target}" — this CLI migrates an app to 0.11 (from 0.10) or 0.12 (from 0.11)`);
+    process.exitCode = 2;
+    return;
+  }
+  if (options.scope !== undefined) {
+    console.error("--scope applies to tulipes migrate 0.12 only");
     process.exitCode = 2;
     return;
   }
@@ -294,9 +299,10 @@ function migrateModule(rootDir: string, dir: string, name: string, report: Migra
   // routes: defineRoutes/runtime → plain functions; `agent: false` gone
   const routesDir = join(dir, "routes");
   if (existsSync(routesDir)) {
-    for (const file of readdirSync(routesDir).filter((entry) => entry.endsWith(".ts"))) {
-      migrateRoutesFile(join(routesDir, file), dir, name, report);
-      stripAgentOptOut(join(routesDir, file), `${label}/routes/${file}`, report);
+    for (const path of walkTs(routesDir)) {
+      const file = relative(routesDir, path);
+      migrateRoutesFile(path, dir, name, report);
+      stripAgentOptOut(path, `${label}/routes/${file}`, report);
     }
   }
 

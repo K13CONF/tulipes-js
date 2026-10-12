@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { fixture } from "../../core/tests/fixture.ts";
 import { migrate, rewriteInspection, rewriteParameterProperties, rewriteSpecifiers } from "../src/migrate.ts";
+import { migrate012, rewriteAllowCalls } from "../src/migrate-0.12.ts";
 import { parseEnv, runConfigImport } from "../src/config-import.ts";
 
 /**
@@ -148,7 +149,10 @@ test("migrate 0.11 rewrites a 0.10 module into the three-file root, plain routes
   const again = migrate(app.rootDir);
   expect(again.changed.filter((line) => !line.startsWith("wrote config/migration"))).toEqual([]);
 
-  // The migrated module boots on this core — declaration, bootstrap and routes alike.
+  // 0.12 gives every id a scope; then the module boots on this core —
+  // declaration, bootstrap and routes alike.
+  expect(migrate012(app.rootDir).ids).toEqual({ "probe:read": "probe:web:read" });
+  expect(await readFile(join(app.rootDir, "modules/probe/module.acl.ts"), "utf8")).toContain('.allow("guest", "probe:web:read")');
   const handle = await app.boot({ listen: false });
   try {
     expect(handle.ctx.config.probe).toEqual({ limit: 5, mode: "open", keep: "kept", label: "probe", retries: 3 });
@@ -254,4 +258,126 @@ export default defineAgent({
 
   // What rc.1 and rc.2 apps rely on: running it again is safe.
   expect(migrate(app.rootDir).changed).toEqual([expect.stringMatching(/^wrote config\/migration-0\.11\.json/)]);
+});
+
+/** A module written the 0.11 way: two-segment ids everywhere they appear. */
+const eleven = {
+  "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module" }),
+  "modules/probe/module.acl.ts": `import type { AclBuilder } from "@tulipes/core/acl";
+import { readFileSync } from "node:fs";
+void readFileSync;
+export default function probeAcl(acl: AclBuilder): void {
+  acl.defineRole("guest", { description: "Anyone" }).defineRole("admin");
+  acl.allow("guest", "probe:read", "probe:list-things");
+  acl.allow("admin", "probe:*", "probe:reset");
+}
+`,
+  "modules/probe/routes/probe.routes.ts": `import { Router } from "express";
+import { z } from "zod/v4";
+import type { BackendCtx } from "@tulipes/core/boot";
+import { allowed } from "../helpers/check.ts";
+
+export default function probeRoutes({ rai }: BackendCtx): Router {
+  const router = Router();
+  router.get("/things/:id", rai({
+    id: "probe:read",
+    params: z.object({ id: z.string() }),
+  }), (req, res) => res.respond({ data: { id: "u1", allowed: allowed(req) } }));
+  router.get("/things", rai({ id: 'probe:list-things' }), (_req, res) => res.respond({ data: [] }));
+  return router;
+}
+`,
+  "modules/probe/routes/web/probe.more.routes.ts": `import { Router } from "express";
+import type { BackendCtx } from "@tulipes/core/boot";
+
+const kind = "more";
+
+export default function moreRoutes({ rai }: BackendCtx): Router {
+  const router = Router();
+  router.get("/more", rai({ id: "probe:web:more" }), (_req, res) => res.respond({ data: kind }));
+  router.get("/dynamic", rai({ id: \`probe:\${kind}\` }), (_req, res) => res.respond({ data: kind }));
+  return router;
+}
+`,
+  "modules/probe/agent/probe.agent.ts": `import { action, defineAgent } from "@tulipes/core/agent";
+export default defineAgent({ actions: [action({ id: "probe:reset", description: "Reset", handler: () => 0 })] });
+`,
+  "modules/probe/helpers/check.ts": `import type { Request } from "express";
+// "probe:title" is an i18n key that looks like an id: it is not one, so it stays.
+export const allowed = (req: Request) => req.t("probe:title") !== "" && req.rai?.id !== "probe:read";
+`,
+  "tests/probe.test.ts": `export const denied = 'role "guest" may not probe:reset';
+export const id = "probe:reset";
+`,
+};
+
+test("migrate 0.12 scopes every id, grant and reference, reports what it cannot read, and runs once", async () => {
+  const app = await fixture(eleven);
+  const read = (file: string) => readFile(join(app.rootDir, file), "utf8");
+
+  const report = migrate012(app.rootDir);
+
+  expect(report.ids).toEqual({
+    "probe:read": "probe:web:read",
+    "probe:list-things": "probe:web:list-things",
+    "probe:reset": "probe:web:reset",
+  });
+
+  const routes = await read("modules/probe/routes/probe.routes.ts");
+  expect(routes).toContain('id: "probe:web:read",');
+  expect(routes).toContain("rai({ id: 'probe:web:list-things' })");
+  // A zod field and a payload named id are not declarations.
+  expect(routes).toContain("params: z.object({ id: z.string() }),");
+  expect(routes).toContain('data: { id: "u1",');
+
+  const nested = await read("modules/probe/routes/web/probe.more.routes.ts");
+  expect(nested).toContain('rai({ id: "probe:web:more" })');
+  expect(report.todos).toEqual([
+    "modules/probe/routes/web/probe.more.routes.ts:9: an id built at runtime — make sure it produces module:scope:resource[:extra]",
+  ]);
+
+  expect(await read("modules/probe/agent/probe.agent.ts")).toContain('action({ id: "probe:web:reset",');
+
+  const acl = await read("modules/probe/module.acl.ts");
+  expect(acl).toContain('acl.allow("guest", "probe:web:read", "probe:web:list-things");');
+  expect(acl).toContain('acl.allow("admin", "probe:*", "probe:web:reset");');
+  expect(acl).toContain('import { readFileSync } from "node:fs";');
+
+  // References elsewhere: an exact match of a rewritten id, nothing else.
+  const helper = await read("modules/probe/helpers/check.ts");
+  expect(helper).toContain('req.t("probe:title")');
+  expect(helper).toContain('req.rai?.id !== "probe:web:read"');
+  const test = await read("tests/probe.test.ts");
+  expect(test).toContain('export const id = "probe:web:reset";');
+  expect(test).toContain("may not probe:reset'");
+
+  expect(JSON.parse(await read("config/migration-0.12.json"))).toMatchObject({ scope: "web", ids: report.ids, todos: report.todos });
+
+  // A second run has nothing left to scope.
+  const again = migrate012(app.rootDir);
+  expect(again.ids).toEqual({});
+  expect(again.changed).toEqual(['wrote config/migration-0.12.json (0 id(s) scoped "web")']);
+
+  // The migrated module passes the route scan, apart from the id built at runtime.
+  await app.write("modules/probe/routes/web/probe.more.routes.ts", nested.replace("rai({ id: `probe:${kind}` })", 'rai({ id: "probe:web:dynamic" })'));
+  const handle = await app.boot({ inspect: true });
+  expect(handle.ctx.routes.all().map(({ info }) => info.id).sort()).toEqual(["probe:web:dynamic", "probe:web:list-things", "probe:web:more", "probe:web:read"]);
+  expect(handle.ctx.acl!.rolesFor("probe:web:reset")).toEqual(["admin"]);
+  await handle.shutdown();
+});
+
+test("migrate 0.12 takes another scope and refuses one that is not a segment", async () => {
+  const app = await fixture(eleven);
+
+  expect(() => migrate012(app.rootDir, { scope: "Back Office" })).toThrow(/--scope "Back Office" is not a scope/);
+  expect(migrate012(app.rootDir, { scope: "bo" }).ids["probe:read"]).toBe("probe:bo:read");
+});
+
+test("only the arguments of allow() are rewritten", () => {
+  const scope = (grant: string) => (grant.includes(":") && !grant.endsWith("*") ? grant.replace(":", ":web:") : grant);
+
+  expect(rewriteAllowCalls(`import x from "node:fs";\nacl.allow("user", "a:b", "a:*", "*");\nconst t = "a:b";`, scope))
+    .toBe(`import x from "node:fs";\nacl.allow("user", "a:web:b", "a:*", "*");\nconst t = "a:b";`);
+  expect(rewriteAllowCalls(`acl.allow(\n  "user",\n  'a:b', // ("not a call")\n).allow("guest", "c:d");`, scope))
+    .toBe(`acl.allow(\n  "user",\n  'a:web:b', // ("not a call")\n).allow("guest", "c:web:d");`);
 });
