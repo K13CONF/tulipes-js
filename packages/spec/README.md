@@ -63,7 +63,7 @@ import { z } from "zod/v4";
 router.post(
   `${base}/users`,
   rai({
-    id: "users:create",
+    id: "users:bo:create",
     name: "Create a user",
     body: z.object({ email: z.email("emailInvalid") }),
     returns: z.object({ id: z.string(), email: z.string() }),

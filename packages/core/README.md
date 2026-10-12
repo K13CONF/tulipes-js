@@ -614,9 +614,9 @@ route share logic through the module's helpers:
 export default defineAgent({
   summary: "Greets callers and counts how often each greeting is used.",
   actions: [
-    action({ id: "hello:list-greetings", description: "The stored greetings, most used first", readOnly: true,
+    action({ id: "hello:web:greetings", description: "The stored greetings, most used first", readOnly: true,
              handler: async (ctx) => (await findGreetings(ctx))[0] }),
-    action({ id: "hello:reset-counts", description: "Reset every counter", input: z.object({ confirm: z.literal(true) }),
+    action({ id: "hello:bo:greetings:reset", description: "Reset every counter", input: z.object({ confirm: z.literal(true) }),
              handler: async (ctx) => ({ reset: (await requireModels(ctx).get("Greeting").updateMany({}, { times_used: 0 })).modifiedCount }) }),
   ],
 });

@@ -358,7 +358,7 @@ pipeline remain explicit follow-up work.
 
 Open settings log streams reload the original token's session owner, live expiry,
 credential version and revocation status, then reload the user and evaluate the
-current role for `settings:logs`. The controller repeats the check before file
+current role for `settings:bo:logs`. The controller repeats the check before file
 access/SSE headers to cover changes since request authentication. Idle and active
 streams recheck every second; a one-second check timeout and a lease measured from
 the check's start limit stale output authorization to two seconds with a responsive
