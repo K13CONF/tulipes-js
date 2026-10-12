@@ -7,7 +7,7 @@ test("warns instead of inheriting bearer auth for a dynamic checker", async () =
     folders: ["items"],
     routes: [
       {
-        id: "items:read",
+        id: "items:web:read",
         path: "/api/catalog/items/:id",
         method: "GET",
         module: "items",
@@ -35,6 +35,6 @@ test("warns instead of inheriting bearer auth for a dynamic checker", async () =
   });
 
   expect(result.warnings).toContain(
-    "items:read: custom access checker; configure authorization manually",
+    "items:web:read: custom access checker; configure authorization manually",
   );
 });

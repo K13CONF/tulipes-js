@@ -1,6 +1,7 @@
 import type { Express } from "express";
 
 import { BootReport } from "../errors/boot-error.ts";
+import { isRai, RAI_SHAPE } from "../acl/rai-id.ts";
 import { RAI_TAG, MOUNT_PATH, type RaiTag, type RouteRecord } from "./rai.ts";
 import { routePath } from "./paths.ts";
 
@@ -51,8 +52,8 @@ export function scanRoutes(app: Express, report: BootReport): RouteRecord[] {
         report.add({ scope: "routes", message: `${method} ${path} has no rai() declaration` });
         continue;
       }
-      if (typeof tag.info.id !== "string" || !tag.info.id.trim()) {
-        report.add({ scope: "routes", module: tag.module, message: `${method} ${path}: rai id must be a nonempty string` });
+      if (!isRai(tag.info.id)) {
+        report.add({ scope: "routes", module: tag.module, message: `${method} ${path}: rai id "${String(tag.info.id)}" is invalid — expected ${RAI_SHAPE}` });
         continue;
       }
       if (tagOf(stack[0]) !== tag || tags.length !== 1) {

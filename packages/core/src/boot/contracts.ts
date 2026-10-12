@@ -67,7 +67,7 @@ export interface Ctx {
    * Declares an endpoint and gates it. `id` is the Resource Access
    * Identifier, which is also the ACL permission:
    *
-   *   router.get(path, rai({ id: "users:read" }), handler);
+   *   router.get(path, rai({ id: "users:bo:list" }), handler);
    *
    * A route without one aborts the boot — see the route scan.
    */

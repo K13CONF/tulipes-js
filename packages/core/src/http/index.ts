@@ -35,6 +35,7 @@ export {
   type RouteRecord,
 } from "./rai.ts";
 export { scanRoutes } from "./route-scan.ts";
+export { isRai, parseRai, type Rai, type RaiParts } from "../acl/rai-id.ts";
 export {
   codeOfIssue,
   fieldOf,

@@ -2,6 +2,7 @@ import type { Request } from "express";
 import { z } from "zod/v4";
 
 import type { Acl } from "../acl/acl.ts";
+import type { Rai } from "../acl/rai-id.ts";
 import type { RuntimeCtx } from "../boot/contracts.ts";
 import type { BootReport } from "../errors/boot-error.ts";
 import { HttpError, ValidationError, type FieldIssue } from "../http/error-handler.ts";
@@ -14,11 +15,11 @@ export type JsonSchema = Record<string, unknown>;
 
 /** One tool as an agent sees it — what the manifest and MCP list. */
 export interface AgentTool {
-  /** `^[a-zA-Z0-9_-]{1,64}$`, derived from the id: `hello:reset-counts` → `hello_reset-counts`. */
+  /** `^[a-zA-Z0-9_-]{1,64}$`, derived from the id: `hello:bo:greetings:reset` → `hello_bo_greetings_reset`. */
   name: string;
   module: string;
   /** The action's id, which is also the permission the ACL decides on. */
-  permission: string;
+  permission: Rai;
   title?: string;
   description: string;
   input_schema: JsonSchema;
