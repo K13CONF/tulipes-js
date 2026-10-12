@@ -614,7 +614,7 @@
           "name": "Read the secret",
           "request": {
             "method": "GET",
-            "description": "Requires a role granted hello:read",
+            "description": "Requires a role granted hello:web:secret",
             "header": [
               {
                 "key": "Accept-Language",
@@ -759,43 +759,6 @@
       "name": "users",
       "item": [
         {
-          "name": "List users",
-          "request": {
-            "method": "GET",
-            "description": "Page through accounts, clamped by the shared bounds",
-            "header": [
-              {
-                "key": "Accept-Language",
-                "value": "en",
-                "disabled": true
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/users/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "users",
-                ""
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "1",
-                  "disabled": true
-                },
-                {
-                  "key": "per_page",
-                  "value": "1",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "event": []
-        },
-        {
           "name": "Create a user",
           "request": {
             "method": "POST",
@@ -829,6 +792,43 @@
                   "language": "json"
                 }
               }
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "description": "Page through accounts, clamped by the shared bounds",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "per_page",
+                  "value": "1",
+                  "disabled": true
+                }
+              ]
             }
           },
           "event": []

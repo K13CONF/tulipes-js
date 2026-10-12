@@ -19,7 +19,7 @@ export interface PostmanOptions {
   /**
    * RAI id of the request that returns a token pair. Its response is
    * captured into `{{accessToken}}`, so signing in once authenticates the
-   * whole collection. Defaults to "auth:login" when the app declares it.
+   * whole collection. Defaults to "auth:web:login" when the app declares it.
    */
   loginRouteId?: string;
 }
@@ -72,7 +72,7 @@ export async function toPostman(
 
 /** Only use a login capture if the app actually declares that route. */
 function resolveLoginId(source: SpecSource, override: string | undefined): string | undefined {
-  const candidate = override ?? "auth:login";
+  const candidate = override ?? "auth:web:login";
   return source.routes.some((route) => route.id === candidate) ? candidate : undefined;
 }
 

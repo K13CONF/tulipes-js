@@ -1,7 +1,7 @@
 import type { Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 
-import { buildGreeting } from "../helpers/greeting.ts";
+import { buildGreeting } from "../../helpers/greeting.ts";
 
 /**
  * Controllers hold the work so routes stay a table of contents. The

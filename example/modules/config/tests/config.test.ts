@@ -79,16 +79,23 @@ test("the console describes every module without a secret's value and only admin
 
   const response = await get("/api/v1/config", admin.access_token);
   expect(response.status).toBe(200);
-  const { data } = (await response.json()) as { data: { store: { ready: boolean }; modules: Record<string, unknown>[] } };
+  const { data } = (await response.json()) as { data: { store: { ready: boolean }; roles: Record<string, unknown>[]; modules: Record<string, unknown>[] } };
   expect(data.store.ready).toBe(true);
   expect(data.modules.map((module) => module.name)).toEqual(app.handle.ctx.modules.map((module) => module.name));
+  expect(data.roles).toContainEqual({
+    name: "admin",
+    description: "Runs the back office",
+    defined_by: "auth",
+    extras: { level: 2 },
+    grants: ["agent:*", "auth:*", "config:bo:describe", "config:bo:read", "hello:*", "users:*"],
+  });
 
   const auth = data.modules.find((module) => module.name === "auth") as { variables: Record<string, unknown>[]; settings: { values: Record<string, unknown>; version: number }; routes: Record<string, unknown>[] };
   const secret = auth.variables.find((variable) => variable.name === "JWT_ACCESS_SECRET")!;
   expect(secret).toMatchObject({ is_secret: true, is_set: true, value: null, default: null });
   expect(JSON.stringify(data)).not.toContain(process.env.JWT_ACCESS_SECRET);
   expect(auth.settings.values).toMatchObject({ accessTtl: "15m" });
-  expect(auth.routes).toContainEqual(expect.objectContaining({ id: "auth:login", method: "POST", roles: expect.arrayContaining(["guest"]) }));
+  expect(auth.routes).toContainEqual(expect.objectContaining({ id: "auth:web:login", method: "POST", roles: expect.arrayContaining(["guest"]) }));
 
   // The administrator may read; writing is the deployment's job.
   expect((await patch("/api/v1/config/hello", { values: { greeting: "Nope" } }, admin.access_token)).status).toBe(403);

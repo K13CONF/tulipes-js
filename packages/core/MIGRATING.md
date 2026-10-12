@@ -11,6 +11,78 @@ what makes it work under nvm.
 
 ---
 
+## 0.12.0-rc.1 — every RAI id has a scope
+
+A RAI id was `module:resource`. It is now `module:scope:resource[:extra]`,
+where the scope is the surface the endpoint serves: `bo` for a back
+office, `web` for a signed-in client, `mobile`, whatever the app names. An
+app on 0.11 refuses to boot on 0.12 until its ids are rewritten:
+
+```
+✖ [auth] resource "auth:login" has no scope — since 0.12 a grant is
+  "module:scope:resource[:extra]" or a prefix wildcard (`tulipes migrate 0.12` rewrites a 0.11 app)
+```
+
+The same line names every grant, and a routes file that survives the ACL
+says `rai id "users:read" has no scope` with its method and path.
+
+From the app root, with the 0.12 CLI:
+
+```sh
+tulipes migrate 0.12            # every id lands in scope "web"; --scope picks another
+pnpm typecheck && pnpm test
+```
+
+It rewrites three things and reports each file:
+
+- every `id: "a:b"` inside `rai({ … })` in `routes/` (any depth) and in
+  `agent/`, to `a:web:b`;
+- every two-segment grant inside `allow(…)` in `module.acl.ts`;
+  `"a:*"` and `"*"` are already valid and stay;
+- every other string literal in the app's TypeScript that is exactly one
+  of those ids: an access check written by hand, an assertion in a test.
+
+An id built at runtime is listed as a TODO in the report, and so is an
+id whose segment starts with a digit, which cannot take a scope as is. The mapping
+is written to `config/migration-0.12.json`; delete it once reviewed.
+
+**By hand: put each surface in its scope.** Everything lands in one scope.
+Move the back-office ids to `bo` (or your own name): the id in `routes/`,
+its grants in `module.acl.ts`, and its references. The reference app's
+split, for comparison:
+
+| 0.11 | 0.12 |
+|---|---|
+| `auth:login`, `auth:me`, … | `auth:web:login`, `auth:web:me`, … |
+| `auth:session-end` | `auth:web:sessions:end` |
+| `users:read`, `users:ping`, `users:demo-missing` | `users:web:list`, `users:web:ping`, `users:web:demo:missing` |
+| `users:create`, `users:delete`, `users:read-deleted` | `users:bo:create`, `users:bo:delete`, `users:bo:list:deleted` |
+| `hello:greet`, `hello:greet-name`, `hello:read` | `hello:web:greet`, `hello:web:greet:by-name`, `hello:web:secret` |
+| `hello:list-greetings`, `hello:use-greeting`, `hello:reset-counts` | `hello:web:greetings`, `hello:web:greetings:use`, `hello:bo:greetings:reset` |
+| `config:read`, `config:describe`, `config:write` | `config:bo:read`, `config:bo:describe`, `config:bo:write` |
+| `settings:logs` | `settings:bo:logs` |
+| `agent:tools`, `agent:invoke` | `agent:web:tools`, `agent:web:invoke` |
+
+A prefix grant now reaches every depth, which can shorten a grant list:
+`allow("user", "auth:web:sessions:*")` covers `auth:web:sessions` and
+`auth:web:sessions:end`.
+
+**Optional, recommended.**
+
+- Give roles a description, read back by `tulipes roles`, the console and
+  the OpenAPI document: `defineRole("admin", { description: "Runs the back office" })`.
+- Name routes and controllers scope-first: `routes/web.users.routes.ts`,
+  `routes/bo.users.routes.ts`, a folder per scope when one scope has
+  several files (`routes/web/hello.greetings.routes.ts`). Core reads every
+  `*.routes.ts` under `routes/` at any depth, so nothing breaks if you
+  keep the old names.
+- Tooling that parsed ids itself should call `parseRai()`, and anything
+  that resolved roles from `acl.describe()` should call `acl.rolesFor()`:
+  the old "namespace before the first colon" rule no longer covers
+  `users:bo:*`.
+
+---
+
 ## 0.11.0 — from a candidate (rc.1 or rc.2)
 
 Install the 0.11.0 CLI first (`npm install -g @tulipes/cli`), then in the

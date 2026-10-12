@@ -14,7 +14,7 @@ endpoint would reject.
 import { z } from "zod/v4";           // v4, not the classic import
 
 router.post("/users", rai({
-  id: "users:create",
+  id: "users:bo:create",
   name: "Create a user",
   body: z.object({ email: z.email("emailInvalid") }),
   returns: z.object({ id: z.string(), email: z.string() }),
@@ -64,13 +64,23 @@ split one module's routes apart, or to gather several modules under one
 heading:
 
 ```ts
-rai({ id: "auth:sessions", name: "List sessions", folder: "sessions" })
+rai({ id: "auth:web:sessions", name: "List sessions", folder: "sessions" })
 ```
 
 ## Generating
 
 ```sh
 pnpm spec     # tulipes spec --openapi docs/openapi.json --postman docs/collection.json
+```
+
+One document per client surface: the RAI's scope is a filter, so a mobile
+team gets only what the mobile app calls. Every operation carries
+`x-tulipes-scope`, and the document lists the app's roles (with their
+descriptions and extras) under `x-tulipes-roles`.
+
+```sh
+pnpm tulipes spec --openapi docs/mobile.json --scope mobile
+pnpm tulipes spec --postman docs/backoffice.json --scope bo
 ```
 
 Generation is an inspection boot: every routes file runs with nothing

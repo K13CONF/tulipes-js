@@ -33,7 +33,8 @@ services: `TEST_MONGO_URI=mongodb://127.0.0.1:27017/tulipes_tests TEST_REDIS_URL
 Use test-only data: the suite creates users and sessions. `pnpm spec` writes
 OpenAPI/Postman documents offline, without services or runtime secrets.
 Change the shared API prefix in `config/routes.ts`. Runtime middleware stays
-with endpoints in `routes/*.routes.ts`, plain functions of the context.
+with endpoints in `routes/`, plain functions of the context, named
+scope-first (`routes/web.users.routes.ts`, `routes/bo.users.routes.ts`).
 Staging/production boot rejects development credentials and equal JWT keys.
 Auth, settings and deployment examples are application policy you own.
 
@@ -46,9 +47,9 @@ before writing your own:
 |---|---|
 | `package.json` `tulipes.env` | the module's environment contract |
 | `module.config.ts` | `defineConfig({ schema })`: this module's settings |
-| `module.acl.ts` | permission grants on `hello:*` |
-| `routes/*.routes.ts` | native routers, shared middleware and RAI schemas |
-| `controllers/` | the work; constructed from the context while routes build |
+| `module.acl.ts` | permission grants on `hello:web:*` ids, with prefix wildcards |
+| `routes/web/*.routes.ts` | native routers, shared middleware and RAI schemas; one folder per scope |
+| `controllers/web/` | the work; constructed from the context while routes build |
 | `helpers/` | pure logic, no framework |
 | `i18n/<locale>.json` | this module's strings — the module is the namespace |
 | `sockets/*.sockets.ts` | a claimed Socket.IO namespace | <!-- feature:sockets -->
@@ -64,7 +65,9 @@ before writing your own:
 | `pnpm worker` | run the queue-consumer process (needs a queue first) | <!-- feature:queues -->
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm check` | validate env against every module contract — CI gate |
-| `pnpm tulipes new module <name>` | scaffold a module |
+| `pnpm tulipes new module <name>` | scaffold a module (`--scope bo` for the back office) |
+| `pnpm tulipes routes` | every endpoint and the roles that reach it (`--scope bo` for one surface) |
+| `pnpm tulipes roles` | every role, its description and the grants it holds |
 | `pnpm tulipes update` | upgrade the framework everywhere it is declared |
 
 ## Authentication
@@ -75,19 +78,27 @@ becomes the **guest** caller, which is what makes a public endpoint
 an ordinary ACL grant instead of a second mechanism:
 
 ```ts
-acl.allow("guest", "auth:login");   // that is why login is reachable
+acl.allow("guest", "auth:web:login");   // that is why login is reachable
 ```
 
 Guarding is the RAI itself — its `id` IS the permission, so there is
-no second call to forget. 401 means "sign in"; 403 means "signed in,
-still not allowed":
+no second call to forget. An id is always `module:scope:resource[:extra]`:
+`users:web:list`, `users:bo:list:deleted`. 401 means "sign in"; 403 means
+"signed in, still not allowed":
 
 ```ts
 router.get(
   `${base}/invoices`,
-  rai({ id: "invoices:read", name: "List invoices" }),
+  rai({ id: "billing:web:invoices", name: "List invoices" }),
   billing.list(),
 );
+```
+
+Roles are defined once in `modules/auth/module.acl.ts`, each with a
+description and any extra the app reads back (`level` here):
+
+```ts
+acl.defineRole("admin", { description: "Runs the back office", level: 2 });
 ```
 
 A route that declares no RAI would be reachable by guest, so core

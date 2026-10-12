@@ -74,7 +74,7 @@ try {
   }, null, 2));
   writeFileSync(join(probe, 'module.acl.ts'), `import type { AclBuilder } from "@tulipes/core/acl";
 export default function probeAcl(acl: AclBuilder): void {
-  acl.allow("guest", "ingress-probe:echo").allow("guest", "ingress-probe:stream").allow("guest", "ingress-probe:raw");
+  acl.allow("guest", "ingress-probe:web:echo").allow("guest", "ingress-probe:web:stream").allow("guest", "ingress-probe:web:raw");
 }
 `);
   writeFileSync(join(probe, 'routes/probe.routes.ts'), `import { Router } from "express";
@@ -83,7 +83,7 @@ import type { BackendCtx } from "@tulipes/core/boot";
 /** Everything the app resolved from the request, as the app sees it. */
 export default function probeRoutes({ rai, routes }: BackendCtx): void {
   const router = Router();
-  router.get("/ingress/echo", rai({ id: "ingress-probe:echo" }), (req, res) => {
+  router.get("/ingress/echo", rai({ id: "ingress-probe:web:echo" }), (req, res) => {
     res.respond({ data: {
       ip: req.ip, ips: req.ips, protocol: req.protocol, secure: req.secure, hostname: req.hostname,
       forwarded_for: req.headers["x-forwarded-for"] ?? null,
@@ -93,7 +93,7 @@ export default function probeRoutes({ rai, routes }: BackendCtx): void {
   });
   // Two streams: one declaring itself unbufferable to nginx, one not. The
   // difference is what proves the header is doing the work.
-  for (const [path, id, accel] of [["/ingress/stream", "ingress-probe:stream", true], ["/ingress/raw-stream", "ingress-probe:raw", false]] as const) {
+  for (const [path, id, accel] of [["/ingress/stream", "ingress-probe:web:stream", true], ["/ingress/raw-stream", "ingress-probe:web:raw", false]] as const) {
     router.get(path, rai({ id }), (req, res) => {
       res.writeHead(200, {
         "Content-Type": "text/event-stream",

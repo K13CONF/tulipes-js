@@ -4,7 +4,7 @@ import { SettingsConflictError, SettingsValidationError } from "@tulipes/core/co
 import { HttpError, ValidationError } from "@tulipes/core/http";
 
 import { auditChange } from "../helpers/audit.ts";
-import { describeModule } from "../helpers/describe.ts";
+import { describeModule, describeRoles } from "../helpers/describe.ts";
 
 /**
  * The console: what every module is configured with, and the one write —
@@ -14,7 +14,7 @@ import { describeModule } from "../helpers/describe.ts";
  * the environment: a variable is what boot needs before the store answers
  * or a secret, and neither is edited at runtime.
  */
-export class ConfigController {
+export class BoConfigController {
   readonly #ctx: Ctx;
 
   constructor(ctx: Ctx) {
@@ -28,6 +28,7 @@ export class ConfigController {
         data: {
           app: this.#ctx.config.app ?? {},
           store: this.#ctx.settings.status(),
+          roles: describeRoles(this.#ctx),
           modules: this.#ctx.modules.map((module) => describeModule(this.#ctx, module.name)),
         },
       });

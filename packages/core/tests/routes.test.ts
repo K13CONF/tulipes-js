@@ -13,7 +13,7 @@ describe("route declaration enforcement", () => {
     const app = express();
     const rai = createRai(new RouteRegistry(), () => false);
 
-    app.get("/secret", respond, rai({ id: "secret:read" }));
+    app.get("/secret", respond, rai({ id: "secret:web:read" }));
 
     const report = new BootReport();
 
@@ -29,7 +29,7 @@ test("rejects a POST without authorization even when the same route guards GET",
 
   app
     .route("/secret")
-    .get(rai({ id: "secret:read" }), respond)
+    .get(rai({ id: "secret:web:read" }), respond)
     .post(respond);
 
   const report = new BootReport();
@@ -45,16 +45,16 @@ test("records each explicitly guarded method separately", () => {
 
   app
     .route("/items")
-    .get(rai({ id: "items:read" }), respond)
-    .post(rai({ id: "items:create" }), respond);
+    .get(rai({ id: "items:web:read" }), respond)
+    .post(rai({ id: "items:web:create" }), respond);
 
   const report = new BootReport();
 
   expect(
     scanRoutes(app, report).map(({ method, info }) => [method, info.id]),
   ).toEqual([
-    ["GET", "items:read"],
-    ["POST", "items:create"],
+    ["GET", "items:web:read"],
+    ["POST", "items:web:create"],
   ]);
 
   expect(report.issues).toEqual([]);
@@ -64,7 +64,7 @@ test("rejects route.all instead of emitting an invalid OpenAPI method", () => {
   const app = express();
   const rai = createRai(new RouteRegistry(), () => true);
 
-  app.route("/items").all(rai({ id: "items:all" }), respond);
+  app.route("/items").all(rai({ id: "items:web:all" }), respond);
 
   const report = new BootReport();
 
@@ -81,7 +81,7 @@ test("preserves explicit nested mount paths", () => {
   const registry = new RouteRegistry(),
     rai = createRai(registry, () => true);
 
-  child.get("/items/:id", rai({ id: "items:read" }), respond);
+  child.get("/items/:id", rai({ id: "items:web:read" }), respond);
 
   registry.mount(parent, "/catalog", child);
 
@@ -106,7 +106,7 @@ test.each([
     const app = express(),
       rai = createRai(new RouteRegistry(), () => true);
 
-    app.get(path, rai({ id: "items:read" }), respond);
+    app.get(path, rai({ id: "items:web:read" }), respond);
 
     const report = new BootReport();
 
@@ -124,11 +124,11 @@ test("rejects duplicate declarations and unknown router mount paths", () => {
 
   const rai = createRai(new RouteRegistry(), () => true);
 
-  app.get("/a", rai({ id: "items:read" }), respond);
+  app.get("/a", rai({ id: "items:web:read" }), respond);
 
-  app.get("/b", rai({ id: "items:read" }), respond);
+  app.get("/b", rai({ id: "items:web:read" }), respond);
 
-  child.get("/c", rai({ id: "items:other" }), respond);
+  child.get("/c", rai({ id: "items:web:other" }), respond);
 
   app.use("/unknown", child);
 
@@ -149,7 +149,7 @@ test("rejects an invalid declared success status", () => {
   const app = express(),
     rai = createRai(new RouteRegistry(), () => true);
 
-  app.get("/a", rai({ id: "items:read", status: 700 }), respond);
+  app.get("/a", rai({ id: "items:web:read", status: 700 }), respond);
 
   const report = new BootReport();
 
@@ -165,7 +165,7 @@ test("mounts prefixes with dots and named parameters while rejecting wildcards",
 
   const rai = createRai(registry, () => true);
 
-  router.get("/keys", rai({ id: "keys:read" }), respond);
+  router.get("/keys", rai({ id: "keys:web:read" }), respond);
 
   registry.mount(app, "/.well-known", router);
 
@@ -202,9 +202,9 @@ test.each([
 
     const rai = createRai(registry, () => true);
 
-    app.get("/api" + first, rai({ id: "items:first" }), respond);
+    app.get("/api" + first, rai({ id: "items:web:first" }), respond);
 
-    router.get(second, rai({ id: "items:second" }), respond);
+    router.get(second, rai({ id: "items:web:second" }), respond);
 
     registry.mount(app, "/api", router);
 
@@ -213,7 +213,7 @@ test.each([
     scanRoutes(app, report);
 
     expect(() => report.throwIfAny("routes")).toThrow(
-      /GET.*already declared.*items:first/,
+      /GET.*already declared.*items:web:first/,
     );
   },
 );

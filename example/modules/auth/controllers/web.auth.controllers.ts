@@ -42,7 +42,7 @@ interface Credentials {
  * "invalidCredentials" becomes INVALID_CREDENTIALS with a translated
  * message and there is no second string to keep in step.
  */
-export class AuthController {
+export class WebAuthController {
   readonly #ctx: Ctx;
 
   constructor(ctx: Ctx) {
