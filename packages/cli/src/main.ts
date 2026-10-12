@@ -1,3 +1,5 @@
+import { RAI_SEGMENT } from "@tulipes/core/acl";
+
 import { FULL_FEATURES, runInit, type InitFeatures, type InitPreset } from "./init.ts";
 import { runSync } from "./sync.ts";
 import { runEnvCheck } from "./env-check.ts";
@@ -5,6 +7,7 @@ import { runNewModule } from "./new-module.ts";
 import { runDev } from "./dev.ts";
 import { runUpdate } from "./update.ts";
 import { runConfigCheck } from "./config-check.ts";
+import { runRoles } from "./roles.ts";
 import { runRoutes } from "./routes.ts";
 import { runSpec } from "./spec.ts";
 import { runAgentManifest } from "./agent.ts";
@@ -28,15 +31,20 @@ Usage:
   tulipes env:check            validate env against every module's tulipes.env (CI-friendly)
   tulipes config:check         load every settings namespace from the store and print it
   tulipes routes               list every declared endpoint, with the roles that reach it
+                                 --scope <scope>  only the endpoints of one scope (bo, web, …)
+  tulipes roles                list every role: description, extras, who defined it, its grants
+                                 --role <role>  only that role
   tulipes spec [options]       write an OpenAPI document / Postman collection (needs @tulipes/spec)
                                  --openapi <file>  --postman <file>  --url <base>
-                                 both inspect the app: no service, secret or .env is needed
+                                 --scope <scope>  describe one client surface only
+                                 all three inspect the app: no service, secret or .env is needed
   tulipes migrate 0.11         rewrite an app generated on 0.10 to the 0.11 layout and contracts
   tulipes config:import        carry .envs values that became settings into the store
                                  --env <APP_ENV>  --from <file>  --dry-run
   tulipes agent manifest       print every tool the app exposes to agents, as JSON
                                  --out <file>  write it instead   --role <role>  only what that role may call
   tulipes new module <name>    scaffold a module under ./modules
+                                 --scope <scope>         the surface its first endpoint serves (default: web)
                                  --model | --no-model    force model/bootstrap files on or off
                                  --queues | --no-queues  force the queues file on or off
                                  --sockets | --no-sockets  force the sockets file on or off
@@ -86,7 +94,16 @@ export async function main(argv: readonly string[]): Promise<void> {
     case "spec": {
       try {
         const options = inspectionArguments(rest, command);
-        return command === "routes" ? await runRoutes(rootDir) : await runSpec(rootDir, options);
+        return command === "routes" ? await runRoutes(rootDir, options) : await runSpec(rootDir, options);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 2;
+        return;
+      }
+    }
+    case "roles": {
+      try {
+        return await runRoles(rootDir, rolesArguments(rest));
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
         process.exitCode = 2;
@@ -109,20 +126,15 @@ export async function main(argv: readonly string[]): Promise<void> {
     }
     case "update":
       return runUpdate(rootDir);
-    case "new":
-      if (rest[0] !== "module" || !rest[1] || rest.slice(2).some((flag) => !["--model", "--no-model", "--queues", "--no-queues", "--sockets", "--no-sockets"].includes(flag))) {
-        console.error('Usage: tulipes new module <name> [--model | --no-model] [--queues | --no-queues] [--sockets | --no-sockets]');
+    case "new": {
+      const parsed = rest[0] === "module" && rest[1] ? newModuleArguments(rest.slice(2)) : undefined;
+      if (!parsed) {
+        console.error('Usage: tulipes new module <name> [--scope <scope>] [--model | --no-model] [--queues | --no-queues] [--sockets | --no-sockets]');
         process.exitCode = 2;
         return;
       }
-      return runNewModule(rootDir, rest[1], {
-        ...(rest.includes("--model") && { models: true }),
-        ...(rest.includes("--no-model") && { models: false }),
-        ...(rest.includes("--queues") && { queues: true }),
-        ...(rest.includes("--no-queues") && { queues: false }),
-        ...(rest.includes("--sockets") && { sockets: true }),
-        ...(rest.includes("--no-sockets") && { sockets: false }),
-      });
+      return runNewModule(rootDir, rest[1]!, parsed);
+    }
     case "dev":
       return runDev(rootDir, rest[0] ?? "app.ts");
     case "-v":
@@ -148,18 +160,61 @@ export async function main(argv: readonly string[]): Promise<void> {
 }
 
 function inspectionArguments(args: readonly string[], command: "routes" | "spec") {
-  const options: { openapi?: string; postman?: string; url?: string } = {};
+  const options: { openapi?: string; postman?: string; url?: string; scope?: string } = {};
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
     if (arg === "--offline" || arg === "--runtime") {
       throw new Error(`${arg} was removed in 0.11: ${command} always inspects the app without services, secrets or a .env`);
-    } else if (command === "spec" && (arg === "--openapi" || arg === "--postman" || arg === "--url")) {
+    } else if (arg === "--scope" || (command === "spec" && (arg === "--openapi" || arg === "--postman" || arg === "--url"))) {
       const value = args[++index];
       if (!value || value.startsWith("-")) throw new Error(`${arg} requires a value`);
-      const key = arg.slice(2) as "openapi" | "postman" | "url";
+      const key = arg.slice(2) as "openapi" | "postman" | "url" | "scope";
       if (options[key]) throw new Error(`Duplicate option: ${arg}`);
+      if (key === "scope" && !RAI_SEGMENT.test(value)) {
+        throw new Error(`--scope "${value}" is not a scope — lowercase, starting with a letter ([a-z][a-z0-9-]*)`);
+      }
       options[key] = value;
     } else throw new Error(`Unknown ${command} option: ${arg}`);
+  }
+  return options;
+}
+
+const NEW_MODULE_FLAGS: Record<string, { models?: boolean; queues?: boolean; sockets?: boolean }> = {
+  "--model": { models: true },
+  "--no-model": { models: false },
+  "--queues": { queues: true },
+  "--no-queues": { queues: false },
+  "--sockets": { sockets: true },
+  "--no-sockets": { sockets: false },
+};
+
+/** Undefined for anything the usage line does not allow. */
+function newModuleArguments(args: readonly string[]) {
+  let options: { models?: boolean; queues?: boolean; sockets?: boolean; scope?: string } = {};
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i]!;
+    if (flag === "--scope") {
+      const value = args[++i];
+      if (!value || value.startsWith("-") || options.scope !== undefined) return undefined;
+      options.scope = value;
+    } else if (NEW_MODULE_FLAGS[flag]) {
+      options = { ...options, ...NEW_MODULE_FLAGS[flag] };
+    } else return undefined;
+  }
+  return options;
+}
+
+function rolesArguments(args: readonly string[]): { role?: string } {
+  const options: { role?: string } = {};
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    const value = args[i + 1];
+    if (flag === "--role" && value && !value.startsWith("-") && options.role === undefined) {
+      options.role = value;
+      i++;
+      continue;
+    }
+    throw new Error(`unknown or incomplete option "${flag}" — usage: tulipes roles [--role <role>]`);
   }
   return options;
 }

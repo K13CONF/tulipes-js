@@ -8,6 +8,7 @@ test("warns instead of inheriting bearer auth for a dynamic checker", async () =
     routes: [
       {
         id: "items:web:read",
+        scope: "web",
         path: "/api/catalog/items/:id",
         method: "GET",
         module: "items",

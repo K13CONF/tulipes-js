@@ -7,7 +7,7 @@
  * invent an endpoint or miss one. `tulipes spec` is the CLI over this.
  */
 export { extract, pathParams, toOpenApiPath, toPostmanPath } from "./extract.ts";
-export type { SpecRoute, SpecSource } from "./extract.ts";
+export type { ExtractOptions, SpecRole, SpecRoute, SpecSource } from "./extract.ts";
 export { toOpenApi } from "./openapi.ts";
 export type { GeneratedDocument, OpenApiOptions } from "./openapi.ts";
 export { toPostman } from "./postman.ts";

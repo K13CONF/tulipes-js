@@ -28,6 +28,36 @@ test("a generated kebab-case module produces valid TypeScript configuration decl
   expect(await readFile(path, "utf8")).toContain('"billing-history"?');
 });
 
+test("new module names its routes and controllers scope-first and declares a three-segment RAI", async () => {
+  const exists = (path: string) => access(path).then(() => true, () => false);
+  const app = await fixture({ "modules/core/package.json": '{"name":"@test/core","type":"module"}' });
+
+  await runNewModule(app.rootDir, "billing");
+  await runNewModule(app.rootDir, "invoices", { scope: "bo" });
+
+  const web = await readFile(app.rootDir + "/modules/billing/routes/web.billing.routes.ts", "utf8");
+  expect(web).toContain('ctx.rai({ id: "billing:web:list", name: "List billing" })');
+  expect(web).toContain('from "../controllers/web.billing.controllers.ts"');
+  expect(await exists(app.rootDir + "/modules/billing/controllers/web.billing.controllers.ts")).toBe(true);
+  expect(await readFile(app.rootDir + "/modules/billing/module.acl.ts", "utf8")).toContain('_acl.allow("user", "billing:web:list")');
+
+  const bo = await readFile(app.rootDir + "/modules/invoices/routes/bo.invoices.routes.ts", "utf8");
+  expect(bo).toContain('id: "invoices:bo:list"');
+  expect(await exists(app.rootDir + "/modules/invoices/controllers/bo.invoices.controllers.ts")).toBe(true);
+
+  // The scaffold boots: the id passes the route scan.
+  await app.write("modules/billing/module.acl.ts", `export default (acl) => acl.defineRole("guest").allow("guest", "billing:*");`);
+  const handle = await app.boot({ inspect: true });
+  expect(handle.ctx.routes.all().map(({ info }) => info.id)).toEqual(["billing:web:list", "invoices:bo:list"]);
+  await handle.shutdown();
+
+  const previous = process.exitCode;
+  await runNewModule(app.rootDir, "broken", { scope: "Back Office" });
+  expect(process.exitCode).toBe(2);
+  expect(await exists(app.rootDir + "/modules/broken")).toBe(false);
+  process.exitCode = previous;
+});
+
 test("new module emits model and bootstrap files only for apps that declare a models provider", async () => {
   const exists = (path: string) => access(path).then(() => true, () => false);
 

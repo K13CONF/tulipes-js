@@ -44,6 +44,15 @@ export async function toOpenApi(
         servers: options.servers.map((url) => ({ url })),
       }),
       tags: source.folders.map((name) => ({ name })),
+      // Who may call what is policy a reader of the document needs: the
+      // roles the app defines, with their descriptions, and the scopes
+      // (client surfaces) the described routes belong to.
+      "x-tulipes-roles": (source.roles ?? []).map(({ name, description, extras }) => ({
+        name,
+        ...(description !== undefined && { description }),
+        ...extras,
+      })),
+      "x-tulipes-scopes": source.scopes ?? [],
       paths,
       components: {
         securitySchemes: {
@@ -85,6 +94,7 @@ async function operation(route: SpecRoute, warnings: string[]): Promise<Record<s
     // The permission is the RAI id, and the roles holding it are policy a
     // reader of the document genuinely needs.
     "x-tulipes-permission": route.id,
+    "x-tulipes-scope": route.scope,
     "x-tulipes-roles": route.roles,
     "x-tulipes-authorization": route.authorization ?? "acl",
     ...(parameters.length > 0 && { parameters }),
