@@ -72,3 +72,61 @@ test("agent manifest describes every tool offline, filtered by role when asked",
 
   expect(run("--bogus").status).toBe(2);
 });
+
+test("routes filters by scope and roles describes every role with its extras and grants", async () => {
+  const app = await fixture({
+    "modules/probe/module.acl.js": `export default acl => acl
+      .defineRole('guest', { description: 'Anyone without a token' })
+      .defineRole('admin', { description: 'Runs the back office', level: 2 })
+      .allow('guest', 'probe:web:list')
+      .allow('admin', 'probe:*');`,
+    "modules/probe/routes/web.probe.routes.js": `
+      import { Router } from 'express';
+      export default ({ rai }) => {
+        const r = Router();
+        r.get('/probe', rai({ id: 'probe:web:list', name: 'List' }), (req, res) => res.respond({ data: [] }));
+        return r;
+      };
+    `,
+    "modules/probe/routes/bo/probe.routes.js": `
+      import { Router } from 'express';
+      export default ({ rai }) => {
+        const r = Router();
+        r.delete('/bo/probe/:id', rai({ id: 'probe:bo:detail:delete' }), (req, res) => res.respond({ data: null }));
+        return r;
+      };
+    `,
+  });
+  const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: app.rootDir, encoding: "utf8", timeout: 20_000, env: { ...process.env, APP_ENV: "production" } });
+
+  const all = run("routes");
+  expect(all.status, all.stdout + all.stderr).toBe(0);
+  expect(all.stdout).toContain("2 endpoint(s)");
+  expect(all.stdout).toMatch(/DELETE\s+probe:bo:detail:delete\s+\/bo\/probe\/:id\s+probe\s+admin\n/);
+  expect(all.stdout).toMatch(/GET\s+probe:web:list\s+\/probe\s+probe\s+admin, guest\n/);
+
+  const backOffice = run("routes", "--scope", "bo");
+  expect(backOffice.status, backOffice.stderr).toBe(0);
+  expect(backOffice.stdout).toContain('1 endpoint(s) in scope "bo"');
+  expect(backOffice.stdout).not.toContain("probe:web:list");
+
+  const mobile = run("routes", "--scope", "mobile");
+  expect(mobile.stdout).toContain('no routes in scope "mobile" — the app declares: bo, web');
+  expect(run("routes", "--scope", "Bad").status).toBe(2);
+  expect(run("routes", "--scope").status).toBe(2);
+
+  const roles = run("roles");
+  expect(roles.status, roles.stdout + roles.stderr).toBe(0);
+  expect(roles.stdout).toContain("2 role(s)");
+  expect(roles.stdout).toMatch(/guest\s+Anyone without a token\s+\(probe\)\n\s+probe:web:list\s+granted by probe\n/);
+  expect(roles.stdout).toMatch(/admin\s+Runs the back office\s+\(probe\)\n\s+level=2\n\s+probe:\*\s+granted by probe\n/);
+
+  const one = run("roles", "--role", "admin");
+  expect(one.stdout).toContain("1 role(s)");
+  expect(one.stdout).not.toContain("guest");
+
+  const unknown = run("roles", "--role", "ghost");
+  expect(unknown.status).toBe(2);
+  expect(unknown.stderr).toContain('unknown role "ghost" — the app defines: guest, admin');
+  expect(run("roles", "--bogus").status).toBe(2);
+});

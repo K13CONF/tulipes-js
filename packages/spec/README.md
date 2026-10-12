@@ -46,6 +46,8 @@ Everything except the request shapes is already declared:
 | `operationId`, summary, description | the route's `rai({ id, name, description })` |
 | tag / folder | `rai({ folder })`, defaulting to the declaring module |
 | security, `x-tulipes-roles` | the ACL — which roles hold that permission |
+| `x-tulipes-scope` | the RAI id's second segment: `users:bo:list` serves `bo` |
+| document `x-tulipes-roles`, `x-tulipes-scopes` | every role the app defines, with its description and extras; every scope described |
 | response envelope | the framework's one response shape |
 | success status | `rai({ status })`, defaulting to 200; 204 has no JSON body |
 | request/response schemas | `rai({ params, query, body, returns })` |
@@ -118,6 +120,22 @@ try {
 } finally {
   await handle.shutdown();
 }
+```
+
+### One document per client surface
+
+A RAI id is `module:scope:resource[:extra]`, so every route belongs to a
+scope — `bo`, `web`, `mobile`, whatever the app names. Pass a scope to
+describe only that surface, which is what a mobile team or a back-office
+team actually wants to import:
+
+```sh
+tulipes spec --openapi docs/mobile.json --scope mobile
+tulipes spec --postman docs/backoffice.json --scope bo
+```
+
+```ts
+const mobile = extract(handle.ctx, { scope: "mobile" });
 ```
 
 Runtime inspection skips bootstrap, sockets, listening and readiness hooks, so it can run

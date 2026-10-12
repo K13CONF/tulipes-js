@@ -14,6 +14,12 @@ import { coreVersion } from "./package-info.ts";
  * The package scope is borrowed from an existing sibling so the app keeps
  * one naming convention without configuring it anywhere.
  *
+ * Routes and controllers are named scope-first — `routes/web.billing.routes.ts`
+ * — and the endpoint's RAI is `billing:web:list`. `--scope bo` scaffolds
+ * the back-office surface instead. A second file for the same scope goes
+ * in a folder named after it (`routes/web/billing.invoices.routes.ts`);
+ * the explorer reads both forms.
+ *
  * Model and bootstrap files are emitted only when the app has selected a
  * models provider (`tulipes.providers.models` in its package.json): in a
  * provider-free app they would make the module require a database the app
@@ -22,10 +28,17 @@ import { coreVersion } from "./package-info.ts";
 export async function runNewModule(
   rootDir: string,
   name: string,
-  options: { models?: boolean; queues?: boolean; sockets?: boolean } = {},
+  options: { models?: boolean; queues?: boolean; sockets?: boolean; scope?: string } = {},
 ): Promise<void> {
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     console.error(`module name "${name}" is invalid — lowercase kebab-case required`);
+    process.exitCode = 2;
+    return;
+  }
+  // The RAI scope (bo, web, mobile…) — `scope` below is the npm package scope.
+  const surface = options.scope ?? "web";
+  if (!/^[a-z][a-z0-9-]*$/.test(surface)) {
+    console.error(`scope "${surface}" is invalid — lowercase, starting with a letter ([a-z][a-z0-9-]*)`);
     process.exitCode = 2;
     return;
   }
@@ -45,7 +58,7 @@ export async function runNewModule(
   const queues = options.queues ?? declared.queues !== undefined;
   const sockets = options.sockets ?? declared.sockets !== undefined;
 
-  for (const [relPath, content] of renderModule(name, scope, locales, models, queues, sockets)) {
+  for (const [relPath, content] of renderModule(name, scope, surface, locales, models, queues, sockets)) {
     const filePath = join(dir, relPath);
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, content);
@@ -93,6 +106,7 @@ const json = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
 function renderModule(
   name: string,
   scope: string,
+  surface: string,
   locales: readonly string[],
   models: boolean,
   queues: boolean,
@@ -157,16 +171,17 @@ function renderModule(
       `import type { AclBuilder } from "@tulipes/core/acl";`,
       ``,
       `/**`,
-      ` * Roles are global and defined once by the sys core module; a feature`,
-      ` * module only attaches grants, on resources namespaced by its own`,
-      ` * name ("${name}:read", "${name}:write").`,
+      ` * Roles are global and defined once, by the module that owns them; a`,
+      ` * feature module only attaches grants, on its own RAIs:`,
+      ` * "${name}:${surface}:list" exactly, "${name}:${surface}:*" for the whole`,
+      ` * ${surface} surface, "${name}:*" for every surface.`,
       ` *`,
       ` * The grant below is commented out because granting to a role this`,
       ` * app does not define is a boot crash — uncomment it once you have`,
-      ` * checked which roles exist in modules/core/module.acl.ts.`,
+      ` * checked which roles exist with \`pnpm tulipes roles\`.`,
       ` */`,
       `export default function ${fn}Acl(_acl: AclBuilder): void {`,
-      `  // _acl.allow("user", "${name}:read");   // the id declared in routes/`,
+      `  // _acl.allow("user", "${name}:${surface}:list");   // the id declared in routes/`,
       `}`,
       ``,
     ].join("\n")],
@@ -184,7 +199,7 @@ function renderModule(
       ``,
     ].join("\n")],
 
-    [`controllers/${name}.controllers.ts`, [
+    [`controllers/${surface}.${name}.controllers.ts`, [
       `import type { Request, RequestHandler, Response } from "express";`,
       `import type { Ctx } from "@tulipes/core/boot";`,
       ``,
@@ -223,11 +238,11 @@ function renderModule(
       ``,
     ].join("\n")],
 
-    [`routes/${name}.routes.ts`, [
+    [`routes/${surface}.${name}.routes.ts`, [
       `import { Router } from "express";`,
       `import type { BackendCtx } from "@tulipes/core/boot";`,
       ``,
-      `import { ${Model}Controller } from "../controllers/${name}.controllers.ts";`,
+      `import { ${Model}Controller } from "../controllers/${surface}.${name}.controllers.ts";`,
       ``,
       `/**`,
       ` * A plain function of the context: build the router, declare a RAI on`,
@@ -235,11 +250,14 @@ function renderModule(
       ` * (or call ctx.routes.mount(router, "/other")). Read models, settings and`,
       ` * the environment inside handlers, not here — inspection builds this`,
       ` * router with nothing acquired.`,
+      ` *`,
+      ` * Every id is "module:scope:resource[:extra]": ${name}:${surface}:list,`,
+      ` * ${name}:${surface}:detail, ${name}:${surface}:detail:delete.`,
       ` */`,
       `export default function ${fn}Routes(ctx: BackendCtx): Router {`,
       `  const router = Router();`,
       `  const controller = new ${Model}Controller(ctx);`,
-      `  router.get("/${name}", ctx.rai({ id: "${name}:read", name: "List ${name}" }), controller.index());`,
+      `  router.get("/${name}", ctx.rai({ id: "${name}:${surface}:list", name: "List ${name}" }), controller.index());`,
       `  return router;`,
       `}`,
       ``,
@@ -330,7 +348,7 @@ function renderModule(
       ` * expose (\`tools\` omitted exposes them all), and actions that are not`,
       ` * endpoints:`,
       ` *`,
-      ` *   action({ id: "${name}:reset", description: "…", input: z.object({ confirm: z.literal(true) }),`,
+      ` *   action({ id: "${name}:${surface}:reset", description: "…", input: z.object({ confirm: z.literal(true) }),`,
       ` *           handler: async (ctx, input, actor) => ({ reset: true }) })`,
       ` *`,
       ` * An action's id is a permission, granted in module.acl.ts like any`,

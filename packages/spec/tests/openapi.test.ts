@@ -9,6 +9,7 @@ function source(route: Partial<SpecRoute> = {}): SpecSource {
     routes: [
       {
         id: "items:web:create",
+        scope: "web",
         method: "POST",
         path: "/items",
         module: "items",
