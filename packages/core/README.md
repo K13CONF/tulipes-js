@@ -235,6 +235,43 @@ on each non-production boot and never written in production. Invalid JSON, or
 an `i18n/` folder with no default-locale file, aborts the boot: i18next would
 otherwise serve raw keys with nothing in the log to explain it.
 
+## Time zones
+
+Instants are stored and returned as UTC — a `Date` in a response is still
+`"2026-10-13T14:00:00.000Z"`. A zone is how an instant is *read*: what
+"today" means for a report, the time in an email, when a nightly job
+fires. The app names its zone in `config/app.config.ts`:
+
+```ts
+timezone: {
+  default: "Africa/Casablanca",
+  supported: ["Africa/Casablanca", "Europe/Paris"],  // optional; omit to accept any IANA zone
+  applyToProcess: true,                              // the default once a zone is named
+},
+```
+
+Each request negotiates its own zone the way it negotiates a locale —
+`?tz=Europe/Paris`, then an `X-Timezone` header, then the default — and an
+unknown or unsupported zone falls through to the next candidate:
+
+```ts
+const since = req.time.startOfDay();               // the caller's local midnight, as a UTC Date
+const orders = await Order.find({ created_at: { $gte: since } });
+res.respond({ data: { orders, timezone: req.timezone, as_of: req.time.toISO(new Date()) } });
+// as_of: "2026-10-13T15:00:00.000+01:00" — the same instant, with the caller's offset
+```
+
+Code with no request uses `ctx.time` (the app's zone) or reads in a
+recipient's: `ctx.time.in(user.timezone, user.locale).format(invoice.due_at)`.
+The same helpers are exported from `@tulipes/core/time`, taking the zone
+as an argument.
+
+Naming a zone also moves the process onto it (`process.env.TZ`) for the
+life of the boot, so `Date#getHours()`, log timestamps and daily log
+rotation agree with the app; `applyToProcess: false` keeps the server's
+zone. A cron pattern given to `@tulipes/bullmq` without a `tz` fires in the
+app's zone. An unknown zone aborts the boot.
+
 ## One response shape
 
 Every endpoint answers with the same envelope, so a client writes its
@@ -368,7 +405,8 @@ and `tulipes spec --scope mobile` show or describe one surface.
     @tulipes/mongoose/settings: the `settings` collection behind ctx.settings)
  6  Settings         every namespace read from the store, seeded on first boot,
                      validated against its schema → ctx.config.<module>
- 7  Translations     modules/*/i18n/*.json, one namespace per module
+ 7  Translations     modules/*/i18n/*.json, one namespace per module;
+                     then config.timezone → ctx.time, process.env.TZ
  8  ACL              module.acl.ts in load order
  9  Bootstrap        bootstrap/*.bootstrap.ts in load order, every mode;
                      a returned function is the module's cleanup

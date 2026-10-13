@@ -9,4 +9,5 @@ export * from "./i18n/index.ts";
 export * from "./modules/index.ts";
 export * from "./queues/index.ts";
 export * from "./sockets/index.ts";
+export * from "./time/index.ts";
 export * from "./errors/index.ts";

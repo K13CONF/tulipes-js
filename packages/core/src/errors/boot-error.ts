@@ -9,6 +9,7 @@ export type BootScope =
   | "modules"
   | "config"
   | "i18n"
+  | "timezone"
   | "acl"
   | "routes"
   | "agent"

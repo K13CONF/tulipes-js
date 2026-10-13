@@ -44,6 +44,18 @@ export default function invoiceQueues(ctx: Ctx, queues: QueueRegistry): void {
 await requireQueues(ctx).add("billing.send-invoice", "send", { invoiceId });
 ```
 
+Recurring work is a job scheduler, keyed so that calling it on every boot
+updates rather than duplicates. A cron `pattern` fires in the app's
+`config.timezone.default` unless it names its own `tz`:
+
+```ts
+// a bootstrap, after acquisition
+await ctx.queues.schedule("billing.send-invoice", "nightly",
+  { pattern: "0 2 * * *" },                       // 02:00 in the app's zone
+  { name: "send", data: { invoiceId: "all" } });  // validated by the queue's schema
+await ctx.queues.unschedule("billing.send-invoice", "nightly");
+```
+
 ## Behavior
 
 - One ioredis connection per queue and one blocking connection per worker,

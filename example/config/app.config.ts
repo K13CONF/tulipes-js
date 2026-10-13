@@ -51,6 +51,21 @@ const appConfig = (() => ({
   },
 
   /**
+   * How instants are read. Dates are stored and returned as UTC; a zone is
+   * what "today", "02:00" and a timestamp in an email mean. A request picks
+   * its own with `?tz=Europe/Paris` or an X-Timezone header (narrowed to
+   * `supported` when you list it), and handlers read it as `req.timezone`
+   * with helpers on `req.time`; code with no request uses `ctx.time`.
+   *
+   * `default` is also the zone of cron patterns given to `ctx.queues`, and
+   * — unless `applyToProcess: false` — the process zone, so log times,
+   * daily log rotation and `Date#getHours()` agree with it.
+   */
+  timezone: {
+    default: "UTC",
+  },
+
+  /**
    * List-endpoint defaults, so every module paginates identically and no
    * caller can ask for ten thousand rows. → modules/users/routes
    */

@@ -34,7 +34,9 @@ export async function initQueues(
     return undefined;
   }
 
-  const manager = new QueueManager(url);
+  // Read on each call, not now: core 0.11 has no ctx.time, and the zone is
+  // settled by phase 7, before any module could schedule anything.
+  const manager = new QueueManager(url, () => (ctx as { time?: { zone?: string } }).time?.zone);
   // Owned before any queue file runs: a define() opens a connection.
   onManager?.(manager);
   ctx.queues = manager;

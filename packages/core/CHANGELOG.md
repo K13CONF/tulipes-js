@@ -9,6 +9,36 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [Unreleased]
+
+### Added
+
+- **Time zones.** `config.timezone` in `config/app.config.ts` names the
+  app's zone — `{ default: "Africa/Casablanca", supported?: [...],
+  applyToProcess?: boolean }`. An app without the block behaves as before:
+  instants read in UTC and the process zone is not touched.
+- A request negotiates its zone like its locale — `?tz=`, then an
+  `X-Timezone` header, then `config.timezone.default`, narrowed to
+  `supported` when it is listed — and reads it as `req.timezone`, with
+  helpers bound to it on `req.time` (`format`, `toISO`, `startOfDay`,
+  `fromWallClock`, `offsetMinutes`). Code with no request uses `ctx.time`,
+  and `ctx.time.in(zone, locale)` for a recipient's zone.
+- Naming a zone also sets `process.env.TZ` for the life of the boot (not
+  under inspection; restored at shutdown), so `Date#getHours()`, log
+  timestamps and daily log rotation agree with the app. Opt out with
+  `applyToProcess: false`.
+- `@tulipes/core/time`: `toZonedISO`, `startOfDay`, `zonedTimeToUtc`,
+  `offsetMinutes`, `formatDate`, `canonicalTimezone`, `resolveTimezone`.
+- An unknown zone in `config.timezone` aborts the boot in a new
+  `timezone` phase (7b, after translations). The banner shows the zone.
+- `@tulipes/bullmq`: a cron `pattern` with no `tz` fires in
+  `config.timezone.default`, through `add(..., { repeat })` and the new
+  `ctx.queues.schedule(queue, schedulerId, repeat, job)` /
+  `unschedule()`, which wrap BullMQ's job schedulers and validate the
+  template's data against the queue's schema.
+
+Dates on the wire are unchanged: stored and returned as UTC ISO strings.
+
 ## [0.12.0-rc.1] — 2026-10-12
 
 The 0.12 line as a candidate, on npm's `next` tag. Breaking for every app

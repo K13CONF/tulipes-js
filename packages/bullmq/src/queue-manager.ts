@@ -4,6 +4,7 @@ import {
   type JobsOptions,
   type Processor,
   type QueueOptions,
+  type RepeatOptions,
   type WorkerOptions,
 } from "bullmq";
 import { Redis } from "ioredis";
@@ -43,6 +44,24 @@ declare module "@tulipes/core/boot" {
      * it, and a name `tulipes sync` knows types the payload at the call site.
      */
     add<N extends string>(queueName: N, jobName: string, data: JobData<N>, options?: JobsOptions): Promise<void>;
+    /**
+     * Create or update a recurring job — BullMQ's job scheduler, keyed by
+     * `schedulerId` so calling it on every boot is safe. A cron `pattern`
+     * fires in `config.timezone.default` unless the schedule names its own
+     * `tz`:
+     *
+     *   await ctx.queues.schedule("billing", "nightly-invoices",
+     *     { pattern: "0 2 * * *" },               // 02:00 in the app's zone
+     *     { name: "send-invoices", data: {} });
+     */
+    schedule<N extends string>(
+      queueName: N,
+      schedulerId: string,
+      repeat: Omit<RepeatOptions, "key">,
+      job: { name: string; data: JobData<N>; options?: Omit<JobsOptions, "repeat" | "jobId"> },
+    ): Promise<void>;
+    /** Stop a recurring job created with `schedule()`. */
+    unschedule(queueName: string, schedulerId: string): Promise<boolean>;
     queue(name: string): Queue;
     names(): string[];
     readonly processorCount: number;
@@ -73,8 +92,23 @@ export class QueueManager implements QueuesCapability {
   readonly #connections: Redis[] = [];
   #closing = false;
 
-  constructor(redisUrl: string) {
+  readonly #timezone: () => string | undefined;
+
+  /** `timezone` is the app's zone, the default for a repeating job's cron pattern. */
+  constructor(redisUrl: string, timezone: () => string | undefined = () => undefined) {
     this.#url = redisUrl;
+    this.#timezone = timezone;
+  }
+
+  /**
+   * A cron pattern without a zone is read in the server's, which is rarely
+   * what "every day at 02:00" meant; the app's configured zone fills it.
+   * An `every` interval has no wall clock, so it is left alone.
+   */
+  #zoned<R extends { pattern?: string; tz?: string } | undefined>(repeat: R): R {
+    if (!repeat?.pattern || repeat.tz) return repeat;
+    const tz = this.#timezone();
+    return tz ? { ...repeat, tz } : repeat;
   }
 
   /**
@@ -173,7 +207,26 @@ export class QueueManager implements QueuesCapability {
     options?: JobsOptions,
   ): Promise<void> {
     const queue = this.queue(queueName);
-    await queue.add(jobName, this.#validate(queueName, data), options);
+    const zoned = options?.repeat ? { ...options, repeat: this.#zoned(options.repeat) } : options;
+    await queue.add(jobName, this.#validate(queueName, data), zoned);
+  }
+
+  async schedule<N extends string>(
+    queueName: N,
+    schedulerId: string,
+    repeat: Omit<RepeatOptions, "key">,
+    job: { name: string; data: JobData<N>; options?: Omit<JobsOptions, "repeat" | "jobId"> },
+  ): Promise<void> {
+    const queue = this.queue(queueName);
+    await queue.upsertJobScheduler(schedulerId, this.#zoned(repeat), {
+      name: job.name,
+      data: this.#validate(queueName, job.data),
+      ...(job.options && { opts: job.options }),
+    });
+  }
+
+  async unschedule(queueName: string, schedulerId: string): Promise<boolean> {
+    return this.queue(queueName).removeJobScheduler(schedulerId);
   }
 
   #validate(queueName: string, data: unknown): unknown {
