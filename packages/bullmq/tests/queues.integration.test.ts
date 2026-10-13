@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Queue } from "bullmq";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "../../core/tests/fixture.ts";
+import { fixture as coreFixture } from "../../core/tests/fixture.ts";
 import type { QueueManager } from "../src/index.ts";
 
+// Every fixture wires config.bullmq the way an app's config/app.config.ts does.
+const wiring = `export default (env) => ({ bullmq: { redisUrl: env.probe?.redisUrl } });`;
+const fixture = (files: Record<string, string> = {}) => coreFixture({ "config/app.config.js": wiring, ...files });
 const redisUrl = process.env.TEST_REDIS_URL;
 const integration = test.skipIf(!redisUrl);
 
@@ -18,14 +21,7 @@ integration(
 
     const app = await fixture({
       "package.json": JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } }),
-      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-          {
-            name: "REDIS_URL",
-            type: "url",
-            default: redisUrl,
-            description: "Isolated test Redis",
-          },
-        ] } }),
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { redisUrl: { key: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" } } } }),
       "modules/probe/module.config.js": `
       import { defineConfig } from '@tulipes/core/config';
       import { z } from 'zod/v4';
@@ -130,9 +126,7 @@ integration(
 
 const withQueues = (name: string, files: Record<string, string>) => fixture({
   "package.json": JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } }),
-  "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-    { name: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" },
-  ] } }),
+  "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { redisUrl: { key: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" } } } }),
   "modules/probe/queues/probe.queues.js": `
     import { z } from 'zod/v4';
     export const jobs = { ${JSON.stringify(name)}: z.object({ id: z.string(), tries: z.number().int().default(1) }) };
@@ -192,10 +186,9 @@ integration(
     const name = `probe.${randomUUID()}`;
     const app = await fixture({
       "package.json": JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } }),
-      "config/app.config.js": `export default () => ({ timezone: { default: 'Africa/Casablanca', applyToProcess: false } });`,
-      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-        { name: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" },
-      ] } }),
+      // Replaces the wrapper's app.config, so it wires Redis too.
+      "config/app.config.js": `export default (env) => ({ timezone: { default: 'Africa/Casablanca', applyToProcess: false }, bullmq: { redisUrl: env.probe?.redisUrl } });`,
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { redisUrl: { key: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" } } } }),
       "modules/probe/queues/probe.queues.js": `
         import { z } from 'zod/v4';
         export const jobs = { ${JSON.stringify(name)}: z.object({ id: z.string() }) };

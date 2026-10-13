@@ -2,6 +2,8 @@ import { createConnection, Schema, type Connection } from "mongoose";
 
 import { importFile, type Ctx } from "@tulipes/core/boot";
 import type { BootReport } from "@tulipes/core/errors";
+
+import { CONNECTION_CONFIG, readConnectionConfig } from "./connection-config.ts";
 import type { ModuleFiles } from "@tulipes/core/modules";
 
 import { ModelStore } from "./model-store.ts";
@@ -24,9 +26,6 @@ export interface ModelDef {
  */
 export type { BootstrapFn } from "@tulipes/core/boot";
 
-/** Well-known infra variable, declared by the app's sys core module. */
-const MONGO_URI = "MONGO_URI";
-
 /**
  * Boot phase 5, run by the provider below: connect and register every model
  * in load order. Bootstrap tasks (indexes, seed rows) are core's phase 9,
@@ -47,23 +46,15 @@ export async function initDatabase(
   report: BootReport,
   options: InitDatabaseOptions = {},
 ): Promise<Connection | undefined> {
-  const uri = ctx.Environment.store.has(MONGO_URI)
-    ? String(ctx.Environment.get(MONGO_URI))
-    : undefined;
-
-  if (!uri) {
-    report.add({
-      scope: "providers",
-      message: `provider "mongoose" is selected but "${MONGO_URI}" is not declared/set — declare it in a sys module's package.json tulipes.env and set it`,
-    });
-    return undefined;
-  }
+  const target = readConnectionConfig(ctx, "mongoose", report);
+  if (!target) return undefined;
 
   let connection: Connection;
   try {
     // Fail fast: default server selection waits 30s before reporting an
     // unreachable database — far too long for a boot-time verdict.
-    connection = createConnection(uri, {
+    connection = createConnection(target.uri, {
+      ...target.options,
       serverSelectionTimeoutMS: 5_000,
     });
     options.onConnection?.(connection);
@@ -71,7 +62,7 @@ export async function initDatabase(
   } catch (error) {
     report.add({
       scope: "boot",
-      message: `database connection failed (${MONGO_URI}): ${(error as Error).message}`,
+      message: `database connection failed (${CONNECTION_CONFIG}): ${(error as Error).message}`,
     });
     return undefined;
   }

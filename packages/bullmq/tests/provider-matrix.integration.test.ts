@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Redis } from "ioredis";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "../../core/tests/fixture.ts";
+import { fixture as coreFixture } from "../../core/tests/fixture.ts";
 import type { QueueManager } from "../src/index.ts";
 
+// Every fixture wires config.bullmq the way an app's config/app.config.ts does.
+const wiring = `export default (env) => ({ bullmq: { redisUrl: env.probe?.redisUrl } });`;
+const fixture = (files: Record<string, string> = {}) => coreFixture({ "config/app.config.js": wiring, ...files });
 /**
  * S10.4 — the queues provider with a real Redis: selection semantics,
  * requirement shapes, worker consumption and the boundary with the
@@ -14,7 +17,7 @@ const redisUrl = process.env.TEST_REDIS_URL;
 const integration = test.skipIf(!redisUrl);
 
 const declared = JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } });
-const redisMeta = JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [{ name: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" }] } });
+const redisMeta = JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { redisUrl: { key: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" } } } });
 const queueFile = (name: string) => `
   export default (ctx, queues) => {
     queues.define(${JSON.stringify(name)});
@@ -48,11 +51,11 @@ integration("a REDIS_URL without a declaration starts nothing, even with the pro
   expect((await clientNames()).length).toBe(before);
 });
 
-integration("a declared provider without REDIS_URL is a boot error naming the variable", async () => {
+integration("a declared provider without config.bullmq.redisUrl is a boot error naming the key to wire", async () => {
   vi.stubEnv("REDIS_URL", undefined);
   const app = await fixture({ "package.json": declared });
 
-  await expect(app.boot({ mode: "script" })).rejects.toThrow(/provider "bullmq" is selected but "REDIS_URL" is not declared\/set/);
+  await expect(app.boot({ mode: "script" })).rejects.toThrow(/provider "bullmq" is selected but config\.bullmq\.redisUrl is not set — wire it in config\/app\.config\.ts/);
 });
 
 integration("a queues file without a declaration is refused before it is imported", async () => {
