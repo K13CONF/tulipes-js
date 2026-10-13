@@ -11,6 +11,37 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — time zones (optional)
+
+Nothing breaks: an app without `config.timezone` keeps reading instants in
+UTC and its process zone is left alone. To adopt it:
+
+1. Add the block to `config/app.config.ts`:
+
+   ```ts
+   timezone: {
+     default: "Africa/Casablanca",
+     // supported: ["Africa/Casablanca", "Europe/Paris"],  // optional allow-list
+     // applyToProcess: false,                           // keep the server's TZ
+   },
+   ```
+
+   From the next boot the process runs in that zone (`process.env.TZ`), so
+   check anything that relied on the server's own zone — cron strings you
+   pass to BullMQ yourself now fire in the app's zone, and `Date#getHours()`
+   answers in it.
+2. Read a caller's zone with `req.timezone` and `req.time` instead of
+   parsing a header yourself; use `ctx.time` where there is no request.
+3. The reference app's logger now writes `"time"` as an ISO string with
+   the zone's offset instead of epoch milliseconds. Generated apps own
+   their logger, so take the change from
+   `example/modules/core/helpers/logger/index.ts` if you want it — and
+   check any log shipper that parsed `time` as a number.
+4. Recurring jobs: prefer `ctx.queues.schedule(queue, id, { pattern }, { name, data })`
+   over `add(..., { repeat })`; both default the cron zone to the app's.
+
+---
+
 ## 0.12.0-rc.1 — every RAI id has a scope
 
 A RAI id was `module:resource`. It is now `module:scope:resource[:extra]`,

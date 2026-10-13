@@ -85,6 +85,14 @@ export function printStartupBanner(
     )}`,
   ]);
 
+  const { default: zone, supported: zones } = handle.timezones.settings;
+  rows.push([
+    "Time zone",
+    `${bold(zone)}  ${dim("\u00b7")}  ${gray(
+      zones ? `requests may ask for ${zones.length} zone(s)` : "requests may ask for any zone",
+    )}${process.env.TZ === zone ? `  ${dim("\u00b7")}  ${gray("process")}` : ""}`,
+  ]);
+
   if (ctx.acl) {
     const roles = ctx.acl.roles();
     rows.push(["Roles", `${bold(String(roles.length))} ${gray(`(${roles.join(", ")})`)}`]);

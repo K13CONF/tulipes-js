@@ -16,6 +16,7 @@ import { errorHandler, notFoundHandler } from "../http/error-handler.ts";
 import { createRai, RouteRegistry } from "../http/rai.ts";
 import { bindRespond, warnOnRawResponse } from "../http/respond.ts";
 import { I18n } from "../i18n/i18n.ts";
+import { Timezones } from "../time/timezone.ts";
 import { scanRoutes } from "../http/route-scan.ts";
 import { loadAgents } from "../agent/load-agents.ts";
 import { loadRoutes } from "./load-routes.ts";
@@ -81,6 +82,8 @@ export interface BootHandle {
   ctx: Ctx;
   /** Translations: the locales served and the module namespaces loaded. */
   i18n: I18n;
+  /** Time zones: the app's zone, the zones a request may ask for. */
+  timezones: Timezones;
   /** Every declared provider, with its banner status, in acquisition order. */
   providers: readonly AcquiredStatus[];
   /** Worker mode: consumers started by the providers' serve() hooks. */
@@ -99,7 +102,7 @@ export interface BootHandle {
  *   4  declarations       config/app.config.ts seed; module.config.ts schemas
  *   5  models, settings   providers connect; no values are read yet
  *   6  settings           every namespace loaded, seeded, validated → ctx.config
- *   7  translations
+ *   7  translations, time zones
  *   8  ACL, then the agent surface from every agent/*.agent.ts
  *   9  bootstrap          bootstrap/*.bootstrap.ts in load order, every mode
  *  10  queues, sockets    providers acquired against the full context
@@ -148,6 +151,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   // from here on and is never replaced; phase 7 is where resources arrive.
   const routes = new RouteRegistry();
   const i18n = new I18n();
+  const timezones = new Timezones();
   const settings = new Settings();
   const aborter = new AbortController();
   const ctx: Ctx = {
@@ -163,6 +167,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
       (role, permission) => ctx.acl!.can(role, permission),
       (req, res, module) => {
         i18n.attach_(req, module);
+        timezones.attach_(req);
         // Bounds live in config.pagination, so every list endpoint in the
         // app clamps identically and no caller can ask for ten thousand.
         bindRespond(req, res, ctx.config.pagination ?? {});
@@ -171,6 +176,17 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     ),
     t: (namespace, locale) => i18n.t(namespace, locale),
     i18n: i18n.instance,
+    // A getter-backed view: phase 7 settles the zone after this object is
+    // built, and a module holding `ctx.time` must still read the settled one.
+    time: {
+      get zone() { return timezones.zone; },
+      format: (date, options) => timezones.in(undefined, i18n.settings.defaultLocale).format(date, options),
+      toISO: (date) => timezones.in().toISO(date),
+      startOfDay: (date) => timezones.in().startOfDay(date),
+      fromWallClock: (wall) => timezones.in().fromWallClock(wall),
+      offsetMinutes: (date) => timezones.in().offsetMinutes(date),
+      in: (zone, locale) => timezones.in(zone, locale ?? i18n.settings.defaultLocale),
+    },
   };
   let cleanups: RegisteredCleanup[] = [];
   let shutdownPromise: Promise<void> | undefined;
@@ -179,7 +195,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   const acquiredProviders: AcquiredProvider[] = [];
   let fileStore: FileSettingsStore | undefined;
   const handle: BootHandle = {
-    mode, env, ctx, i18n,
+    mode, env, ctx, i18n, timezones,
     providers: [],
     consumers: 0,
     shutdown: () => {
@@ -238,6 +254,14 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     const i18nReport = new BootReport();
     await i18n.load(explored, I18n.readSettings(ctx.config.i18n, i18nReport), env.appEnv, i18nReport);
     i18nReport.throwIfAny("i18n");
+
+    // Phase 7b — time zones, from config.timezone like the locales. Naming
+    // a zone also moves the process onto it (unless applyToProcess: false),
+    // before bootstrap creates a logger whose timestamps should agree.
+    const timezoneReport = new BootReport();
+    const timezoneSettings = Timezones.readSettings(ctx.config.timezone, timezoneReport);
+    timezoneReport.throwIfAny("timezone");
+    timezones.load(options.inspect ? { ...timezoneSettings, applyToProcess: false } : timezoneSettings);
 
     // Phase 8 — ACL merge
     const aclReport = new BootReport();
@@ -434,5 +458,6 @@ async function shutdown(
   }
   await disposeProviders(providers, cleanup);
   fileStore?.dispose();
+  handle.timezones.restore_();
   cleanup.finish();
 }

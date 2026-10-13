@@ -5,6 +5,7 @@ import pino from "pino";
 import type { Logger, TransportTargetOptions } from "pino";
 import type { ProcessMode } from "@tulipes/core/boot";
 import type { Environment } from "@tulipes/core/env";
+import { toZonedISO } from "@tulipes/core/time";
 
 /**
  * The app's logger, shared by every module.
@@ -92,11 +93,20 @@ export function logger(environment: Environment, mode: ProcessMode = "backend"):
     });
   }
 
+  // Every line's time is written in the process zone with its offset —
+  // "2026-10-13T15:00:00.000+01:00" — so a file reads in the app's local
+  // time and still sorts and parses as one exact instant. Core moves the
+  // process onto config.timezone.default before bootstrap creates this
+  // logger, which is also what the console's SYS: times and the daily
+  // rotation above follow.
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const options = { level, base: { mode }, timestamp: () => `,"time":"${toZonedISO(Date.now(), zone)}"` };
+
   instance = targets.length
-    ? pino({ level, base: { mode } }, pino.transport({ targets }))
+    ? pino(options, pino.transport({ targets }))
     : // Every destination disabled: still return a working logger rather
       // than null-checking at a hundred call sites.
-      pino({ level, base: { mode } });
+      pino(options);
 
   return instance;
 }

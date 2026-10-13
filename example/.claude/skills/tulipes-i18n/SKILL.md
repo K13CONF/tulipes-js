@@ -1,6 +1,6 @@
 ---
 name: tulipes-i18n
-description: Use when writing any user-facing string in a Tulipes app — an error message, a response body, an email subject — or when adding a locale, translating a module, or working out why an endpoint answers in the wrong language. Covers req.t, ctx.t, module namespaces and the missing-key files.
+description: Use when writing any user-facing string in a Tulipes app — an error message, a response body, an email subject — or when adding a locale, translating a module, or working out why an endpoint answers in the wrong language. Covers req.t, ctx.t, module namespaces, the missing-key files, and time zones (req.timezone, req.time, ctx.time).
 ---
 
 # Translating
@@ -96,3 +96,22 @@ served by `fr` unless `fr-CA.json` exists.
   default-locale file, aborts the boot — i18next would otherwise serve raw
   keys with nothing in the log to explain it.
 - A module with no `i18n/` folder is fine; it simply has nothing to say.
+
+## Time zones
+
+Dates are stored and returned as UTC; never convert them in a response
+body. A zone is how a date is *read*, and it is negotiated like the locale:
+`?tz=Europe/Paris`, then an `X-Timezone` header, then
+`config.timezone.default` (`config/app.config.ts`).
+
+```ts
+const since = req.time.startOfDay();              // the caller's midnight, as a UTC Date
+const label = req.time.format(order.created_at);  // in req.timezone and req.locale
+const at = req.time.toISO(new Date());            // "2026-10-13T15:00:00.000+01:00"
+```
+
+Without a request — a queue processor, an email to a user — read in the
+recipient's zone: `ctx.time.in(user.timezone, user.locale).format(date)`.
+Never call `getHours()`/`toLocaleString()` without a zone, and never build
+"today" from `new Date().setHours(0)`: both read the process zone, which is
+the app's default, not the caller's.

@@ -9,6 +9,7 @@ import type { AgentRegistry } from "../agent/registry.ts";
 import type { RouteInfo, RouteRegistry } from "../http/rai.ts";
 import type { ModuleManifest } from "../modules/manifest.ts";
 import type { I18nextInstance, TFunction } from "../i18n/index.ts";
+import type { ZonedTime } from "../time/index.ts";
 
 /**
  * The context object threaded through every module-authored function.
@@ -85,6 +86,18 @@ export interface Ctx {
   t: (namespace: string, locale?: string) => TFunction;
   /** The i18next instance, for anything `ctx.t` does not cover. */
   i18n: I18nextInstance;
+  /**
+   * Zone-aware helpers for code with no request to negotiate a zone from —
+   * a nightly report, a reminder email. `ctx.time.zone` is
+   * `config.timezone.default` (UTC when the app names none); pass the
+   * recipient's zone to read an instant as they would:
+   *
+   *   ctx.time.in(user.timezone, user.locale).format(invoice.due_at);
+   *
+   * Inside a request handler use `req.time`, already bound to the caller's
+   * zone. Settled in phase 7, with translations.
+   */
+  time: ZonedTime & { in(zone?: string, locale?: string): ZonedTime };
 }
 
 /**
