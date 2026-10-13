@@ -24,8 +24,8 @@ export function printStartupBanner(
   modules: readonly ModuleManifest[],
   bootMs: number,
 ): void {
-  const { env, ctx, mode } = handle;
-  const ec = envColor(env.appEnv);
+  const { ctx, mode } = handle;
+  const ec = envColor(ctx.appEnv);
   const appName = String(
     (ctx.config.app as { name?: unknown } | undefined)?.name ?? "tulipes",
   );
@@ -110,7 +110,7 @@ export function printStartupBanner(
 
   const lines = [
     "",
-    `  ${bold(cyan(`▲ ${appName}`))}  ${ec(bold(env.appEnv))} ${dim("·")} ${dim(`${mode} mode`)}`,
+    `  ${bold(cyan(`▲ ${appName}`))}  ${ec(bold(ctx.appEnv))} ${dim("·")} ${dim(`${mode} mode`)}`,
     "",
     ...rows.map(
       ([label, value]) => `  ${arrow}  ${bold(label.padEnd(labelWidth))}   ${value}`,

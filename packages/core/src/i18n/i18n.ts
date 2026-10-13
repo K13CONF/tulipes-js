@@ -4,7 +4,7 @@ import type { Request } from "express";
 import i18next, { type i18n as I18nextInstance, type TFunction } from "i18next";
 import FsBackend from "i18next-fs-backend";
 
-import type { AppEnv } from "../env/environment.ts";
+import type { AppEnv } from "../boot/app-env.ts";
 import type { BootReport } from "../errors/boot-error.ts";
 import type { ModuleFiles } from "../modules/explorer.ts";
 import { resolveLocale } from "./locale.ts";

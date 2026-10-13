@@ -1,26 +1,26 @@
-export { Environment, appEnvs, type AppEnv, type EnvironmentOptions } from "./environment.ts";
-
 /**
- * Augmentation target for the generated `types/tulipes.d.ts` (`tulipes sync`):
- * one property per declared variable, typed from its meta spec. Empty here on
- * purpose — an app without codegen still gets `VariableValue` from get().
+ * Environment values — internal to boot and to the CLI's `sync` and
+ * `env:check`. An app never imports from here: it reads a value as
+ * `ctx.config.<module>.<name>` and sees the shape of a declaration in its
+ * module's package.json.
  *
- * Declared in THIS module (not re-exported) because TypeScript module
- * augmentation only merges with the module that declares the interface.
+ *   spec      what a declaration looks like
+ *   coerce    a raw string → the declared type
+ *   resolve   declarations + process.env + the env file → ResolvedEnv
+ *   resolved  the values, and what the console may say about them
+ *   bind      ResolvedEnv → read-only getters on ctx.config
  */
-export interface KnownVariables {}
-export {
-  VariableStore,
-  type DescribedVariable,
-  type VariableSource,
-} from "./variable-store.ts";
+export { bindEnvValues } from "./bind.ts";
 export { coerceValue } from "./coerce.ts";
-export { discoverModuleMeta, LEGACY_META_FILENAME, type ModuleMeta } from "./meta-discovery.ts";
+export { resolveEnv, type ResolveEnvOptions } from "./resolve.ts";
+export { ResolvedEnv, type EnvInspector, type EnvVariableDescription, type ResolvedVariable, type VariableSource } from "./resolved.ts";
 export {
-  metaFileSchema,
+  LEGACY_ARRAY_MESSAGE,
+  configKeySchema,
+  envDeclarationSchema,
   variableSpecSchema,
   variableTypes,
-  type MetaFile,
+  type EnvDeclaration,
   type VariableSpec,
   type VariableType,
   type VariableValue,

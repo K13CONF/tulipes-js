@@ -1,67 +1,7 @@
-import { expect, test, vi } from "vitest";
-import { Environment } from "../src/env/environment.ts";
+import { expect, test } from "vitest";
 import { sortModules } from "../src/modules/graph.ts";
 import type { ModuleManifest } from "../src/modules/manifest.ts";
 import { BootReport } from "../src/errors/boot-error.ts";
-import { fixture } from "./fixture.ts";
-
-test("environment resolves and attributes deployment overrides while redacting secrets", async () => {
-  const app = await fixture({
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-        {
-          name: "TEST_CONTRACT_NUMBER",
-          type: "number",
-          description: "number",
-          default: 1,
-        },
-        {
-          name: "TEST_CONTRACT_SECRET",
-          type: "secret",
-          description: "secret",
-          required: true,
-        },
-      ] } }),
-    ".envs/.env.test":
-      "TEST_CONTRACT_NUMBER=2\nTEST_CONTRACT_SECRET=fixture-only\n",
-  });
-
-  const file = Environment.load({ rootDir: app.rootDir, appEnv: "test" });
-
-  expect(file.get("TEST_CONTRACT_NUMBER")).toBe(2);
-  expect(file.store.sourceOf("TEST_CONTRACT_NUMBER")).toBe("file");
-
-  vi.stubEnv("TEST_CONTRACT_NUMBER", "3");
-
-  const injected = Environment.load({ rootDir: app.rootDir, appEnv: "test" });
-
-  expect(injected.get("TEST_CONTRACT_NUMBER")).toBe(3);
-  expect(injected.store.sourceOf("TEST_CONTRACT_NUMBER")).toBe("process.env");
-  expect(file.store.snapshot().TEST_CONTRACT_SECRET).toBe("•••");
-  expect(() => file.get("TEST_CONTRACT_TYPO")).toThrow(/never declared/);
-});
-
-test("environment aggregates all missing required values", async () => {
-  const app = await fixture({
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-        {
-          name: "TEST_CONTRACT_A",
-          type: "string",
-          description: "a",
-          required: true,
-        },
-        {
-          name: "TEST_CONTRACT_B",
-          type: "number",
-          description: "b",
-          required: true,
-        },
-      ] } }),
-  });
-
-  expect(() =>
-    Environment.load({ rootDir: app.rootDir, appEnv: "test" }),
-  ).toThrow(/2 issue/);
-});
 
 const module = (
   name: string,
@@ -75,7 +15,8 @@ const module = (
   tier,
   priority,
   dependsOn,
-  requires: [], env: [],
+  requires: [],
+  env: {},
 });
 
 test("dependencies outrank priority while sys modules precede app modules", () => {
@@ -117,7 +58,7 @@ test.each([
 
 test("a url variable accepts a replica set's host list and still rejects a malformed one", async () => {
   const { coerceValue } = await import("../src/env/coerce.ts");
-  const spec = { name: "MONGO_URI", type: "url", description: "Database" } as const;
+  const spec = { key: "MONGO_URI", type: "url", description: "Database" } as const;
   const accepts = (value: string) => coerceValue(spec, value).ok;
 
   // Every self-hosted replica set is addressed this way; WHATWG URL parsing
