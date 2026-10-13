@@ -24,7 +24,7 @@ const files = {
         if (token?.startsWith('user:')) req.auth = { isAuthenticated: true, user: { _id: token.slice(5), role: 'user' }, session: null };
         next();
       });
-      r.get('/things', ctx.rai({ id: 'probe:web:read' }), (req, res) => res.respond({ data: { greeting: ctx.config.probe.greeting, q: req.query.q ?? null, port: process.env.PORT } }));
+      r.get('/things', ctx.rai({ id: 'probe:web:read' }), (req, res) => res.respond({ data: { greeting: ctx.config.probe.greeting, q: req.query.q ?? null, mark: process.env.PROBE_MARK } }));
       r.post('/things', ctx.rai({ id: 'probe:web:write' }), (req, res) => res.respond({ status: 201, data: { echoed: req.body, by: req.auth.user._id } }));
       r.post('/auth/register', ctx.rai({ id: 'auth:web:register' }), (req, res) => res.respond({ status: 201, data: { user: { id: 'u-' + req.body.email.length }, access_token: 'user:u-' + req.body.email.length, refresh_token: 'r' } }));
       r.post('/auth/login', ctx.rai({ id: 'auth:web:login' }), (req, res) => res.respond({ data: { user: { id: 'u' }, access_token: 'user:u', refresh_token: 'r2' } }));
@@ -42,9 +42,10 @@ test("boots on a free port with the env and settings asked for, decodes the enve
     expect(app.prefix).toBe("");
     expect(process.env.PROBE_MARK).toBe("set");
 
-    const ok = await app.get<{ greeting: string; q: string | null; port: string }>("/things", { query: { q: "x" } });
+    const ok = await app.get<{ greeting: string; q: string | null; mark: string }>("/things", { query: { q: "x" } });
     expect(ok.status).toBe(200);
-    expect(ok.data).toEqual({ greeting: "Howdy", q: "x", port: "0" });
+    // The variable asked for reached the booted process; the port was free.
+    expect(ok.data).toEqual({ greeting: "Howdy", q: "x", mark: "set" });
     expect(ok.body).toMatchObject({ success: true, errors: [] });
 
     const denied = await app.post("/things", { a: 1 });

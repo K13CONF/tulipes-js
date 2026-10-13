@@ -1,6 +1,7 @@
 import type { HydratedDocument, InferSchemaType, Model, ObtainSchemaGeneric, Schema } from "mongoose";
 
 export { initDatabase, type BootstrapFn, type ModelDef } from "./database.ts";
+export { readConnectionConfig, type MongooseConnectionConfig } from "./connection-config.ts";
 export { ModelStore } from "./model-store.ts";
 export { MongoSettingsStore, type MongoSettingsStoreOptions, type SettingsDocument, type SettingsHistoryDocument } from "./settings-store.ts";
 export { provider as settingsProvider } from "./settings-provider.ts";

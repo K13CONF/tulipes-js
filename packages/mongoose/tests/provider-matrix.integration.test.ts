@@ -1,8 +1,11 @@
 import mongoose from "mongoose";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "../../core/tests/fixture.ts";
+import { fixture as coreFixture } from "../../core/tests/fixture.ts";
 import type { ModelStore } from "../src/index.ts";
 
+// Every fixture wires config.mongoose the way an app's config/app.config.ts does.
+const wiring = `export default (env) => ({ mongoose: { uri: env.probe?.mongoUri } });`;
+const fixture = (files: Record<string, string> = {}) => coreFixture({ "config/app.config.js": wiring, ...files });
 /**
  * S09.9 — the failure and omission matrix with the real driver. What core's
  * fake-provider tests prove about the seam, these prove about this provider:
@@ -14,7 +17,7 @@ const mongo = process.env.TEST_MONGO_URI;
 const integration = test.skipIf(!mongo);
 
 const declared = JSON.stringify({ type: "module", tulipes: { providers: { models: "@tulipes/mongoose" } } });
-const uriEnv = [{ name: "MONGO_URI", type: "url", default: mongo, description: "Test database" }];
+const uriEnv = { mongoUri: { key: "MONGO_URI", type: "url", default: mongo, description: "Test database" } };
 const uriMeta = JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: uriEnv } });
 const openConnections = () => mongoose.connections.filter((c) => c.readyState !== 0);
 
@@ -39,12 +42,12 @@ integration("a MONGO_URI without a declaration connects nothing, even with the p
   expect(mongoose.connections.length).toBe(before);
 });
 
-integration("a declared provider without MONGO_URI is a boot error naming the variable", async () => {
+integration("a declared provider without config.mongoose.uri is a boot error naming the key to wire", async () => {
   vi.stubEnv("MONGO_URI", undefined);
   const app = await fixture({ "package.json": declared });
 
   await expect(app.boot({ mode: "script" })).rejects.toThrow(
-    /Boot aborted during "providers"[\s\S]*provider "mongoose" is selected but "MONGO_URI" is not declared\/set/,
+    /Boot aborted during "providers"[\s\S]*provider "mongoose" is selected but config\.mongoose\.uri is not set — wire it in config\/app\.config\.ts/,
   );
   expect(openConnections()).toHaveLength(0);
 });
@@ -53,10 +56,10 @@ integration("an unreachable database fails inside the provider, after ownership,
   vi.stubEnv("MONGO_URI", "mongodb://127.0.0.1:1/unreachable");
   const app = await fixture({
     "package.json": declared,
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [{ name: "MONGO_URI", type: "url", required: true, description: "Test database" }] } }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { mongoUri: { key: "MONGO_URI", type: "url", required: true, description: "Test database" } } } }),
   });
 
-  await expect(app.boot({ mode: "script" })).rejects.toThrow(/database connection failed \(MONGO_URI\)/);
+  await expect(app.boot({ mode: "script" })).rejects.toThrow(/database connection failed \(config\.mongoose\.uri\)/);
   expect(openConnections()).toHaveLength(0);
 });
 
