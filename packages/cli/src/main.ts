@@ -29,7 +29,7 @@ Usage:
                                  --no-queues | --no-sockets  (production only) leave a provider out
   tulipes dev [entry]          run the entrypoint with node --watch (default: app.ts), sync first
   tulipes sync                 regenerate types/tulipes.d.ts and .env.example
-  tulipes env:check            validate env against every module's tulipes.env (CI-friendly)
+  tulipes env:check            resolve every module's tulipes.env and show where each value lands (CI-friendly)
   tulipes config:check         load every settings namespace from the store and print it
   tulipes routes               list every declared endpoint, with the roles that reach it
                                  --scope <scope>  only the endpoints of one scope (bo, web, …)

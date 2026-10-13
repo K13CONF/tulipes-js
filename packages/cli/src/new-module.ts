@@ -250,7 +250,7 @@ function renderModule(
       ` * A plain function of the context: build the router, declare a RAI on`,
       ` * every endpoint, return it and core mounts it under config.api.prefix`,
       ` * (or call ctx.routes.mount(router, "/other")). Read models, settings and`,
-      ` * the environment inside handlers, not here — inspection builds this`,
+      ` * the config inside handlers, not here — inspection builds this`,
       ` * router with nothing acquired.`,
       ` *`,
       ` * Every id is "module:scope:resource[:extra]": ${name}:${surface}:list,`,
