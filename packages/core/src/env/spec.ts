@@ -96,7 +96,9 @@ export const LEGACY_ARRAY_MESSAGE =
 export const envDeclarationSchema = z
   .unknown()
   .superRefine((value, ctx) => {
-    if (Array.isArray(value)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: LEGACY_ARRAY_MESSAGE });
+    // Fatal: the one line that names the way out is the whole report; the
+    // record schema below would add a meaningless line per array entry.
+    if (Array.isArray(value)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: LEGACY_ARRAY_MESSAGE, fatal: true });
   })
   .pipe(z.record(configKeySchema, variableSpecSchema))
   .superRefine((declaration, ctx) => {

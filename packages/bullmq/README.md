@@ -23,10 +23,12 @@ own Redis clients.
 { "tulipes": { "providers": { "queues": "@tulipes/bullmq" } } }
 ```
 
-plus `REDIS_URL` declared by the app's sys `core` module and set. A `queues/`
-directory requires the provider automatically; a module that only produces
-declares `"tulipes": { "requires": ["queues"] }`. Installing this package
-without the declaration selects nothing; a `REDIS_URL` on its own starts nothing.
+plus `config.bullmq.redisUrl` wired in `config/app.config.ts` from a variable
+the app's sys `core` module declares: `bullmq: { redisUrl: env.core.redisUrl }`.
+A `queues/` directory requires the provider automatically; a module that only
+produces declares `"tulipes": { "requires": ["queues"] }`. Installing this
+package without the declaration selects nothing; a wired URL on its own
+starts nothing.
 
 ## Use it
 

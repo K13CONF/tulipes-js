@@ -40,7 +40,8 @@ Usage:
                                  --scope <scope>  describe one client surface only
                                  all three inspect the app: no service, secret or .env is needed
   tulipes migrate 0.11         rewrite an app generated on 0.10 to the 0.11 layout and contracts
-  tulipes migrate 0.12         give every RAI id a scope: users:read → users:web:read
+  tulipes migrate 0.12         give every RAI id a scope (users:read → users:web:read) and move the
+                                 environment into the config (tulipes.env keyed by name, ctx.config.<module>.<name>)
                                  --scope <scope>  the scope to insert (default: web)
   tulipes config:import        carry .envs values that became settings into the store
                                  --env <APP_ENV>  --from <file>  --dry-run
