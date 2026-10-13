@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/socket.io",
-  "version": "0.1.3-rc.1",
+  "version": "0.1.3-rc.2",
   "description": "Socket.IO sockets provider for Tulipes apps: module-owned namespaces on the backend's HTTP server, behind core's sockets capability",
   "type": "module",
   "exports": {
