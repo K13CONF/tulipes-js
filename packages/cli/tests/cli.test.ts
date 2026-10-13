@@ -1,7 +1,8 @@
 import { access, readFile } from "node:fs/promises";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { runEnvCheck } from "../src/env-check.ts";
 import { runNewModule } from "../src/new-module.ts";
 import { runSync } from "../src/sync.ts";
 import { runInit } from "../src/init.ts";
@@ -209,4 +210,70 @@ test("sync leaves the provider augmentations out of an app with no model or queu
   const dts = await readFile(app.rootDir + "/types/tulipes.d.ts", "utf8");
   expect(dts).not.toContain("@tulipes/mongoose");
   expect(dts).not.toContain("@tulipes/bullmq");
+});
+
+const billingManifest = JSON.stringify({ name: "@test/billing", type: "module", tulipes: { env: {
+  apiKey: { key: "BILLING_API_KEY", type: "secret", required: true, group: "stripe", description: "Stripe secret key" },
+  trialDays: { key: "BILLING_TRIAL_DAYS", type: "number", default: 14, description: "Days before the first charge" },
+  region: { key: "BILLING_REGION", type: "enum", enum: ["eu", "us"], description: "Optional: no default, not required" },
+} } });
+
+test("sync types environment values for the app config and the module namespace, and writes .env.example by variable", async () => {
+  const app = await fixture({
+    "modules/core/package.json": '{"name":"@test/core","type":"module"}',
+    "modules/billing/package.json": billingManifest,
+    "modules/billing/module.config.ts": `
+      import { defineConfig } from "@tulipes/core/config";
+      import { z } from "zod/v4";
+      export default defineConfig({ schema: z.object({ currency: z.string().default("EUR") }) });
+    `,
+  });
+
+  await runSync(app.rootDir);
+
+  const dts = await readFile(app.rootDir + "/types/tulipes.d.ts", "utf8");
+  expect(dts).toContain('interface EnvValues {\n    "billing": {');
+  expect(dts).toContain("readonly apiKey: string;");
+  expect(dts).toContain("readonly trialDays: number;");
+  expect(dts).toContain('readonly region: "eu" | "us" | undefined;');
+  // Both halves of the namespace, one type.
+  expect(dts).toMatch(/"billing"\?: import\("zod\/v4"\)\.output<[^>]+>\s*& EnvValues\["billing"\];/);
+  expect(dts).not.toContain("KnownVariables");
+  const result = spawnSync(resolve("node_modules/.bin/tsc"), [app.rootDir + "/types/tulipes.d.ts", "--noEmit", "--skipLibCheck", "--allowImportingTsExtensions"], { encoding: "utf8" });
+  expect(result.status, result.stdout + result.stderr).toBe(0);
+
+  const example = await readFile(app.rootDir + "/.env.example", "utf8");
+  expect(example).toContain("# ━━━ billing ━━━");
+  expect(example).toContain("# ── stripe ──\n# Stripe secret key (secret, REQUIRED) → config.billing.apiKey\nBILLING_API_KEY=");
+  expect(example).toContain("BILLING_TRIAL_DAYS=14");
+});
+
+test("env:check shows where each value lands and from which source, redacts secrets, and fails on a missing one", async () => {
+  const app = await fixture({ "modules/billing/package.json": billingManifest, ".envs/.env.development": "BILLING_TRIAL_DAYS=30\n" });
+  const logs: string[] = [];
+  const errors: string[] = [];
+  vi.spyOn(console, "log").mockImplementation((line: string) => void logs.push(line));
+  vi.spyOn(console, "error").mockImplementation((line: string) => void errors.push(line));
+  const previous = process.exitCode;
+  try {
+    vi.stubEnv("APP_ENV", undefined);
+    vi.stubEnv("BILLING_API_KEY", "sk_live_do_not_print");
+    await runEnvCheck(app.rootDir);
+    expect(process.exitCode).toBe(previous);
+    expect(logs).toEqual([
+      "APP_ENV=development — 3 variable(s) resolved:",
+      "  ✔ config.billing.apiKey ← BILLING_API_KEY=•••",
+      "  ✔ config.billing.trialDays ← BILLING_TRIAL_DAYS=30",
+      "  ✔ config.billing.region ← BILLING_REGION=(not set)",
+    ]);
+    expect(logs.join("\n")).not.toContain("sk_live");
+
+    vi.stubEnv("BILLING_API_KEY", undefined);
+    await runEnvCheck(app.rootDir);
+    expect(process.exitCode).toBe(1);
+    expect(errors.join("\n")).toMatch(/required variable "BILLING_API_KEY" has no value/);
+  } finally {
+    process.exitCode = previous;
+    vi.restoreAllMocks();
+  }
 });

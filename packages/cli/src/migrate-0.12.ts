@@ -4,6 +4,8 @@ import { dirname, join, relative } from "node:path";
 import { isRai, RAI_SEGMENT } from "@tulipes/core/acl";
 
 import { walkTs } from "./migrate.ts";
+import { migrateEnv } from "./migrate-0.12-env.ts";
+import { migrateScaffoldIdioms } from "./migrate-0.12-scaffold.ts";
 
 /**
  * `tulipes migrate 0.12` — every RAI id gains a scope.
@@ -26,6 +28,10 @@ import { walkTs } from "./migrate.ts";
  * The one judgement it leaves to a person is which ids belong to another
  * scope: everything lands in one, and moving the back office to `bo` is a
  * rename of the id, its grants and its references, by hand.
+ *
+ * The same command carries the environment into the config — see
+ * `migrate-0.12-env.ts` for the rules and `migrate-0.12-scaffold.ts` for
+ * the reference app's own idioms.
  */
 export interface Migration012Report {
   scope: string;
@@ -33,6 +39,8 @@ export interface Migration012Report {
   todos: string[];
   /** Every id rewritten, old → new. */
   ids: Record<string, string>;
+  /** Per module: variable → the config name it is read under. */
+  env: Record<string, Record<string, string>>;
 }
 
 const TWO_SEGMENTS = /^[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9-]*$/;
@@ -58,7 +66,7 @@ export function migrate012(rootDir: string, options: { scope?: string } = {}): M
   if (!RAI_SEGMENT.test(scope)) {
     throw new Error(`--scope "${scope}" is not a scope — lowercase, starting with a letter ([a-z][a-z0-9-]*)`);
   }
-  const report: Migration012Report = { scope, changed: [], todos: [], ids: {} };
+  const report: Migration012Report = { scope, changed: [], todos: [], ids: {}, env: {} };
   const scoped = (id: string): string => {
     const [module, resource] = id.split(":") as [string, string];
     return `${module}:${scope}:${resource}`;
@@ -158,13 +166,21 @@ export function migrate012(rootDir: string, options: { scope?: string } = {}): M
     }
   }
 
+  // ── the environment: declarations keyed by config name, reads through ctx.config ──
+  // The scaffold's own idioms first, while their 0.11 text is still intact.
+  migrateScaffoldIdioms(rootDir, report.changed);
+  const env = migrateEnv(rootDir);
+  report.changed.push(...env.changed);
+  report.todos.push(...env.todos);
+  report.env = env.env;
+
   const record = join(rootDir, "config", "migration-0.12.json");
   mkdirSync(dirname(record), { recursive: true });
   writeFileSync(
     record,
-    JSON.stringify({ migrated_at: new Date().toISOString(), scope, ids: report.ids, todos: report.todos }, null, 2) + "\n",
+    JSON.stringify({ migrated_at: new Date().toISOString(), scope, ids: report.ids, env: report.env, todos: report.todos }, null, 2) + "\n",
   );
-  report.changed.push(`wrote config/migration-0.12.json (${known.length} id(s) scoped "${scope}")`);
+  report.changed.push(`wrote config/migration-0.12.json (${known.length} id(s) scoped "${scope}", ${Object.values(report.env).reduce((n, m) => n + Object.keys(m).length, 0)} variable(s) keyed)`);
   return report;
 }
 
@@ -212,11 +228,16 @@ export async function runMigrate012(rootDir: string, options: { scope?: string }
   const ids = Object.entries(report.ids);
   console.log(`\nscoped ${ids.length} id(s) "${report.scope}"; ${report.todos.length} TODO(s) to review`);
   for (const [from, to] of ids) console.log(`  ${from} → ${to}`);
+  for (const [module, variables] of Object.entries(report.env)) {
+    for (const [variable, name] of Object.entries(variables)) console.log(`  ${variable} → config.${module}.${name}`);
+  }
   for (const todo of report.todos) console.log(`  ! ${todo}`);
   console.log(
     [
       "",
       "next:",
+      "  every variable is read as ctx.config.<module>.<name>; config/app.config.ts wires",
+      "  server.port, mongoose.uri and bullmq.redisUrl from them (add the MongoDB parts if you want them)",
       `  every id is in scope "${report.scope}" now. Move the back office (and any other surface)`,
       "  by hand: rename the id in routes/ or agent/, its grants in module.acl.ts, and its",
       "  references — `pnpm tulipes routes` lists them, `pnpm typecheck` finds a two-segment id",

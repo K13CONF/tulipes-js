@@ -1,6 +1,6 @@
 import type { Express, RequestHandler, Router } from "express";
 
-import type { Environment } from "../env/environment.ts";
+import type { AppEnv } from "./app-env.ts";
 import type { ProcessMode } from "./boot.ts";
 import type { GlobalConfig } from "../config/index.ts";
 import type { SettingsApi } from "../config/settings.ts";
@@ -9,6 +9,7 @@ import type { AgentRegistry } from "../agent/registry.ts";
 import type { RouteInfo, RouteRegistry } from "../http/rai.ts";
 import type { ModuleManifest } from "../modules/manifest.ts";
 import type { I18nextInstance, TFunction } from "../i18n/index.ts";
+import type { ZonedTime } from "../time/index.ts";
 
 /**
  * The context object threaded through every module-authored function.
@@ -22,7 +23,13 @@ export interface Ctx {
    * and worker never rotate the same file, is the motivating case.
    */
   mode: ProcessMode;
-  Environment: Environment;
+  /**
+   * Which deployment this is — development, staging, production or test —
+   * from APP_ENV. It selects the env file and the settings file at boot;
+   * modules read it to refuse a development default in production, or to
+   * record where an action happened.
+   */
+  appEnv: AppEnv;
   /**
    * Every module in load order, with its manifest and resolved directory.
    *
@@ -32,9 +39,11 @@ export interface Ctx {
    */
   modules: readonly ModuleManifest[];
   /**
-   * Every module's settings, namespaced by short name and kept live: a
-   * write through `ctx.settings` or from another replica replaces the
-   * values in place. Read a value where it is used, never cache it at boot.
+   * Every module's configuration, namespaced by short name: its settings,
+   * kept live (a write through `ctx.settings` or from another replica
+   * replaces the values in place), and its environment values, read-only
+   * and bound at boot from the variables its package.json declares. Read a
+   * value where it is used, never cache it at boot.
    */
   config: GlobalConfig;
   /** The write and inspection side of the settings store; reads go through `config`. */
@@ -85,6 +94,18 @@ export interface Ctx {
   t: (namespace: string, locale?: string) => TFunction;
   /** The i18next instance, for anything `ctx.t` does not cover. */
   i18n: I18nextInstance;
+  /**
+   * Zone-aware helpers for code with no request to negotiate a zone from —
+   * a nightly report, a reminder email. `ctx.time.zone` is
+   * `config.timezone.default` (UTC when the app names none); pass the
+   * recipient's zone to read an instant as they would:
+   *
+   *   ctx.time.in(user.timezone, user.locale).format(invoice.due_at);
+   *
+   * Inside a request handler use `req.time`, already bound to the caller's
+   * zone. Settled in phase 7, with translations.
+   */
+  time: ZonedTime & { in(zone?: string, locale?: string): ZonedTime };
 }
 
 /**
@@ -106,9 +127,10 @@ export type BootstrapFn = (ctx: RuntimeCtx) => void | BootstrapCleanup | Promise
  * Default export of `routes/*.routes.ts`. Returns a Router, which core
  * mounts under `config.api.prefix` (or `ctx.routes.mount(router, "/other")`
  * to choose the path), or mounts global middleware on `ctx.app` itself and
- * returns nothing. Build the router from the context; read `ctx.models`,
- * `ctx.config` and the environment inside handlers, where they are live —
- * inspection runs this function with stubs that throw on infrastructure.
+ * returns nothing. Build the router from the context; read `ctx.models`
+ * and `ctx.config` inside handlers, where they are live — inspection runs
+ * this function with stubs that throw on infrastructure, and an
+ * environment value read while building throws for the same reason.
  */
 export type RoutesFn = (ctx: BackendCtx) => Router | void | Promise<Router | void>;
 

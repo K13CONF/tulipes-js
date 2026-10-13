@@ -15,7 +15,9 @@ import type { UserDoc } from "../helpers/documents.ts";
 export default async function seedAdmin(ctx: DatabaseCtx): Promise<void> {
   // Bootstrap runs in every mode; a one-off script has no business seeding.
   if (ctx.mode === "script") return;
-  const email = String(ctx.Environment.get("AUTH_ADMIN_EMAIL")).toLowerCase();
+  // The seeded credentials are this module's environment values.
+  const { adminEmail, adminPassword } = ctx.config.auth!;
+  const email = adminEmail.toLowerCase();
   const User = ctx.models.get<UserDoc>("User");
 
   let user: Pick<UserDoc, "_id"> | null = await User.findOne({ email }).lean();
@@ -39,6 +41,6 @@ export default async function seedAdmin(ctx: DatabaseCtx): Promise<void> {
     .limit(1);
 
   if (existing === 0) {
-    await setPassword(ctx, String(user!._id), String(ctx.Environment.get("AUTH_ADMIN_PASSWORD")));
+    await setPassword(ctx, String(user!._id), adminPassword);
   }
 }

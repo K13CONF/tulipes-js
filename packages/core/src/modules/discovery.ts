@@ -11,7 +11,7 @@ import { derivedDependsOn, tulipesManifestSchema, type ModuleManifest } from "./
  */
 const ROOT_FILES = /^(package\.json|module\.config\.[cm]?[jt]s|module\.acl\.[cm]?[jt]s)$/;
 const ROOT_HINTS: Record<string, string> = {
-  "meta.variables.json": "its variables moved to package.json under tulipes.env",
+  "meta.variables.json": 'its variables moved to package.json under "tulipes": { "env": { "<name>": { "key": "<VARIABLE>", … } } } — `tulipes migrate 0.11` then `tulipes migrate 0.12` rewrite a 0.10 module',
   "index.ts": "its public exports live in lib/index.ts, pointed at by package.json \"exports\"",
   "index.js": "its public exports live in lib/index.js, pointed at by package.json \"exports\"",
   "schemas.ts": "request schemas live in schemas/<module>.schemas.ts",

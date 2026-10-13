@@ -255,7 +255,7 @@ test("invalid refresh credentials cannot revoke a live family", async () => {
   const initial = await account();
   const other = await account();
   const original = jwt.decode(initial.refresh_token) as Record<string, unknown>;
-  const key = String(app.handle.ctx.Environment.get("JWT_REFRESH_SECRET"));
+  const key = String(app.handle.ctx.config.auth!.jwtRefreshSecret);
 
   const sign = (changes: Record<string, unknown>) =>
     jwt.sign({ ...original, ...changes }, key);

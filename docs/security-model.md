@@ -24,10 +24,13 @@ unknown roles or denied permissions. Since 0.12 a RAI id is
 ACL does not interpret: it is not a network or tenancy boundary, and a
 back-office endpoint is protected by the roles granted its id, never by the
 word `bo` in it. A prefix grant (`users:bo:*`) reaches every id under it,
-so review prefix grants as carefully as `*`. Since 0.11 configuration has two layers:
-the environment holds what boot needs before the settings store answers (the
-port, the connection strings, the log destinations) and the secrets, and is
-read-only at runtime; everything else is a setting, declared with a schema in
+so review prefix grants as carefully as `*`. Configuration has two layers in
+one place: a module's environment values hold what boot needs before the
+settings store answers (the port, the connection strings, the log
+destinations) and the secrets — declared in its package.json, bound
+read-only and non-enumerable on `ctx.config.<module>` so that no listing,
+spread or serialisation of the namespace carries them; everything else is a
+setting, declared with a schema in
 the owning module, stored per deployment (MongoDB `settings` collection in the
 production preset), and written through `PATCH /config/:module` — `admin` may
 read the console, `sysadmin` alone may write, and every write is validated by
@@ -40,7 +43,7 @@ deployment secrets and are never readable through the console.
 
 Staging and production boot reject blank or known development signing keys,
 seed passwords/default admin identity, and identical access/refresh keys. Errors
-name variables without their values. The guard is deployment validation, not a
+name the variables (never the config names' values). The guard is deployment validation, not a
 password-strength estimator. Set unique random keys and an operator-owned admin
 identity; environment validation alone does not check this policy until boot.
 
@@ -249,7 +252,7 @@ client per minute are 20 combined credential POSTs, 120 total auth requests and
 window and the namespace are the `security.rateLimits` setting, validated by
 the schema and rebuilt by the module's `onChange` when written; proxy trust,
 CORS, HSTS and the body limit are settings in the same namespace, and none of
-them is an environment variable any more. Replicas share atomic counters when
+them is an environment value any more. Replicas share atomic counters when
 they use the same namespace, environment and quota configuration. Rejected requests do not extend
 the window; responses use 429 with `Retry-After`. Store errors and stalled initial
 connections/commands fail closed with sanitized 503 responses and one-second
@@ -267,8 +270,9 @@ operators own sizing, persistence and deployment tuning. See the
 ## S08g — Constrained settings files
 
 Retired in 0.11. The console no longer reads or writes `.env` files or
-translation files: variables are read-only through `GET /config` (names,
-types, sources, and a non-secret's resolved value), translations are code in
+translation files: environment values are described through `GET /config`
+(config name, variable, type, source, and a non-secret's resolved value;
+`ctx.settings.describeEnv()`), translations are code in
 the repository, and settings live in the store the app declares. The file
 store core ships for apps without a settings provider writes
 `config/settings.<APP_ENV>.json` through an exclusive temporary sibling and
@@ -392,7 +396,7 @@ HTTP/socket/worker drain actions. Async notifications and traffic draining share
 the existing cleanup deadline; failures are aggregated and later cleanup is still
 attempted. Resource disposal remains in `onShutdown` after drain attempts.
 
-One log-stream manager belongs to each boot Environment. Draining permanently
+One log-stream manager belongs to each boot (keyed by its context). Draining permanently
 stops admission for that boot, closes idle/active responses, stops tails/timers and
 aborts cooperative authorization. Openings already waiting on authorization and
 late arrivals return sanitized 503 `LOG_STREAMS_DRAINING`; checks that later settle

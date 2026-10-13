@@ -9,6 +9,94 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [0.12.0-rc.2] — 2026-10-13
+
+The second candidate of the 0.12 line, on npm's `next` tag, superseding
+rc.1 before it was tagged. Two things join the scoped ids: the environment
+lives in the config, and the app has a time zone. `tulipes migrate 0.12`
+carries both the ids and the environment across. Packages: core
+`0.12.0-rc.2`, `@tulipes/cli` `0.3.0-rc.2`, `@tulipes/spec` `0.4.0-rc.2`,
+`@tulipes/mongoose` and `@tulipes/bullmq` `0.2.1-rc.2` and
+`@tulipes/testing` `0.1.1-rc.2` (the three require core `^0.12.0-rc.2`),
+`@tulipes/socket.io` `0.1.3-rc.2` and `@tulipes/mcp` `0.1.1-rc.2` (no
+source change).
+
+### Changed
+
+- **One config.** A module's environment values are declared in its
+  package.json `tulipes.env` as an object keyed by the camelCase name the
+  value is read under, with `key` naming the variable —
+  `{ "port": { "key": "PORT", "type": "number", "default": 3000, … } }` —
+  and read as `ctx.config.<module>.<name>`, beside the module's settings.
+  The values are bound in boot phase 6b as read-only, non-enumerable
+  getters: a spread, `JSON.stringify`, `Object.keys` and the settings store
+  never see them, so a secret cannot reach a response or a settings file.
+  Resolution is unchanged (`process.env` › `.envs/.env.<APP_ENV>` ›
+  `default`, every problem reported at once); variable names are unchanged,
+  so `.envs` files and deployments are untouched.
+- **`config/app.config.ts` receives the values.** Its default export is
+  `(env, { appEnv, mode }) => seed`; `env.core.port` and the like are typed
+  by `tulipes sync` (`EnvValues`). It wires what core and the providers
+  read: `server.port` (core; `boot({ port })` wins over it, 3000 without
+  either), `mongoose.{uri,user,pass,dbName}` (`@tulipes/mongoose`, which no
+  longer looks for `MONGO_URI`) and `bullmq.redisUrl` (`@tulipes/bullmq`,
+  which no longer looks for `REDIS_URL`). A seed named after a module is
+  refused: that namespace is the module's.
+- **Inspection resolves leniently**: nothing is required and an invalid
+  value is absent, so `tulipes routes` and `tulipes spec` need no `.env` or
+  secret; a module reading a value while building a router throws, naming
+  the value and where to read it instead.
+- `ctx.appEnv` replaces `Environment.appEnv`; `appEnvs` and `AppEnv` move
+  to `@tulipes/core/boot`.
+- `ctx.settings.describeEnv(module)` describes a module's environment
+  values for a console — name, key, type, source, `isSet`; never a
+  secret's value or default.
+- `tulipes sync` generates `EnvValues` and types each module's
+  `GlobalConfig` entry as its settings output intersected with its
+  environment values; `.env.example` lines name the config key each
+  variable lands on. `tulipes env:check` prints
+  `config.<module>.<name> ← KEY=value`, secrets redacted.
+- `tulipes migrate 0.12` also carries the environment: declarations to the
+  object form, every read it can see to `ctx.config`, helpers that took the
+  engine to take the context, `handle.env` to `handle.ctx`, and the
+  app-config wiring; what it cannot read is a TODO naming the replacement.
+- The 0.11 array form of `tulipes.env` is refused by name, with the
+  command that rewrites it.
+
+### Removed
+
+- `Environment`, `VariableStore`, `KnownVariables`, `ctx.Environment`,
+  `BootHandle.env` and the `@tulipes/core/env` subpath. Tooling reads
+  `resolveEnv` and `ResolvedEnv` from `@tulipes/core/boot`.
+
+### Added
+
+- **Time zones.** `config.timezone` in `config/app.config.ts` names the
+  app's zone — `{ default: "Africa/Casablanca", supported?: [...],
+  applyToProcess?: boolean }`. An app without the block behaves as before:
+  instants read in UTC and the process zone is not touched.
+- A request negotiates its zone like its locale — `?tz=`, then an
+  `X-Timezone` header, then `config.timezone.default`, narrowed to
+  `supported` when it is listed — and reads it as `req.timezone`, with
+  helpers bound to it on `req.time` (`format`, `toISO`, `startOfDay`,
+  `fromWallClock`, `offsetMinutes`). Code with no request uses `ctx.time`,
+  and `ctx.time.in(zone, locale)` for a recipient's zone.
+- Naming a zone also sets `process.env.TZ` for the life of the boot (not
+  under inspection; restored at shutdown), so `Date#getHours()`, log
+  timestamps and daily log rotation agree with the app. Opt out with
+  `applyToProcess: false`.
+- `@tulipes/core/time`: `toZonedISO`, `startOfDay`, `zonedTimeToUtc`,
+  `offsetMinutes`, `formatDate`, `canonicalTimezone`, `resolveTimezone`.
+- An unknown zone in `config.timezone` aborts the boot in a new
+  `timezone` phase (7b, after translations). The banner shows the zone.
+- `@tulipes/bullmq`: a cron `pattern` with no `tz` fires in
+  `config.timezone.default`, through `add(..., { repeat })` and the new
+  `ctx.queues.schedule(queue, schedulerId, repeat, job)` /
+  `unschedule()`, which wrap BullMQ's job schedulers and validate the
+  template's data against the queue's schema.
+
+Dates on the wire are unchanged: stored and returned as UTC ISO strings.
+
 ## [0.12.0-rc.1] — 2026-10-12
 
 The 0.12 line as a candidate, on npm's `next` tag. Breaking for every app

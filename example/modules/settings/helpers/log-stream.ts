@@ -1,5 +1,5 @@
 import type { Response } from "express";
-import type { Environment } from "@tulipes/core/env";
+import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
 import { AccessLease } from "./access-lease.ts";
 import { tailLogs, type Tail } from "./log-tail.ts";
@@ -37,14 +37,15 @@ const LEVELS: Record<string, number> = {
   fatal: 60,
 };
 
-const instances = new WeakMap<Environment, LogStreams>();
+/** One manager per boot: the context object is what a boot has exactly one of. */
+const instances = new WeakMap<Ctx, LogStreams>();
 
 /** Keep the stopped instance until the boot is collected; late requests cannot reopen it. */
-export function configuredLogStreams(environment: Environment): LogStreams {
-  let streams = instances.get(environment);
+export function configuredLogStreams(ctx: Ctx): LogStreams {
+  let streams = instances.get(ctx);
   if (!streams) {
     streams = new LogStreams();
-    instances.set(environment, streams);
+    instances.set(ctx, streams);
   }
   return streams;
 }

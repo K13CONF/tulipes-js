@@ -29,7 +29,7 @@ Usage:
                                  --no-queues | --no-sockets  (production only) leave a provider out
   tulipes dev [entry]          run the entrypoint with node --watch (default: app.ts), sync first
   tulipes sync                 regenerate types/tulipes.d.ts and .env.example
-  tulipes env:check            validate env against every module's tulipes.env (CI-friendly)
+  tulipes env:check            resolve every module's tulipes.env and show where each value lands (CI-friendly)
   tulipes config:check         load every settings namespace from the store and print it
   tulipes routes               list every declared endpoint, with the roles that reach it
                                  --scope <scope>  only the endpoints of one scope (bo, web, …)
@@ -40,7 +40,8 @@ Usage:
                                  --scope <scope>  describe one client surface only
                                  all three inspect the app: no service, secret or .env is needed
   tulipes migrate 0.11         rewrite an app generated on 0.10 to the 0.11 layout and contracts
-  tulipes migrate 0.12         give every RAI id a scope: users:read → users:web:read
+  tulipes migrate 0.12         give every RAI id a scope (users:read → users:web:read) and move the
+                                 environment into the config (tulipes.env keyed by name, ctx.config.<module>.<name>)
                                  --scope <scope>  the scope to insert (default: web)
   tulipes config:import        carry .envs values that became settings into the store
                                  --env <APP_ENV>  --from <file>  --dry-run

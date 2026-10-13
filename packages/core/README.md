@@ -86,8 +86,9 @@ the feature is gone — no dangling registration left in six other files.
 
 **Fail closed, everywhere.** Missing variables, dependency cycles, duplicate
 ACL grants, colliding queue names: all crash the boot with a full report.
-Reading an undeclared variable or an unregistered model throws at the call
-site. Unknown roles deny. Unrouted requests 404. Unexpected errors never leak
+Reading an unregistered model throws at the call site; an environment value
+is typed from its declaration, so a name that does not exist does not
+compile. Unknown roles deny. Unrouted requests 404. Unexpected errors never leak
 internals outside development.
 
 **One codebase, three processes.** The same app boots as a `backend` server, a
@@ -96,8 +97,9 @@ forked at the last pipeline phase. A maintenance script therefore runs against
 exactly the configuration the server has, never an approximation of it.
 
 **Types generated, not hand-written.** `tulipes sync` reads your modules and
-emits a `types/tulipes.d.ts`: enum variables become literal unions, config
-namespaces are the output of each module's settings schema, `ctx.models.get()`
+emits a `types/tulipes.d.ts`: enum values become literal unions, config
+namespaces are the output of each module's settings schema joined with its
+environment values, `ctx.models.get()`
 is typed from each model file's schema and `queues.add()` from each queue
 file's job schemas — a wrong name or payload does not compile.
 
@@ -145,45 +147,56 @@ depending on an app module all crash the boot. Cross-module imports go through
 package names, so the package manager enforces that a module only uses what it
 declares.
 
-## The environment contract
+## Environment values
 
-Each module declares the variables it needs. Plain JSON, so tooling can read a
-module's contract without executing its code.
+A module declares what it needs from the deployment in its `package.json`,
+keyed by the config name it reads the value under; `key` names the variable.
+Plain JSON, so tooling can read a module's contract without executing its code.
 
 ```json
 {
-  "variables": [
-    {
-      "name": "STRIPE_API_KEY",
-      "type": "secret",
-      "group": "billing",
-      "required": true,
-      "description": "Server-side Stripe key"
-    },
-    {
-      "name": "BILLING_TRIAL_DAYS",
-      "type": "number",
-      "group": "billing",
-      "description": "Free trial length",
-      "default": 14
+  "tulipes": {
+    "env": {
+      "stripeApiKey": { "key": "STRIPE_API_KEY", "type": "secret", "group": "billing", "required": true, "description": "Server-side Stripe key" },
+      "trialDays":    { "key": "BILLING_TRIAL_DAYS", "type": "number", "group": "billing", "default": 14, "description": "Free trial length" }
     }
-  ]
+  }
 }
 ```
 
 ```ts
-ctx.Environment.get("BILLING_TRIAL_DAYS"); // number, after `tulipes sync`
-ctx.Environment.get("TYPO_NAME");          // throws — never declared
+ctx.config.billing.trialDays;    // number, after `tulipes sync`
+ctx.config.billing.stripeApiKey; // string — read where it is used, never listed
 ```
+
+The values land beside the module's settings in `ctx.config.<module>`, so
+code reads both the same way — and they are **read-only and non-enumerable**:
+`{ ...ctx.config.billing }`, `JSON.stringify`, `Object.keys` and the settings
+store never see them, which is what keeps a secret out of a response body and
+out of a settings file. `tulipes env:check` is where they are seen.
 
 Resolution is **`process.env` › `.envs/.env.<APP_ENV>` › `default`**, so
 container-injected values always win. Values are coerced and validated against
-their declared type, and `secret` values are redacted in logs, reports and the
-startup banner.
+their declared type, every problem reported at once, and a `secret` is
+withheld from `GET /config`, `env:check` and the startup banner. Under
+inspection (`tulipes routes`, `tulipes spec`) nothing is required and a module
+reading a value while *building* a router throws, naming it.
+
+Core and the providers read fixed keys that `config/app.config.ts` wires from
+these values — it receives them as `env`, typed:
+
+```ts
+export default ((env) => ({
+  server:   { port: env.core.port },
+  mongoose: { uri: env.core.mongodbUri },     // or { uri: host, user, pass, dbName }
+  bullmq:   { redisUrl: env.core.redisUrl },
+})) satisfies AppConfigFn;
+```
 
 | Field | Rules |
 |---|---|
-| `name` | UPPER_SNAKE, **one owner per variable** — two modules declaring the same name is a boot crash naming both |
+| name (the key) | camelCase, like a settings field; not also a field of the module's settings schema — the boot refuses a name used by both |
+| `key` | UPPER_SNAKE, **one owner per variable** — two modules declaring the same key is a boot crash naming both |
 | `type` | `string` · `number` · `boolean` · `enum` · `url` · `secret` |
 | `enum` | required with `type: "enum"`; generates a literal union |
 | `required` | no value anywhere → boot crash; mutually exclusive with `default` |
@@ -191,7 +204,7 @@ startup banner.
 | `group` | free-form label; groups the variable in the generated `.env.example` |
 
 The mode comes from `APP_ENV`, deliberately **not** `NODE_ENV` — bundlers and
-libraries overload that one as an optimisation flag.
+libraries overload that one as an optimisation flag; read it as `ctx.appEnv`.
 
 ## Translations
 
@@ -234,6 +247,43 @@ with the default text as the value — a work list for a translator, rewritten
 on each non-production boot and never written in production. Invalid JSON, or
 an `i18n/` folder with no default-locale file, aborts the boot: i18next would
 otherwise serve raw keys with nothing in the log to explain it.
+
+## Time zones
+
+Instants are stored and returned as UTC — a `Date` in a response is still
+`"2026-10-13T14:00:00.000Z"`. A zone is how an instant is *read*: what
+"today" means for a report, the time in an email, when a nightly job
+fires. The app names its zone in `config/app.config.ts`:
+
+```ts
+timezone: {
+  default: "Africa/Casablanca",
+  supported: ["Africa/Casablanca", "Europe/Paris"],  // optional; omit to accept any IANA zone
+  applyToProcess: true,                              // the default once a zone is named
+},
+```
+
+Each request negotiates its own zone the way it negotiates a locale —
+`?tz=Europe/Paris`, then an `X-Timezone` header, then the default — and an
+unknown or unsupported zone falls through to the next candidate:
+
+```ts
+const since = req.time.startOfDay();               // the caller's local midnight, as a UTC Date
+const orders = await Order.find({ created_at: { $gte: since } });
+res.respond({ data: { orders, timezone: req.timezone, as_of: req.time.toISO(new Date()) } });
+// as_of: "2026-10-13T15:00:00.000+01:00" — the same instant, with the caller's offset
+```
+
+Code with no request uses `ctx.time` (the app's zone) or reads in a
+recipient's: `ctx.time.in(user.timezone, user.locale).format(invoice.due_at)`.
+The same helpers are exported from `@tulipes/core/time`, taking the zone
+as an argument.
+
+Naming a zone also moves the process onto it (`process.env.TZ`) for the
+life of the boot, so `Date#getHours()`, log timestamps and daily log
+rotation agree with the app; `applyToProcess: false` keeps the server's
+zone. A cron pattern given to `@tulipes/bullmq` without a `tz` fires in the
+app's zone. An unknown zone aborts the boot.
 
 ## One response shape
 
@@ -360,15 +410,18 @@ and `tulipes spec --scope mobile` show or describe one surface.
 ## The boot pipeline
 
 ```
- 1  Environment      .env.<APP_ENV> + every package.json tulipes.env → validate
+ 1  Environment      APP_ENV; every package.json tulipes.env resolved from
+                     process.env, .env.<APP_ENV>, the defaults → validate
  2  Module graph     "tulipes" keys → tier / priority / topological sort
  3  Exploration      resolve conventional paths in load order, import nothing
  4  Declarations     config/app.config.ts seed; each module.config.ts schema
  5  Models, settings providers connect (@tulipes/mongoose: connection → model store;
     @tulipes/mongoose/settings: the `settings` collection behind ctx.settings)
  6  Settings         every namespace read from the store, seeded on first boot,
-                     validated against its schema → ctx.config.<module>
- 7  Translations     modules/*/i18n/*.json, one namespace per module
+                     validated against its schema → ctx.config.<module>;
+                     then each module's environment values bound read-only beside them
+ 7  Translations     modules/*/i18n/*.json, one namespace per module;
+                     then config.timezone → ctx.time, process.env.TZ
  8  ACL              module.acl.ts in load order
  9  Bootstrap        bootstrap/*.bootstrap.ts in load order, every mode;
                      a returned function is the module's cleanup
@@ -397,8 +450,8 @@ interface Ctx {
   mode: ProcessMode;        // "backend" | "worker" | "script"
   rai: (info: RouteInfo) => RequestHandler;  // declare + gate an endpoint
   routes: RouteRegistry;    // every declared endpoint
-  Environment: Environment; // typed variable store
-  config: GlobalConfig;     // namespaced by module: config.billing
+  appEnv: AppEnv;           // development | staging | production | test
+  config: GlobalConfig;     // namespaced by module: config.billing — settings and environment values
   t: (ns: string, locale?: string) => TFunction;  // off-request translator
   i18n: I18nextInstance;    // the instance underneath
   acl?: Acl;                // after phase 6
@@ -496,7 +549,7 @@ loader — a running app installs only the HTTP runtime.
 | `tulipes init [dir] [--minimal \| --preset minimal \| --preset production] [--no-queues] [--no-sockets]` | scaffold an application; no services; the opt-outs compose the production preset without that provider |
 | `tulipes dev [entry]` | regenerate types, then run the entrypoint with `node --watch` |
 | `tulipes sync` | regenerate `types/tulipes.d.ts` and `.env.example` |
-| `tulipes env:check` | validate the environment without booting — a CI gate |
+| `tulipes env:check` | resolve every environment value and show where it lands, without booting — a CI gate |
 | `tulipes routes [--scope s]` | list every declared endpoint with the roles that reach it; no service, secret or `.env` |
 | `tulipes roles [--role r]` | list every role with its description, extras, defining module and grants |
 | `tulipes spec [--openapi file] [--postman file] [--url base] [--scope s]` | generate documents from the same inspection, for one scope if asked |
@@ -529,7 +582,7 @@ routes files receive:
 
 | | serving | inspection |
 |---|---|---|
-| `ctx.Environment` | resolved and validated | declared and validated, every read throws |
+| environment values (`ctx.config.<module>.<name>`) | resolved and validated | resolved leniently (nothing required), every read throws |
 | `ctx.models`, `ctx.queues`, `ctx.sockets` | the declared providers | stubs that throw on use (undefined when not declared) |
 | `ctx.config.<module>` | the settings store | each schema's defaults, in memory |
 | bootstrap | runs | skipped |
@@ -538,9 +591,9 @@ routes files receive:
 The consequence is a rule a routes file already follows when it is written
 well: build the router from the context and use infrastructure inside
 handlers. A controller keeps `ctx` and reads `ctx.models` when a request
-arrives; a middleware that needs a variable or a client is built on its
-first request (`lazy()` in the reference app's core module). A file that
-reads a variable or a model while building fails inspection with its path
+arrives; a middleware that needs an environment value or a client is built
+on its first request (`lazy()` in the reference app's core module). A file
+that reads an environment value or a model while building fails inspection with its path
 and the reason, which is the right outcome: it would have coupled routing
 to a service.
 
@@ -569,7 +622,7 @@ and the migration guide says what replaces each.
 The framework is the engine; the scaffold is a complete application you own and
 edit:
 
-- **`modules/core`** (sys, priority 0) — infrastructure variables, the global
+- **`modules/core`** (sys, priority 0) — the infrastructure environment values, the global
   role vocabulary, request ids, and shared helpers exported as `@app/core`: a
   cache (`Cache` contract, Redis and LRU-capped memory drivers), Mongoose base
   plugins (snake_case timestamps, soft delete), and a **logger** writing a
@@ -646,8 +699,8 @@ Claude Code over MCP through that door.
 | Import | Contents |
 |---|---|
 | `@tulipes/core` | everything below |
-| `@tulipes/core/boot` | `boot`, `Ctx`, `BootHandle`, contract types |
-| `@tulipes/core/env` | `Environment`, `KnownVariables` (codegen target), spec types |
+| `@tulipes/core/boot` | `boot`, `Ctx`, `BootHandle`, `AppEnv`, contract types; `resolveEnv` for tooling |
+| `@tulipes/core/config` | `defineConfig`, `GlobalConfig` and `EnvValues` (codegen targets), `SettingsApi` |
 | `@tulipes/core/http` | `HttpError`, `notFoundHandler`, `errorHandler`, `parseRai`, `isRai`, `Rai` |
 | `@tulipes/core/acl` | `Acl`, `AclBuilder`, `AclFn`, `RoleMeta`, `RoleRecord`, `RoleDefinition`, `parseRai`, `isRai`, `isGrant` |
 | `@tulipes/core/agent` | `defineAgent`, `action`, `AgentRegistry`, `AgentManifest` |

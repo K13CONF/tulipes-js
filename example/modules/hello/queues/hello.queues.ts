@@ -25,7 +25,7 @@ export default function helloQueues(ctx: Ctx, queues: QueueRegistry): void {
   const { models } = ctx;
   // The same logger the backend uses. In the worker process it writes
   // to app-worker.log, so the two processes never share a file.
-  const log = moduleLogger(ctx.Environment, "hello", ctx.mode);
+  const log = moduleLogger(ctx, "hello");
 
   queues.process("hello.count-greeting", async (job) => {
     // Jobs retry, so processors must be idempotent-safe. Pass ids in

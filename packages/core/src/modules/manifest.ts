@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { variableSpecSchema, type VariableSpec } from "../env/spec.ts";
+import { envDeclarationSchema, type EnvDeclaration } from "../env/spec.ts";
 
 /**
  * A module's ordering metadata lives under the "tulipes" key of its
@@ -43,13 +43,14 @@ export const tulipesManifestSchema = z
     /** Short names of modules that must load before this one. */
     dependsOn: z.array(z.string().min(1)).default([]),
     /**
-     * This module's environment contract: the variables it owns. Boot
-     * resolves them before anything else; `tulipes sync` types them and
+     * This module's environment contract: config name → the variable that
+     * supplies it. Boot resolves them before anything else and binds them
+     * read-only on `ctx.config.<module>`; `tulipes sync` types them and
      * writes `.env.example` from them. Only what the process needs before
      * the database answers, plus secrets — everything else is a setting
      * declared in module.config.ts.
      */
-    env: z.array(variableSpecSchema).default([]),
+    env: envDeclarationSchema.default({}),
     /**
      * Provider capabilities this module consumes without owning files that
      * imply them (`models/` implies "models", `queues/` "queues", `sockets/` "sockets").
@@ -89,5 +90,5 @@ export interface ModuleManifest {
   priority: number;
   dependsOn: readonly string[];
   requires: readonly ModuleRequirement[];
-  env: readonly VariableSpec[];
+  env: EnvDeclaration;
 }

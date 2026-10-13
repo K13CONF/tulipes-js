@@ -87,10 +87,11 @@ test("a models/ directory implies the models requirement", async () => {
 test("an installed but undeclared provider is never imported, even with MONGO_URI set", async () => {
   const app = await fixture({
     "providers/fake.js": `throw new Error('provider imported without a declaration');`,
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-        { name: "PORT", type: "number", default: 0, description: "Ephemeral HTTP port" },
-        { name: "MONGO_URI", type: "url", default: "mongodb://127.0.0.1:1/unused", description: "Leftover" },
-      ] } }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: {
+      mongoUri: { key: "MONGO_URI", type: "url", default: "mongodb://127.0.0.1:1/unused", description: "Leftover" },
+    } } }),
+    // Even wired where the provider would read it: only the declaration selects a provider.
+    "config/app.config.js": `export default (env) => ({ mongoose: { uri: env.probe.mongoUri } });`,
   });
 
   const handle = await app.boot({ mode: "script" });

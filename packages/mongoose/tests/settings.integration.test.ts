@@ -1,9 +1,12 @@
 import mongoose from "mongoose";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { SettingsConflictError } from "@tulipes/core/config";
-import { fixture } from "../../core/tests/fixture.ts";
+import { fixture as coreFixture } from "../../core/tests/fixture.ts";
 import { MongoSettingsStore } from "../src/settings-store.ts";
 
+// Every fixture wires config.mongoose the way an app's config/app.config.ts does.
+const wiring = `export default (env) => ({ mongoose: { uri: env.probe?.mongoUri } });`;
+const fixture = (files: Record<string, string> = {}) => coreFixture({ "config/app.config.js": wiring, ...files });
 /**
  * S02 — the Mongo settings store against the real driver: the document
  * shape, the optimistic version, the history, propagation between two
@@ -92,7 +95,7 @@ integration("a write in one process reaches another's watch within the poll inte
 
 const probe = (greeting = "Hello") => ({
   "package.json": JSON.stringify({ type: "module", tulipes: { providers: { models: "@tulipes/mongoose", settings: "@tulipes/mongoose/settings" } } }),
-  "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [{ name: "MONGO_URI", type: "url", default: mongo, description: "Test database" }] } }),
+  "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { mongoUri: { key: "MONGO_URI", type: "url", default: mongo, description: "Test database" } } } }),
   "modules/probe/module.config.js": `
     import { defineConfig } from '@tulipes/core/config';
     import { z } from 'zod/v4';
@@ -106,7 +109,7 @@ integration("the provider shares the models connection, the manager writes throu
   uri.pathname = `/${database}`;
   vi.stubEnv("MONGO_URI", uri.href);
   const files = probe();
-  files["modules/probe/package.json"] = JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [{ name: "MONGO_URI", type: "url", default: uri.href, description: "Test database" }] } });
+  files["modules/probe/package.json"] = JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { mongoUri: { key: "MONGO_URI", type: "url", default: uri.href, description: "Test database" } } } });
 
   const first = await (await fixture(files)).boot({ mode: "script" });
   try {
@@ -144,7 +147,7 @@ integration("without a models provider the settings provider opens and closes it
   expect(openConnections()).toHaveLength(0);
 
   vi.stubEnv("MONGO_URI", "mongodb://127.0.0.1:1/unreachable");
-  const unreachable = await fixture({ ...files, "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [{ name: "MONGO_URI", type: "url", required: true, description: "Test database" }] } }) });
-  await expect(unreachable.boot({ mode: "script" })).rejects.toThrow(/settings database connection failed \(MONGO_URI\)/);
+  const unreachable = await fixture({ ...files, "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { mongoUri: { key: "MONGO_URI", type: "url", required: true, description: "Test database" } } } }) });
+  await expect(unreachable.boot({ mode: "script" })).rejects.toThrow(/settings database connection failed \(config\.mongoose\.uri\)/);
   expect(openConnections()).toHaveLength(0);
 });

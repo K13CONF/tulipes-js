@@ -33,3 +33,4 @@ export type JobData<N extends string> = N extends KnownQueueName ? KnownJobs[N] 
 export type JobsOf<M> = M extends { jobs: infer J }
   ? { [K in keyof J]: J[K] extends { safeParse(data: unknown): { data?: infer D } } ? Exclude<D, undefined> : unknown }
   : {};
+export { readRedisUrl, type BullmqConfig } from "./config.ts";

@@ -2,8 +2,9 @@ import type { Ctx } from "@tulipes/core/boot";
 
 /**
  * Everything the framework knows about one module, for the console: the
- * manifest, the variables it declares (names, types, sources — a secret's
- * value never, any value only as what the process resolved), its settings
+ * manifest, the environment values it declares (config names, variables,
+ * types, sources — a secret's value never, any value only as what the
+ * process resolved), its settings
  * with their schema, live values and stored version, and its endpoints
  * with the roles that reach them. Nothing is invented: it all comes from
  * the booted context, so the console cannot describe an app different
@@ -13,22 +14,22 @@ export function describeModule(ctx: Ctx, name: string): Record<string, unknown> 
   const manifest = ctx.modules.find((entry) => entry.name === name);
   if (!manifest) return undefined;
 
-  const variables = ctx.Environment.store.describe()
-    .filter((variable) => variable.owner === name)
-    .map((variable) => ({
-      name: variable.spec.name,
-      type: variable.spec.type,
-      description: variable.spec.description,
-      group: variable.spec.group ?? null,
-      required: variable.spec.required ?? false,
-      enum: variable.spec.enum ?? null,
-      default: variable.spec.type === "secret" ? null : (variable.spec.default ?? null),
-      source: variable.source,
-      is_secret: variable.isSecret,
-      is_set: variable.isSet,
-      // What this process resolved; a secret is never here.
-      value: variable.isSecret ? null : (variable.value ?? null),
-    }));
+  // The env half of the module's namespace, as the framework describes it:
+  // a secret's value and default are already withheld.
+  const variables = ctx.settings.describeEnv(name).map((variable) => ({
+    name: variable.name,
+    key: variable.key,
+    type: variable.type,
+    description: variable.description,
+    group: variable.group ?? null,
+    required: variable.required,
+    enum: variable.enum ?? null,
+    default: variable.default ?? null,
+    source: variable.source ?? null,
+    is_secret: variable.isSecret,
+    is_set: variable.isSet,
+    value: variable.value ?? null,
+  }));
 
   const settings = ctx.settings.namespaces().includes(name) ? ctx.settings.describe(name) : undefined;
   const routes = ctx.routes.all()

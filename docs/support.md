@@ -23,13 +23,15 @@ at 0.2.0 and `@tulipes/socket.io` at 0.1.2, and `@tulipes/mcp` and
 install it globally and as an app devDependency. The providers, mcp and
 testing require core `^0.11.0`; spec accepts `^0.10.0 || ^0.11.0`.
 
-Candidate on `next`: core 0.12.0-rc.1 with `@tulipes/cli` 0.3.0-rc.1,
-`@tulipes/spec` 0.4.0-rc.1 (core `^0.12.0-rc.1` only), the providers
-`@tulipes/mongoose` and `@tulipes/bullmq` 0.2.1-rc.1 and
-`@tulipes/socket.io` 0.1.3-rc.1, and `@tulipes/mcp` and `@tulipes/testing`
-0.1.1-rc.1, whose core range admits both lines. It is the breaking 0.12
-line (scoped RAI ids, `tulipes migrate 0.12`) and carries no stability
-promise until 0.12.0.
+Candidate on `next`: core 0.12.0-rc.2 with `@tulipes/cli` 0.3.0-rc.2,
+`@tulipes/spec` 0.4.0-rc.2 (core `^0.12.0-rc.1` only), the providers
+`@tulipes/mongoose` and `@tulipes/bullmq` 0.2.1-rc.2 and `@tulipes/testing`
+0.1.1-rc.2 (core `^0.12.0-rc.2`: they read the config keys the app wires),
+and `@tulipes/socket.io` 0.1.3-rc.2 and `@tulipes/mcp` 0.1.1-rc.2, whose
+core range admits both lines. It is the breaking 0.12 line (scoped RAI
+ids, the environment in the config, `tulipes migrate 0.12` for both) and
+carries no stability promise until 0.12.0. rc.1 was superseded before a
+tag.
 
 **Stable is a statement about the API, not about production hours.** The 0.11
 contracts are settled and breaking changes wait for 0.12; every supported

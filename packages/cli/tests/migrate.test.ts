@@ -5,6 +5,8 @@ import { expect, test } from "vitest";
 import { fixture } from "../../core/tests/fixture.ts";
 import { migrate, rewriteInspection, rewriteParameterProperties, rewriteSpecifiers } from "../src/migrate.ts";
 import { migrate012, rewriteAllowCalls } from "../src/migrate-0.12.ts";
+import { configNameOf, migrateEnv } from "../src/migrate-0.12-env.ts";
+import { migrateScaffoldIdioms } from "../src/migrate-0.12-scaffold.ts";
 import { parseEnv, runConfigImport } from "../src/config-import.ts";
 
 /**
@@ -149,13 +151,23 @@ test("migrate 0.11 rewrites a 0.10 module into the three-file root, plain routes
   const again = migrate(app.rootDir);
   expect(again.changed.filter((line) => !line.startsWith("wrote config/migration"))).toEqual([]);
 
-  // 0.12 gives every id a scope; then the module boots on this core —
+  // 0.12 gives every id a scope and moves the variable left in the
+  // environment into the config; then the module boots on this core —
   // declaration, bootstrap and routes alike.
-  expect(migrate012(app.rootDir).ids).toEqual({ "probe:read": "probe:web:read" });
+  const scoped = migrate012(app.rootDir);
+  expect(scoped.ids).toEqual({ "probe:read": "probe:web:read" });
+  expect(scoped.env).toEqual({ probe: { PROBE_KEEP: "probeKeep" } });
+  expect(scoped.todos).toEqual([]);
   expect(await readFile(join(app.rootDir, "modules/probe/module.acl.ts"), "utf8")).toContain('.allow("guest", "probe:web:read")');
+  expect(JSON.parse(await readFile(join(app.rootDir, "modules/probe/package.json"), "utf8")).tulipes.env)
+    .toEqual({ probeKeep: { key: "PROBE_KEEP", type: "string", default: "kept", description: "Read elsewhere too" } });
+  expect(await readFile(join(app.rootDir, "modules/probe/helpers/keep.ts"), "utf8")).toContain("ctx.config.probe!.probeKeep");
+  expect(await readFile(join(app.rootDir, "modules/probe/routes/probe.routes.ts"), "utf8")).toContain("const stamp = runtime(ctx, async (ctx) => {\n    return { header: String(ctx.appEnv) };");
   const handle = await app.boot({ listen: false });
   try {
     expect(handle.ctx.config.probe).toEqual({ limit: 5, mode: "open", keep: "kept", label: "probe", retries: 3 });
+    // The environment value sits beside the settings, invisible to the listing above.
+    expect((handle.ctx.config.probe as { probeKeep?: string }).probeKeep).toBe("kept");
     expect((globalThis as { probeReady?: unknown }).probeReady).toBe(5);
     expect(handle.ctx.routes.all().map((record) => [record.method, record.path])).toEqual([["GET", "/probe/things"]]);
   } finally {
@@ -356,7 +368,7 @@ test("migrate 0.12 scopes every id, grant and reference, reports what it cannot 
   // A second run has nothing left to scope.
   const again = migrate012(app.rootDir);
   expect(again.ids).toEqual({});
-  expect(again.changed).toEqual(['wrote config/migration-0.12.json (0 id(s) scoped "web")']);
+  expect(again.changed).toEqual(['wrote config/migration-0.12.json (0 id(s) scoped "web", 0 variable(s) keyed)']);
 
   // The migrated module passes the route scan, apart from the id built at runtime.
   await app.write("modules/probe/routes/web/probe.more.routes.ts", nested.replace("rai({ id: `probe:${kind}` })", 'rai({ id: "probe:web:dynamic" })'));
@@ -380,4 +392,163 @@ test("only the arguments of allow() are rewritten", () => {
     .toBe(`import x from "node:fs";\nacl.allow("user", "a:web:b", "a:*", "*");\nconst t = "a:b";`);
   expect(rewriteAllowCalls(`acl.allow(\n  "user",\n  'a:b', // ("not a call")\n).allow("guest", "c:d");`, scope))
     .toBe(`acl.allow(\n  "user",\n  'a:web:b', // ("not a call")\n).allow("guest", "c:web:d");`);
+});
+
+test("the environment step rewrites every form of read, wires the app config, and reports what it cannot read", async () => {
+  const app = await fixture({
+    "modules/core/package.json": JSON.stringify({ name: "@app/core", type: "module", tulipes: { tier: "sys", env: [
+      { name: "PORT", type: "number", default: 3000, description: "Port" },
+      { name: "MONGO_URI", type: "url", required: true, description: "Mongo" },
+      { name: "REDIS_URL", type: "url", required: true, description: "Redis" },
+      { name: "LOG_LEVEL", type: "enum", enum: ["info", "debug"], default: "info", description: "Level" },
+    ] } }),
+    "modules/billing/package.json": JSON.stringify({ name: "@app/billing", type: "module", tulipes: { env: {
+      stripeKey: { key: "STRIPE_KEY", type: "secret", required: true, description: "Already 0.12" },
+    } } }),
+    "config/app.config.ts": `import type { AppConfigFn } from "@tulipes/core/boot";
+
+/**
+ * A value that differs per deployment belongs in a module's tulipes.env,
+ * read with \`Environment.get\` — prose the 0.11 scaffold wrote, not code.
+ */
+const appConfig = (() => ({
+  app: { name: "upgraded" },
+  api: { prefix: "/api/v1" },
+})) satisfies AppConfigFn;
+
+export default appConfig;
+
+declare module "@tulipes/core/config" {
+  interface GlobalConfig extends Partial<ReturnType<typeof appConfig>> {}
+}
+`,
+    // A helper that took the engine; a routes file that destructured it; a controller holding a context.
+    "modules/core/helpers/logger.ts": `import type { Environment } from "@tulipes/core/env";
+import type { ProcessMode } from "@tulipes/core/boot";
+
+export function logger(environment: Environment, mode: ProcessMode = "backend"): string {
+  return String(environment.get("LOG_LEVEL")) + mode;
+}
+export function appCache(environment: Environment): boolean {
+  return environment.store.has("REDIS_URL");
+}
+`,
+    "modules/core/routes/core.routes.ts": `import type { BackendCtx } from "@tulipes/core/boot";
+import { appCache } from "../helpers/logger.ts";
+
+export default function coreRoutes({ app, Environment }: BackendCtx): void {
+  app.use(() => appCache(Environment));
+}
+`,
+    "modules/core/routes/security.routes.ts": `import type { BackendCtx } from "@tulipes/core/boot";
+import { logger } from "../helpers/logger.ts";
+
+export default function securityRoutes(ctx: BackendCtx): void {
+  const { app, Environment, mode } = ctx;
+  app.use(() => logger(Environment, mode) + Environment.appEnv);
+}
+`,
+    "modules/billing/controllers/billing.controllers.ts": `import type { Ctx } from "@tulipes/core/boot";
+
+export class BillingController {
+  constructor(private readonly ctx: Ctx) {}
+  key(): string { return String(this.ctx.Environment.get("STRIPE_KEY")) + this.ctx.Environment.appEnv; }
+  dynamic(name: string): unknown { return this.ctx.Environment.get(name); }
+}
+`,
+    "scripts/deploy.ts": `import { boot } from "@tulipes/core/boot";
+const handle = await boot({ rootDir: "." });
+const { appEnv } = handle.env;
+console.log(appEnv, Number(handle.env.get("PORT")));
+`,
+    "tests/mutate.test.ts": `export const set = (env: { store: { set(n: string, v: unknown): void } }) => env.store.set("LOG_LEVEL", "debug");
+export const describe = (ctx: { Environment: { store: { describe(): unknown } } }) => ctx.Environment.store.describe();
+`,
+  });
+
+  const outcome = migrateEnv(app.rootDir);
+  const read = (file: string) => readFile(join(app.rootDir, file), "utf8");
+
+  // Declarations: converted, keyed, and the 0.12 one left alone.
+  expect(outcome.env).toEqual({ core: { PORT: "port", MONGO_URI: "mongoUri", REDIS_URL: "redisUrl", LOG_LEVEL: "logLevel" }, billing: { STRIPE_KEY: "stripeKey" } });
+  expect(JSON.parse(await read("modules/core/package.json")).tulipes.env.mongoUri).toEqual({ key: "MONGO_URI", type: "url", required: true, description: "Mongo" });
+  expect(configNameOf("JWT_ACCESS_SECRET")).toBe("jwtAccessSecret");
+
+  // A helper takes the part of the context it reads.
+  const logger = await read("modules/core/helpers/logger.ts");
+  expect(logger).toContain('import type { Ctx } from "@tulipes/core/boot";');
+  expect(logger).not.toContain("@tulipes/core/env");
+  expect(logger).toContain('export function logger(environment: Pick<Ctx, "config">, mode: ProcessMode = "backend"): string {\n  return String(environment.config.core!.logLevel) + mode;');
+  expect(logger).toContain('export function appCache(environment: Pick<Ctx, "config">): boolean {\n  return (environment.config.core!.redisUrl !== undefined);');
+
+  // A destructured parameter becomes the context; a local destructure reads through its source.
+  expect(await read("modules/core/routes/core.routes.ts")).toContain("export default function coreRoutes(ctx: BackendCtx): void {\n  const { app } = ctx;\n  app.use(() => appCache(ctx));");
+  expect(await read("modules/core/routes/security.routes.ts")).toContain("  const { app, mode } = ctx;\n  app.use(() => logger(ctx, mode) + ctx.appEnv);");
+
+  // A held context; a dynamic name is a TODO and left as it was.
+  const controller = await read("modules/billing/controllers/billing.controllers.ts");
+  expect(controller).toContain('key(): string { return String(this.ctx.config.billing!.stripeKey) + this.ctx.appEnv; }');
+  expect(controller).toContain("dynamic(name: string): unknown { return this.ctx.Environment.get(name); }");
+
+  // The boot handle no longer carries an environment.
+  expect(await read("scripts/deploy.ts")).toContain("const { appEnv } = handle.ctx;\nconsole.log(appEnv, Number(handle.ctx.config.core!.port));");
+
+  // The app config receives the values and wires what core and the providers read.
+  const config = await read("config/app.config.ts");
+  expect(config).toContain("const appConfig = ((env) => ({\n  // The environment wired to what core and the providers read (0.12).\n  server: { port: env.core.port },\n  mongoose: { uri: env.core.mongoUri },\n  bullmq: { redisUrl: env.core.redisUrl },\n\n  app: { name: \"upgraded\" },");
+  expect(config).toContain('interface GlobalConfig extends Partial<Omit<ReturnType<typeof appConfig>, "server" | "mongoose" | "bullmq">> {}');
+
+  expect(outcome.todos).toEqual([
+    expect.stringMatching(/billing\.controllers\.ts:6: a variable read by a name built at runtime/),
+    expect.stringMatching(/billing\.controllers\.ts: still mentions Environment/),
+    expect.stringMatching(/tests\/mutate\.test\.ts:1: env\.store\.set\(\) — a value is read-only now/),
+    expect.stringMatching(/tests\/mutate\.test\.ts:2: Environment\.store\.describe\(\) — ctx\.settings\.describeEnv/),
+    expect.stringMatching(/tests\/mutate\.test\.ts: still mentions Environment/),
+  ]);
+
+  // A second run finds nothing to convert and wires nothing twice.
+  const again = migrateEnv(app.rootDir);
+  expect(again.changed).toEqual([]);
+  expect(await read("config/app.config.ts")).toBe(config);
+});
+
+test("the scaffold step rewrites the 0.11 credentials guard to the names the environment step derives, and leaves an edited file alone", async () => {
+  const guard = `import type { RuntimeCtx } from "@tulipes/core/boot";
+
+export default function credentials({ Environment }: RuntimeCtx): void {
+  if (Environment.appEnv !== "production" && Environment.appEnv !== "staging") return;
+  const invalid: string[] = [];
+  const defaults = [
+    ["JWT_ACCESS_SECRET", "dev-only-access-secret-change-me"],
+    ["JWT_REFRESH_SECRET", "dev-only-refresh-secret-change-me"],
+    ["AUTH_ADMIN_PASSWORD", "dev-admin-password"],
+    ["AUTH_ADMIN_EMAIL", "admin@example.com"],
+  ] as const;
+  for (const [name, developmentValue] of defaults) {
+    const value = String(Environment.get(name)).trim();
+    if (!value || value === developmentValue) invalid.push(name);
+  }
+  if (Environment.get("JWT_ACCESS_SECRET") === Environment.get("JWT_REFRESH_SECRET")) {
+    invalid.push("JWT_ACCESS_SECRET / JWT_REFRESH_SECRET (use distinct keys)");
+  }
+  if (invalid.length) throw new Error("Unsafe production credentials: configure " + invalid.join(", "));
+}
+`;
+  const app = await fixture({
+    "modules/auth/bootstrap/credentials.bootstrap.ts": guard,
+    "modules/auth/helpers/tokens.ts": `// edited past recognition\nexport const secret = () => "";\n`,
+  });
+  const changed: string[] = [];
+
+  migrateScaffoldIdioms(app.rootDir, changed);
+
+  const rewritten = await readFile(join(app.rootDir, "modules/auth/bootstrap/credentials.bootstrap.ts"), "utf8");
+  // What `migrateEnv` derives from the variables, so the guard and the manifest agree.
+  for (const variable of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "AUTH_ADMIN_PASSWORD", "AUTH_ADMIN_EMAIL"]) {
+    expect(rewritten).toContain(`["${configNameOf(variable)}", "${variable}",`);
+  }
+  expect(rewritten).toContain("export default function credentials({ appEnv, config }: RuntimeCtx): void {");
+  expect(rewritten).not.toContain("Environment");
+  expect(changed).toEqual(["modules/auth/bootstrap/credentials.bootstrap.ts: reads config.auth.*, names the variables in its message"]);
+  expect(await readFile(join(app.rootDir, "modules/auth/helpers/tokens.ts"), "utf8")).toContain("edited past recognition");
 });

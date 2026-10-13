@@ -3,9 +3,11 @@ import { z } from "zod/v4";
 
 /**
  * Token policy is a setting: every deployment wants to tune it, none of it
- * is secret. The signing keys and the seeded admin credentials stay in the
- * environment, where secrets belong, and `bootstrap/credentials.bootstrap.ts`
- * refuses development values outside development.
+ * is secret. The signing keys and the seeded admin credentials are this
+ * module's environment values (package.json `tulipes.env`), where secrets
+ * belong — read as `config.auth.jwtAccessSecret` and the like, never listed
+ * — and `bootstrap/credentials.bootstrap.ts` refuses development values
+ * outside development.
  */
 export default defineConfig({
   schema: z.object({

@@ -36,12 +36,10 @@ export interface SessionOrigin {
   user_agent?: string;
 }
 
+// The signing keys are this module's environment values, read where they
+// are used: inspection has no value, and nothing here runs under it.
 const secret = (ctx: Ctx, typ: "access" | "refresh"): string =>
-  String(
-    ctx.Environment.get(
-      typ === "access" ? "JWT_ACCESS_SECRET" : "JWT_REFRESH_SECRET",
-    ),
-  );
+  typ === "access" ? ctx.config.auth!.jwtAccessSecret : ctx.config.auth!.jwtRefreshSecret;
 
 // Read at signing time, never cached: token policy is a setting an operator
 // changes without a restart.

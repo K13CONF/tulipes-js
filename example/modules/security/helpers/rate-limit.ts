@@ -62,8 +62,9 @@ export function rebuildRateLimits(ctx: Ctx, settings: RateLimitSettings): { limi
   const next = {
     settings: { ...settings },
     limits: createRateLimits({
-      redisUrl: String(ctx.Environment.get("REDIS_URL")),
-      namespace: settings.namespace + ":" + ctx.Environment.appEnv,
+      // The core module's environment value; the app refuses to boot without it.
+      redisUrl: ctx.config.core!.redisUrl,
+      namespace: settings.namespace + ":" + ctx.appEnv,
       windowMs: settings.windowMs,
       authLimit: settings.auth,
       sessionLimit: settings.session,

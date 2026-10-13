@@ -68,15 +68,19 @@ child for inherited parameters). A file that only mounts global middleware
 on `ctx.app` returns nothing.
 
 **Build with the context, use infrastructure in handlers.** `tulipes routes`
-and `tulipes spec` build every router with nothing acquired: the environment
-is declared but unresolved and `ctx.models`, `ctx.queues` and `ctx.sockets`
-are stubs that throw. So a controller keeps `ctx` and reads `ctx.models`
-inside its handlers (as every controller in this app does), and a middleware
-that needs a variable or a client is built on its first request:
+and `tulipes spec` build every router with nothing acquired: an environment
+value (`ctx.config.<module>.<name>`) throws when read, and `ctx.models`,
+`ctx.queues` and `ctx.sockets` are stubs that throw. So a controller keeps
+`ctx` and reads `ctx.models` inside its handlers (as every controller in
+this app does), and a middleware that needs an environment value or a
+client is built on its first request:
 
 ```ts
-import { lazy } from "@app/core";
-app.use(lazy(() => express.json({ limit: String(Environment.get("BODY_LIMIT")) })));
+import { appCache, lazy } from "@app/core";
+app.use(lazy(() => {
+  const cache = appCache(ctx); // opens Redis from config.core.redisUrl
+  return (req, res, next) => { /* … */ next(); };
+}));
 ```
 
 Use router.use for shared middleware, router.param for parameter callbacks, and

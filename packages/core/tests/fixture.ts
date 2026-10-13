@@ -2,12 +2,10 @@ import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { onTestFinished, vi } from "vitest";
+import { onTestFinished } from "vitest";
 import { boot, type BootHandle, type BootOptions } from "../src/boot/boot.ts";
 
 export async function fixture(files: Record<string, string> = {}) {
-  vi.stubEnv("PORT", "0");
-
   const rootDir = await mkdtemp(join(tmpdir(), "tulipes-test-"));
   const handles: BootHandle[] = [];
 
@@ -21,11 +19,13 @@ export async function fixture(files: Record<string, string> = {}) {
     await writeFile(path, contents);
   };
 
-  const port = { name: "PORT", type: "number", default: 0, description: "Ephemeral HTTP port" };
-  const provided: Record<string, string> = { "package.json": '{"type":"module"}', ...files };
-  // Every probe module declares an ephemeral PORT, even when the test
-  // supplies the manifest, so a backend boot never takes a real port.
-  provided["modules/probe/package.json"] = withPort(provided["modules/probe/package.json"] ?? JSON.stringify({ name: "@test/probe", type: "module" }), port);
+  // Every fixture has a probe module, so a test may drop a single file into
+  // it without writing a manifest.
+  const provided: Record<string, string> = {
+    "package.json": '{"type":"module"}',
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module" }),
+    ...files,
+  };
   for (const [file, contents] of Object.entries(provided)) await write(file, contents);
 
   // onTestFinished, not afterEach: fixture() is called from inside a test, and
@@ -41,9 +41,11 @@ export async function fixture(files: Record<string, string> = {}) {
     rootDir,
     write,
     async boot(options: Omit<BootOptions, "rootDir"> = {}) {
+      // An ephemeral port, so a backend boot never takes a real one.
       const handle = await boot({
         rootDir,
         appEnv: "production",
+        port: 0,
         handleSignals: false,
         ...options,
       });
@@ -53,18 +55,6 @@ export async function fixture(files: Record<string, string> = {}) {
       return handle;
     },
   };
-}
-
-function withPort(manifest: string, port: Record<string, unknown>): string {
-  try {
-    const pkg = JSON.parse(manifest) as { tulipes?: { env?: Record<string, unknown>[] } };
-    const env = pkg.tulipes?.env ?? [];
-    if (env.some((variable) => variable.name === "PORT")) return manifest;
-    pkg.tulipes = { ...pkg.tulipes, env: [...env, port] };
-    return JSON.stringify(pkg);
-  } catch {
-    return manifest; // a deliberately invalid manifest stays invalid
-  }
 }
 
 /**
