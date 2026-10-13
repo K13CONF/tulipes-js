@@ -1,25 +1,24 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
+import type { VariableSpec } from "@tulipes/core/boot";
 import { BootReport } from "@tulipes/core/errors";
-import { discoverModuleMeta, type ModuleMeta } from "@tulipes/core/env";
-import { discoverModules } from "@tulipes/core/modules";
-import { sortModules } from "@tulipes/core/modules";
-import { exploreModules } from "@tulipes/core/modules";
-import type { VariableSpec } from "@tulipes/core/env";
+import { discoverModules, exploreModules, sortModules, type ModuleManifest } from "@tulipes/core/modules";
 
 /**
  * `tulipes sync` — everything derivable from the declarations, derived:
  *
- *   types/tulipes.d.ts  KnownVariables, GlobalConfig, KnownModels and
- *                       KnownJobs augmentations. A config namespace is typed
- *                       as the OUTPUT of the schema its module.config.ts
- *                       declares, a model as its file's default export and a
- *                       queue's job data as its file's `jobs` schema, all via
- *                       `typeof import(...)` — the compiler does the
- *                       inference, codegen never executes module code. The
- *                       one thing read from source is each model's name,
- *                       which keys the interface and so must be a literal.
+ *   types/tulipes.d.ts  EnvValues, GlobalConfig, KnownModels and KnownJobs
+ *                       augmentations. A config namespace is typed as the
+ *                       OUTPUT of the schema its module.config.ts declares,
+ *                       intersected with the read-only environment values
+ *                       its package.json declares; a model as its file's
+ *                       default export and a queue's job data as its file's
+ *                       `jobs` schema, all via `typeof import(...)` — the
+ *                       compiler does the inference, codegen never executes
+ *                       module code. The one thing read from source is each
+ *                       model's name, which keys the interface and so must
+ *                       be a literal.
  *   .env.example        every variable, grouped by module and `group`.
  *
  * Both files are committed and marked generated.
@@ -34,21 +33,16 @@ export async function runSync(rootDir: string): Promise<void> {
   const report = new BootReport();
   const modulesDir = join(rootDir, "modules");
 
-  const metas = discoverModuleMeta(modulesDir, report);
+  // The manifests carry the environment declarations; load order keeps
+  // the output stable.
   const order = sortModules(discoverModules(modulesDir, report), report);
   report.throwIfAny("sync");
-
-  const metaByModule = new Map(metas.map((meta) => [meta.module, meta]));
-  // Meta discovery walks folders; align it to load order for stable output.
-  const orderedMetas = order
-    .map((module) => metaByModule.get(module.name))
-    .filter((meta): meta is ModuleMeta => meta !== undefined);
 
   const typesDir = join(rootDir, "types");
   mkdirSync(typesDir, { recursive: true });
 
   const dtsPath = join(typesDir, TYPES_FILE);
-  writeFileSync(dtsPath, renderDts(rootDir, orderedMetas, order));
+  writeFileSync(dtsPath, renderDts(rootDir, order));
   console.log(`wrote ${relative(rootDir, dtsPath)}`);
 
   const legacyPath = join(typesDir, LEGACY_DTS);
@@ -58,21 +52,21 @@ export async function runSync(rootDir: string): Promise<void> {
   }
 
   const envExamplePath = join(rootDir, ".env.example");
-  writeFileSync(envExamplePath, renderEnvExample(orderedMetas));
+  writeFileSync(envExamplePath, renderEnvExample(order));
   console.log(`wrote ${relative(rootDir, envExamplePath)}`);
 }
 
-function renderDts(
-  rootDir: string,
-  metas: readonly ModuleMeta[],
-  order: ReturnType<typeof sortModules>,
-): string {
-  const variableLines = metas.flatMap((meta) =>
-    meta.variables.flatMap((spec) => [
-      `    /** [${meta.module}] ${spec.description} */`,
-      `    ${spec.name}: ${tsTypeOf(spec)};`,
-    ]),
-  );
+function renderDts(rootDir: string, order: readonly ModuleManifest[]): string {
+  // `env.<module>.<name>` in config/app.config.ts: one block per module that
+  // declares anything, each value read-only, optional when nothing
+  // guarantees it (no default, not required).
+  const envLines = order
+    .filter((module) => Object.keys(module.env).length > 0)
+    .flatMap((module) => [
+      `    ${JSON.stringify(module.name)}: {`,
+      ...envFieldLines(module, "      "),
+      `    };`,
+    ]);
 
   const explored = exploreModules(order);
   // `.ts` specifiers: the app imports its own files that way (Node strips
@@ -80,17 +74,20 @@ function renderDts(
   const specifierOf = (file: string) =>
     "./" + relative(join(rootDir, "types"), file);
 
-  // Only modules with a declaration get a typed namespace; the rest fall
-  // back to GlobalConfig's index signature.
+  // A module's namespace is its settings' output, its environment values,
+  // or both; a module with neither falls back to GlobalConfig's index
+  // signature. Optional on purpose: a namespace only exists once phase 6
+  // has loaded it, and an empty config seed must stay assignable.
   const configLines = explored
-    .filter((files) => files.configFile)
-    .flatMap((files) => [
-      // Optional on purpose: a namespace only exists once phase 6 has loaded
-      // it, and an empty config seed must stay assignable.
-      `    ${JSON.stringify(files.module.name)}?: import("zod/v4").output<`,
-      `      (typeof import("${specifierOf(files.configFile!)}"))["default"]["schema"]`,
-      `    >;`,
-    ]);
+    .filter((files) => files.configFile || Object.keys(files.module.env).length > 0)
+    .flatMap((files) => {
+      const parts: string[] = [];
+      if (files.configFile) {
+        parts.push(`import("zod/v4").output<(typeof import("${specifierOf(files.configFile)}"))["default"]["schema"]>`);
+      }
+      if (Object.keys(files.module.env).length > 0) parts.push(`EnvValues[${JSON.stringify(files.module.name)}]`);
+      return [`    ${JSON.stringify(files.module.name)}?: ${parts.join(" & ")};`];
+    });
 
   // A model's name keys the interface, so it is read from the file — the
   // one place codegen looks at source rather than types. A name that is not
@@ -138,13 +135,10 @@ function renderDts(
   return [
     `${GENERATED_MARKER} — do not edit.`,
     "",
-    'declare module "@tulipes/core/env" {',
-    "  interface KnownVariables {",
-    ...variableLines,
-    "  }",
-    "}",
-    "",
     'declare module "@tulipes/core/config" {',
+    "  interface EnvValues {",
+    ...envLines,
+    "  }",
     "  interface GlobalConfig {",
     ...configLines,
     "  }",
@@ -167,6 +161,17 @@ export function modelNameOf(file: string): string | undefined {
   return NAME_LITERAL.exec(scope)?.[2] ?? NAME_LITERAL.exec(source)?.[2];
 }
 
+/** `/** doc *\/ readonly name: type;` for each of a module's declared values. */
+function envFieldLines(module: ModuleManifest, indent: string): string[] {
+  return Object.entries(module.env).flatMap(([name, spec]) => {
+    const guaranteed = spec.required === true || spec.default !== undefined;
+    return [
+      `${indent}/** ${spec.key} — ${spec.description} */`,
+      `${indent}readonly ${name}: ${tsTypeOf(spec)}${guaranteed ? "" : " | undefined"};`,
+    ];
+  });
+}
+
 function tsTypeOf(spec: VariableSpec): string {
   switch (spec.type) {
     case "number":
@@ -180,33 +185,33 @@ function tsTypeOf(spec: VariableSpec): string {
   }
 }
 
-function renderEnvExample(metas: readonly ModuleMeta[]): string {
+function renderEnvExample(order: readonly ModuleManifest[]): string {
   const lines = [
     "# AUTO-GENERATED by `tulipes sync` from every module's package.json tulipes.env.",
     "# Copy into .envs/.env.<mode> and fill in the blanks.",
   ];
 
-  for (const meta of metas) {
-    if (meta.variables.length === 0) continue;
-    lines.push("", `# ━━━ ${meta.module} ━━━`);
+  for (const module of order) {
+    const variables = Object.entries(module.env);
+    if (variables.length === 0) continue;
+    lines.push("", `# ━━━ ${module.name} ━━━`);
 
-    // Stable grouping: order of first appearance, ungrouped vars last.
-    const groups = new Map<string, VariableSpec[]>();
-    for (const spec of meta.variables) {
-      const key = spec.group ?? "";
-      (groups.get(key) ?? groups.set(key, []).get(key)!).push(spec);
+    // Stable grouping: order of first appearance, ungrouped variables last.
+    const groups = new Map<string, [string, VariableSpec][]>();
+    for (const entry of variables) {
+      const group = entry[1].group ?? "";
+      (groups.get(group) ?? groups.set(group, []).get(group)!).push(entry);
     }
 
     for (const [group, specs] of [...groups.entries()].sort(
       ([a], [b]) => Number(a === "") - Number(b === ""),
     )) {
       if (group) lines.push("", `# ── ${group} ──`);
-      for (const spec of specs) {
-        const constraint =
-          spec.type === "enum" ? `enum: ${spec.enum!.join(" | ")}` : spec.type;
+      for (const [name, spec] of specs) {
+        const constraint = spec.type === "enum" ? `enum: ${spec.enum!.join(" | ")}` : spec.type;
         const requirement = spec.required ? ", REQUIRED" : "";
-        lines.push(`# ${spec.description} (${constraint}${requirement})`);
-        lines.push(`${spec.name}=${spec.default ?? ""}`);
+        lines.push(`# ${spec.description} (${constraint}${requirement}) → config.${module.name}.${name}`);
+        lines.push(`${spec.key}=${spec.default ?? ""}`);
       }
     }
   }

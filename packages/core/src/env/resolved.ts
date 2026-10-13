@@ -117,6 +117,10 @@ export class ResolvedEnv implements EnvInspector {
     const grouped: Record<string, Record<string, VariableValue | undefined>> = {};
     for (const entry of entries) (grouped[entry.module] ??= {})[entry.configKey] = entry.value;
     for (const module of Object.values(grouped)) Object.freeze(module);
-    return Object.freeze(grouped);
+    // `tulipes sync` augments EnvValues with one required block per module
+    // that declares anything, from the same manifests these entries came
+    // from — so the promise holds at runtime, the way `ctx.config` is typed
+    // by codegen and built as `{}`.
+    return Object.freeze(grouped) as EnvValues;
   }
 }
