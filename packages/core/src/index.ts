@@ -3,7 +3,6 @@ export * from "./agent/index.ts";
 export * from "./boot/index.ts";
 export * from "./config/index.ts";
 export * from "./db/index.ts";
-export * from "./env/index.ts";
 export * from "./http/index.ts";
 export * from "./i18n/index.ts";
 export * from "./modules/index.ts";

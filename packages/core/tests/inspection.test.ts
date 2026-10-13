@@ -10,9 +10,9 @@ import { fixture, url } from "./fixture.ts";
 
 /**
  * Inspection is the normal boot with nothing acquired: every route mounted
- * through the same loader and scan, the environment declared but
- * unresolved, providers as stubs, settings as defaults, no bootstrap, no
- * listener. `tulipes routes` and `tulipes spec` run it.
+ * through the same loader and scan, environment values resolved leniently
+ * and refused when read, providers as stubs, settings as defaults, no
+ * bootstrap, no listener. `tulipes routes` and `tulipes spec` run it.
  */
 const acl = `export default acl => { acl.defineRole('guest').allow('guest', 'probe:web:read'); };`;
 
@@ -46,13 +46,13 @@ test("inspection mounts every route without resolving a variable, importing a pr
     "modules/probe/controllers/runtime.js": `
       export class RuntimeController {
         constructor(ctx) { this.ctx = ctx; }
-        show() { return (req, res) => res.respond({ data: { key: this.ctx.Environment.get('PRIVATE_KEY'), id: this.ctx.models.get('Thing') } }); }
+        show() { return (req, res) => res.respond({ data: { key: this.ctx.config.probe.privateKey, id: this.ctx.models.get('Thing') } }); }
       }`,
     "modules/probe/module.acl.js": acl,
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"], env: [
-      { name: "PRIVATE_KEY", type: "secret", required: true, description: "Runtime only" },
-      { name: "MONGO_URI", type: "url", required: true, description: "Runtime database" },
-    ] } }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"], env: {
+      privateKey: { key: "PRIVATE_KEY", type: "secret", required: true, description: "Runtime only" },
+      mongoUri: { key: "MONGO_URI", type: "url", required: true, description: "Runtime database" },
+    } } }),
     ".envs/.env.production": "MONGO_URI=invalid\n",
     "package.json": JSON.stringify({ type: "module", tulipes: { providers: { models: "./providers/models.js", queues: "./providers/queues.js", sockets: "./providers/sockets.js" } } }),
   };
@@ -69,7 +69,9 @@ test("inspection mounts every route without resolving a variable, importing a pr
   expect(extract(inspected.ctx).routes[0]).toMatchObject({ path: "/probe/:id", roles: ["guest"], public: true });
   expect(inspected.server!.listening).toBe(false);
   expect(inspected.providers.map((status) => status.skipped)).toEqual(["inspect", "inspect", "inspect"]);
-  expect(() => inspected.ctx.Environment.get("PRIVATE_KEY")).toThrow(/not available during inspection — read it inside a handler/);
+  expect(() => inspected.ctx.config.probe!.privateKey).toThrow(/config\.probe\.privateKey is an environment value, not available during inspection — read it inside a handler/);
+  // Leniently resolved: the invalid URL is absent rather than an error, and nothing is required.
+  expect(inspected.ctx.settings.describeEnv("probe").map((variable) => [variable.name, variable.isSet])).toEqual([["privateKey", false], ["mongoUri", false]]);
   expect(connect).not.toHaveBeenCalled();
   await inspected.shutdown();
 
@@ -107,13 +109,13 @@ test("routes files are read from scope folders too, in path order, attributed to
 
 test("a routes file that touches infrastructure while building fails inspection with its path", async () => {
   for (const [body, message] of [
-    ["ctx.Environment.get('PORT')", /environment variable "PORT" is not available during inspection/],
+    ["ctx.config.probe.secret", /config\.probe\.secret is an environment value, not available during inspection/],
     ["ctx.models.get('Thing')", /ctx\.models is not available during inspection/],
   ] as const) {
     const app = await fixture({
       "package.json": JSON.stringify({ type: "module", tulipes: { providers: { models: "./providers/models.js" } } }),
       "providers/models.js": `throw new Error('provider imported');`,
-      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"] } }),
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { requires: ["models"], env: { secret: { key: "PROBE_SECRET", type: "secret", description: "Runtime only" } } } }),
       "modules/probe/routes/probe.routes.js": `export default (ctx) => { ${body}; };`,
     });
     const error = await app.boot({ inspect: true }).catch((error: Error) => error);
@@ -206,14 +208,25 @@ test.each(["duplicate id", "duplicate path"])("the scan rejects a %s across modu
   await expect(app.boot({ inspect: true })).rejects.toThrow(/already declared/);
 });
 
-test.each(["invalid", "duplicate"])("inspection checks %s environment declarations without resolving values", async (kind) => {
+test.each(["invalid", "legacy", "duplicate"])("inspection checks %s environment declarations without requiring values", async (kind) => {
+  const declarations = {
+    invalid: { bad: { type: "number" } },
+    legacy: [{ name: "PORT", type: "number", description: "0.11 shape" }],
+    duplicate: { first: { key: "PORT", type: "number", description: "First" }, second: { key: "PORT", type: "number", description: "Second" } },
+  };
   const app = await fixture({
-    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env:
-      kind === "invalid"
-        ? [{ name: "bad" }]
-        : [{ name: "PORT", type: "number", description: "First" }, { name: "PORT", type: "number", description: "Second" }] } }),
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: declarations[kind] } }),
   });
-  await expect(app.boot({ inspect: true })).rejects.toThrow(kind === "invalid" ? /tulipes\.env/ : /one owner/);
+  const message = { invalid: /tulipes" key: env\.bad\.key — Required/, legacy: /tulipes\.env is an object keyed by config name since 0\.12/, duplicate: /already supplies "first"/ }[kind];
+  await expect(app.boot({ inspect: true })).rejects.toThrow(message);
+});
+
+test("a variable has one owning module across the app", async () => {
+  const app = await fixture({
+    "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { port: { key: "PORT", type: "number", description: "Probe's" } } } }),
+    "modules/other/package.json": JSON.stringify({ name: "@test/other", type: "module", tulipes: { env: { listen: { key: "PORT", type: "number", description: "Other's" } } } }),
+  });
+  await expect(app.boot({ inspect: true })).rejects.toThrow(/variable "PORT" is already declared by module "(probe|other)" — one owner per variable/);
 });
 
 test("the 0.10 forms are refused by name: tulipes.offline, defineRoutes and the legacy declaration file", async () => {
@@ -223,8 +236,8 @@ test("the 0.10 forms are refused by name: tulipes.offline, defineRoutes and the 
   await expect(offline.boot({ inspect: true })).rejects.toThrow(/tulipes\.offline" is gone — every module is inspectable/);
 
   const legacy = await fixture({ "modules/probe/meta.variables.json": '{"variables":[]}' });
-  await expect(legacy.boot({ inspect: true })).rejects.toThrow(/meta\.variables\.json moved to package\.json under "tulipes": \{ "env"/);
-  await expect(legacy.boot({ mode: "script" })).rejects.toThrow(/meta\.variables\.json moved/);
+  await expect(legacy.boot({ inspect: true })).rejects.toThrow(/meta\.variables\.json does not belong at the module root — its variables moved to package\.json under "tulipes": \{ "env"/);
+  await expect(legacy.boot({ mode: "script" })).rejects.toThrow(/meta\.variables\.json does not belong/);
 
   const root = await fixture({ "modules/probe/index.js": "export const x = 1;", "modules/probe/schemas.js": "export const y = 1;" });
   await expect(root.boot({ mode: "script" })).rejects.toThrow(/index\.js does not belong at the module root — its public exports live in lib\/index\.js[\s\S]*schemas\.js does not belong at the module root/);

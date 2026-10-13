@@ -8,6 +8,7 @@ import {
   restartFields,
   type ConfigDeclaration,
 } from "./define-config.ts";
+import type { EnvInspector, EnvVariableDescription } from "../env/resolved.ts";
 import { SYSTEM_ACTOR, type Actor, type SettingsStore, type StoredSettings } from "./settings-store.ts";
 
 /** A write the schema refuses, with the same issue shape request validation uses. */
@@ -42,13 +43,21 @@ export interface SettingsDescription {
 }
 
 /**
- * What `ctx.settings` is: the write side and the inspection side of the
- * settings store, for the console module and for tooling. Reads go
- * through `ctx.config.<module>`, which this manager keeps live.
+ * What `ctx.settings` is: the write side and the inspection side of
+ * `ctx.config`, for the console module and for tooling. Reads go through
+ * `ctx.config.<module>`, which this manager keeps live. A namespace has two
+ * halves — the settings an operator edits and the environment values a
+ * deployment sets — and each has its describe method; only the first can
+ * be written.
  */
 export interface SettingsApi {
   namespaces(): string[];
   describe(namespace: string): SettingsDescription;
+  /**
+   * The environment values `namespace` declares, with their type, source
+   * and (never for a secret) value. Empty for a module that declares none.
+   */
+  describeEnv(namespace: string): EnvVariableDescription[];
   /** Validate `patch` over the stored values, persist, apply, run the module's onChange. */
   set(namespace: string, patch: Record<string, unknown>, actor: Actor): Promise<SettingsWrite>;
   /** The store behind it, for the banner. */
@@ -74,6 +83,7 @@ export class Settings implements SettingsApi {
   #store: SettingsStore | undefined;
   #unwatch: (() => void) | undefined;
   #ctx: Ctx | undefined;
+  #env: EnvInspector | undefined;
 
   /** @internal Phase 4. */
   declare_(module: string, declaration: ConfigDeclaration, report: BootReport): void {
@@ -129,8 +139,17 @@ export class Settings implements SettingsApi {
     }
   }
 
+  /** @internal Phase 6b: the resolved environment, for `describeEnv`. */
+  attachEnv_(env: EnvInspector): void {
+    this.#env = env;
+  }
+
   namespaces(): string[] {
     return [...this.#live.keys()];
+  }
+
+  describeEnv(namespace: string): EnvVariableDescription[] {
+    return this.#env?.describe(namespace) ?? [];
   }
 
   describe(namespace: string): SettingsDescription {
