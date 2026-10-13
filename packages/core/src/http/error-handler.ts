@@ -1,6 +1,6 @@
 import type { ErrorRequestHandler, Request, RequestHandler } from "express";
 
-import type { AppEnv } from "../env/environment.ts";
+import type { AppEnv } from "../boot/app-env.ts";
 import { envelope, type ApiError } from "./envelope.ts";
 import { markResponded } from "./respond.ts";
 

@@ -26,7 +26,7 @@ export async function runConfigCheck(rootDir: string): Promise<void> {
   try {
     const { settings } = handle.ctx;
     const namespaces = settings.namespaces();
-    console.log(`APP_ENV=${handle.env.appEnv} — ${namespaces.length} settings namespace(s) in ${settings.status().label}:`);
+    console.log(`APP_ENV=${handle.ctx.appEnv} — ${namespaces.length} settings namespace(s) in ${settings.status().label}:`);
     for (const namespace of namespaces) {
       const description = settings.describe(namespace);
       const { version, updated_at, updated_by } = description.stored;

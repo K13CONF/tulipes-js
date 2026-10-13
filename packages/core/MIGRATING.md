@@ -11,6 +11,97 @@ what makes it work under nvm.
 
 ---
 
+## 0.12.0-rc.2 — environment values in the config
+
+`ctx.Environment` is gone. A module's variables are its **environment
+values**: declared in its package.json `tulipes.env` as an object keyed by
+the camelCase name the value is read under, and read as
+`ctx.config.<module>.<name>` beside the module's settings — read-only, and
+invisible to anything that lists the namespace, so a secret never reaches a
+response or the settings store. Variable names do not change: `.envs` files
+and deployments stay as they are.
+
+```jsonc
+// before                                   // after
+"env": [                                    "env": {
+  { "name": "MONGO_URI", "type": "url",       "mongoUri": { "key": "MONGO_URI", "type": "url",
+    "required": true, "description": "…" }                  "required": true, "description": "…" }
+]                                           }
+```
+
+```ts
+ctx.Environment.get("MONGO_URI")   →  ctx.config.core.mongoUri
+ctx.Environment.store.has("X")     →  ctx.config.<module>.<x> !== undefined
+ctx.Environment.appEnv             →  ctx.appEnv
+logger(ctx.Environment, mode)      →  logger(ctx, mode)        // a helper takes the context
+```
+
+**Run `tulipes migrate 0.12`** (the same command that scopes the ids). It:
+
+1. rewrites every module's declaration to the object form and records the
+   map in `config/migration-0.12.json` (`MONGO_URI` → `mongoUri`,
+   `JWT_ACCESS_SECRET` → `jwtAccessSecret`);
+2. rewrites every read it can see — `x.Environment.get("K")`, `.store.has`,
+   `.appEnv`, through a destructured `Environment`, a parameter typed
+   `Environment` (which becomes `Pick<Ctx, "config">`), `handle.env` — and
+   passes the context where an `Environment` was passed as a value;
+3. gives `config/app.config.ts` an `env` parameter and wires `server.port`,
+   `mongoose.uri` and `bullmq.redisUrl` from the variables you declared —
+   the providers read those keys now, not `MONGO_URI` and `REDIS_URL`;
+4. rewrites the scaffold's own idioms it knows by text: the credentials
+   guard, the token keys, the console's `describe.ts`, the settings
+   stream test.
+
+What it cannot read is a TODO in the report: a variable name built at
+runtime (`get(name)` in a loop), a `store.set()` in a test (values are
+read-only now; set the variable before the boot), `store.describe()`
+(use `ctx.settings.describeEnv(module)`). Then `pnpm sync`, `pnpm typecheck`,
+`pnpm test`.
+
+**By hand, if you want them.**
+
+- MongoDB by parts: declare `mongodbHost`, `mongodbUsername`,
+  `mongodbPassword` (secret), `mongodbDbName` beside an optional `mongodbUri`
+  and wire `mongoose: env.core.mongodbUri ? { uri } : { uri: host, user,
+  pass, dbName }` as the reference app does; the driver assembles the
+  credentials, nothing is URL-encoded by hand.
+- A console that listed variables should read `ctx.settings.describeEnv()`.
+- `console.log(ctx.config.core)` no longer shows environment values; that
+  is the point. `pnpm check` shows them.
+
+---
+
+## 0.12.0-rc.2 — time zones (optional)
+
+Nothing breaks: an app without `config.timezone` keeps reading instants in
+UTC and its process zone is left alone. To adopt it:
+
+1. Add the block to `config/app.config.ts`:
+
+   ```ts
+   timezone: {
+     default: "Africa/Casablanca",
+     // supported: ["Africa/Casablanca", "Europe/Paris"],  // optional allow-list
+     // applyToProcess: false,                           // keep the server's TZ
+   },
+   ```
+
+   From the next boot the process runs in that zone (`process.env.TZ`), so
+   check anything that relied on the server's own zone — cron strings you
+   pass to BullMQ yourself now fire in the app's zone, and `Date#getHours()`
+   answers in it.
+2. Read a caller's zone with `req.timezone` and `req.time` instead of
+   parsing a header yourself; use `ctx.time` where there is no request.
+3. The reference app's logger now writes `"time"` as an ISO string with
+   the zone's offset instead of epoch milliseconds. Generated apps own
+   their logger, so take the change from
+   `example/modules/core/helpers/logger/index.ts` if you want it — and
+   check any log shipper that parsed `time` as a number.
+4. Recurring jobs: prefer `ctx.queues.schedule(queue, id, { pattern }, { name, data })`
+   over `add(..., { repeat })`; both default the cron zone to the app's.
+
+---
+
 ## 0.12.0-rc.1 — every RAI id has a scope
 
 A RAI id was `module:resource`. It is now `module:scope:resource[:extra]`,

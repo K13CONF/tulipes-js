@@ -12,9 +12,11 @@ import { registerBasePlugins } from "./helpers/mongoose/index.ts";
 registerBasePlugins();
 
 /**
- * The sys core module's own settings. The environment keeps only what boot
- * needs before the store answers (the port, the connection strings, the log
- * destinations) and the secrets; everything else is a setting like this one.
+ * The sys core module's own settings. Its environment values (package.json
+ * `tulipes.env`) keep only what boot needs before the store answers — the
+ * port, the connection strings, the log destinations — and the secrets, and
+ * land beside these as `config.core.port`, `config.core.redisUrl`…;
+ * everything else is a setting like this one.
  */
 export default defineConfig({
   schema: z.object({

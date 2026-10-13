@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Queue } from "bullmq";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "../../core/tests/fixture.ts";
+import { fixture as coreFixture } from "../../core/tests/fixture.ts";
 import type { QueueManager } from "../src/index.ts";
 
+// Every fixture wires config.bullmq the way an app's config/app.config.ts does.
+const wiring = `export default (env) => ({ bullmq: { redisUrl: env.probe?.redisUrl } });`;
+const fixture = (files: Record<string, string> = {}) => coreFixture({ "config/app.config.js": wiring, ...files });
 const redisUrl = process.env.TEST_REDIS_URL;
 const integration = test.skipIf(!redisUrl);
 
@@ -18,14 +21,7 @@ integration(
 
     const app = await fixture({
       "package.json": JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } }),
-      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-          {
-            name: "REDIS_URL",
-            type: "url",
-            default: redisUrl,
-            description: "Isolated test Redis",
-          },
-        ] } }),
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { redisUrl: { key: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" } } } }),
       "modules/probe/module.config.js": `
       import { defineConfig } from '@tulipes/core/config';
       import { z } from 'zod/v4';
@@ -130,9 +126,7 @@ integration(
 
 const withQueues = (name: string, files: Record<string, string>) => fixture({
   "package.json": JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } }),
-  "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-    { name: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" },
-  ] } }),
+  "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { redisUrl: { key: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" } } } }),
   "modules/probe/queues/probe.queues.js": `
     import { z } from 'zod/v4';
     export const jobs = { ${JSON.stringify(name)}: z.object({ id: z.string(), tries: z.number().int().default(1) }) };
@@ -185,3 +179,53 @@ integration("a jobs export that is not schemas is refused with the file", async 
 
   await expect(app.boot({ mode: "script" })).rejects.toThrow(/probe\.queues\.js: jobs\["probe\.[^"]+"\] is not a schema/);
 });
+
+integration(
+  "a cron pattern without a zone fires in config.timezone.default; a named zone or an interval is left alone",
+  async () => {
+    const name = `probe.${randomUUID()}`;
+    const app = await fixture({
+      "package.json": JSON.stringify({ type: "module", tulipes: { providers: { queues: "@tulipes/bullmq" } } }),
+      // Replaces the wrapper's app.config, so it wires Redis too.
+      "config/app.config.js": `export default (env) => ({ timezone: { default: 'Africa/Casablanca', applyToProcess: false }, bullmq: { redisUrl: env.probe?.redisUrl } });`,
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { redisUrl: { key: "REDIS_URL", type: "url", default: redisUrl, description: "Isolated test Redis" } } } }),
+      "modules/probe/queues/probe.queues.js": `
+        import { z } from 'zod/v4';
+        export const jobs = { ${JSON.stringify(name)}: z.object({ id: z.string() }) };
+        export default (ctx, queues) => { queues.define(${JSON.stringify(name)}); };
+      `,
+    });
+    const handle = await app.boot({ mode: "script" });
+    const queues = handle.ctx.queues as QueueManager;
+    const queue = queues.queue(name);
+
+    try {
+      await queues.schedule(name, "nightly", { pattern: "0 2 * * *" }, { name: "run", data: { id: "a" } });
+      await queues.schedule(name, "paris", { pattern: "0 2 * * *", tz: "Europe/Paris" }, { name: "run", data: { id: "b" } });
+      await queues.schedule(name, "interval", { every: 60_000 }, { name: "run", data: { id: "c" } });
+
+      expect((await queue.getJobScheduler("nightly"))?.tz).toBe("Africa/Casablanca");
+      expect((await queue.getJobScheduler("paris"))?.tz).toBe("Europe/Paris");
+      expect((await queue.getJobScheduler("interval"))?.tz).toBeUndefined();
+
+      // Scheduling again updates in place rather than adding a second one.
+      await queues.schedule(name, "nightly", { pattern: "0 3 * * *" }, { name: "run", data: { id: "a" } });
+      expect(await queue.getJobSchedulersCount()).toBe(3);
+      expect((await queue.getJobScheduler("nightly"))?.pattern).toBe("0 3 * * *");
+
+      // The declared schema guards a schedule's template like any job.
+      await expect(queues.schedule(name, "bad", { pattern: "0 2 * * *" }, { name: "run", data: {} as never }))
+        .rejects.toThrow(/Job data for queue/);
+
+      // The older repeat option on add() gets the same default.
+      await queues.add(name, "legacy", { id: "d" }, { repeat: { pattern: "0 4 * * *" } });
+      const legacy = (await queue.getJobSchedulers()).find((scheduler) => scheduler.pattern === "0 4 * * *");
+      expect(legacy?.tz).toBe("Africa/Casablanca");
+
+      expect(await queues.unschedule(name, "paris")).toBe(true);
+      expect(await queue.getJobScheduler("paris")).toBeUndefined();
+    } finally {
+      await queue.obliterate({ force: true });
+    }
+  },
+);

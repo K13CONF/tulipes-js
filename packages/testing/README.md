@@ -34,7 +34,8 @@ test("the secret needs a role", async () => {
 ## What you get
 
 - `useTestApp(options, { beforeAll, afterAll })` boots in `beforeAll`
-  (`PORT=0`, `appEnv: "test"`, no signal handlers) and shuts down in
+  (a free port through `boot({ port: 0 })`, `appEnv: "test"`, no signal
+  handlers) and shuts down in
   `afterAll`; `bootTestApp(options)` is the same without the hooks.
 - `app.request(method, path, { body, as, token, headers, query })` and the
   `get` / `post` / `patch` / `delete` shorthands return `{ status, headers,

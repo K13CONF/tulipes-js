@@ -3,7 +3,8 @@ import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import express, { type Express } from "express";
 
-import { Environment, type AppEnv } from "../env/environment.ts";
+import { mirrorNodeEnv, resolveAppEnv, type AppEnv } from "./app-env.ts";
+import { bindEnvValues, resolveEnv } from "../env/index.ts";
 import { BootReport } from "../errors/boot-error.ts";
 import { discoverModules } from "../modules/discovery.ts";
 import { sortModules } from "../modules/graph.ts";
@@ -16,6 +17,7 @@ import { errorHandler, notFoundHandler } from "../http/error-handler.ts";
 import { createRai, RouteRegistry } from "../http/rai.ts";
 import { bindRespond, warnOnRawResponse } from "../http/respond.ts";
 import { I18n } from "../i18n/i18n.ts";
+import { Timezones } from "../time/timezone.ts";
 import { scanRoutes } from "../http/route-scan.ts";
 import { loadAgents } from "../agent/load-agents.ts";
 import { loadRoutes } from "./load-routes.ts";
@@ -54,7 +56,14 @@ export interface BootOptions {
   rootDir: string;
   /** Defaults to process.env.PROCESS_MODE, then "backend". */
   mode?: ProcessMode;
+  /** Defaults to process.env.APP_ENV, then "development". */
   appEnv?: AppEnv;
+  /**
+   * The port the backend listens on. Wins over `config.server.port`, which
+   * `config/app.config.ts` sets from the environment; a test passes 0 for
+   * an ephemeral port. Without either, 3000.
+   */
+  port?: number;
   /** Skip SIGTERM/SIGINT wiring — for tests that manage shutdown themselves. */
   handleSignals?: boolean;
   /**
@@ -67,20 +76,22 @@ export interface BootOptions {
   shutdownTimeoutMs?: number;
   /**
    * Inspection: build the app and mount every route with nothing acquired —
-   * the environment is declared but unresolved, declared providers are stubs
-   * that throw on use, settings are their defaults in memory, bootstrap and
-   * listening are skipped. What `tulipes routes` and `tulipes spec` run,
-   * without a `.env`, a secret or a service.
+   * environment values are resolved leniently (nothing required) and throw
+   * when a module reads one, declared providers are stubs that throw on
+   * use, settings are their defaults in memory, bootstrap and listening
+   * are skipped. What `tulipes routes` and `tulipes spec` run, without a
+   * `.env`, a secret or a service.
    */
   inspect?: boolean;
 }
 
 export interface BootHandle {
   mode: ProcessMode;
-  env: Environment;
   ctx: Ctx;
   /** Translations: the locales served and the module namespaces loaded. */
   i18n: I18n;
+  /** Time zones: the app's zone, the zones a request may ask for. */
+  timezones: Timezones;
   /** Every declared provider, with its banner status, in acquisition order. */
   providers: readonly AcquiredStatus[];
   /** Worker mode: consumers started by the providers' serve() hooks. */
@@ -93,13 +104,15 @@ export interface BootHandle {
 /**
  * The whole run workflow:
  *
- *   1  environment        .env.<APP_ENV> + every declared variable → validate
+ *   1  environment        APP_ENV; every module's manifest; its tulipes.env
+ *                         resolved from process.env, .env.<APP_ENV>, defaults
  *   2  module graph       tier / priority / dependsOn → load order
  *   3  exploration        conventional paths resolved, nothing imported
  *   4  declarations       config/app.config.ts seed; module.config.ts schemas
  *   5  models, settings   providers connect; no values are read yet
- *   6  settings           every namespace loaded, seeded, validated → ctx.config
- *   7  translations
+ *   6  settings           every namespace loaded, seeded, validated → ctx.config;
+ *                         then environment values bound read-only beside them
+ *   7  translations, time zones
  *   8  ACL, then the agent surface from every agent/*.agent.ts
  *   9  bootstrap          bootstrap/*.bootstrap.ts in load order, every mode
  *  10  queues, sockets    providers acquired against the full context
@@ -118,16 +131,26 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   if (options.inspect && mode !== "backend") throw new Error("inspection requires backend mode");
   const situation = options.inspect ? "inspect" : mode;
 
-  // Phase 1 — Environment engine (crashes internally on bad env). Inspection
-  // validates the declarations and resolves nothing.
-  const env = (options.inspect ? Environment.inspection : Environment.load)({
-    rootDir: options.rootDir,
-    ...(options.appEnv && { appEnv: options.appEnv }),
-  });
-
-  // Phase 2 — module graph
+  // Phase 1 — environment. Which deployment this is, then every module's
+  // manifest (the declarations live there), then a value for each declared
+  // variable. Inspection resolves leniently: nothing is required and an
+  // invalid value is absent, so no `.env` or secret is ever needed to list
+  // the routes. The manifests are read once here and sorted in phase 2.
+  const envReport = new BootReport();
+  const appEnv = resolveAppEnv(options.appEnv, envReport);
+  envReport.throwIfAny("environment");
+  if (!options.inspect) mirrorNodeEnv(appEnv);
   const graphReport = new BootReport();
   const manifests = discoverModules(join(options.rootDir, "modules"), graphReport);
+  graphReport.throwIfAny("module graph");
+  const resolvedEnv = resolveEnv(
+    manifests,
+    { appEnv, envsDir: join(options.rootDir, ".envs"), lenient: options.inspect === true },
+    envReport,
+  );
+  envReport.throwIfAny("environment");
+
+  // Phase 2 — module graph
   const order = sortModules(manifests, graphReport);
   graphReport.throwIfAny("module graph");
 
@@ -148,11 +171,12 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   // from here on and is never replaced; phase 7 is where resources arrive.
   const routes = new RouteRegistry();
   const i18n = new I18n();
+  const timezones = new Timezones();
   const settings = new Settings();
   const aborter = new AbortController();
   const ctx: Ctx = {
     mode,
-    Environment: env,
+    appEnv,
     modules: order,
     config: {},
     settings,
@@ -163,14 +187,26 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
       (role, permission) => ctx.acl!.can(role, permission),
       (req, res, module) => {
         i18n.attach_(req, module);
+        timezones.attach_(req);
         // Bounds live in config.pagination, so every list endpoint in the
         // app clamps identically and no caller can ask for ten thousand.
         bindRespond(req, res, ctx.config.pagination ?? {});
-        if (env.appEnv === "development") warnOnRawResponse(req, res);
+        if (appEnv === "development") warnOnRawResponse(req, res);
       },
     ),
     t: (namespace, locale) => i18n.t(namespace, locale),
     i18n: i18n.instance,
+    // A getter-backed view: phase 7 settles the zone after this object is
+    // built, and a module holding `ctx.time` must still read the settled one.
+    time: {
+      get zone() { return timezones.zone; },
+      format: (date, options) => timezones.in(undefined, i18n.settings.defaultLocale).format(date, options),
+      toISO: (date) => timezones.in().toISO(date),
+      startOfDay: (date) => timezones.in().startOfDay(date),
+      fromWallClock: (wall) => timezones.in().fromWallClock(wall),
+      offsetMinutes: (date) => timezones.in().offsetMinutes(date),
+      in: (zone, locale) => timezones.in(zone, locale ?? i18n.settings.defaultLocale),
+    },
   };
   let cleanups: RegisteredCleanup[] = [];
   let shutdownPromise: Promise<void> | undefined;
@@ -179,7 +215,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   const acquiredProviders: AcquiredProvider[] = [];
   let fileStore: FileSettingsStore | undefined;
   const handle: BootHandle = {
-    mode, env, ctx, i18n,
+    mode, ctx, i18n, timezones,
     providers: [],
     consumers: 0,
     shutdown: () => {
@@ -198,7 +234,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   try {
     // Phase 4 — declarations: the app-level seed and every module's schema.
     const declarationReport = new BootReport();
-    await loadAppConfigSeed(options.rootDir, ctx, declarationReport);
+    await loadAppConfigSeed(options.rootDir, ctx, resolvedEnv.values, declarationReport);
     await declareConfig(explored, settings, declarationReport);
     declarationReport.throwIfAny("config");
 
@@ -228,16 +264,34 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     const declaredStore = acquiredProviders.find((entry) => entry.capability === "settings")?.value as SettingsStore | undefined;
     const store = options.inspect
       ? new MemorySettingsStore("defaults (inspection)")
-      : declaredStore ?? (fileStore = new FileSettingsStore(options.rootDir, env.appEnv));
+      : declaredStore ?? (fileStore = new FileSettingsStore(options.rootDir, appEnv));
     await settings.load(store, ctx, settingsReport);
     settingsReport.throwIfAny("settings");
+
+    // Phase 6b — environment values, beside the settings they share a
+    // namespace with. After settings, because the settings manager replaces
+    // each namespace object when it loads and the getters must land on the
+    // object that stays; before anything a module runs, so a bootstrap
+    // reads them like any other config.
+    const bindReport = new BootReport();
+    bindEnvValues(ctx.config, resolvedEnv, { inspecting: options.inspect === true }, bindReport);
+    settings.attachEnv_(resolvedEnv);
+    bindReport.throwIfAny("environment");
 
     // Phase 7 — translations. After settings, because the locales an app
     // ships are app policy read from config.i18n; before everything that
     // might want to say something to a user.
     const i18nReport = new BootReport();
-    await i18n.load(explored, I18n.readSettings(ctx.config.i18n, i18nReport), env.appEnv, i18nReport);
+    await i18n.load(explored, I18n.readSettings(ctx.config.i18n, i18nReport), appEnv, i18nReport);
     i18nReport.throwIfAny("i18n");
+
+    // Phase 7b — time zones, from config.timezone like the locales. Naming
+    // a zone also moves the process onto it (unless applyToProcess: false),
+    // before bootstrap creates a logger whose timestamps should agree.
+    const timezoneReport = new BootReport();
+    const timezoneSettings = Timezones.readSettings(ctx.config.timezone, timezoneReport);
+    timezoneReport.throwIfAny("timezone");
+    timezones.load(options.inspect ? { ...timezoneSettings, applyToProcess: false } : timezoneSettings);
 
     // Phase 8 — ACL merge
     const aclReport = new BootReport();
@@ -267,7 +321,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
     }
 
     if (mode === "backend") {
-      await startBackend(handle, explored, acquiredProviders, options.listen !== false && !options.inspect, options.inspect);
+      await startBackend(handle, explored, acquiredProviders, options.listen !== false && !options.inspect, options.inspect, options.port);
     } else if (mode === "worker") {
       // Phase 11 (worker) — every acquired provider that can serve starts
       // consuming. Consumers hold the event loop open; a worker with nothing
@@ -321,6 +375,20 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   }
 }
 
+/**
+ * `boot({ port })` first — a test asks for an ephemeral port that way — then
+ * what the app config wired from the environment, then 3000. A port that is
+ * not a whole number in range is a configuration error, named as such
+ * rather than left to the listener's EADDRNOTAVAIL.
+ */
+function listeningPort(requested: number | undefined, configured: unknown): number {
+  const port = requested ?? configured ?? 3000;
+  if (typeof port !== "number" || !Number.isInteger(port) || port < 0 || port > 65_535) {
+    throw new Error(`config.server.port must be a whole number between 0 and 65535, got ${JSON.stringify(port)}`);
+  }
+  return port;
+}
+
 function resolveMode(override: ProcessMode | undefined): ProcessMode {
   const raw = override ?? process.env.PROCESS_MODE ?? "backend";
   if (!(processModes as readonly string[]).includes(raw)) {
@@ -358,6 +426,7 @@ async function startBackend(
   providers: readonly AcquiredProvider[],
   listen = true,
   inspect = false,
+  requestedPort?: number,
 ): Promise<void> {
   const app = express();
   handle.app = app;
@@ -370,7 +439,7 @@ async function startBackend(
   await loadRoutes(app, explored, handle.ctx.routes, handle.ctx as BackendCtx, report);
 
   app.use(notFoundHandler());
-  app.use(errorHandler(handle.env.appEnv));
+  app.use(errorHandler(handle.ctx.appEnv));
 
   // Every route must have declared a RAI. Checked here, once everything is
   // mounted, so the failure is a refused boot rather than an endpoint that
@@ -379,9 +448,7 @@ async function startBackend(
 
   report.throwIfAny("routes");
 
-  const port = handle.env.store.has("PORT")
-    ? Number(handle.env.get("PORT"))
-    : 3000;
+  const port = listeningPort(requestedPort, handle.ctx.config.server?.port);
 
   const server = createServer(app);
   handle.server = server;
@@ -434,5 +501,6 @@ async function shutdown(
   }
   await disposeProviders(providers, cleanup);
   fileStore?.dispose();
+  handle.timezones.restore_();
   cleanup.finish();
 }

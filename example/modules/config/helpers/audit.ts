@@ -27,7 +27,7 @@ export async function auditChange(
       actor: String(user._id),
       actor_role: user.role,
       ip: req.ip,
-      app_env: ctx.Environment.appEnv,
+      app_env: ctx.appEnv,
       mode: ctx.mode,
       recorded_at: new Date(),
     }).save({ w: "majority", j: true, wtimeout: 5000 });

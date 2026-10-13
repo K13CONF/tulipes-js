@@ -40,9 +40,10 @@ try {
 }
 
 async function deploy(): Promise<void> {
-  const { appEnv } = handle.env;
+  const { appEnv } = handle.ctx;
   const domain = String(handle.ctx.config.core?.publicDomain ?? "localhost").trim();
-  const port = Number(handle.env.get("PORT"));
+  // What app.config wired from PORT — the same port the backend listens on.
+  const port = Number(handle.ctx.config.server?.port ?? 3000);
 
   const templatePath = join(rootDir, "nginx", `${appEnv}.conf`);
   if (!existsSync(templatePath)) {

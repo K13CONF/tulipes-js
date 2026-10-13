@@ -23,10 +23,12 @@ own Redis clients.
 { "tulipes": { "providers": { "queues": "@tulipes/bullmq" } } }
 ```
 
-plus `REDIS_URL` declared by the app's sys `core` module and set. A `queues/`
-directory requires the provider automatically; a module that only produces
-declares `"tulipes": { "requires": ["queues"] }`. Installing this package
-without the declaration selects nothing; a `REDIS_URL` on its own starts nothing.
+plus `config.bullmq.redisUrl` wired in `config/app.config.ts` from a variable
+the app's sys `core` module declares: `bullmq: { redisUrl: env.core.redisUrl }`.
+A `queues/` directory requires the provider automatically; a module that only
+produces declares `"tulipes": { "requires": ["queues"] }`. Installing this
+package without the declaration selects nothing; a wired URL on its own
+starts nothing.
 
 ## Use it
 
@@ -42,6 +44,18 @@ export default function invoiceQueues(ctx: Ctx, queues: QueueRegistry): void {
 
 // anywhere after acquisition
 await requireQueues(ctx).add("billing.send-invoice", "send", { invoiceId });
+```
+
+Recurring work is a job scheduler, keyed so that calling it on every boot
+updates rather than duplicates. A cron `pattern` fires in the app's
+`config.timezone.default` unless it names its own `tz`:
+
+```ts
+// a bootstrap, after acquisition
+await ctx.queues.schedule("billing.send-invoice", "nightly",
+  { pattern: "0 2 * * *" },                       // 02:00 in the app's zone
+  { name: "send", data: { invoiceId: "all" } });  // validated by the queue's schema
+await ctx.queues.unschedule("billing.send-invoice", "nightly");
 ```
 
 ## Behavior

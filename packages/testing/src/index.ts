@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import { boot, type BootHandle, type BootOptions, type Ctx } from "@tulipes/core/boot";
-import type { AppEnv } from "@tulipes/core/env";
+import { boot, type AppEnv, type BootHandle, type BootOptions, type Ctx } from "@tulipes/core/boot";
 import type { Envelope } from "@tulipes/core/http";
 
 /**
@@ -14,8 +13,10 @@ export interface TestAppOptions {
   /** Which `.envs/.env.<appEnv>` and settings file the boot reads; default "test". */
   appEnv?: AppEnv;
   /**
-   * Variables set on `process.env` for the boot and restored on shutdown.
-   * `PORT` is `"0"` unless given: the listener takes a free port.
+   * Variables set on `process.env` for the boot and restored on shutdown —
+   * the app's declared variables, by their env names. The listener takes a
+   * free port regardless: `boot({ port: 0 })` wins over whatever the app
+   * wires into `config.server.port`.
    */
   env?: Record<string, string>;
   /**
@@ -26,7 +27,7 @@ export interface TestAppOptions {
   /** The auth module's mount, relative to the API prefix; default "/auth". */
   authPath?: string;
   /** Anything else `boot()` takes. */
-  boot?: Partial<Omit<BootOptions, "rootDir" | "appEnv" | "mode" | "inspect">>;
+  boot?: Partial<Omit<BootOptions, "rootDir" | "appEnv" | "mode" | "inspect" | "port">>;
 }
 
 export interface RequestOptions {
@@ -180,12 +181,12 @@ export class TestApp {
 }
 
 /**
- * Boot the app once for a test file: a random port, no signal handlers,
- * the variables in `env` set for the boot. Call `shutdown()` in the file's
+ * Boot the app once for a test file: a free port, no signal handlers, the
+ * variables in `env` set for the boot. Call `shutdown()` in the file's
  * teardown, or let `useTestApp()` do both.
  */
 export async function bootTestApp(options: TestAppOptions): Promise<TestApp> {
-  const env = { PORT: "0", ...options.env };
+  const env = { ...options.env };
   const previous = new Map(Object.keys(env).map((key) => [key, process.env[key]]));
   for (const [key, value] of Object.entries(env)) process.env[key] = value;
   const restore = () => {
@@ -196,7 +197,7 @@ export async function bootTestApp(options: TestAppOptions): Promise<TestApp> {
   };
   let handle: BootHandle;
   try {
-    handle = await boot({ ...options.boot, rootDir: options.rootDir, appEnv: options.appEnv ?? "test", mode: "backend", handleSignals: false });
+    handle = await boot({ ...options.boot, rootDir: options.rootDir, appEnv: options.appEnv ?? "test", mode: "backend", port: 0, handleSignals: false });
   } catch (error) {
     restore();
     throw error;

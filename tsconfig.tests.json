@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": { "noEmit": true, "declaration": false },
-  "include": ["vitest.config.ts", "packages/*/tests/**/*.ts"]
+  "include": ["vitest.config.ts", "packages/*/tests/**/*.ts", "example/types/tulipes.d.ts"]
 }

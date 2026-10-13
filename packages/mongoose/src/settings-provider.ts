@@ -2,10 +2,8 @@ import { createConnection, type Connection } from "mongoose";
 
 import type { Provider } from "@tulipes/core/boot";
 
+import { CONNECTION_CONFIG, readConnectionConfig } from "./connection-config.ts";
 import { MongoSettingsStore } from "./settings-store.ts";
-
-/** Well-known infra variable, declared by the app's sys core module. */
-const MONGO_URI = "MONGO_URI";
 
 /**
  * The "settings" provider an app selects with
@@ -26,16 +24,10 @@ export const provider: Provider<"settings"> = {
     let store: MongoSettingsStore | undefined;
 
     if (!connection) {
-      const uri = ctx.Environment.store.has(MONGO_URI) ? String(ctx.Environment.get(MONGO_URI)) : undefined;
-      if (!uri) {
-        report.add({
-          scope: "providers",
-          message: `provider "mongoose-settings" is selected but "${MONGO_URI}" is not declared/set — declare it in a sys module's package.json tulipes.env and set it`,
-        });
-        return undefined;
-      }
+      const target = readConnectionConfig(ctx, "mongoose-settings", report);
+      if (!target) return undefined;
       try {
-        connection = createConnection(uri, { serverSelectionTimeoutMS: 5_000 });
+        connection = createConnection(target.uri, { ...target.options, serverSelectionTimeoutMS: 5_000 });
         const owned = connection;
         own({
           dispose: async () => { await store?.dispose(); await owned.close(); },
@@ -44,7 +36,7 @@ export const provider: Provider<"settings"> = {
         });
         await connection.asPromise();
       } catch (error) {
-        report.add({ scope: "providers", message: `settings database connection failed (${MONGO_URI}): ${(error as Error).message}` });
+        report.add({ scope: "providers", message: `settings database connection failed (${CONNECTION_CONFIG}): ${(error as Error).message}` });
         return undefined;
       }
     } else {

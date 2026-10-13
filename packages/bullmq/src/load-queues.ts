@@ -2,13 +2,11 @@ import { importFile, type Ctx } from "@tulipes/core/boot";
 import type { BootReport } from "@tulipes/core/errors";
 import type { ModuleFiles } from "@tulipes/core/modules";
 
+import { readRedisUrl } from "./config.ts";
 import { QueueManager, type JobSchema, type QueueRegistry } from "./queue-manager.ts";
 
 /** Default export of `queues/*.queues.ts`. */
 export type QueuesFn = (ctx: Ctx, queues: QueueRegistry) => void | Promise<void>;
-
-/** Well-known infra variable, declared by the app's sys core module. */
-const REDIS_URL = "REDIS_URL";
 
 /**
  * Phase 8, run by the provider: run every `*.queues.ts` in load order so
@@ -22,19 +20,12 @@ export async function initQueues(
   report: BootReport,
   onManager?: (manager: QueueManager) => void,
 ): Promise<QueueManager | undefined> {
-  const url = ctx.Environment.store.has(REDIS_URL)
-    ? String(ctx.Environment.get(REDIS_URL))
-    : undefined;
+  const url = readRedisUrl(ctx, report);
+  if (!url) return undefined;
 
-  if (!url) {
-    report.add({
-      scope: "providers",
-      message: `provider "bullmq" is selected but "${REDIS_URL}" is not declared/set — declare it in a sys module's package.json tulipes.env and set it`,
-    });
-    return undefined;
-  }
-
-  const manager = new QueueManager(url);
+  // Read on each call, not now: core 0.11 has no ctx.time, and the zone is
+  // settled by phase 7, before any module could schedule anything.
+  const manager = new QueueManager(url, () => (ctx as { time?: { zone?: string } }).time?.zone);
   // Owned before any queue file runs: a define() opens a connection.
   onManager?.(manager);
   ctx.queues = manager;

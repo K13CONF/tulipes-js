@@ -15,11 +15,11 @@ import { configuredRateLimits } from "../helpers/rate-limit.ts";
  * current values (cheap, and a write lands at once), the proxy policy is
  * set here and again by module.config's onChange, and the rate limiter is
  * rebuilt there, so the handlers below always delegate to the current set.
- * The logger reads the environment, which inspection does not resolve, so
- * it is built on its first request.
+ * The logger reads the core module's environment values, which inspection
+ * refuses, so it is built on its first request.
  */
 export default function securityRoutes(ctx: BackendCtx): void {
-  const { app, Environment, mode, config } = ctx;
+  const { app, config } = ctx;
   const prefix = String(config.api?.prefix ?? "");
   const security = () => config.security!;
 
@@ -27,7 +27,7 @@ export default function securityRoutes(ctx: BackendCtx): void {
   app.use((req, res, next) => helmet(helmetOptions(security()))(req, res, next));
   app.use((req, res, next) => cors(corsOptions(security()))(req, res, next));
   app.use(lazy(() => pinoHttp({
-    logger: logger(Environment, mode),
+    logger: logger(ctx),
     customLogLevel: (_req, res, err) =>
       err || res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
     genReqId: (_req, res) => String(res.getHeader("X-Request-Id") ?? ""),

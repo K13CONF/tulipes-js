@@ -32,18 +32,18 @@ export function cacheTtlSeconds(ctx: Ctx): number {
 
 export async function readIdentity(ctx: Ctx, sid: string): Promise<CachedIdentity | null> {
   if (cacheTtlSeconds(ctx) === 0) return null;
-  return appCache(ctx.Environment).get<CachedIdentity>(KEY + sid);
+  return appCache(ctx).get<CachedIdentity>(KEY + sid);
 }
 
 export async function writeIdentity(ctx: Ctx, sid: string, identity: CachedIdentity): Promise<void> {
   const ttl = cacheTtlSeconds(ctx);
   if (ttl === 0) return;
-  await appCache(ctx.Environment).set(KEY + sid, identity, ttl);
+  await appCache(ctx).set(KEY + sid, identity, ttl);
 }
 
 /** Forget one session: the next request with its token takes the cold path. */
 export async function forgetSession(ctx: Ctx, sid: string): Promise<void> {
-  await appCache(ctx.Environment).del(KEY + sid);
+  await appCache(ctx).del(KEY + sid);
 }
 
 /**

@@ -1,9 +1,12 @@
 import mongoose from "mongoose";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { fixture } from "../../core/tests/fixture.ts";
+import { fixture as coreFixture } from "../../core/tests/fixture.ts";
 // Brings this package's ModelsCapability augmentation into the test program.
 import type { ModelStore } from "../src/index.ts";
 
+// Every fixture wires config.mongoose the way an app's config/app.config.ts does.
+const wiring = `export default (env) => ({ mongoose: { uri: env.probe?.mongoUri } });`;
+const fixture = (files: Record<string, string> = {}) => coreFixture({ "config/app.config.js": wiring, ...files });
 const mongo = process.env.TEST_MONGO_URI;
 const integration = test.skipIf(!mongo);
 const declared = JSON.stringify({ type: "module", tulipes: { providers: { models: "@tulipes/mongoose" } } });
@@ -26,14 +29,7 @@ integration(
   async () => {
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-          {
-            name: "MONGO_URI",
-            type: "url",
-            default: mongo,
-            description: "Test database",
-          },
-        ] } }),
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { mongoUri: { key: "MONGO_URI", type: "url", default: mongo, description: "Test database" } } } }),
       "modules/probe/models/broken.model.js": `export default { name: 'Broken' };`,
     });
 
@@ -50,14 +46,7 @@ integration(
   async () => {
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-          {
-            name: "MONGO_URI",
-            type: "url",
-            default: mongo,
-            description: "Test database",
-          },
-        ] } }),
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { mongoUri: { key: "MONGO_URI", type: "url", default: mongo, description: "Test database" } } } }),
       "modules/probe/models/broken.model.js": `
       import { Schema } from 'mongoose';
       const schema = new Schema({});
@@ -83,14 +72,7 @@ integration(
 
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-          {
-            name: "MONGO_URI",
-            type: "url",
-            default: mongo,
-            description: "Test database",
-          },
-        ] } }),
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { mongoUri: { key: "MONGO_URI", type: "url", default: mongo, description: "Test database" } } } }),
     });
 
     await app.write(
@@ -115,14 +97,7 @@ integration(
   async () => {
     const app = await fixture({
       "package.json": declared,
-      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: [
-          {
-            name: "MONGO_URI",
-            type: "url",
-            default: mongo,
-            description: "Test database",
-          },
-        ] } }),
+      "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: { mongoUri: { key: "MONGO_URI", type: "url", default: mongo, description: "Test database" } } } }),
     });
 
     const handle = await app.boot({ mode: "script", shutdownTimeoutMs: 50 });

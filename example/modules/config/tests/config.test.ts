@@ -8,7 +8,8 @@ import { useTestApp } from "@tulipes/testing";
 import { testEnv, testSettings } from "../../../tests/support.ts";
 
 const rootDir = fileURLToPath(new URL("../../../", import.meta.url));
-const app = useTestApp({ rootDir, env: testEnv(), settings: testSettings() }, { beforeAll, afterAll });
+const env = testEnv();
+const app = useTestApp({ rootDir, env, settings: testSettings() }, { beforeAll, afterAll });
 
 
 const tokens = z.object({
@@ -91,9 +92,9 @@ test("the console describes every module without a secret's value and only admin
   });
 
   const auth = data.modules.find((module) => module.name === "auth") as { variables: Record<string, unknown>[]; settings: { values: Record<string, unknown>; version: number }; routes: Record<string, unknown>[] };
-  const secret = auth.variables.find((variable) => variable.name === "JWT_ACCESS_SECRET")!;
-  expect(secret).toMatchObject({ is_secret: true, is_set: true, value: null, default: null });
-  expect(JSON.stringify(data)).not.toContain(process.env.JWT_ACCESS_SECRET);
+  const secret = auth.variables.find((variable) => variable.name === "jwtAccessSecret")!;
+  expect(secret).toMatchObject({ key: "JWT_ACCESS_SECRET", type: "secret", source: "process.env", is_secret: true, is_set: true, value: null, default: null });
+  expect(JSON.stringify(data)).not.toContain(env.JWT_ACCESS_SECRET);
   expect(auth.settings.values).toMatchObject({ accessTtl: "15m" });
   expect(auth.routes).toContainEqual(expect.objectContaining({ id: "auth:web:login", method: "POST", roles: expect.arrayContaining(["guest"]) }));
 

@@ -1,11 +1,10 @@
 {
   "name": "@tulipes/core",
-  "version": "0.12.0-rc.1",
-  "description": "Module-based Express framework runtime: convention-driven boot pipeline, env contracts, ACL and the provider seam for models, queues and sockets",
+  "version": "0.12.0-rc.2",
+  "description": "Module-based Express framework runtime: convention-driven boot pipeline, one config for settings and environment values, ACL and the provider seam for models, queues and sockets",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./env": "./src/env/index.ts",
     "./modules": "./src/modules/index.ts",
     "./boot": "./src/boot/index.ts",
     "./acl": "./src/acl/index.ts",
@@ -15,6 +14,7 @@
     "./sockets": "./src/sockets/index.ts",
     "./http": "./src/http/index.ts",
     "./i18n": "./src/i18n/index.ts",
+    "./time": "./src/time/index.ts",
     "./config": "./src/config/index.ts",
     "./errors": "./src/errors/index.ts"
   },
@@ -34,7 +34,6 @@
     "access": "public",
     "exports": {
       ".": "./dist/index.js",
-      "./env": "./dist/env/index.js",
       "./modules": "./dist/modules/index.js",
       "./boot": "./dist/boot/index.js",
       "./acl": "./dist/acl/index.js",
@@ -44,6 +43,7 @@
       "./sockets": "./dist/sockets/index.js",
       "./http": "./dist/http/index.js",
       "./i18n": "./dist/i18n/index.js",
+      "./time": "./dist/time/index.js",
       "./config": "./dist/config/index.js",
       "./errors": "./dist/errors/index.js"
     }
