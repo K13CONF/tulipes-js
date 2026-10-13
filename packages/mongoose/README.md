@@ -24,13 +24,16 @@ One line in the app's root `package.json`:
 { "tulipes": { "providers": { "models": "@tulipes/mongoose" } } }
 ```
 
-and `MONGO_URI` declared by the app's sys `core` module (`meta.variables.json`)
-and set. Modules with `models/` or `bootstrap/` directories require the
+and `config.mongoose.uri` wired in `config/app.config.ts` from a variable the
+app's sys `core` module declares — `mongoose: { uri: env.core.mongodbUri }`,
+or by parts: `{ uri: env.core.mongodbHost, user, pass, dbName }`, which the
+driver assembles so no credential is URL-encoded by hand. Modules with
+`models/` or `bootstrap/` directories require the
 provider automatically; a module that only reads models declares
 `"tulipes": { "requires": ["models"] }` in its own manifest. Boot refuses an
 unmet requirement before any module code is imported. Installing this package
-without the declaration selects nothing; a `MONGO_URI` on its own connects
-nothing.
+without the declaration selects nothing; a wired `config.mongoose.uri` on its
+own connects nothing.
 
 ## Use it
 
@@ -89,6 +92,6 @@ cannot overwrite each other, and the document it replaced goes to
 when the connection is to a replica set and by polling (every 2s) otherwise;
 core validates every incoming document against the module's schema before
 applying it. The store shares the models provider's connection when both
-are this package, and opens its own from `MONGO_URI` when the app keeps no
-mongoose models. Without the declaration core keeps settings in
+are this package, and opens its own from `config.mongoose` when the app
+keeps no mongoose models. Without the declaration core keeps settings in
 `config/settings.<APP_ENV>.json`.
