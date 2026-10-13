@@ -1,5 +1,5 @@
 import { Redis } from "ioredis";
-import type { Environment } from "@tulipes/core/env";
+import type { Ctx } from "@tulipes/core/boot";
 
 import { MemoryCache } from "./memory-cache.ts";
 import { RedisCache } from "./redis-cache.ts";
@@ -13,18 +13,19 @@ export { RedisCache } from "./redis-cache.ts";
 let active: { cache: Cache; redis?: Redis } | undefined;
 
 /**
- * The app's one cache, picked from the environment: redis when REDIS_URL is
- * declared, in-process memory otherwise (tests, minimal setups). Lazily
- * created, process-wide singleton.
+ * The app's one cache, picked from the core module's environment values:
+ * redis when `config.core.redisUrl` is set, in-process memory otherwise
+ * (tests, minimal setups). Lazily created, process-wide singleton.
  */
-export function appCache(environment: Environment): Cache {
+export function appCache({ config }: Pick<Ctx, "config">): Cache {
   if (active) return active.cache;
 
-  if (environment.store.has("REDIS_URL")) {
+  const redisUrl = config.core?.redisUrl;
+  if (redisUrl) {
     // Fail a command fast instead of queueing it and retrying for seconds: the
     // cache is consulted on every request, so a redis outage must cost a miss,
     // not a stalled request. RedisCache turns the rejection into that miss.
-    const redis = new Redis(String(environment.get("REDIS_URL")), {
+    const redis = new Redis(redisUrl, {
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
     });

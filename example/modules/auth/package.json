@@ -9,36 +9,36 @@
   "tulipes": {
     "tier": "sys",
     "priority": 20,
-    "env": [
-      {
-        "name": "JWT_ACCESS_SECRET",
+    "env": {
+      "jwtAccessSecret": {
+        "key": "JWT_ACCESS_SECRET",
         "type": "secret",
         "group": "auth",
         "required": true,
         "description": "Signing key for short-lived access tokens"
       },
-      {
-        "name": "JWT_REFRESH_SECRET",
+      "jwtRefreshSecret": {
+        "key": "JWT_REFRESH_SECRET",
         "type": "secret",
         "group": "auth",
         "required": true,
         "description": "Signing key for refresh tokens; separate from the access key so leaking one cannot mint the other"
       },
-      {
-        "name": "AUTH_ADMIN_EMAIL",
+      "adminEmail": {
+        "key": "AUTH_ADMIN_EMAIL",
         "type": "string",
         "group": "auth",
         "required": true,
         "description": "Email of the admin account seeded on first boot"
       },
-      {
-        "name": "AUTH_ADMIN_PASSWORD",
+      "adminPassword": {
+        "key": "AUTH_ADMIN_PASSWORD",
         "type": "secret",
         "group": "auth",
         "required": true,
         "description": "Password for the seeded admin account; change it after the first login"
       }
-    ]
+    }
   },
   "dependencies": {
     "@app/core": "workspace:*",

@@ -38,7 +38,9 @@ object is replaced in place when a write lands.
   defaults; the first boot writes them. There is no "required setting",
   because an operator cannot be asked for a value the process needs to boot.
 - **No secrets.** `defineConfig` refuses a field whose metadata says
-  `secret`; a secret is an environment variable. → skill `tulipes-env-variable`
+  `secret`; a secret is an environment value, declared in the module's
+  package.json and read beside the settings at `ctx.config.<module>`, never
+  listed. → skill `tulipes-env-variable`
 - **Describe every field.** `.describe()` is what the console form, the
   generated types and an agent reading the manifest see.
 - **Validate in the schema, not in `onChange`.** The store persists before
@@ -57,7 +59,7 @@ object is replaced in place when a write lands.
 
 | | |
 |---|---|
-| `GET /config` | every module in load order: manifest, declared variables (names, types, sources — a secret's value never), settings with schema, live values and stored version, endpoints with the roles that reach them |
+| `GET /config` | every module in load order: manifest, environment values (config name, variable, type, source — a secret's value never), settings with schema, live values and stored version, endpoints with the roles that reach them |
 | `GET /config/:module` | the same for one module |
 | `PATCH /config/:module` | `{ values: { … }, version? }` — a patch over the stored values, validated by the module's schema (422 with the field), refused when `version` is not the stored one (409 `STALE_VERSION`), audited before it lands, applied at once in every replica |
 

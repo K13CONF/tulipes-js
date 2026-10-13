@@ -92,7 +92,7 @@ export function configurePassport(ctx: Ctx): void {
         // Cookies and URL parameters never authenticate this starter. A cookie
         // extractor would also need the policy described in docs/browser-auth.md.
         jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-        secretOrKey: String(ctx.Environment.get("JWT_ACCESS_SECRET")),
+        secretOrKey: ctx.config.auth!.jwtAccessSecret,
         passReqToCallback: false,
       },
       async (claims: TokenClaims, done) => {

@@ -5,13 +5,14 @@ description: Use when streaming an app's logs, or when deciding whether a value 
 
 # Settings and the settings module
 
-Two layers of configuration. **Environment** is what the process needs
-before the settings store can answer — the port, the connection strings,
-the log destinations — plus secrets: declared under `tulipes.env` in a
-module's `package.json`, read with `ctx.Environment.get()`, resolved once
-at boot. **Settings** are everything else: declared with a zod schema in
-`module.config.ts`, stored per module, validated on every write,
-hot-applied, read live at `ctx.config.<module>`. The test is mechanical:
+Two layers of configuration, one place to read them. **Environment values**
+are what the process needs before the settings store can answer — the
+port, the connection strings, the log destinations — plus secrets:
+declared under `tulipes.env` in a module's `package.json`, resolved once at
+boot, read-only at `ctx.config.<module>.<name>`. **Settings** are everything
+else: declared with a zod schema in `module.config.ts`, stored per module,
+validated on every write, hot-applied, read live at the same
+`ctx.config.<module>`. The test is mechanical:
 if boot does not need it before the database answers and it is not a
 secret, it is a setting. → skills `tulipes-env-variable`, `tulipes-config`
 
@@ -54,7 +55,7 @@ and refuses when `LOG_FILE` is off.
 | 0.10 endpoint | 0.11 |
 |---|---|
 | `GET /settings/modules` | `GET /config` — the `config` module |
-| `GET`/`PUT /settings/variables/:name` | gone: no editable secrets; variables are read-only in `GET /config` |
+| `GET`/`PUT /settings/variables/:name` | gone: no editable secrets; environment values are described (never a secret's value) in `GET /config` |
 | `POST /settings/reboot` | gone: nothing needs a restart to take effect; a restart-tagged field says so in the write's response |
 | `GET`/`PUT /settings/i18n/:module/:locale` | gone: translations are code, edited in the repository |
 | the `.env` file editor, PM2 control, the audit of those | gone with them; the console's writes are audited by the `config` module |

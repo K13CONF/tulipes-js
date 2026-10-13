@@ -6,30 +6,57 @@
   "tulipes": {
     "tier": "sys",
     "priority": 0,
-    "env": [
-      {
-        "name": "PORT",
+    "env": {
+      "port": {
+        "key": "PORT",
         "type": "number",
         "group": "http",
         "description": "HTTP port the backend process listens on",
         "default": 3000
       },
-      {
-        "name": "MONGO_URI",
+      "mongodbUri": {
+        "key": "MONGO_URI",
         "type": "url",
         "group": "database",
-        "required": true,
-        "description": "MongoDB connection string"
+        "description": "Full MongoDB connection string; when set it wins over the parts below (the only way to name a replica set, an Atlas mongodb+srv:// cluster or driver options)"
       },
-      {
-        "name": "REDIS_URL",
+      "mongodbHost": {
+        "key": "MONGO_HOST",
+        "type": "url",
+        "group": "database",
+        "description": "MongoDB host as a URI without credentials or database: mongodb://host:port",
+        "default": "mongodb://localhost:27017"
+      },
+      "mongodbUsername": {
+        "key": "MONGO_USERNAME",
+        "type": "string",
+        "group": "database",
+        "description": "MongoDB username; empty for an unauthenticated server",
+        "default": ""
+      },
+      "mongodbPassword": {
+        "key": "MONGO_PASSWORD",
+        "type": "secret",
+        "group": "database",
+        "description": "MongoDB password",
+        "default": ""
+      },
+      "mongodbDbName": {
+        "key": "MONGO_DBNAME",
+        "type": "string",
+        "group": "database",
+        "description": "MongoDB database name",
+        "default": "tulipes_example"
+      },
+      "redisUrl": {
+        "key": "REDIS_URL",
         "type": "url",
         "group": "redis",
         "required": true,
-        "description": "Redis connection string (queues, cache)"
+        "description": "Redis connection string (queues, cache, rate limits)"
       },
-      {
-        "name": "LOG_LEVEL",
+      "logLevel": {
+        "key": "LOG_LEVEL",
         "type": "enum",
         "enum": [
           "fatal",
@@ -43,28 +70,28 @@
         "description": "Lowest level that reaches any destination",
         "default": "info"
       },
-      {
-        "name": "LOG_CONSOLE",
+      "logConsole": {
+        "key": "LOG_CONSOLE",
         "type": "boolean",
         "group": "logging",
         "description": "Pretty coloured logs on stdout; turn off where a collector reads files only",
         "default": true
       },
-      {
-        "name": "LOG_FILE",
+      "logFile": {
+        "key": "LOG_FILE",
         "type": "boolean",
         "group": "logging",
         "description": "Write JSON-line log files under LOG_DIR",
         "default": true
       },
-      {
-        "name": "LOG_DIR",
+      "logDir": {
+        "key": "LOG_DIR",
         "type": "string",
         "group": "logging",
         "description": "Directory for log files, relative to the app root or absolute",
         "default": "logs"
       }
-    ]
+    }
   },
   "dependencies": {
     "@tulipes/core": "workspace:*",

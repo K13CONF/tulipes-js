@@ -27,10 +27,12 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
 ## Non-negotiable rules
 
 1. **Never read `process.env` directly, and keep the environment small.**
-   A value is an environment variable only if boot needs it before the
+   A value is an environment value only if boot needs it before the
    database answers (connection strings, the port, log destination) or it
-   is a secret: declared under `tulipes.env` in the module's `package.json`, read with
-   `ctx.Environment.get("NAME")`. Everything else is a *setting*: declared
+   is a secret: declared under `tulipes.env` in the module's `package.json`
+   as `"name": { "key": "VARIABLE", … }`, read as
+   `ctx.config.<module>.<name>` — read-only, invisible to listings, beside
+   the module's settings. Everything else is a *setting*: declared
    with a zod schema in that module's `module.config.ts`, stored in the
    settings store (the `settings` collection here; a JSON file under
    `config/` in an app without the Mongo store), edited through the
@@ -52,9 +54,10 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
 5. **Run `pnpm sync` after touching a module's `tulipes.env`, a
    settings schema in `module.config.ts`, a model file or a queue file's
    `jobs` export.** It regenerates `types/tulipes.d.ts` and `.env.example`;
-   stale generated types are a lie. With it, `ctx.models.get("User")` is
-   typed from the model's schema and `queues.add("users.welcome", …)` from
-   the queue's job schema, so a wrong name or payload does not compile. `module.config.ts`
+   stale generated types are a lie. With it, `ctx.config.core.port` is a
+   `number`, `ctx.models.get("User")` is typed from the model's schema and
+   `queues.add("users.welcome", …)` from the queue's job schema, so a wrong
+   name or payload does not compile. `module.config.ts`
    has exactly one export, `defineConfig({ schema })`; initialization and
    cleanup belong to `bootstrap/*.bootstrap.ts`, which may return the
    function that closes what it opened, and long-lived work ends on
@@ -114,18 +117,18 @@ For endpoint changes, read `tulipes-endpoint`: native routers live in
 several files (`routes/web/hello.greetings.routes.ts`); controllers mirror
 them (`controllers/bo.users.controllers.ts` exports `BoUsersController`).
 They are plain `(ctx) => Router` functions: build the router from
-the context, return it for the configured prefix, and read models, settings
-and the environment inside handlers, never while building — `tulipes routes`
-and `tulipes spec` build every router with nothing acquired. Global
-middleware that needs the environment is built on its first request with
-`lazy()` from `@app/core`.
+the context, return it for the configured prefix, and read models and
+config inside handlers, never while building — `tulipes routes` and
+`tulipes spec` build every router with nothing acquired, and an environment
+value read while building throws. Global middleware that needs one is built
+on its first request with `lazy()` from `@app/core`.
 
 ## Where things go
 
 | Decision | Location |
 |---|---|
-| Connection string, secret, or anything boot needs before the database answers | `tulipes.env` in that module's `package.json` |
-| Policy shared by ≥2 modules and the same everywhere (pagination, locales) | `config/app.config.ts` |
+| Connection string, secret, or anything boot needs before the database answers | `tulipes.env` in that module's `package.json`, read at `ctx.config.<module>.<name>` |
+| Policy shared by ≥2 modules and the same everywhere (pagination, locales); wiring the environment to what core and the providers read (`server.port`, `mongoose.*`, `bullmq.redisUrl`) | `config/app.config.ts` |
 | A value an operator may change at runtime (limits, modes, toggles, lifetimes) | a field in that module's `module.config.ts` schema, read at `ctx.config.<module>` |
 | Opening a client, seeding rows, ensuring indexes, and closing them again | that module's `bootstrap/*.bootstrap.ts`, returning the cleanup |
 | A string a user will read | that module's `i18n/<locale>.json`, reached with `req.t` |
@@ -135,7 +138,7 @@ middleware that needs the environment is built on its first request with
 | Helper used by ≥2 modules | the sys core module, exported from its `lib/index.ts` and imported as `@app/core` |
 | Helper used by one module | that module's `helpers/` |
 | One-off task (backfill, export, admin chore) | `scripts/`, booted with `mode: "script"` |
-| Anything you would `console.log` | `moduleLogger(ctx.Environment, "<module>", ctx.mode)` from `@app/core` |
+| Anything you would `console.log` | `moduleLogger(ctx, "<module>")` from `@app/core` |
 
 ## Boot order (why load order matters)
 
@@ -156,7 +159,7 @@ luck.
 | `pnpm tulipes roles [--role r]` | every role with its description, extras and grants, offline |
 | `pnpm tulipes agent manifest [--role r]` | print every tool the app exposes to agents, offline |
 | `pnpm test` | every `tests/` and `modules/*/tests/` file; each boots the app once through `@tulipes/testing` |
-| `pnpm check` | validate the environment without booting |
+| `pnpm check` | resolve every environment value and show where it lands, without booting |
 | `pnpm typecheck` | typecheck the whole app |
 | `pnpm tulipes new module <name> [--scope s]` | scaffold a module (its first endpoint in scope `s`, default `web`) |
 | `tulipes update` | upgrade the global cli and the framework in every manifest |

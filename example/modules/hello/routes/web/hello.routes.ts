@@ -14,8 +14,8 @@ import { HelloController } from "../../controllers/web/hello.controllers.ts";
  * A routes file is a plain function of the context. It returns a Router,
  * which core mounts under `config.api.prefix`, and declares a RAI on every
  * endpoint: the id is the permission, and a route without one refuses the
- * boot. Build the router from the context; read models, settings and the
- * environment inside handlers, where they are live.
+ * boot. Build the router from the context; read models and config inside
+ * handlers, where they are live.
  */
 export default function helloRoutes(ctx: BackendCtx): Router {
   const { rai } = ctx;

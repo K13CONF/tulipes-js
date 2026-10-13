@@ -208,8 +208,8 @@ test.each(["duplicate id", "duplicate path"])("the scan rejects a %s across modu
   await expect(app.boot({ inspect: true })).rejects.toThrow(/already declared/);
 });
 
-test.each(["invalid", "legacy", "duplicate"])("inspection checks %s environment declarations without requiring values", async (kind) => {
-  const declarations = {
+test.each(["invalid", "legacy", "duplicate"] as const)("inspection checks %s environment declarations without requiring values", async (kind) => {
+  const declarations: Record<typeof kind, unknown> = {
     invalid: { bad: { type: "number" } },
     legacy: [{ name: "PORT", type: "number", description: "0.11 shape" }],
     duplicate: { first: { key: "PORT", type: "number", description: "First" }, second: { key: "PORT", type: "number", description: "Second" } },
@@ -217,8 +217,8 @@ test.each(["invalid", "legacy", "duplicate"])("inspection checks %s environment 
   const app = await fixture({
     "modules/probe/package.json": JSON.stringify({ name: "@test/probe", type: "module", tulipes: { env: declarations[kind] } }),
   });
-  const message = { invalid: /tulipes" key: env\.bad\.key — Required/, legacy: /tulipes\.env is an object keyed by config name since 0\.12/, duplicate: /already supplies "first"/ }[kind];
-  await expect(app.boot({ inspect: true })).rejects.toThrow(message);
+  const message: Record<typeof kind, RegExp> = { invalid: /tulipes" key: env\.bad\.key — Required/, legacy: /tulipes\.env is an object keyed by config name since 0\.12/, duplicate: /already supplies "first"/ };
+  await expect(app.boot({ inspect: true })).rejects.toThrow(message[kind]);
 });
 
 test("a variable has one owning module across the app", async () => {

@@ -55,7 +55,7 @@ touching anything else.
 
 | Field | Meaning |
 |---|---|
-| `tier` | `sys` loads before every `app` module. Use `sys` **only** for framework-level concerns: global middleware, roles, infra variables. A business feature is always `app`. |
+| `tier` | `sys` loads before every `app` module. Use `sys` **only** for framework-level concerns: global middleware, roles, the infrastructure environment values. A business feature is always `app`. |
 | `priority` | Lower loads earlier within a tier. Default 100. Use it for coarse ordering, not for dependencies. |
 | `dependsOn` | Short names (`"users"`, not `"@app/users"`) of modules that must load first. Declare this whenever you import from another module or read its config. |
 

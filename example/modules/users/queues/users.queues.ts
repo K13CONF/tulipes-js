@@ -16,7 +16,7 @@ export const jobs = {
 export default function usersQueues(ctx: Ctx, queues: QueueRegistry): void {
   // The same logger the backend uses. In the worker process it writes
   // to app-worker.log, so the two processes never share a file.
-  const log = moduleLogger(ctx.Environment, "users", ctx.mode);
+  const log = moduleLogger(ctx, "users");
 
   queues.process("users.welcome", async (job) => {
     // No request here to negotiate a locale from, so the one the caller

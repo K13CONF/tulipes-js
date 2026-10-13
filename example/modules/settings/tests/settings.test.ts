@@ -1,4 +1,8 @@
 import { randomBytes } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod/v4";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
@@ -8,7 +12,15 @@ import { useTestApp } from "@tulipes/testing";
 import { testEnv, testSettings } from "../../../tests/support.ts";
 
 const rootDir = fileURLToPath(new URL("../../../", import.meta.url));
-const app = useTestApp({ rootDir, env: testEnv(), settings: testSettings() }, { beforeAll, afterAll });
+
+/**
+ * Where this boot's logger writes and the stream reads: environment values
+ * are bound once at boot, so the file logging the stream needs is on for
+ * the whole file, into a directory the suite owns and empties per test.
+ */
+const logDir = mkdtempSync(join(tmpdir(), "tulipes-log-http-"));
+const app = useTestApp({ rootDir, env: { ...testEnv(), LOG_FILE: "true", LOG_DIR: logDir }, settings: testSettings() }, { beforeAll, afterAll });
+afterAll(() => rm(logDir, { recursive: true, force: true }));
 
 
 const tokens = z.object({
@@ -59,30 +71,16 @@ async function sysadmin() {
   return user;
 }
 
+/** `run` sees the log directory empty: one test's files never serve another's stream. */
 async function logFiles(run: (dir: string) => Promise<void>) {
-  const { mkdtemp, rm } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
-  const dir = await mkdtemp(join(tmpdir(), "tulipes-log-http-"));
-  const env = app.handle.ctx.Environment;
-
-  const previous = {
-    file: env.get("LOG_FILE"),
-    dir: env.get("LOG_DIR"),
+  const empty = async () => {
+    for (const entry of await readdir(logDir)) await rm(join(logDir, entry), { recursive: true, force: true });
   };
-
-  env.store.set("LOG_FILE", true);
-
-  env.store.set("LOG_DIR", dir);
-
+  await empty();
   try {
-    await run(dir);
+    await run(logDir);
   } finally {
-    env.store.set("LOG_FILE", previous.file);
-
-    env.store.set("LOG_DIR", previous.dir);
-
-    await rm(dir, { recursive: true, force: true });
+    await empty();
   }
 }
 
@@ -378,10 +376,8 @@ test("shutdown drains settings streams and a later boot owns fresh stream admiss
       });
 
       try {
-        next.env.store.set("LOG_FILE", true);
-
-        next.env.store.set("LOG_DIR", dir);
-
+        // LOG_FILE and LOG_DIR are still set on the process, so this boot
+        // reads the same directory.
         const address = next.server!.address();
 
         if (!address || typeof address === "string")
