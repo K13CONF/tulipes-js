@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/bullmq",
-  "version": "0.2.1-rc.1",
+  "version": "0.2.1-rc.2",
   "description": "BullMQ queues provider for Tulipes apps: producers in every process, consumers in the worker, behind core's queues capability",
   "type": "module",
   "exports": {
@@ -27,7 +27,7 @@
     "ioredis": "^5"
   },
   "peerDependencies": {
-    "@tulipes/core": "^0.11.0 || ^0.12.0-rc.1"
+    "@tulipes/core": "^0.12.0-rc.2"
   },
   "devDependencies": {
     "@tulipes/core": "workspace:*",

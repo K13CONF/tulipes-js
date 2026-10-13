@@ -1,7 +1,11 @@
 # Release — core 0.12.0-rc.1, the 0.12 line as a candidate
 
-Status: **prepared, authorized, not yet published.** The release owner
-asked on 2026-10-12 to merge the 0.12 work and publish a new version.
+Status: **superseded before a tag.** On 2026-10-13 the owner folded the
+environment change and the time zones into the 0.12 line as its next
+candidate, [0.12.0-rc.2](./release-0.12.0-rc.2.md); this candidate was
+never tagged or published. Kept as the record of what rc.1 would have
+been. The release owner had asked on 2026-10-12 to merge the 0.12 work
+and publish a new version.
 Structural changes open with a prerelease under
 [the release procedure](../releasing.md), so this is `0.12.0-rc.1` on
 npm's `next` tag; `latest` stays on 0.11.0. Owning item: 0.12-S05 in
