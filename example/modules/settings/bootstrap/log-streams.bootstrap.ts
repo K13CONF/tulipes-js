@@ -7,6 +7,6 @@ import { configuredLogStreams } from "../helpers/log-stream.ts";
  * aborts the moment shutdown begins, before HTTP stops accepting, so the
  * streams end while the server is still draining ordinary requests.
  */
-export default function logStreams({ Environment, signal }: RuntimeCtx): void {
-  signal.addEventListener("abort", () => configuredLogStreams(Environment).drain(), { once: true });
+export default function logStreams(ctx: RuntimeCtx): void {
+  ctx.signal.addEventListener("abort", () => configuredLogStreams(ctx).drain(), { once: true });
 }

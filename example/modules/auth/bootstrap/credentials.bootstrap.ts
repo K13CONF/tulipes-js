@@ -19,11 +19,11 @@ const PLACEHOLDERS = [
 export default function credentials({ appEnv, config }: RuntimeCtx): void {
   if (appEnv !== "production" && appEnv !== "staging") return;
 
-  const auth = config.auth as Record<string, unknown>;
+  const auth = config.auth!;
   const invalid: string[] = [];
 
   for (const [name, variable, developmentValue] of PLACEHOLDERS) {
-    const value = String(auth[name] ?? "").trim();
+    const value = auth[name].trim();
     if (!value || value === developmentValue) invalid.push(variable);
   }
   if (auth.jwtAccessSecret === auth.jwtRefreshSecret) {

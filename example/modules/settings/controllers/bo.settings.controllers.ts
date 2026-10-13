@@ -18,14 +18,15 @@ export class BoSettingsController {
   readonly #ctx: Ctx;
 
   constructor(ctx: Ctx) {
-
     this.#ctx = ctx;
-    this.#logStreams = configuredLogStreams(ctx.Environment);
+    this.#logStreams = configuredLogStreams(ctx);
   }
 
   logStream(): RequestHandler {
     return async (req: Request, res: Response) => {
-      if (!Boolean(this.#ctx.Environment.get("LOG_FILE"))) {
+      // Where the core module's logger writes, from its environment values.
+      const { logFile, logDir } = this.#ctx.config.core!;
+      if (!logFile) {
         throw new HttpError(409, "fileLoggingDisabled", {
           code: "FILE_LOGGING_DISABLED",
           defaultMessage: "LOG_FILE is off — there are no log files to stream",
@@ -47,7 +48,7 @@ export class BoSettingsController {
               session.expires_at.getTime(),
             )
           : 0,
-        dir: String(this.#ctx.Environment.get("LOG_DIR")),
+        dir: logDir,
         prefix: `${LOG_FILES.basename}-${which}`,
         process: which,
         tail,

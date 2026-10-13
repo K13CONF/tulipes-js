@@ -78,5 +78,6 @@ nothing processes them — that is the correct behaviour, not a bug.
 - Keep payloads small and JSON-serializable.
 - Throwing marks the job failed and schedules a retry per its options; let
   it throw rather than swallowing errors.
-- Both processes run the full boot pipeline, so `models`, `config` and
-  `Environment` are all available inside a processor.
+- Both processes run the full boot pipeline, so `ctx.models` and
+  `ctx.config` (settings and environment values alike) are available
+  inside a processor.

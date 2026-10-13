@@ -26,13 +26,16 @@ problems the report has not reached yet.
 |---|---|---|
 | `environment` | `required variable "X" has no value` | Declared `required` but nothing supplies it. Add it to `.envs/.env.<APP_ENV>`, or give the spec a `default`. |
 | `environment` | `"abc" is not a number` / `not one of: …` | Value fails its declared `type`/`enum`. Fix the value or the spec. |
-| `environment` | `variable "X" is already declared by module "y"` | Two modules declare the same name. Delete the duplicate; read the other module's variable instead. |
+| `environment` | `variable "X" is already declared by module "y"` | Two modules declare the same `key`. Delete the duplicate; read the other module's config instead. |
+| `environment` | `config.x.name is both a setting and an environment value` | A `tulipes.env` name is also a field of that module's settings schema. Rename one; they share the namespace. |
+| `environment` | `tulipes.env is an object keyed by config name since 0.12` | The 0.11 array form. Run `tulipes migrate 0.12`, which rewrites it and the reads. |
 | `module graph` | `dependsOn "x" — no such module exists` | Typo, or you used the package name. `dependsOn` takes short names (`"users"`). |
 | `module graph` | `dependency cycle: a → b → a` | Mutual dependency. Move the shared part into the core module or a third module. |
 | `module graph` | `sys module cannot depend on app module` | A sys module needs something app-tier. Either it is not really sys, or the dependency belongs in `lib/`. |
 | `modules` | `x does not belong at the module root` | Only `package.json`, `module.config.ts` and `module.acl.ts` live there; the message names the folder the file belongs in. |
-| `modules` | `tulipes.offline is gone` / `meta.variables.json moved to package.json` | The 0.10 forms. Delete the flag; move the variables under `tulipes.env`. |
-| `routes` | `routes function threw: ctx.models is not available during inspection` | A routes file or a controller constructor touched infrastructure while building. Move the read into the handler, or build the middleware with `lazy()`. |
+| `modules` | `tulipes.offline is gone` / `meta.variables.json … moved to package.json` | The 0.10 forms. Delete the flag; run `tulipes migrate 0.11` then `0.12` for the variables. |
+| `routes` | `routes function threw: ctx.models is not available during inspection` / `config.x.name is an environment value, not available during inspection` | A routes file or a controller constructor touched infrastructure or an environment value while building. Move the read into the handler, or build the middleware with `lazy()`. |
+| `config` | `app.config returns "x", which is the config namespace of module "x"` | `config/app.config.ts` seeded a key named after a module; that namespace holds the module's settings and environment values. Rename the key. |
 | `config` | `module.config must default-export defineConfig({ schema })` | Missing/misspelled `export default`, or the 0.10 factory form: values now live in the settings store. |
 | `config` | `module.config exports "onReady"` | The 0.10 lifecycle exports. Initialization is a `bootstrap/*.bootstrap.ts` file, which may return its cleanup; long-lived work ends on `ctx.signal`. |
 | `config` | `field "x" has no default — every setting needs one` | Give the field a `.default()`; an operator is never asked for a value the process needs to boot. |
@@ -43,13 +46,13 @@ problems the report has not reached yet.
 | `providers` | `provider "…" cannot be resolved from …` | The declared specifier is not installed in the app. Install it (or fix the path). |
 | `providers` | `"@tulipes/core/db" no longer contains the Mongoose provider` | The app still declares the pre-extraction specifier. Install `@tulipes/mongoose`, declare it, and import `ModelDef`/`BootstrapFn` from it. |
 | `providers` | `[x] requires capability "queues" … declares no provider for it` | A module has a `queues/` file (or `requires: ["queues"]`) but the app's `package.json` has no `"tulipes": { "providers": { "queues": "@tulipes/bullmq" } }`. Add that line. |
-| `providers` | `provider "bullmq" is selected but "REDIS_URL" is not declared/set` | Add the variable to the sys `core` module's meta file and set it. |
+| `providers` | `provider "bullmq" is selected but config.bullmq.redisUrl is not set` | Wire it in `config/app.config.ts` — `bullmq: { redisUrl: env.core.redisUrl }` — from a variable the sys `core` module declares, and set that variable. |
 | `providers` | `"@tulipes/core/queues" no longer contains the BullMQ provider` | Install `@tulipes/bullmq`, declare it, and import `QueueRegistry`/`QueuesFn` from it. |
 | `providers` | `[x] requires capability "sockets" … declares no provider for it` | A module has a `sockets/` file (or `requires: ["sockets"]`) but the app's `package.json` has no `"tulipes": { "providers": { "sockets": "@tulipes/socket.io" } }`. Add that line. |
 | `providers` | `"@tulipes/core/sockets" no longer contains the Socket.IO provider` | Install `@tulipes/socket.io`, declare it, and import `SocketRegistry`/`SocketsFn` from it. |
 | `providers` | `provider "socket.io" failed to attach to the HTTP server` | The transport could not bind to the server core created; the message carries the driver's reason. |
-| `providers` | `provider "mongoose" is selected but "MONGO_URI" is not declared/set` | Add the variable to the sys `core` module's meta file and set it. |
-| `providers` | `database connection failed` | Mongo unreachable or `MONGO_URI` wrong. Check the service is running. |
+| `providers` | `provider "mongoose" is selected but config.mongoose.uri is not set` | Wire it in `config/app.config.ts` — `mongoose: { uri: env.core.mongodbUri }` (or the host, user, pass and dbName parts) — from variables the sys `core` module declares, and set them. |
+| `providers` | `database connection failed (config.mongoose.uri)` | Mongo unreachable or the URI wrong. Check the service is running and what `pnpm check` resolved. |
 | `providers` | `package.json "tulipes" key: providers — Unrecognized key` | Typo in the capability name; only `models` exists. |
 | `providers` | `queue name … is invalid` | Queue names use `.`, not `:`. |
 | `routes` | `must default-export a routes function` | Missing `export default` in a `*.routes.ts`. |
@@ -72,7 +75,10 @@ runs, check in this order:
 
 ## Other symptoms
 
-- **Types are `unknown` or a new variable is not typed** → run `pnpm sync`.
+- **Types are `unknown` or a new environment value is not typed** → run `pnpm sync`.
+- **`console.log(ctx.config.core)` does not show an environment value** →
+  by design; they are non-enumerable so a secret never reaches a log or a
+  response. `pnpm check` shows them.
 - **Worker exits immediately** → no processors registered; it refuses to
   idle. Add a `*.queues.ts` with `process()`.
 - **Env change has no effect** → `process.env` beats the file. Check for a

@@ -3,24 +3,35 @@ import type { AppConfigFn } from "@tulipes/core/boot";
 /**
  * ── The app-wide config seed ──────────────────────────────────────────
  *
- * Runs FIRST in boot phase 6, before any module.config.ts factory, and
+ * Runs FIRST in boot phase 4, before any module's settings are loaded, and
  * whatever it returns becomes the base of the global config. Modules read
  * it through `ctx.config.<key>`.
+ *
+ * It receives `env`: every module's environment values, resolved from the
+ * container, `.envs/.env.<APP_ENV>` and the defaults each module declares
+ * in its package.json `tulipes.env` — `env.core.port`, `env.auth.adminEmail`
+ * — typed by `pnpm sync`. This is the one place the environment is wired
+ * to what the framework and the providers read: `server.port` for core,
+ * `mongoose.*` for @tulipes/mongoose, `bullmq.redisUrl` for @tulipes/bullmq.
+ * Modules never need this wiring: each reads its own values as
+ * `ctx.config.<module>.<name>`, beside its settings.
  *
  * Add a key here when two or more modules share a value. Config belonging
  * to ONE feature goes in that module's `module.config.ts` instead, where
  * `pnpm sync` types it for you — that is where `users.maxSessions` and
  * `users.signupMode` live. A value that differs per deployment belongs in
- * neither: declare it in a module's `meta.variables.json` and read it with
- * `Environment.get`, the way MONGO_URI, CORS_ORIGINS and BODY_LIMIT do.
+ * neither: declare it under `tulipes.env` in a module's package.json and
+ * read it as `ctx.config.<module>.<name>`, the way MONGO_URI and REDIS_URL
+ * are declared by the core module.
  *
- * The framework reads exactly one field of this object: `app.name`, which
- * titles the startup banner. Everything else is yours.
+ * Under inspection (`tulipes routes`, `tulipes spec`) a value that is
+ * missing or invalid is `undefined` rather than an error, so this file
+ * only wires values and never requires one.
  */
 
 // `satisfies` (not a type annotation) so TypeScript keeps the exact shape
 // of this object for the augmentation at the bottom of the file.
-const appConfig = (() => ({
+const appConfig = ((env) => ({
   app: {
     name: "tulipes-example",
   },
@@ -32,6 +43,31 @@ const appConfig = (() => ({
    */
   api: {
     prefix: "/api/v1",
+  },
+
+  /** What core listens on. */
+  server: {
+    port: env.core.port,
+  },
+
+  /**
+   * How @tulipes/mongoose reaches MongoDB. A full MONGO_URI wins — it is the
+   * only way to name a replica set, an Atlas cluster or driver options;
+   * otherwise the host, credentials and database name are handed to the
+   * driver separately, so nothing is URL-encoded by hand.
+   */
+  mongoose: env.core.mongodbUri
+    ? { uri: env.core.mongodbUri }
+    : {
+        uri: env.core.mongodbHost,
+        user: env.core.mongodbUsername,
+        pass: env.core.mongodbPassword,
+        dbName: env.core.mongodbDbName,
+      },
+
+  /** How @tulipes/bullmq reaches Redis. */
+  bullmq: {
+    redisUrl: env.core.redisUrl,
   },
 
   /**
@@ -82,7 +118,9 @@ export default appConfig;
  * number, not `unknown`. `pnpm sync` does this automatically for
  * module.config.ts factories; the app-level seed types itself here.
  * Partial because the config object is empty until this factory runs.
+ * `server`, `mongoose` and `bullmq` are left out: core and the providers
+ * already type the keys they read.
  */
 declare module "@tulipes/core/config" {
-  interface GlobalConfig extends Partial<ReturnType<typeof appConfig>> {}
+  interface GlobalConfig extends Partial<Omit<ReturnType<typeof appConfig>, "server" | "mongoose" | "bullmq">> {}
 }

@@ -2,9 +2,10 @@ import { randomBytes } from "node:crypto";
 
 /**
  * What every module test boots the app with. The services are dedicated:
- * the suite writes users, sessions and settings. The variables are the
- * eleven the app declares; everything else the request pipeline needs is a
- * setting, written after the boot the way an operator writes it.
+ * the suite writes users, sessions and settings. The variables are the ones
+ * the core and auth modules declare, by their env names; everything else the
+ * request pipeline needs is a setting, written after the boot the way an
+ * operator writes it.
  */
 export function testEnv(): Record<string, string> {
   if (!process.env.TEST_MONGO_URI || !process.env.TEST_REDIS_URL) {
