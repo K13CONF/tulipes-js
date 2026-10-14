@@ -119,3 +119,12 @@ export function grantsCovering(permission: string): string[] {
   covering.push("*");
   return covering;
 }
+
+/**
+ * Whether a credential's scopes reach `permission`, in the grant grammar
+ * above. `undefined` is an unscoped credential, which this never narrows;
+ * the role is checked separately, so a scope can only take away.
+ */
+export function scopesCover(scopes: readonly string[] | undefined, permission: string): boolean {
+  return scopes === undefined || grantsCovering(permission).some((grant) => scopes.includes(grant));
+}

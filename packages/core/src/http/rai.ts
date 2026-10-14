@@ -1,6 +1,6 @@
 import type { Express, Router, Request, RequestHandler, Response } from "express";
 
-import type { Rai } from "../acl/rai-id.ts";
+import { scopesCover, type Rai } from "../acl/rai-id.ts";
 import { HttpError, ValidationError, type FieldIssue } from "./error-handler.ts";
 import { codeOfIssue, fieldOf, type RouteSchemas, type ValidatableSchema } from "./schema.ts";
 import type { Auth } from "./index.ts";
@@ -175,6 +175,48 @@ export class RouteRegistry {
 }
 
 /**
+ * The ACL's decision for one caller and one permission: the role must hold
+ * it, then the credential's scopes must cover it. Undefined means allowed.
+ * Shared by the route gate and the agent registry so a scoped credential is
+ * narrowed the same way over HTTP and over MCP.
+ */
+export function accessRefusal(
+  auth: Auth,
+  role: string,
+  permission: string,
+  can: (role: string, permission: string) => boolean,
+): HttpError | undefined {
+  if (!can(role, permission)) return refuse(auth, role, permission);
+  if (!scopesCover(auth.scopes, permission)) {
+    return new HttpError(403, "outOfScope", {
+      code: "OUT_OF_SCOPE",
+      vars: { permission },
+      defaultMessage: `this credential is not scoped to ${permission}`,
+    });
+  }
+  return undefined;
+}
+
+/**
+ * 401 says "sign in and this may work"; 403 says it will not. A client can
+ * act on the difference, so they are not merged. Both carry a key AND an
+ * English default: an app that defines "forbidden" in a module's i18n gets
+ * it translated, and one that never thinks about it still reads correctly.
+ */
+export function refuse(auth: Auth, role: string, permission: string): HttpError {
+  return auth.isAuthenticated
+    ? new HttpError(403, "forbidden", {
+        code: "FORBIDDEN",
+        vars: { role, permission },
+        defaultMessage: `role "${role}" may not ${permission}`,
+      })
+    : new HttpError(401, "unauthenticated", {
+        code: "UNAUTHENTICATED",
+        defaultMessage: "authentication required",
+      });
+}
+
+/**
  * Builds the middleware a route puts first. Exposed as `ctx.rai` so a
  * routes file can destructure it and never import anything:
  *
@@ -205,28 +247,11 @@ export function createRai(
       if (!req.auth || req.auth === ANONYMOUS) req.auth = { ...ANONYMOUS };
 
       const role = roleOf(req);
-      const allowed = registry.checker
-        ? await registry.checker(req, info)
-        : can(role, info.id);
-
-      if (allowed !== true) {
-        // 401 says "sign in and this may work"; 403 says it will not. A
-        // client can act on the difference, so they are not merged.
-        //
-        // Both carry a key AND an English default: an app that defines
-        // "forbidden" in a module's i18n gets it translated, and one that
-        // never thinks about it still reads correctly.
-        throw req.auth.isAuthenticated
-          ? new HttpError(403, "forbidden", {
-              code: "FORBIDDEN",
-              vars: { role, permission: info.id },
-              defaultMessage: `role "${role}" may not ${info.id}`,
-            })
-          : new HttpError(401, "unauthenticated", {
-              code: "UNAUTHENTICATED",
-              defaultMessage: "authentication required",
-            });
-      }
+      // A custom checker replaces the whole decision, scopes included.
+      const refusal = registry.checker
+        ? (await registry.checker(req, info)) === true ? undefined : refuse(req.auth, role, info.id)
+        : accessRefusal(req.auth, role, info.id, can);
+      if (refusal) throw refusal;
 
       // Validation runs AFTER the access check, never before: telling a
       // caller which fields are wrong on a route they may not reach leaks

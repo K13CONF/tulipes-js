@@ -2,11 +2,11 @@ import type { Request } from "express";
 import { z } from "zod/v4";
 
 import type { Acl } from "../acl/acl.ts";
-import type { Rai } from "../acl/rai-id.ts";
+import { scopesCover, type Rai } from "../acl/rai-id.ts";
 import type { RuntimeCtx } from "../boot/contracts.ts";
 import type { BootReport } from "../errors/boot-error.ts";
 import { HttpError, ValidationError, type FieldIssue } from "../http/error-handler.ts";
-import type { RouteRegistry } from "../http/rai.ts";
+import { accessRefusal, refuse, type RouteRegistry } from "../http/rai.ts";
 import { codeOfIssue, type ValidatableSchema } from "../http/schema.ts";
 import type { ModuleManifest } from "../modules/manifest.ts";
 import type { ActionTool, AgentDeclaration, ToolActor } from "./define-agent.ts";
@@ -145,19 +145,26 @@ export class AgentRegistry {
     }
   }
 
-  /** Every tool, or those a role may call. */
-  tools(role?: string): AgentTool[] {
+  /**
+   * Every tool, or those a caller may call: by role alone, or by an actor,
+   * whose credential's scopes narrow the role further. Pass the actor
+   * wherever there is one, so a scoped agent is never shown a tool it will
+   * be refused.
+   */
+  tools(caller?: string | ToolActor): AgentTool[] {
     const visible = [...this.#tools.values()].map(({ tool }) => tool);
-    if (role === undefined || this.#routes?.checker) return visible;
-    return visible.filter((tool) => this.#acl?.can(role, tool.permission) === true);
+    if (caller === undefined || this.#routes?.checker) return visible;
+    const role = typeof caller === "string" ? caller : caller.role;
+    const scopes = typeof caller === "string" ? undefined : caller.scopes;
+    return visible.filter((tool) => this.#acl?.can(role, tool.permission) === true && scopesCover(scopes, tool.permission));
   }
 
   find(name: string): AgentTool | undefined {
     return this.#tools.get(name)?.tool;
   }
 
-  manifest(role?: string): AgentManifest {
-    const tools = this.tools(role);
+  manifest(caller?: string | ToolActor): AgentManifest {
+    const tools = this.tools(caller);
     const names = new Set(tools.map((tool) => tool.name));
     return {
       app: this.#app,
@@ -185,21 +192,12 @@ export class AgentRegistry {
     }
     const { tool, action } = resolved;
 
-    const allowed = this.#routes?.checker && request
-      ? await this.#routes.checker(request, { id: tool.permission, name: tool.title, description: tool.description })
-      : this.#acl?.can(actor.role, tool.permission) === true;
-    if (allowed !== true) {
-      throw actor.isAuthenticated
-        ? new HttpError(403, "forbidden", {
-            code: "FORBIDDEN",
-            vars: { role: actor.role, permission: tool.permission },
-            defaultMessage: `role "${actor.role}" may not ${tool.permission}`,
-          })
-        : new HttpError(401, "unauthenticated", {
-            code: "UNAUTHENTICATED",
-            defaultMessage: "authentication required",
-          });
-    }
+    const refusal = this.#routes?.checker && request
+      ? (await this.#routes.checker(request, { id: tool.permission, name: tool.title, description: tool.description })) === true
+        ? undefined
+        : refuse(actor, actor.role, tool.permission)
+      : accessRefusal(actor, actor.role, tool.permission, (role, permission) => this.#acl?.can(role, permission) === true);
+    if (refusal) throw refusal;
 
     let parsed: unknown = undefined;
     if (action.input) {
