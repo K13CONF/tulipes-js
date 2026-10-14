@@ -16,25 +16,18 @@ currently claimed as supported. Node upgrades require expanding CI first.
 
 ## Pre-1.0 policy
 
-Current stable line, published to `latest`: core 0.11.0, `@tulipes/cli` 0.2.0,
-`@tulipes/spec` 0.3.2, the providers `@tulipes/mongoose` and `@tulipes/bullmq`
-at 0.2.0 and `@tulipes/socket.io` at 0.1.2, and `@tulipes/mcp` and
-`@tulipes/testing` at 0.1.0. The `tulipes` command ships in its own package:
-install it globally and as an app devDependency. The providers, mcp and
-testing require core `^0.11.0`; spec accepts `^0.10.0 || ^0.11.0`.
+Current stable line, published to `latest`: core 0.12.0, `@tulipes/cli` 0.3.0,
+`@tulipes/spec` 0.4.0, the providers `@tulipes/mongoose` and `@tulipes/bullmq`
+at 0.2.1, `@tulipes/testing` at 0.1.1, `@tulipes/socket.io` at 0.1.3 and
+`@tulipes/mcp` at 0.1.1. The `tulipes` command ships in its own package:
+install it globally and as an app devDependency. The providers and testing
+require core `^0.12.0`; spec requires `^0.12.0`; socket.io and mcp admit
+`^0.11.0 || ^0.12.0`. 0.12 is the breaking line (scoped RAI ids, the
+environment in the config, `tulipes migrate 0.12` for both); the 0.12.0-rc.1
+and rc.2 candidates were never expected to be fixed — upgrade to 0.12.0.
 
-Candidate on `next`: core 0.12.0-rc.2 with `@tulipes/cli` 0.3.0-rc.2,
-`@tulipes/spec` 0.4.0-rc.2 (core `^0.12.0-rc.1` only), the providers
-`@tulipes/mongoose` and `@tulipes/bullmq` 0.2.1-rc.2 and `@tulipes/testing`
-0.1.1-rc.2 (core `^0.12.0-rc.2`: they read the config keys the app wires),
-and `@tulipes/socket.io` 0.1.3-rc.2 and `@tulipes/mcp` 0.1.1-rc.2, whose
-core range admits both lines. It is the breaking 0.12 line (scoped RAI
-ids, the environment in the config, `tulipes migrate 0.12` for both) and
-carries no stability promise until 0.12.0. rc.1 was superseded before a
-tag.
-
-**Stable is a statement about the API, not about production hours.** The 0.11
-contracts are settled and breaking changes wait for 0.12; every supported
+**Stable is a statement about the API, not about production hours.** The 0.12
+contracts are settled; every supported
 journey is exercised by CI on each commit, and the operational harnesses in
 `scripts/` cover real nginx ingress and MongoDB/Redis failure. No production
 pilot has run this framework yet: there is no load, backup-restore or
@@ -50,9 +43,10 @@ Maintained lines, to be updated in each release PR:
 
 | Line | Status |
 |---|---|
-| core 0.11.x, cli 0.2.x, spec 0.3.2+, mongoose and bullmq 0.2.x, socket.io 0.1.2+, mcp and testing 0.1.x | current; normal fixes target these; the agent surface and `@tulipes/mcp` are experimental (above) |
-| core 0.11.0-rc.1 and rc.2 | candidates only (`next`); superseded by 0.11.0 — upgrade rather than expecting fixes |
-| core 0.10.x, cli 0.1.x, spec 0.3.0–0.3.1, providers 0.1.x | previous stable; critical security fixes evaluated until the next core minor ships, where a safe backport is practical |
+| core 0.12.x, cli 0.3.x, spec 0.4.x, mongoose and bullmq 0.2.1+, socket.io 0.1.3+, mcp and testing 0.1.1+ | current; normal fixes target these; the agent surface and `@tulipes/mcp` are experimental (above) |
+| core 0.12.0-rc.1 and rc.2 | candidates only (`next`); superseded by 0.12.0 — upgrade rather than expecting fixes |
+| core 0.11.x, cli 0.2.x, spec 0.3.2, providers 0.2.0 | previous stable; critical security fixes evaluated until the next core minor ships |
+| core 0.10.x, cli 0.1.x, spec 0.3.0–0.3.1, providers 0.1.x | unmaintained |
 | core 0.9.x and older | unmaintained |
 
 This is a best-effort maintenance commitment with no guaranteed response time.

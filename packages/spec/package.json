@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/spec",
-  "version": "0.4.0-rc.2",
+  "version": "0.4.0",
   "description": "Generate OpenAPI documents and Postman collections from a Tulipes app's declared routes",
   "type": "module",
   "exports": {
@@ -23,7 +23,7 @@
     }
   },
   "peerDependencies": {
-    "@tulipes/core": "^0.12.0-rc.1",
+    "@tulipes/core": "^0.12.0",
     "zod": "^3.25 || ^4"
   },
   "devDependencies": {
