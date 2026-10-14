@@ -9,7 +9,16 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
-## [Unreleased]
+## [0.12.0] — 2026-10-14
+
+The 0.12 line, stable, on npm's `latest` tag: everything rc.1 and rc.2
+carried (scoped ids, prefix grants, `tulipes migrate 0.12`, the environment
+in the config, time zones) plus the fixes below, found upgrading a real app.
+Packages: core `0.12.0`, `@tulipes/cli` `0.3.0`, `@tulipes/spec` `0.4.0`,
+`@tulipes/mongoose`, `@tulipes/bullmq` and `@tulipes/testing` `0.2.1` /
+`0.2.1` / `0.1.1` (core `^0.12.0`), `@tulipes/socket.io` `0.1.3` and
+`@tulipes/mcp` `0.1.1` (no source change). Upgrading from a candidate needs
+nothing beyond the notes in [MIGRATING.md](./MIGRATING.md).
 
 ### Fixed
 
