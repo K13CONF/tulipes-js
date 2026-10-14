@@ -23,22 +23,41 @@ import type { Ctx } from "../boot/contracts.ts";
  * next boot, and the write reports `requires_restart`. Secrets are refused:
  * they belong to the environment, never to a store a console can read.
  */
-export interface ConfigDeclaration<Schema extends z.ZodObject = z.ZodObject> {
+export interface ConfigDeclaration<Schema extends ConfigSchema = ConfigSchema> {
   readonly [CONFIG_DECLARATION]: true;
   readonly schema: Schema;
   /** After a write lands, in every process that holds the app. */
-  readonly onChange?: (next: z.output<Schema>, ctx: Ctx) => void | Promise<void>;
+  readonly onChange?: (next: ConfigOutput<Schema>, ctx: Ctx) => void | Promise<void>;
 }
 
-export interface ConfigDeclarationInput<Schema extends z.ZodObject> {
+export interface ConfigDeclarationInput<Schema extends ConfigSchema> {
   schema: Schema;
-  onChange?: (next: z.output<Schema>, ctx: Ctx) => void | Promise<void>;
+  onChange?: (next: ConfigOutput<Schema>, ctx: Ctx) => void | Promise<void>;
 }
+
+/**
+ * What a settings schema must look like, structurally: a zod object from any
+ * zod 4 copy — core's own `zod/v4` (zod 3.25) or a module's zod 4.x. Typing
+ * it nominally as `z.ZodObject` made TypeScript compare two copies' internals
+ * recursively and give up (TS2589), though the runtime accepts both: zod 4
+ * identifies its instances by trait, not by prototype. Route schemas are
+ * structural for the same reason (`ValidatableSchema`).
+ */
+export interface ConfigSchema {
+  readonly shape: object;
+  safeParse(input: unknown):
+    | { success: true; data: unknown }
+    | { success: false; error: { issues: readonly { path: PropertyKey[]; message: string }[] } };
+  readonly _zod: { readonly output: unknown };
+}
+
+/** A schema's parsed value, read through zod 4's `_zod` marker both copies expose. */
+export type ConfigOutput<Schema extends ConfigSchema> = Schema["_zod"]["output"];
 
 /** Symbol.for so a declaration survives duplicate copies of core. */
 export const CONFIG_DECLARATION = Symbol.for("tulipes.config-declaration");
 
-export function defineConfig<Schema extends z.ZodObject>(input: ConfigDeclarationInput<Schema>): ConfigDeclaration<Schema> {
+export function defineConfig<Schema extends ConfigSchema>(input: ConfigDeclarationInput<Schema>): ConfigDeclaration<Schema> {
   return Object.freeze({ [CONFIG_DECLARATION]: true as const, schema: input.schema, ...(input.onChange && { onChange: input.onChange }) });
 }
 
@@ -70,7 +89,7 @@ export function fieldMeta(schema: z.ZodType): FieldMeta {
  */
 export function declarationProblems(declaration: ConfigDeclaration): string[] {
   const problems: string[] = [];
-  const schema = declaration.schema as z.ZodObject;
+  const schema = declaration.schema as unknown as z.ZodObject;
   if (!(schema instanceof z.ZodObject)) {
     problems.push("schema must be a zod object (z.object({ ... }))");
     return problems;
@@ -84,14 +103,14 @@ export function declarationProblems(declaration: ConfigDeclaration): string[] {
 
 /** The fields that only apply on the next boot. */
 export function restartFields(declaration: ConfigDeclaration): string[] {
-  return Object.entries((declaration.schema as z.ZodObject).shape as Record<string, z.ZodType>)
+  return Object.entries((declaration.schema as unknown as z.ZodObject).shape as Record<string, z.ZodType>)
     .filter(([, field]) => fieldMeta(field).restart === true)
     .map(([name]) => name);
 }
 
 /** JSON Schema of the declaration, for the console and the agent manifest. */
 export function declarationJsonSchema(declaration: ConfigDeclaration): Record<string, unknown> {
-  const json = z.toJSONSchema(declaration.schema, { unrepresentable: "any", io: "input" }) as Record<string, unknown>;
+  const json = z.toJSONSchema(declaration.schema as unknown as z.ZodObject, { unrepresentable: "any", io: "input" }) as Record<string, unknown>;
   delete json.$schema;
   return json;
 }
