@@ -83,7 +83,7 @@ function renderDts(rootDir: string, order: readonly ModuleManifest[]): string {
     .flatMap((files) => {
       const parts: string[] = [];
       if (files.configFile) {
-        parts.push(`import("zod/v4").output<(typeof import("${specifierOf(files.configFile)}"))["default"]["schema"]>`);
+        parts.push(`(typeof import("${specifierOf(files.configFile)}"))["default"]["schema"]["_zod"]["output"]`);
       }
       if (Object.keys(files.module.env).length > 0) parts.push(`EnvValues[${JSON.stringify(files.module.name)}]`);
       return [`    ${JSON.stringify(files.module.name)}?: ${parts.join(" & ")};`];

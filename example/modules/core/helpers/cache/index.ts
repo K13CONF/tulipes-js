@@ -15,7 +15,9 @@ let active: { cache: Cache; redis?: Redis } | undefined;
 /**
  * The app's one cache, picked from the core module's environment values:
  * redis when `config.core.redisUrl` is set, in-process memory otherwise
- * (tests, minimal setups). Lazily created, process-wide singleton.
+ * (tests, minimal setups). Lazily created, process-wide singleton; the
+ * cache bootstrap opens it at boot with `openCache`, so the first request
+ * does not race the connection.
  */
 export function appCache({ config }: Pick<Ctx, "config">): Cache {
   if (active) return active.cache;
@@ -37,6 +39,31 @@ export function appCache({ config }: Pick<Ctx, "config">): Cache {
     active = { cache: new MemoryCache() };
   }
   return active.cache;
+}
+
+/**
+ * Open the cache at boot and wait, bounded, until redis is ready. With the
+ * offline queue off, commands sent while the client is still connecting are
+ * rejected, so the first requests would miss, fail to store, and log a
+ * false outage. Never throws: a redis that does not come up in time leaves
+ * the app as an outage would, without the cache and saying so.
+ */
+export async function openCache(ctx: Pick<Ctx, "config">, timeoutMs = 5000): Promise<void> {
+  appCache(ctx);
+  const redis = active?.redis;
+  if (!redis || redis.status === "ready") return;
+
+  await new Promise<void>((done) => {
+    const finish = () => {
+      clearTimeout(timer);
+      redis.off("ready", finish);
+      redis.off("end", finish);
+      done();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    redis.once("ready", finish);
+    redis.once("end", finish);
+  });
 }
 
 /**

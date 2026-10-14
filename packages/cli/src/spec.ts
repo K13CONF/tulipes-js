@@ -61,7 +61,7 @@ export async function runSpec(rootDir: string, options: SpecOptions): Promise<vo
       return;
     }
 
-    const url = options.url ?? defaultUrl(handle.ctx.config.server?.port, handle.ctx.config.core);
+    const url = options.url ?? defaultUrl(handle.ctx);
     const warnings = new Set<string>();
 
     if (options.openapi) {
@@ -135,15 +135,32 @@ async function fromCli(): Promise<SpecModule | undefined> {
 
 /**
  * Whatever the app itself would be reachable at, so the document is usable
- * as written: the sys core module's `publicDomain` setting (its default
- * under inspection), else localhost on the port the app config wired into
+ * as written: the sys core module's `publicDomain` (its default under
+ * inspection), else localhost on the port the app config wired into
  * `config.server.port` (3000 when it wired none).
+ *
+ * `publicDomain` is either a setting or an environment value. Settings are
+ * enumerable on `config.core`; environment values are not, and their
+ * getters throw under inspection, so those go through `describeEnv`, which
+ * withholds a secret's value.
  */
-function defaultUrl(configuredPort: unknown, core: { publicDomain?: unknown } | undefined): string {
+function defaultUrl(ctx: {
+  config: Record<string, any>;
+  settings: { describeEnv(namespace: string): { name: string; value?: unknown }[] };
+}): string {
+  const configuredPort = ctx.config.server?.port;
   const port = typeof configuredPort === "number" ? configuredPort : 3000;
-  const domain = typeof core?.publicDomain === "string" && core.publicDomain ? core.publicDomain : "localhost";
+  const core = ctx.config.core as object | undefined;
 
-  return domain === "localhost" ? `http://localhost:${port}` : `https://${domain}`;
+  let domain: unknown;
+  if (core && Object.prototype.propertyIsEnumerable.call(core, "publicDomain")) {
+    domain = (core as { publicDomain?: unknown }).publicDomain;
+  } else {
+    domain = ctx.settings.describeEnv("core").find((variable) => variable.name === "publicDomain")?.value;
+  }
+
+  const host = typeof domain === "string" && domain ? domain : "localhost";
+  return host === "localhost" ? `http://localhost:${port}` : `https://${host}`;
 }
 
 function write(target: string, document: unknown): void {

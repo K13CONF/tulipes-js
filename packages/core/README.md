@@ -466,6 +466,9 @@ interface Ctx {
 // They persist in config/settings.<APP_ENV>.json until the app declares
 // "providers": { "settings": "@tulipes/mongoose/settings" } — then in the
 // `settings` collection, versioned, with history, propagated to every replica.
+// The schema may come from either zod 4 copy: `zod/v4` (what the reference app
+// uses) or a module's own `zod@4`. Core types it structurally, by its `_zod`
+// output, so two copies never have to be compared.
 export default defineConfig({
   schema: z.object({
     trialDays: z.number().int().positive().default(14).describe("Free trial length"),

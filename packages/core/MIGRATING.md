@@ -11,7 +11,7 @@ what makes it work under nvm.
 
 ---
 
-## 0.12.0-rc.2 — environment values in the config
+## 0.12.0 — environment values in the config
 
 `ctx.Environment` is gone. A module's variables are its **environment
 values**: declared in its package.json `tulipes.env` as an object keyed by
@@ -71,7 +71,7 @@ read-only now; set the variable before the boot), `store.describe()`
 
 ---
 
-## 0.12.0-rc.2 — time zones (optional)
+## 0.12.0 — time zones (optional)
 
 Nothing breaks: an app without `config.timezone` keeps reading instants in
 UTC and its process zone is left alone. To adopt it:

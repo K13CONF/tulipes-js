@@ -46,12 +46,20 @@ export function printStartupBanner(
     ]);
   }
 
+  // One "Settings" row: a settings provider's own row carries the namespaces,
+  // and the file store gets its row below only when no provider took it.
+  const namespaces = ctx.settings.namespaces();
+  const declared = namespaces.length
+    ? gray(namespaces.map((name) => `${name} v${ctx.settings.describe(name).stored.version}`).join(", "))
+    : gray("no module declares settings");
+
   for (const { capability, provider, label, ready, detail, skipped } of handle.providers) {
+    const extra = capability === "settings" ? `  ${dim("·")}  ${declared}` : "";
     rows.push([
       capability[0]!.toUpperCase() + capability.slice(1),
       skipped
-        ? `${gray(label)}  ${dim("·")}  ${gray(provider)}`
-        : `${cyan(label)}  ${dot(ready)} ${ready ? green("ready") : red("not ready")}${detail ? `  ${dim("·")}  ${gray(detail)}` : ""}  ${dim("·")}  ${gray(provider)}`,
+        ? `${gray(label)}  ${dim("·")}  ${gray(provider)}${extra}`
+        : `${cyan(label)}  ${dot(ready)} ${ready ? green("ready") : red("not ready")}${detail ? `  ${dim("·")}  ${gray(detail)}` : ""}  ${dim("·")}  ${gray(provider)}${extra}`,
     ]);
   }
   for (const capability of ["models", "queues", "sockets"] as const) {
@@ -60,13 +68,12 @@ export function printStartupBanner(
     }
   }
 
-  const namespaces = ctx.settings.namespaces();
-  rows.push([
-    "Settings",
-    namespaces.length
-      ? `${cyan(ctx.settings.status().label)}  ${dim("·")}  ${gray(namespaces.map((name) => `${name} v${ctx.settings.describe(name).stored.version}`).join(", "))}`
-      : gray("no module declares settings"),
-  ]);
+  if (!handle.providers.some((p) => p.capability === "settings")) {
+    rows.push([
+      "Settings",
+      namespaces.length ? `${cyan(ctx.settings.status().label)}  ${dim("·")}  ${declared}` : declared,
+    ]);
+  }
 
   rows.push([
     "Modules",
