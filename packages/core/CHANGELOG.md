@@ -9,6 +9,24 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [Unreleased]
+
+### Fixed
+
+- **`tulipes spec` with `publicDomain` as an environment value.** The command
+  read `config.core.publicDomain` as a setting and crashed on the inspection
+  guard. It now reads an enumerable setting as before and otherwise asks
+  `settings.describeEnv("core")`, which withholds a secret's value.
+- **Settings with a module's own zod 4.** `defineConfig` types its schema
+  structurally (`ConfigSchema`, output read through `_zod`), so a module on
+  `zod@4.x` no longer fails with TS2589. `tulipes sync` emits the namespace
+  type through the same accessor.
+- **One "Settings" row in the startup banner.** A settings provider's row
+  carries the namespaces; the file store's row appears only without one.
+- **The reference app's cache is ready at boot.** `openCache` waits, bounded
+  (5 s), for redis, so the first requests no longer miss, fail to store and
+  log a false outage.
+
 ## [0.12.0-rc.2] — 2026-10-13
 
 The second candidate of the 0.12 line, on npm's `next` tag, superseding

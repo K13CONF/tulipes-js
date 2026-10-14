@@ -38,11 +38,11 @@ declare module "@tulipes/core/config" {
     };
   }
   interface GlobalConfig {
-    "core"?: import("zod/v4").output<(typeof import("./../modules/core/module.config.ts"))["default"]["schema"]> & EnvValues["core"];
-    "security"?: import("zod/v4").output<(typeof import("./../modules/security/module.config.ts"))["default"]["schema"]>;
-    "auth"?: import("zod/v4").output<(typeof import("./../modules/auth/module.config.ts"))["default"]["schema"]> & EnvValues["auth"];
-    "users"?: import("zod/v4").output<(typeof import("./../modules/users/module.config.ts"))["default"]["schema"]>;
-    "hello"?: import("zod/v4").output<(typeof import("./../modules/hello/module.config.ts"))["default"]["schema"]>;
+    "core"?: (typeof import("./../modules/core/module.config.ts"))["default"]["schema"]["_zod"]["output"] & EnvValues["core"];
+    "security"?: (typeof import("./../modules/security/module.config.ts"))["default"]["schema"]["_zod"]["output"];
+    "auth"?: (typeof import("./../modules/auth/module.config.ts"))["default"]["schema"]["_zod"]["output"] & EnvValues["auth"];
+    "users"?: (typeof import("./../modules/users/module.config.ts"))["default"]["schema"]["_zod"]["output"];
+    "hello"?: (typeof import("./../modules/hello/module.config.ts"))["default"]["schema"]["_zod"]["output"];
   }
 }
 
