@@ -10,3 +10,5 @@ export { endAllSessions, endSession, listSessions } from "../helpers/tokens.ts";
 /** Call after writing a user's role or deleting the user: cached identities carry the old authority. */
 export { forgetSession, forgetUser } from "../helpers/session-cache.ts";
 export { createAccessCheck } from "../helpers/access-check.ts";
+/** The actor behind a bearer credential, outside a request — what `config/mcp.config.ts` identifies with. */
+export { identifyCredential } from "../helpers/passport.ts";

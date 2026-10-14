@@ -64,6 +64,7 @@ before writing your own:
 |---|---|
 | `pnpm dev` | regenerate types, run the backend process with `node --watch` |
 | `pnpm worker` | run the queue-consumer process (needs a queue first) | <!-- feature:queues -->
+| `pnpm mcp --token <access token>` | serve the modules' actions to an MCP client on stdio (`config/mcp.config.ts` says who the caller is) |
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm check` | validate env against every module contract — CI gate |
 | `pnpm tulipes new module <name>` | scaffold a module (`--scope bo` for the back office) |

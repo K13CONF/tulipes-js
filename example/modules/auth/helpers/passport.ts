@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
 import { Strategy as LocalStrategy } from "passport-local";
 import type { Ctx } from "@tulipes/core/boot";
+import type { ToolActor } from "@tulipes/core/agent";
 import type { Auth } from "@tulipes/core/http";
 
 import { verifyPassword } from "./passwords.ts";
@@ -10,6 +11,7 @@ import {
   isRevoked,
   loadSession,
   touchSession,
+  verify,
   type TokenClaims,
 } from "./tokens.ts";
 import { GUEST } from "./auth.ts";
@@ -97,47 +99,69 @@ export function configurePassport(ctx: Ctx): void {
       },
       async (claims: TokenClaims, done) => {
         try {
-          if (claims.typ !== "access") return done(null, false);
-
-          // A hit is the identity a cold path resolved moments ago, for
-          // this sid and subject, and no revocation has run since — every
-          // revocation path deletes the entry before it answers. Documents
-          // are hydrated from the cached attributes, so handlers hold the
-          // same kind of value either way.
-          const cached = await readIdentity(ctx, claims.sid);
-          if (cached && String(cached.user._id) === claims.sub && cached.session.sid === claims.sid
-            && new Date(cached.session.expires_at).getTime() > Date.now()) {
-            const user = ctx.models!.get<UserDoc>("User").hydrate(cached.user) as UserDoc;
-            const session = ctx.models!.get<SessionDoc>("Session").hydrate(cached.session) as SessionDoc;
-            if (await touchSession(ctx, session, touchInterval(ctx))) {
-              await writeIdentity(ctx, claims.sid, { user: cached.user, session: session.toObject() as SessionAttrs });
-            }
-            return done(null, resolve(user, session, claims) as unknown as Express.User);
-          }
-
-          // Logout blacklists the jti; without this check a "logged out"
-          // token keeps working until it expires.
-          if (await isRevoked(ctx, claims.jti)) return done(null, false);
-
-          // The session row is the server-side half: deleting it signs the
-          // device out even though the access token is still signed and
-          // unexpired. A token whose session is gone is not a caller.
-          const session = await loadSession(ctx, claims.sid, claims.sub);
-          if (!session) return done(null, false);
-
-          const user = await ctx.models!.get<UserDoc>("User").findById(claims.sub);
-          if (!user) return done(null, false);
-
-          await touchSession(ctx, session, touchInterval(ctx));
-          await writeIdentity(ctx, claims.sid, { user: user.toObject() as UserAttrs, session: session.toObject() as SessionAttrs });
-
-          return done(null, resolve(user, session, claims) as unknown as Express.User);
+          const resolved = await identifyClaims(ctx, claims);
+          return done(null, (resolved ?? false) as unknown as Express.User);
         } catch (error) {
           return done(error as Error);
         }
       },
     ),
   );
+}
+
+/**
+ * The caller behind verified access-token claims, or undefined when the
+ * token is revoked, its session ended or its user gone. The jwt strategy
+ * and `identifyCredential()` both resolve through this.
+ */
+async function identifyClaims(ctx: Ctx, claims: TokenClaims): Promise<Auth | undefined> {
+  if (claims.typ !== "access") return undefined;
+
+  // A hit is the identity a cold path resolved moments ago, for
+  // this sid and subject, and no revocation has run since — every
+  // revocation path deletes the entry before it answers. Documents
+  // are hydrated from the cached attributes, so handlers hold the
+  // same kind of value either way.
+  const cached = await readIdentity(ctx, claims.sid);
+  if (cached && String(cached.user._id) === claims.sub && cached.session.sid === claims.sid
+    && new Date(cached.session.expires_at).getTime() > Date.now()) {
+    const user = ctx.models!.get<UserDoc>("User").hydrate(cached.user) as UserDoc;
+    const session = ctx.models!.get<SessionDoc>("Session").hydrate(cached.session) as SessionDoc;
+    if (await touchSession(ctx, session, touchInterval(ctx))) {
+      await writeIdentity(ctx, claims.sid, { user: cached.user, session: session.toObject() as SessionAttrs });
+    }
+    return resolve(user, session, claims);
+  }
+
+  // Logout blacklists the jti; without this check a "logged out"
+  // token keeps working until it expires.
+  if (await isRevoked(ctx, claims.jti)) return undefined;
+
+  // The session row is the server-side half: deleting it signs the
+  // device out even though the access token is still signed and
+  // unexpired. A token whose session is gone is not a caller.
+  const session = await loadSession(ctx, claims.sid, claims.sub);
+  if (!session) return undefined;
+
+  const user = await ctx.models!.get<UserDoc>("User").findById(claims.sub);
+  if (!user) return undefined;
+
+  await touchSession(ctx, session, touchInterval(ctx));
+  await writeIdentity(ctx, claims.sid, { user: user.toObject() as UserAttrs, session: session.toObject() as SessionAttrs });
+
+  return resolve(user, session, claims);
+}
+
+/**
+ * Who a bearer credential belongs to, outside a request: the actor an MCP
+ * process (`config/mcp.config.ts`) or a job acts as, with the role read from
+ * the user, never from the token. Null for anything that is not a live
+ * access token. API tokens resolve here too once 0.13-S02 lands.
+ */
+export async function identifyCredential(ctx: Ctx, credential: string | undefined): Promise<ToolActor | null> {
+  const claims = credential ? verify(ctx, credential, "access") : undefined;
+  const resolved = claims && await identifyClaims(ctx, claims);
+  return resolved ? { ...resolved, role: resolved.user!.role } : null;
 }
 
 /**

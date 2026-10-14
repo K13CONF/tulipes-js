@@ -18,6 +18,7 @@
   },
   "include": [
     "app.ts",
+    "mcp.ts",
     "worker.ts",
     "types",
     "modules",
