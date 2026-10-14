@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import { printStartupBanner } from "../src/boot/banner.ts";
 import { SettingsValidationError } from "../src/config/settings.ts";
 import { fixture } from "./fixture.ts";
 
@@ -140,4 +141,62 @@ test("a module without a declaration has no namespace and the app seed still rea
   expect(handle.ctx.config.app).toEqual({ name: "seeded" });
   expect(handle.ctx.config.probe).toBeUndefined();
   await handle.shutdown();
+});
+
+const settingsRows = (calls: unknown[][]) =>
+  String(calls[0]![0]).split("\n").filter((line) => /➜\s+Settings\s/.test(line));
+
+const settingsProvider = { capability: "settings", provider: "mongoose-settings", label: "mongodb://store/settings (poll)", ready: true, detail: undefined, skipped: undefined };
+
+test("the banner prints one Settings row: the provider's, carrying the namespaces", async () => {
+  const app = await fixture({ "modules/probe/module.config.js": declaration(greeting) });
+  const handle = await app.boot({ mode: "script" });
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  printStartupBanner({ ...handle, providers: [settingsProvider] } as never, [], 1);
+
+  const rows = settingsRows(log.mock.calls);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toContain("mongoose-settings");
+  expect(rows[0]).toContain("probe v1");
+});
+
+test("the banner prints one Settings row for the file store, and one when no module declares settings", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const declared = await (await fixture({ "modules/probe/module.config.js": declaration(greeting) })).boot({ mode: "script" });
+  printStartupBanner(declared as never, [], 1);
+  expect(settingsRows(log.mock.calls)).toHaveLength(1);
+  expect(settingsRows(log.mock.calls)[0]).toContain("probe v1");
+
+  log.mockClear();
+  const none = await (await fixture()).boot({ mode: "script" });
+  printStartupBanner(none as never, [], 1);
+  expect(settingsRows(log.mock.calls)).toHaveLength(1);
+  expect(settingsRows(log.mock.calls)[0]).toContain("no module declares settings");
+});
+
+test("a module whose own zod is 4.x declares settings: boot, set, describe and the types all work", async () => {
+  const app = await fixture({
+    "modules/probe/module.config.js": `
+      import { defineConfig } from '@tulipes/core/config';
+      import { z } from 'zod4';
+      export default defineConfig({ schema: z.object({
+        limits: z.object({ daily: z.number().int().positive().default(10) }).default({ daily: 10 }),
+        label: z.string().default('x').meta({ restart: true }),
+      }) });
+    `,
+  });
+
+  const handle = await app.boot({ mode: "script" });
+  expect(handle.ctx.config.probe).toEqual({ limits: { daily: 10 }, label: "x" });
+
+  const write = await handle.ctx.settings.set("probe", { limits: { daily: 25 } }, { id: "tester" } as never);
+  expect(write.values).toMatchObject({ limits: { daily: 25 } });
+  expect(handle.ctx.config.probe).toMatchObject({ limits: { daily: 25 } });
+  await expect(handle.ctx.settings.set("probe", { limits: { daily: -1 } }, { id: "tester" } as never)).rejects.toBeInstanceOf(SettingsValidationError);
+
+  const described = handle.ctx.settings.describe("probe");
+  expect(described.restart).toEqual(["label"]);
+  expect(JSON.stringify(described.schema)).toContain("daily");
 });

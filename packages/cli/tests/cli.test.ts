@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { runEnvCheck } from "../src/env-check.ts";
 import { runNewModule } from "../src/new-module.ts";
+import { runSpec } from "../src/spec.ts";
 import { runSync } from "../src/sync.ts";
 import { runInit } from "../src/init.ts";
 import { fixture } from "../../core/tests/fixture.ts";
@@ -237,7 +238,7 @@ test("sync types environment values for the app config and the module namespace,
   expect(dts).toContain("readonly trialDays: number;");
   expect(dts).toContain('readonly region: "eu" | "us" | undefined;');
   // Both halves of the namespace, one type.
-  expect(dts).toMatch(/"billing"\?: import\("zod\/v4"\)\.output<[^>]+>\s*& EnvValues\["billing"\];/);
+  expect(dts).toMatch(/"billing"\?: \(typeof import\("[^"]+"\)\)\["default"\]\["schema"\]\["_zod"\]\["output"\]\s*& EnvValues\["billing"\];/);
   expect(dts).not.toContain("KnownVariables");
   const result = spawnSync(resolve("node_modules/.bin/tsc"), [app.rootDir + "/types/tulipes.d.ts", "--noEmit", "--skipLibCheck", "--allowImportingTsExtensions"], { encoding: "utf8" });
   expect(result.status, result.stdout + result.stderr).toBe(0);
@@ -276,4 +277,60 @@ test("env:check shows where each value lands and from which source, redacts secr
     process.exitCode = previous;
     vi.restoreAllMocks();
   }
+});
+
+const specRoute = `
+  import { Router } from 'express';
+  export default ({ rai }) => {
+    const router = Router();
+    router.get('/probe', rai({ id: 'probe:web:read' }), (req, res) => res.respond({ data: 1 }));
+    return router;
+  };
+`;
+const specAcl = `export default acl => { acl.defineRole('guest').allow('guest', 'probe:web:read'); };`;
+const publicDomainSpec = (type: "string" | "secret") => JSON.stringify({ name: "@test/core", type: "module", tulipes: { env: {
+  publicDomain: { key: "PUBLIC_DOMAIN", type, default: "localhost", description: "Where the app is reachable" },
+} } });
+
+/** `runSpec` over a one-route app; returns the first server the OpenAPI document advertises. */
+async function specServer(files: Record<string, string>): Promise<string> {
+  const app = await fixture({
+    "modules/probe/routes/probe.routes.js": specRoute,
+    "modules/probe/module.acl.js": specAcl,
+    ...files,
+  });
+  const target = `${app.rootDir}/openapi.json`;
+  const exit = process.exitCode;
+  await runSpec(app.rootDir, { openapi: target });
+  expect(process.exitCode).toBe(exit);
+  const document = JSON.parse(await readFile(target, "utf8")) as { servers: { url: string }[] };
+  return document.servers[0]!.url;
+}
+
+test("spec reads publicDomain declared as an environment value without evaluating its getter", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.stubEnv("PUBLIC_DOMAIN", "api.example.test");
+  expect(await specServer({ "modules/core/package.json": publicDomainSpec("string") })).toBe("https://api.example.test");
+
+  vi.stubEnv("PUBLIC_DOMAIN", undefined);
+  expect(await specServer({ "modules/core/package.json": publicDomainSpec("string") })).toBe("http://localhost:3000");
+});
+
+test("spec reads publicDomain declared as a setting, as the reference app does", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const core = {
+    "modules/core/package.json": '{"name":"@test/core","type":"module"}',
+    "modules/core/module.config.js": `
+      import { defineConfig } from "@tulipes/core/config";
+      import { z } from "zod/v4";
+      export default defineConfig({ schema: z.object({ publicDomain: z.string().default("docs.example.test") }) });
+    `,
+  };
+  expect(await specServer(core)).toBe("https://docs.example.test");
+});
+
+test("spec never advertises a secret named publicDomain", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.stubEnv("PUBLIC_DOMAIN", "hunter2.example.test");
+  expect(await specServer({ "modules/core/package.json": publicDomainSpec("secret") })).toBe("http://localhost:3000");
 });

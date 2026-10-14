@@ -1,12 +1,15 @@
-import type { BootstrapCleanup } from "@tulipes/core/boot";
+import type { BootstrapCleanup, RuntimeCtx } from "@tulipes/core/boot";
 
-import { closeCache } from "../helpers/cache/index.ts";
+import { closeCache, openCache } from "../helpers/cache/index.ts";
 
 /**
- * The app cache opens lazily on first use, so there is nothing to open here;
- * what this bootstrap contributes is the cleanup: the redis driver holds a
- * connection, and core runs this after traffic drains, in reverse load order.
+ * Open the app cache and wait, bounded, for redis, so the first request and
+ * the first job find it ready instead of missing while it connects. The
+ * cleanup is the other half: the redis driver holds a connection, and core
+ * runs it after traffic drains, in reverse load order. Inspection never
+ * runs bootstraps, so nothing connects there.
  */
-export default function cache(): BootstrapCleanup {
+export default async function cache(ctx: RuntimeCtx): Promise<BootstrapCleanup> {
+  await openCache(ctx);
   return () => closeCache();
 }
