@@ -143,8 +143,10 @@ test("a module without a declaration has no namespace and the app seed still rea
   await handle.shutdown();
 });
 
+// Colour is forced on in CI, so the rows are read with ANSI stripped.
+const ansi = /\u001b\[[0-9;]*m/g;
 const settingsRows = (calls: unknown[][]) =>
-  String(calls[0]![0]).split("\n").filter((line) => /➜\s+Settings\s/.test(line));
+  String(calls[0]![0]).replace(ansi, "").split("\n").filter((line) => /➜\s+Settings\s/.test(line));
 
 const settingsProvider = { capability: "settings", provider: "mongoose-settings", label: "mongodb://store/settings (poll)", ready: true, detail: undefined, skipped: undefined };
 
