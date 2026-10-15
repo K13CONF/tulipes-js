@@ -73,16 +73,27 @@ no service or `.env` needed; `--role admin` shows what one role gets.
 ## An agent inside the app
 
 `ctx.agent` exists in every process — backend, worker, script — once the
-ACL is loaded. An agent module runs a model against the other modules'
-actions without any HTTP:
+ACL is loaded:
 
 ```ts
-const { tools } = ctx.agent.manifest(actor.role);   // name, description, input_schema: a tool definition each
-const result = await ctx.agent.invoke(name, input, actor); // ACL, then schema, then the handler
+const { tools } = ctx.agent.manifest(actor);              // what this actor (role and scopes) may call
+const result = await ctx.agent.invoke(name, input, actor); // ACL, scopes, then schema, then the handler
 ```
 
-A long run belongs in a queue job (`queues/`), where `ctx.agent` is the
-same registry.
+The production preset's `agents` module is that consumer, built as a
+harness: a run is a queue job that drives Claude against the manifest, as
+the person who started it. Your module's part is only its actions — a
+good description, an honest `readOnly` (a call that writes waits for the
+person's approval by default), helpful errors. To give an agent more to
+do, declare more actions; never call a model from your own module.
+
+- Its loop (`helpers/harness/`) depends only on ports; the adapters
+  (`helpers/adapters/`) are the SDK, Mongo, the registry and the auth
+  module, composed in `helpers/compose.ts`.
+- Runs: `POST /agents/runs`, `GET /agents/runs/:run_id`, `…/approve`,
+  `…/cancel`. A token needs `agents:web:runs:*` to start one; the run keeps
+  its scopes and stops when it is revoked.
+- Without queues (`tulipes init --no-queues`) there is no agents module.
 
 ## MCP: `pnpm mcp`
 

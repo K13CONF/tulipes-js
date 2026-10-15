@@ -17,7 +17,7 @@ one contract in depth.
 
 Read the installed modules and package scripts before applying integration examples.
 The minimal preset has core, security, hello and agent only. Auth, users,
-config, settings, MongoDB, Redis, queues, sockets, shared logger/cache helpers
+config, settings, agents, MongoDB, Redis, queues, sockets, shared logger/cache helpers
 and PM2 examples below apply when those modules are installed (the production
 preset). Minimal
 requests use the framework guest identity. Grant permissions to roles the app
@@ -104,7 +104,9 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    description, input schema, handler — and nothing is derived from the
    routes. An action and a route share logic through `helpers/`; neither
    calls the other. `ctx.agent` carries every action in every process,
-   and `pnpm mcp` serves them to MCP clients. Give an agent a credential
+   and `pnpm mcp` serves them to MCP clients; the production preset's
+   `agents` module runs Claude against them as a queue job, as the person
+   who asks. Never call a model from a feature module. Give an agent a credential
    limited to scopes (grant patterns, `hello:web:*`): a scope only ever
    narrows the user's role. → skills `tulipes-agent-tool`, `tulipes-permissions`
 15. **A module's tests live in `modules/<name>/tests/` and boot the app

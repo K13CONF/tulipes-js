@@ -729,6 +729,15 @@ for API tokens); the candidate bookkeeping (§8, decision 3).
 --offline-only` pass; the two skill copies are identical; the release
 record carries the full run.
 
+Status: documentation done on 2026-10-15; the candidate's bookkeeping
+waits for the live eval. There is no `--no-agents` flag: the module is
+part of the queues feature (`--no-queues` leaves it out), and the
+composition smoke covers that. Written: the README's Agents section
+(every line tagged `feature:queues`, so it leaves with the module), the
+`tulipes-agent-tool` skill's in-app section (both copies), AGENTS.md's
+preset scope and rule 14 (both copies), CHANGELOG, MIGRATING (copy the
+module, as for API tokens) and `docs/support.md` (experimental).
+
 ## 8. Decisions
 
 Taken on 2026-10-15 (proposed by the design; the maintainer's to

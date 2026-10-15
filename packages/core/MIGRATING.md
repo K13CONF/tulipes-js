@@ -42,6 +42,15 @@ module.
 **A refusal to read.** A scoped credential refused by its scopes rather
 than its role answers 403 with code `OUT_OF_SCOPE`, not `FORBIDDEN`.
 
+**The agents module (production preset).** Optional, and like API tokens
+it is the reference app's code, so no command adds it: copy
+`modules/agents/` from the reference app, add `"agents:*"` to the
+`admin` and `sysadmin` grants in `modules/auth/module.acl.ts`, take the
+auth module's `isTokenLive` and the `credentialId` line of
+`helpers/api-tokens.ts`, then `pnpm install`, `pnpm sync` and set
+`ANTHROPIC_API_KEY`. It needs the queues provider and a worker
+(`pnpm worker`).
+
 **An app with its own access checker.** `ctx.routes.setAccessChecker()`
 replaces the ACL's whole decision, and that now includes the scopes: a
 scoped API token reaches whatever your checker allows its user. If you

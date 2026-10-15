@@ -39,6 +39,17 @@ Packages: core `0.13.0-rc.1`, `@tulipes/cli` `0.4.0-rc.1`, `@tulipes/mcp`
   once, retired by a password change; `identifyCredential()` resolves them
   and access JWTs alike.
 - **`tulipes migrate 0.13`** adds the MCP process to an app on 0.12.
+- **The `agents` module (production preset)**: Claude inside the app, as a
+  harness. A run is a queue job that drives the model against
+  `ctx.agent.manifest(actor)` as the person who started it — their role,
+  their token's scopes, re-checked every step; every turn persisted before
+  its tools run, so a crashed job resumes and a write is never re-run; a
+  call that writes waits for the owner's approval by default; budgets on
+  turns, calls, tokens and time; loop detection; `run_finish` as the only
+  successful end. `POST /agents/runs`, `GET …/:run_id`, `…/approve`,
+  `…/cancel`, and the back office's `agents:bo:runs:*`. `@anthropic-ai/sdk`
+  is that module's dependency only; `ANTHROPIC_API_KEY` is optional at boot.
+  `tulipes init --no-queues` leaves the module out.
 - **`Auth.credentialId`**: the id of the API token behind a request (never
   the secret), absent for a session. The reference app's auth module sets
   it; the MCP process's audit line carries it as `credential`, so an owner

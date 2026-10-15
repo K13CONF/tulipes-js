@@ -159,6 +159,31 @@ until it expires; a password change moves a per-user epoch that
 invalidates every token issued before it. Both token collections carry
 TTL indexes.
 
+## Agents <!-- feature:queues -->
+<!-- feature:queues -->
+`modules/agents` runs Claude inside the app on behalf of the person who <!-- feature:queues -->
+asks, with exactly their permissions: its tools are the actions the other <!-- feature:queues -->
+modules declare (`ctx.agent`), narrowed by the role and by the scopes of <!-- feature:queues -->
+the token that started the run. Each run is a queue job, so `pnpm worker` <!-- feature:queues -->
+runs it; a crashed job resumes from the stored transcript. <!-- feature:queues -->
+<!-- feature:queues -->
+- `POST /api/v1/agents/runs` `{ goal, context? }` answers 202 with the <!-- feature:queues -->
+  queued run; `GET /api/v1/agents/runs/:run_id` follows it — status, <!-- feature:queues -->
+  result, notes, steps and transcript. <!-- feature:queues -->
+- A call that changes something waits for the person who started the run <!-- feature:queues -->
+  (setting `approval`, default `writes`): the run lists it under <!-- feature:queues -->
+  `waiting_on`, and `POST …/approve` `{ decisions: { <id>: "allow" | "deny" } }` <!-- feature:queues -->
+  answers it. `POST …/cancel` stops a run. <!-- feature:queues -->
+- A run ends on its own `run_finish` — `done`, `blocked` or `partial`, with <!-- feature:queues -->
+  what it checked — or on a budget (`maxTurns`, `maxToolCalls`, <!-- feature:queues -->
+  `maxOutputTokens`, `maxRunMinutes`), a revoked token, or a loop. <!-- feature:queues -->
+- Set `ANTHROPIC_API_KEY`. Without it the app, the worker and `pnpm mcp` <!-- feature:queues -->
+  run as usual and starting a run answers 503. The model, effort, approval <!-- feature:queues -->
+  mode and budgets are settings in the console. <!-- feature:queues -->
+- An API token starts runs only with `agents:web:runs:*` in its scopes. <!-- feature:queues -->
+- `AGENTS_LIVE=1 pnpm exec vitest run modules/agents/tests/live.test.ts` <!-- feature:queues -->
+  runs the eight-goal eval against the real model (it spends tokens). <!-- feature:queues -->
+
 ## The console
 
 `modules/config` is the operator's console: `GET /api/v1/config`
