@@ -55,10 +55,10 @@ export default function authAcl(acl: AclBuilder): void {
   // is meant to be a boundary an ordinary administrator cannot cross — a
   // grant that quietly includes everything makes "sysadmin only" a label
   // rather than a rule. Add your own namespaces here as modules arrive.
-  acl.allow("admin", "auth:*", "users:*", "hello:*");
+  acl.allow("admin", "auth:*", "users:*", "hello:*", "agents:*");
 
   // `sysadmin` is an admin who can also administer the deployment. The
   // settings grant is NOT here: a module grants its own namespace, so
   // `settings:*` is declared by the settings module itself.
-  acl.allow("sysadmin", "auth:*", "users:*", "hello:*");
+  acl.allow("sysadmin", "auth:*", "users:*", "hello:*", "agents:*");
 }

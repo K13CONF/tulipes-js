@@ -2,6 +2,7 @@ import express from "express";
 import { expect, test } from "vitest";
 import { ANONYMOUS, createRai, RouteRegistry } from "../src/http/rai.ts";
 import { bindRespond } from "../src/http/respond.ts";
+import type { Auth } from "../src/http/index.ts";
 
 async function request(app: express.Express, path: string) {
   const server = app.listen(0, "127.0.0.1");
@@ -115,7 +116,9 @@ test.each([
     app.use((req, _res, next) => {
       req.auth = {
         isAuthenticated: authenticated,
-        user: { role },
+        // Cast: an app may augment AuthUser (the reference app does), and
+        // these tests are about the gate, not the user's shape.
+        user: { role } as NonNullable<Auth["user"]>,
         session: null,
       };
 
@@ -242,7 +245,7 @@ test.each([false, true])(
 
       req.auth.isAuthenticated = true;
 
-      req.auth.user = { role: "admin" };
+      req.auth.user = { role: "admin" } as NonNullable<Auth["user"]>;
 
       res.respond({ data: "signed in" });
     });

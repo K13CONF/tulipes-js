@@ -144,7 +144,9 @@ export function renderTemplate(source: TemplateSource, options: RenderOptions): 
 
   const output: [string, string | Buffer][] = [];
   for (const rel of listTemplate(source.dir)) {
-    if (!features.queues && (rel === "worker.ts" || /(^|\/)queues\//.test(rel))) continue;
+    // The agents module runs each agent as a queue job: without queues it
+    // has nothing to run on, so it goes with them.
+    if (!features.queues && (rel === "worker.ts" || /(^|\/)queues\//.test(rel) || rel.startsWith("modules/agents/"))) continue;
     if (!features.sockets && /(^|\/)sockets\//.test(rel)) continue;
 
     let file = join(source.dir, rel);

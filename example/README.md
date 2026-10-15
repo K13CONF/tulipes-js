@@ -64,7 +64,7 @@ before writing your own:
 |---|---|
 | `pnpm dev` | regenerate types, run the backend process with `node --watch` |
 | `pnpm worker` | run the queue-consumer process (needs a queue first) | <!-- feature:queues -->
-| `pnpm mcp --token <api token>` | serve the modules' actions to an MCP client on stdio (`config/mcp.config.ts` says who the caller is) |
+| `TULIPES_MCP_TOKEN=<api token> pnpm mcp` | serve the modules' actions to an MCP client on stdio (`config/mcp.config.ts` says who the caller is) |
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm check` | validate env against every module contract — CI gate |
 | `pnpm tulipes new module <name>` | scaffold a module (`--scope bo` for the back office) |
@@ -148,7 +148,7 @@ sees the secret once (`tulipes-example_<id>_<secret>`), lists them with
 `scopes` are grant patterns (`hello:web:*`) that narrow the user's role,
 never widen it; a call outside them is refused 403 `OUT_OF_SCOPE`. The role
 is read from the user on each use, a password change retires every token,
-and a token cannot issue another. `pnpm mcp --token <secret>` serves the
+and a token cannot issue another. `TULIPES_MCP_TOKEN=<secret> pnpm mcp` serves the
 app's actions as that token.
 
 Passwords never touch the User document: the hash lives in the auth
@@ -158,6 +158,31 @@ logout deletes the refresh row and blacklists the access token's jti
 until it expires; a password change moves a per-user epoch that
 invalidates every token issued before it. Both token collections carry
 TTL indexes.
+
+## Agents <!-- feature:queues -->
+<!-- feature:queues -->
+`modules/agents` runs Claude inside the app on behalf of the person who <!-- feature:queues -->
+asks, with exactly their permissions: its tools are the actions the other <!-- feature:queues -->
+modules declare (`ctx.agent`), narrowed by the role and by the scopes of <!-- feature:queues -->
+the token that started the run. Each run is a queue job, so `pnpm worker` <!-- feature:queues -->
+runs it; a crashed job resumes from the stored transcript. <!-- feature:queues -->
+<!-- feature:queues -->
+- `POST /api/v1/agents/runs` `{ goal, context? }` answers 202 with the <!-- feature:queues -->
+  queued run; `GET /api/v1/agents/runs/:run_id` follows it — status, <!-- feature:queues -->
+  result, notes, steps and transcript. <!-- feature:queues -->
+- A call that changes something waits for the person who started the run <!-- feature:queues -->
+  (setting `approval`, default `writes`): the run lists it under <!-- feature:queues -->
+  `waiting_on`, and `POST …/approve` `{ decisions: { <id>: "allow" | "deny" } }` <!-- feature:queues -->
+  answers it. `POST …/cancel` stops a run. <!-- feature:queues -->
+- A run ends on its own `run_finish` — `done`, `blocked` or `partial`, with <!-- feature:queues -->
+  what it checked — or on a budget (`maxTurns`, `maxToolCalls`, <!-- feature:queues -->
+  `maxOutputTokens`, `maxRunMinutes`), a revoked token, or a loop. <!-- feature:queues -->
+- Set `ANTHROPIC_API_KEY`. Without it the app, the worker and `pnpm mcp` <!-- feature:queues -->
+  run as usual and starting a run answers 503. The model, effort, approval <!-- feature:queues -->
+  mode and budgets are settings in the console. <!-- feature:queues -->
+- An API token starts runs only with `agents:web:runs:*` in its scopes. <!-- feature:queues -->
+- `AGENTS_LIVE=1 pnpm exec vitest run modules/agents/tests/live.test.ts` <!-- feature:queues -->
+  runs the eight-goal eval against the real model (it spends tokens). <!-- feature:queues -->
 
 ## The console
 

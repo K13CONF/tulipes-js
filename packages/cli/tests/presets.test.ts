@@ -215,7 +215,7 @@ test("the production preset composes without queues or sockets: no files, depend
   expect(Object.keys(pkg.dependencies)).not.toContain("@tulipes/bullmq");
   expect(Object.keys(pkg.dependencies)).not.toContain("@tulipes/socket.io");
 
-  for (const path of ["worker.ts", "modules/users/queues", "modules/users/sockets", "modules/hello/queues", "modules/hello/sockets"]) {
+  for (const path of ["worker.ts", "modules/users/queues", "modules/users/sockets", "modules/hello/queues", "modules/hello/sockets", "modules/agents"]) {
     await expect(access(root + "/" + path)).rejects.toThrow();
   }
   for (const module of ["users", "hello"]) {

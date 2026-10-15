@@ -1,0 +1,13 @@
+{
+  "agentUnconfigured": "Les exécutions d'agent ne sont pas configurées sur ce déploiement",
+  "goalRequired": "Dites ce que l'agent doit faire",
+  "goalTooLong": "L'objectif dépasse 4 000 caractères",
+  "contextTooLong": "Le contexte dépasse 20 000 caractères",
+  "noSuchRun": "Exécution introuvable",
+  "runEnded": "L'exécution est déjà terminée",
+  "runNotWaiting": "L'exécution n'attend pas d'approbation",
+  "decisionsRequired": "Répondez aux appels que l'exécution attend",
+  "decisionsIncomplete": "Répondez à chaque appel attendu, et à eux seuls",
+  "decisionInvalid": "Chaque réponse est allow ou deny",
+  "noSuchCall": "Cet appel n'est pas attendu par l'exécution"
+}

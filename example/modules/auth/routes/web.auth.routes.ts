@@ -98,8 +98,8 @@ export default function authRoutes(ctx: BackendCtx): void {
       body: newPassword,
     }), auth.changePassword());
 
-  // API tokens: what a user gives an agent or an MCP client (`pnpm mcp
-  // --token`). `auth:web:tokens:*` covers all three.
+  // API tokens: what a user gives an agent or an MCP client
+  // (`TULIPES_MCP_TOKEN=… pnpm mcp`). `auth:web:tokens:*` covers all three.
   router.post("/tokens", rai({
       id: "auth:web:tokens:issue",
       status: 201,

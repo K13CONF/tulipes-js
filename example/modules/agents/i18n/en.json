@@ -1,0 +1,13 @@
+{
+  "agentUnconfigured": "Agent runs are not configured on this deployment",
+  "goalRequired": "Say what the agent should do",
+  "goalTooLong": "The goal is longer than 4,000 characters",
+  "contextTooLong": "The context is longer than 20,000 characters",
+  "noSuchRun": "No such run",
+  "runEnded": "The run has already ended",
+  "runNotWaiting": "The run is not waiting for approval",
+  "decisionsRequired": "Answer the calls the run is waiting on",
+  "decisionsIncomplete": "Answer every call the run is waiting on, and only those",
+  "decisionInvalid": "Each answer is allow or deny",
+  "noSuchCall": "Not a call this run is waiting on"
+}

@@ -115,7 +115,7 @@ export function runMigrate013(rootDir: string): void {
       "next:",
       "  pnpm install && pnpm typecheck",
       "  pnpm mcp                    # serve the modules' actions on stdio; config/mcp.config.ts says who is calling",
-      "  claude mcp add <name> -- pnpm --silent mcp --token \"$TOKEN\"",
+      "  claude mcp add <name> -e TULIPES_MCP_TOKEN=\"$TOKEN\" -- pnpm --silent mcp   # the token in the environment, never in ps",
     ].join("\n"),
   );
 }

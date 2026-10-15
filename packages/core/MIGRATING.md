@@ -20,7 +20,8 @@ credential carries them; `req.auth.scopes` absent is the role's full grant.
 `config/mcp.config.ts`, the `mcp` script, `@tulipes/mcp` as a dependency and
 `mcp.ts` in the tsconfig's `include`, and changes nothing that exists. Then
 `pnpm install`, and `pnpm mcp` serves the modules' actions on stdio
-(`claude mcp add <name> -- pnpm --silent mcp --token "$TOKEN"`).
+(`claude mcp add <name> -e TULIPES_MCP_TOKEN="$TOKEN" -- pnpm --silent mcp`;
+the token in the environment, since `ps` shows a command line).
 For remote agents, `transport: { http: { port: 3100 } }` in the config
 serves Streamable HTTP on its own port; the production nginx template has
 the commented `location = /mcp` to expose it.
@@ -40,6 +41,26 @@ module.
 
 **A refusal to read.** A scoped credential refused by its scopes rather
 than its role answers 403 with code `OUT_OF_SCOPE`, not `FORBIDDEN`.
+
+**The agents module (production preset).** Optional, and like API tokens
+it is the reference app's code, so no command adds it: copy
+`modules/agents/` from the reference app, add `"agents:*"` to the
+`admin` and `sysadmin` grants in `modules/auth/module.acl.ts`, take the
+auth module's `isTokenLive` and the `credentialId` line of
+`helpers/api-tokens.ts`, then `pnpm install`, `pnpm sync` and set
+`ANTHROPIC_API_KEY`. It needs the queues provider and a worker
+(`pnpm worker`).
+
+**An app with its own access checker.** `ctx.routes.setAccessChecker()`
+replaces the ACL's whole decision, and that now includes the scopes: a
+scoped API token reaches whatever your checker allows its user. If you
+issue scoped credentials, apply them in the checker — `scopesCover(req.auth.scopes,
+info.id)` from `@tulipes/core/acl` is the rule `rai()` uses.
+
+**API tokens copied from the reference app before this candidate.** Take
+`revokeToken` and `identifyApiToken` from `helpers/api-tokens.ts` again:
+the first now deletes the row before forgetting the cache, the second
+rewrites the cache entry when it touches `last_used_at`.
 
 ---
 

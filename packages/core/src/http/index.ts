@@ -73,6 +73,13 @@ export interface Auth {
    * grants nothing, and `[]` reaches nothing.
    */
   scopes?: readonly string[];
+  /**
+   * The id of the credential behind this request when it is one its owner
+   * can name and revoke — an API token's — never the secret. For audit
+   * lines and for work that must stop when the credential is revoked.
+   * Absent for a session.
+   */
+  credentialId?: string;
 }
 
 /**

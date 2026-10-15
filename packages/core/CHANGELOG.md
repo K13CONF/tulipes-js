@@ -9,16 +9,16 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
-## [0.13.0-rc.1] — 2026-10-15
+## [0.13.0] — 2026-10-15
 
-The 0.13 line's first candidate, on npm's `next` tag; `latest` stays on 0.12.0.
+The 0.13 line, published directly as stable on npm's `latest` tag — no
+candidate was published (a `0.13.0-rc.1` was prepared and never tagged).
 Additive over 0.12; see the 0.13 section of [MIGRATING.md](./MIGRATING.md).
-The agent surface and `@tulipes/mcp` stay experimental.
-Packages: core `0.13.0-rc.1`, `@tulipes/cli` `0.4.0-rc.1`, `@tulipes/mcp`
-`0.2.0-rc.1` (core `^0.13.0-rc.1`), and republished for their core range only:
-`@tulipes/spec` `0.4.1-rc.1`, `@tulipes/mongoose` and `@tulipes/bullmq`
-`0.2.2-rc.1`, `@tulipes/testing` `0.1.2-rc.1`, `@tulipes/socket.io`
-`0.1.4-rc.1`.
+The agent surface, `@tulipes/mcp` and the production preset's `agents`
+module are experimental. Packages: core `0.13.0`, `@tulipes/cli` `0.4.0`,
+`@tulipes/mcp` `0.2.0` (core `^0.13.0`), and republished for their core range
+only: `@tulipes/spec` `0.4.1`, `@tulipes/mongoose` and `@tulipes/bullmq`
+`0.2.2`, `@tulipes/testing` `0.1.2`, `@tulipes/socket.io` `0.1.4`.
 
 ### Added
 
@@ -39,6 +39,44 @@ Packages: core `0.13.0-rc.1`, `@tulipes/cli` `0.4.0-rc.1`, `@tulipes/mcp`
   once, retired by a password change; `identifyCredential()` resolves them
   and access JWTs alike.
 - **`tulipes migrate 0.13`** adds the MCP process to an app on 0.12.
+- **The `agents` module (production preset)**: Claude inside the app, as a
+  harness. A run is a queue job that drives the model against
+  `ctx.agent.manifest(actor)` as the person who started it — their role,
+  their token's scopes, re-checked every step; every turn persisted before
+  its tools run, so a crashed job resumes and a write is never re-run; a
+  call that writes waits for the owner's approval by default; budgets on
+  turns, calls, tokens and time; loop detection; `run_finish` as the only
+  successful end. `POST /agents/runs`, `GET …/:run_id`, `…/approve`,
+  `…/cancel`, and the back office's `agents:bo:runs:*`. `@anthropic-ai/sdk`
+  is that module's dependency only; `ANTHROPIC_API_KEY` is optional at boot.
+  `tulipes init --no-queues` leaves the module out.
+- **`Auth.credentialId`**: the id of the API token behind a request (never
+  the secret), absent for a session. The reference app's auth module sets
+  it; the MCP process's audit line carries it as `credential`, so an owner
+  with several tokens can tell which one made a call; an agent run records
+  it to stop when the token is revoked.
+
+### Security
+
+- **A custom access checker decides alone, scopes included.** An app that
+  calls `ctx.routes.setAccessChecker()` replaces the ACL's whole decision
+  in `rai()` and `invoke()`, so a credential's scopes are not applied
+  there and the manifest is not filtered by them (`authorization:
+  "dynamic"`). Such an app reads `req.auth.scopes` in its own checker; see
+  MIGRATING.
+- **`@tulipes/mcp`'s HTTP transport** refuses, on a loopback bind, a request
+  whose `Host` is not the listener's own (DNS rebinding: a web page cannot
+  reach a local MCP process through a name it re-points at 127.0.0.1), and
+  refuses a body over `maxBodyBytes` (1 MiB by default) with 413 before
+  `identify` runs.
+- **API tokens in the reference app's auth module:** revoking a token
+  deletes its row before forgetting its cached identity, so a request
+  arriving between the two can no longer re-cache a revoked token; and a
+  cache hit that touches `last_used_at` rewrites the cached entry, so hits
+  past the first minute no longer write to the database every time.
+- **The documented MCP command passes the token in the environment**
+  (`claude mcp add <name> -e TULIPES_MCP_TOKEN=… -- pnpm --silent mcp`)
+  rather than as `--token`, which any user of the machine sees in `ps`.
 
 ## [0.12.0] — 2026-10-14
 

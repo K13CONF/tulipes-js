@@ -1,6 +1,12 @@
 # Release — core 0.13.0-rc.1, the 0.13 line's first candidate
 
-Status: **prepared locally, not tagged, not published.** Published to npm's
+Status: **superseded — never tagged, never published.** On 2026-10-15 the
+maintainer took S04 (the agents module) into the line and then chose to
+publish 0.13.0 directly as stable, without a candidate; see
+[release-0.13.0.md](./release-0.13.0.md). What follows is the record as it
+stood.
+
+Originally: **prepared locally, not tagged, not published.** Published to npm's
 `next` tag; `latest` stays on 0.12.0. Owning items: S01, S02, S03 and S05 of
 [the 0.13 plan](./0.13-plan.md). S04 (a reference agent) is not part of this
 candidate. Tagging and publishing are authorized operations, not side effects
@@ -45,7 +51,7 @@ and Redis on 127.0.0.1, npm registry reachable, no Docker. Every job of
 | `scaffold-smoke.mjs production` (services) | **fails on this Mac at the app's own suite**: 46 of 48 pass, the two failures are the rate-limit pair (201 parallel connects, `ECONNRESET`, `kern.ipc.somaxconn=128`), as on 0.12.0-rc.2. Install, sync, typecheck, offline routes and spec passed before it. | to record on Linux |
 | the same smoke with only its `test` step skipped (a temporary copy of the script, deleted) | pass: boot, worker, start-smoke, `mcp-smoke.mjs` (stdio MCP process), pm2-smoke | — |
 | `ingress-smoke.mjs`, `failure-smoke.mjs` | not run (Docker) | — |
-| MCP cold start to `initialize` (`docs/design/0.13-measurements.md`) | not measured for this candidate | — |
+| MCP cold start to `initialize` ([0.13-measurements.md](../design/0.13-measurements.md)) | median 452 ms over five runs (first 992 ms), against 438 ms for the HTTP backend's banner on the same app and machine | — |
 
 ## Publication
 
