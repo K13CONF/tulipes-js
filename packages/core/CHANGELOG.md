@@ -9,6 +9,31 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [Unreleased] — the 0.13 line
+
+Additive over 0.12; see the 0.13 section of [MIGRATING.md](./MIGRATING.md).
+The agent surface and `@tulipes/mcp` stay experimental.
+
+### Added
+
+- **Credential scopes.** `Auth.scopes` (and so `ToolActor`'s): grant
+  patterns a credential is limited to. Both gates — `rai()` and
+  `ctx.agent.invoke()` — allow when the role grants the permission and a
+  scope covers it; refused by scope is 403 `OUT_OF_SCOPE`.
+  `ctx.agent.manifest()` and `tools()` take an actor as well as a role.
+  `scopesCover()` in `@tulipes/core/acl`.
+- **`@tulipes/mcp`: the app as its own MCP server.** `serveMcp()` (in a
+  generated app's `mcp.ts`, `pnpm mcp`) boots the app in script mode and
+  serves its actions in process, to the caller `config/mcp.config.ts`'s
+  `defineMcp({ identify })` resolves; stdio, or Streamable HTTP on its own
+  port. `developmentIdentity()` for apps without auth, refused in
+  production. One audit line per call.
+- **API tokens in the reference app's auth module.** `POST`/`GET`/`DELETE
+  /auth/tokens`: named, scoped, optionally expiring, hashed at rest, shown
+  once, retired by a password change; `identifyCredential()` resolves them
+  and access JWTs alike.
+- **`tulipes migrate 0.13`** adds the MCP process to an app on 0.12.
+
 ## [0.12.0] — 2026-10-14
 
 The 0.12 line, stable, on npm's `latest` tag: everything rc.1 and rc.2
