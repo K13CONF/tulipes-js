@@ -64,7 +64,7 @@ before writing your own:
 |---|---|
 | `pnpm dev` | regenerate types, run the backend process with `node --watch` |
 | `pnpm worker` | run the queue-consumer process (needs a queue first) | <!-- feature:queues -->
-| `pnpm mcp --token <api token>` | serve the modules' actions to an MCP client on stdio (`config/mcp.config.ts` says who the caller is) |
+| `TULIPES_MCP_TOKEN=<api token> pnpm mcp` | serve the modules' actions to an MCP client on stdio (`config/mcp.config.ts` says who the caller is) |
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm check` | validate env against every module contract — CI gate |
 | `pnpm tulipes new module <name>` | scaffold a module (`--scope bo` for the back office) |
@@ -148,7 +148,7 @@ sees the secret once (`tulipes-example_<id>_<secret>`), lists them with
 `scopes` are grant patterns (`hello:web:*`) that narrow the user's role,
 never widen it; a call outside them is refused 403 `OUT_OF_SCOPE`. The role
 is read from the user on each use, a password change retires every token,
-and a token cannot issue another. `pnpm mcp --token <secret>` serves the
+and a token cannot issue another. `TULIPES_MCP_TOKEN=<secret> pnpm mcp` serves the
 app's actions as that token.
 
 Passwords never touch the User document: the hash lives in the auth

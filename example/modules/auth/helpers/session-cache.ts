@@ -47,7 +47,11 @@ export async function forgetSession(ctx: Ctx, sid: string): Promise<void> {
   await appCache(ctx).del(KEY + sid);
 }
 
-/** What an API token resolves to: its user and the token row, without the hash. */
+/**
+ * What an API token resolves to: its user and the token row. The row keeps
+ * its `secret_hash`, so a hit still proves the bearer holds the secret —
+ * an entry is never enough by its id alone.
+ */
 export interface CachedTokenIdentity {
   user: UserAttrs;
   token: ApiTokenAttrs;

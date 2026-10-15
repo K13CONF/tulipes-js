@@ -4,5 +4,7 @@ import { serveMcp } from "@tulipes/mcp";
 // modules declare in agent/*.agent.ts to the caller config/mcp.config.ts
 // identifies. For Claude Code:
 //
-//   claude mcp add tulipes-example -- pnpm --silent mcp --token "$TOKEN"
+//   claude mcp add tulipes-example -e TULIPES_MCP_TOKEN="$TOKEN" -- pnpm --silent mcp
+//
+// The token goes in the environment: on the command line, `ps` shows it.
 await serveMcp({ rootDir: import.meta.dirname });

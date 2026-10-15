@@ -1,3 +1,4 @@
+import { request } from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -127,6 +128,42 @@ describe("the http transport", () => {
     const { served } = await listen(httpConfig(identifyByBearer));
     expect((await fetch(served.url!)).status).toBe(405);
     expect((await fetch(new URL("/elsewhere", served.url), { method: "POST", body: "{}" })).status).toBe(404);
+  });
+
+  /** A raw POST, so a test can send any Host and stream a body without a length. */
+  async function post(url: string, options: { host?: string; body: string | Buffer; chunked?: boolean }) {
+    const target = new URL(url);
+    return new Promise<number>((resolve, reject) => {
+      const req = request({
+        host: target.hostname, port: target.port, path: target.pathname, method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...(options.host && { host: options.host }) },
+      }, (res) => { res.resume(); resolve(res.statusCode!); });
+      req.on("error", (error: NodeJS.ErrnoException) => (error.code === "ECONNRESET" || error.code === "EPIPE" ? undefined : reject(error)));
+      if (options.chunked) {
+        req.write(options.body);
+        req.end();
+      } else {
+        req.setHeader("content-length", Buffer.byteLength(options.body));
+        req.end(options.body);
+      }
+    });
+  }
+
+  test("on loopback, refuses a request addressed to another host name (DNS rebinding)", async () => {
+    const { served } = await listen(httpConfig(identifyByBearer));
+    const ping = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" });
+    expect(await post(served.url!, { host: "evil.example:80", body: ping })).toBe(403);
+    const { port } = new URL(served.url!);
+    expect(await post(served.url!, { host: `localhost:${port}`, body: ping })).not.toBe(403);
+  });
+
+  test("refuses a body over maxBodyBytes, declared or streamed, before identify runs", async () => {
+    const { served } = await listen({ "config/mcp.config.js": `import { defineMcp } from '@tulipes/mcp';
+      export default defineMcp({ transport: { http: { port: 0, maxBodyBytes: 1024 } }, identify: () => { globalThis.__identified = (globalThis.__identified ?? 0) + 1; return null; } });` });
+    const big = Buffer.alloc(2_048, 0x20);
+    expect(await post(served.url!, { body: big })).toBe(413);
+    expect(await post(served.url!, { body: big, chunked: true })).toBe(413);
+    expect((globalThis as { __identified?: number }).__identified ?? 0).toBe(0);
   });
 
   test("refuses to serve every caller on the network as a guest in production", async () => {

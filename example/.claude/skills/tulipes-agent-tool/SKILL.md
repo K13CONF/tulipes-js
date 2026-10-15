@@ -102,8 +102,12 @@ export default defineMcp({
 ```
 
 ```sh
-claude mcp add my-app -- pnpm --silent mcp --token "$TOKEN"   # or TULIPES_MCP_TOKEN
+claude mcp add my-app -e TULIPES_MCP_TOKEN="$TOKEN" -- pnpm --silent mcp
 ```
+
+The credential goes in the environment, not on the command line, where
+any user of the machine can read it in `ps`. (`--token` is still accepted,
+for a one-off run.)
 
 For remote agents, `transport: { http: { port: 3100 } }` serves MCP's
 Streamable HTTP at `http://127.0.0.1:3100/mcp` instead; every request is

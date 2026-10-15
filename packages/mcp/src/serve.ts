@@ -29,6 +29,8 @@ export interface McpHttpTransport {
     host?: string;
     /** Defaults to /mcp. */
     path?: string;
+    /** The largest request body read, in bytes; larger is refused with 413 before identify runs. Defaults to 1 MiB. */
+    maxBodyBytes?: number;
   };
 }
 
@@ -209,6 +211,13 @@ async function readConfig(rootDir: string): Promise<McpConfig> {
  */
 async function serveHttp(options: McpHttpTransport["http"], source: (credential: string | undefined) => ToolSource) {
   const path = options.path ?? "/mcp";
+  const host = options.host ?? "127.0.0.1";
+  const maxBodyBytes = options.maxBodyBytes ?? 1_048_576;
+  // On a loopback bind the only legitimate Host is this listener's own: a
+  // browser page whose name an attacker re-points at 127.0.0.1 (DNS
+  // rebinding) sends its own name and is refused. Behind an ingress the
+  // Host is the public name, and checking it is the ingress's job.
+  let allowedHosts: Set<string> | undefined;
   const http = createHttpServer(async (req, res) => {
     const answer = (status: number, message: string) => {
       if (res.headersSent) return;
@@ -217,9 +226,23 @@ async function serveHttp(options: McpHttpTransport["http"], source: (credential:
     if (new URL(req.url ?? "/", "http://mcp").pathname !== path) return answer(404, `not found — the MCP endpoint is ${path}`);
     // Stateless: no session to resume, no server-initiated stream to open.
     if (req.method !== "POST") return answer(405, "method not allowed — POST JSON-RPC to this endpoint");
+    if (allowedHosts && !allowedHosts.has(req.headers.host ?? "")) return answer(403, "this endpoint only answers requests addressed to its own loopback address");
+    // Refused once the 413 is written: closing the socket earlier would
+    // leave the client a reset instead of a reason.
+    const tooLarge = () => {
+      res.setHeader("connection", "close");
+      res.once("finish", () => req.destroy());
+      answer(413, `the body is larger than ${maxBodyBytes} bytes`);
+    };
+    if (Number(req.headers["content-length"] ?? 0) > maxBodyBytes) return tooLarge();
     try {
       const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(chunk as Buffer);
+      let size = 0;
+      for await (const chunk of req) {
+        size += (chunk as Buffer).length;
+        if (size > maxBodyBytes) return tooLarge();
+        chunks.push(chunk as Buffer);
+      }
       const body: unknown = JSON.parse(Buffer.concat(chunks).toString() || "null");
       const credential = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
       const server = await createServer(source(credential));
@@ -233,14 +256,16 @@ async function serveHttp(options: McpHttpTransport["http"], source: (credential:
       answer(500, "internal error");
     }
   });
-  const host = options.host ?? "127.0.0.1";
   await new Promise<void>((resolve, reject) => {
     http.once("error", reject);
     http.listen(options.port, host, () => resolve());
   });
   const { port } = http.address() as AddressInfo;
+  if (LOOPBACK.has(host)) allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);
   return { http, url: `http://${host.includes(":") ? `[${host}]` : host}:${port}${path}` };
 }
+
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1"]);
 
 /** Keeps the real stdout for the protocol and sends every other write to stderr, until restored. */
 function divertStdout(): { out: Writable; restore: () => void } {

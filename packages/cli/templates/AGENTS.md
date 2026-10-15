@@ -156,7 +156,7 @@ luck.
 |---|---|
 | `pnpm dev` | run the backend process (regenerates types first) |
 | `pnpm worker` | run the queue-consumer process |
-| `pnpm mcp [--token t]` | serve the modules' actions to an MCP client on stdio; `config/mcp.config.ts` identifies the caller |
+| `pnpm mcp` (`TULIPES_MCP_TOKEN`) | serve the modules' actions to an MCP client on stdio; `config/mcp.config.ts` identifies the caller |
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm tulipes routes [--scope s]` | every endpoint with the roles that reach it, offline |
 | `pnpm tulipes roles [--role r]` | every role with its description, extras and grants, offline |

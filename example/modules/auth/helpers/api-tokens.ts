@@ -71,9 +71,13 @@ export async function listTokens(ctx: Ctx, userId: string) {
 
 /** Revoke one of the user's tokens. False when it is not theirs (or does not exist). */
 export async function revokeToken(ctx: Ctx, userId: string, tokenId: string): Promise<boolean> {
-  await forgetToken(ctx, tokenId);
+  // The row goes first, then the cached identity. The other order leaves a
+  // window: a request between the two finds the row, caches the token
+  // again, and it outlives its revocation until the cache entry expires.
   const result = await ctx.models!.get("ApiToken").deleteOne({ token_id: tokenId, user: userId });
-  return result.deletedCount === 1;
+  if (result.deletedCount !== 1) return false;
+  await forgetToken(ctx, tokenId);
+  return true;
 }
 
 /**
@@ -89,7 +93,10 @@ export async function identifyApiToken(ctx: Ctx, bearer: string): Promise<Auth |
 
   const cached = await readTokenIdentity(ctx, tokenId);
   if (cached && cached.token.secret_hash && sameHash(cached.token.secret_hash, hash(secret)) && live(cached.token)) {
-    await touch(ctx, cached.token);
+    // A touch rewrites the entry, as a session's does: the cached
+    // last_used_at is what the next hit compares against, and a stale one
+    // would turn every later hit into a write.
+    if (await touch(ctx, cached.token)) await writeTokenIdentity(ctx, tokenId, cached);
     return resolve(ctx, cached.user, cached.token);
   }
 
@@ -121,12 +128,17 @@ function live(token: ApiTokenAttrs): boolean {
   return !token.expires_at || new Date(token.expires_at).getTime() > Date.now();
 }
 
-/** `last_used_at` at most once a minute: a write per request costs more than the field is worth. */
-async function touch(ctx: Ctx, token: ApiTokenAttrs): Promise<void> {
+/**
+ * `last_used_at` at most once a minute: a write per request costs more than
+ * the field is worth. True when it wrote, so a caller holding a cached copy
+ * knows to store the new value.
+ */
+async function touch(ctx: Ctx, token: ApiTokenAttrs): Promise<boolean> {
   const last = token.last_used_at ? new Date(token.last_used_at).getTime() : 0;
-  if (Date.now() - last < 60_000) return;
+  if (Date.now() - last < 60_000) return false;
   token.last_used_at = new Date();
   await ctx.models!.get("ApiToken").updateOne({ token_id: token.token_id }, { last_used_at: token.last_used_at });
+  return true;
 }
 
 function describeToken(row: ApiTokenAttrs) {

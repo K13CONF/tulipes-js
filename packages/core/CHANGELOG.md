@@ -40,6 +40,28 @@ Packages: core `0.13.0-rc.1`, `@tulipes/cli` `0.4.0-rc.1`, `@tulipes/mcp`
   and access JWTs alike.
 - **`tulipes migrate 0.13`** adds the MCP process to an app on 0.12.
 
+### Security
+
+- **A custom access checker decides alone, scopes included.** An app that
+  calls `ctx.routes.setAccessChecker()` replaces the ACL's whole decision
+  in `rai()` and `invoke()`, so a credential's scopes are not applied
+  there and the manifest is not filtered by them (`authorization:
+  "dynamic"`). Such an app reads `req.auth.scopes` in its own checker; see
+  MIGRATING.
+- **`@tulipes/mcp`'s HTTP transport** refuses, on a loopback bind, a request
+  whose `Host` is not the listener's own (DNS rebinding: a web page cannot
+  reach a local MCP process through a name it re-points at 127.0.0.1), and
+  refuses a body over `maxBodyBytes` (1 MiB by default) with 413 before
+  `identify` runs.
+- **API tokens in the reference app's auth module:** revoking a token
+  deletes its row before forgetting its cached identity, so a request
+  arriving between the two can no longer re-cache a revoked token; and a
+  cache hit that touches `last_used_at` rewrites the cached entry, so hits
+  past the first minute no longer write to the database every time.
+- **The documented MCP command passes the token in the environment**
+  (`claude mcp add <name> -e TULIPES_MCP_TOKEN=… -- pnpm --silent mcp`)
+  rather than as `--token`, which any user of the machine sees in `ps`.
+
 ## [0.12.0] — 2026-10-14
 
 The 0.12 line, stable, on npm's `latest` tag: everything rc.1 and rc.2

@@ -39,13 +39,17 @@ export default defineMcp({ transport: "stdio", identify: (ctx, credential) => id
 ```
 
 ```sh
-claude mcp add my-app -- pnpm --silent mcp --token "$TOKEN"   # or TULIPES_MCP_TOKEN
+claude mcp add my-app -e TULIPES_MCP_TOKEN="$TOKEN" -- pnpm --silent mcp   # the token in the environment; ps shows argv
 ```
 
-- `transport: { http: { port, host?, path? } }` serves MCP's Streamable
-  HTTP (stateless) on its own port, default `127.0.0.1` and `/mcp`; each
-  request is identified by its `Authorization: Bearer`. Without an
-  `identify` it refuses to listen when `APP_ENV` is production or staging.
+- `transport: { http: { port, host?, path?, maxBodyBytes? } }` serves MCP's
+  Streamable HTTP (stateless) on its own port, default `127.0.0.1` and
+  `/mcp`; each request is identified by its `Authorization: Bearer`. Without
+  an `identify` it refuses to listen when `APP_ENV` is production or
+  staging. On a loopback bind it answers only requests addressed to its own
+  address (403 otherwise, against DNS rebinding); behind an ingress the
+  ingress checks the host name. A body over `maxBodyBytes` (1 MiB) is
+  refused with 413 before `identify` runs.
 - No `identify`, or `null` from it, is a guest. `identify` runs on every
   list and call, so a revocation applies to a running session.
 - `developmentIdentity("MCP_ROLE")` takes the role from an environment
@@ -71,7 +75,7 @@ server calls as guest and lists only what a guest may call.
 For Claude Code:
 
 ```sh
-claude mcp add tulipes-example -- pnpm tulipes-mcp --token "$TOKEN"
+claude mcp add tulipes-example -e TULIPES_TOKEN="$TOKEN" -- pnpm tulipes-mcp
 ```
 
 ## What it does

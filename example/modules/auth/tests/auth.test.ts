@@ -1091,6 +1091,33 @@ test("an API token cannot issue tokens, rejects bad scopes, expires, and dies wi
   expect(await (await get("/api/v1/auth/tokens", replacement)).json()).toMatchObject({ data: [] });
 });
 
+test("an API token's last_used_at is written at most once a minute, on a cache hit as on a miss", async () => {
+  const user = await account();
+  const { secret } = (await issue(user.access_token, { name: "touch" })).body.data!;
+  const tokens = app.handle.ctx.models!.get("ApiToken");
+  const writes = vi.spyOn(tokens, "updateOne");
+  vi.useFakeTimers({ toFake: ["Date"], now: Date.now() });
+  try {
+    // A miss (written), then 61 s later a hit (written), then five hits a second apart (not).
+    for (const step of [0, 61_000, 1_000, 1_000, 1_000, 1_000, 1_000]) {
+      vi.setSystemTime(Date.now() + step);
+      expect((await get("/api/v1/hello/secret", secret)).status).toBe(200);
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+  expect(writes).toHaveBeenCalledTimes(2);
+});
+
+test("a revoked API token is refused at once, even while its identity is cached", async () => {
+  const user = await account();
+  const { token_id, secret } = (await issue(user.access_token, { name: "cached" })).body.data!;
+  expect((await get("/api/v1/hello/secret", secret)).status).toBe(200);
+  expect((await get("/api/v1/hello/secret", secret)).status).toBe(200);
+  expect((await fetch(app.base + "/api/v1/auth/tokens/" + token_id, { method: "DELETE", headers: { authorization: "Bearer " + user.access_token } })).status).toBe(200);
+  expect((await get("/api/v1/hello/secret", secret)).status).toBe(401);
+});
+
 // Keep this test last: it boots a second replica, which configures passport
 // (a process-wide singleton) with its own context and then shuts it down.
 test("a revocation on one replica is refused on the very next request on another", async () => {
