@@ -70,3 +70,19 @@ describe("the Anthropic adapter", () => {
       .rejects.toThrow("fetch failed");
   });
 });
+
+describe("long runs", () => {
+  test("context editing and compaction add their beta flags and one list of edits; off, neither is sent", async () => {
+    const both = client(async () => message());
+    await new AnthropicModelClient({ ...SETTINGS, contextEditing: true, compaction: true }, both.sdk).complete(REQUEST);
+    expect(both.sent[0]).toMatchObject({
+      betas: ["server-side-fallback-2026-07-01", "context-management-2025-06-27", "compact-2026-01-12"],
+      context_management: { edits: [{ type: "clear_tool_uses_20250919" }, { type: "compact_20260112" }] },
+    });
+
+    const none = client(async () => message());
+    await new AnthropicModelClient(SETTINGS, none.sdk).complete(REQUEST);
+    expect(none.sent[0]).not.toHaveProperty("context_management");
+    expect(none.sent[0]!.betas).toEqual(["server-side-fallback-2026-07-01"]);
+  });
+});

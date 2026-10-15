@@ -70,7 +70,7 @@ export function composeLoop(ctx: RuntimeCtx, overrides: LoopOverrides = {}): Run
 }
 
 function modelFor(ctx: RuntimeCtx): ModelClient {
-  const { anthropicApiKey, anthropicBaseUrl, model, effort, refusalFallback } = ctx.config.agents!;
+  const { anthropicApiKey, anthropicBaseUrl, model, effort, refusalFallback, contextEditing, compaction } = ctx.config.agents!;
   // The key was there when the run started and is gone now: the run ends
   // with a reason rather than the job failing three times.
   if (!anthropicApiKey) {
@@ -82,5 +82,7 @@ function modelFor(ctx: RuntimeCtx): ModelClient {
     model,
     effort,
     refusalFallback,
+    contextEditing,
+    compaction,
   });
 }

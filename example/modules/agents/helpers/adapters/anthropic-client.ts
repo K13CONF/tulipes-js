@@ -12,6 +12,10 @@ export interface AnthropicSettings {
   effort: Effort;
   /** On a safety refusal, let the API re-run the turn on a fallback model it chooses. */
   refusalFallback: boolean;
+  /** Server-side clearing of old tool results (beta). */
+  contextEditing?: boolean;
+  /** Server-side summary of the earliest turns near the context window (beta). */
+  compaction?: boolean;
 }
 
 /** The statuses that say the request itself is wrong: a retry sends the same thing. */
@@ -31,6 +35,12 @@ const REJECTED = new Set([400, 401, 403, 404, 413, 422]);
  * always on), its depth set by `effort`. Tools are sent non-strict: the
  * app's own schemas validate every call in `invoke()`, and a rejected
  * input comes back to the model as a 422 it can act on.
+ *
+ * Long runs: the transcript the harness stores is append-only, so every
+ * reduction is the server's — clearing old tool results, compacting the
+ * earliest turns — each behind its setting. What the API returns (a
+ * compaction block included) is appended as it came, which is how the next
+ * request carries the reduction.
  */
 export class AnthropicModelClient implements ModelClient {
   readonly #client: Anthropic;
@@ -42,7 +52,17 @@ export class AnthropicModelClient implements ModelClient {
   }
 
   async complete(request: ModelRequest): Promise<ModelTurn> {
-    const { model, effort, refusalFallback } = this.#settings;
+    const { model, effort, refusalFallback, contextEditing, compaction } = this.#settings;
+    // Each server-side feature is a beta flag; the reductions are one list of edits.
+    const betas = [
+      ...(refusalFallback ? ["server-side-fallback-2026-07-01"] : []),
+      ...(contextEditing ? ["context-management-2025-06-27"] : []),
+      ...(compaction ? ["compact-2026-01-12"] : []),
+    ];
+    const edits = [
+      ...(contextEditing ? [{ type: "clear_tool_uses_20250919" as const }] : []),
+      ...(compaction ? [{ type: "compact_20260112" as const }] : []),
+    ];
     const params: BetaMessageStreamParams = {
       model,
       max_tokens: request.maxTokens,
@@ -51,7 +71,9 @@ export class AnthropicModelClient implements ModelClient {
       messages: [...request.messages],
       output_config: { effort },
       cache_control: { type: "ephemeral" },
-      ...(refusalFallback && { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
+      ...(betas.length > 0 && { betas }),
+      ...(refusalFallback && { fallbacks: "default" as const }),
+      ...(edits.length > 0 && { context_management: { edits } }),
     };
     let message: Anthropic.Beta.BetaMessage;
     try {

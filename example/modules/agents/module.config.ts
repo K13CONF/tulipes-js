@@ -27,6 +27,10 @@ export default defineConfig({
       .describe("max_tokens of one model turn; a turn cut off is retried once with twice this"),
     toolResultMaxChars: z.number().int().min(1_000).default(8_000)
       .describe("Longest tool result the model reads; longer is cut, saying what was left out"),
+    contextEditing: z.boolean().default(false)
+      .describe("Let the API clear old tool results from long runs (beta); the stored transcript is never edited"),
+    compaction: z.boolean().default(false)
+      .describe("Let the API summarise the earliest turns of a run that nears the context window (beta)"),
     refusalFallback: z.boolean().default(true)
       .describe("When the model declines on safety grounds, let the API retry the turn on a fallback model"),
     retentionDays: z.number().int().positive().default(30)
