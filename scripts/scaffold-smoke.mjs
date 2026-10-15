@@ -169,11 +169,12 @@ try {
     `);
     run(process.execPath, ['smoke.mjs'], app, env);
     run(process.execPath, [join(scripts, 'start-smoke.mjs')], app, env);
+    run(process.execPath, [join(scripts, 'mcp-smoke.mjs')], app, env);
     if (preset === 'production') {
       copyFileSync(join(scripts, 'pm2-smoke.mjs'), join(app, 'pm2-smoke.mjs'));
       run(process.execPath, ['pm2-smoke.mjs'], app, { ...env, PM2_HOME: join(workspace, 'pm2') });
     }
-    console.log(`${variant}: ${registry ? 'registry' : 'packed'} install, generated types, tests, specs, backend/shutdown${preset === 'production' && features.queues ? ' and worker' : ''} passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+    console.log(`${variant}: ${registry ? 'registry' : 'packed'} install, generated types, tests, specs, backend/shutdown, mcp${preset === 'production' && features.queues ? ' and worker' : ''} passed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   }
 } finally {
   // TULIPES_SMOKE_KEEP=1 leaves the generated app behind for a post-mortem.
