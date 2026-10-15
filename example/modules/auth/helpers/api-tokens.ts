@@ -11,7 +11,7 @@ import { forgetToken, readTokenIdentity, writeTokenIdentity } from "./session-ca
  * credential that does not expire in fifteen minutes, can be limited to
  * scopes, and is revoked by name.
  *
- *   <app>_<token_id>_<secret>      tulipes-example_3f9c…_9b1e…
+ *   <app>_<token_id>_<secret>      shop-api_3f9c…_9b1e…
  *
  * The prefix is the app's name, so two apps' tokens cannot be confused in
  * a shell and a secret scanner can be taught this app's shape. Resolution

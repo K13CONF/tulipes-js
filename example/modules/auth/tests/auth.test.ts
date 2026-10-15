@@ -1043,7 +1043,7 @@ test("an API token is issued once, reaches what its role grants and its scopes c
   const issued = await issue(user.access_token, { name: "claude-code laptop", scopes: ["hello:web:*"] });
   expect(issued.status).toBe(201);
   const { token_id, secret } = issued.body.data!;
-  expect(secret).toMatch(new RegExp(`^tulipes-example_${token_id}_[a-f0-9]{64}$`));
+  expect(secret).toMatch(new RegExp(`^${String(app.handle.ctx.config.app!.name)}_${token_id}_[a-f0-9]{64}$`));
   expect(issued.body.data!.scopes).toEqual(["hello:web:*"]);
 
   // In scope and granted to the role: reached. Granted but out of scope: refused as such.
