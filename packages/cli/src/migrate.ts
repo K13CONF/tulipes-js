@@ -25,7 +25,7 @@ const PNPM = "pnpm@10.28.0";
 
 export async function runMigrate(rootDir: string, target: string, options: { scope?: string } = {}): Promise<void> {
   if (target !== "0.11") {
-    console.error(`unknown migration target "${target}" — this CLI migrates an app to 0.11 (from 0.10) or 0.12 (from 0.11)`);
+    console.error(`unknown migration target "${target}" — this CLI migrates an app to 0.11 (from 0.10), 0.12 (from 0.11) or 0.13 (from 0.12)`);
     process.exitCode = 2;
     return;
   }
