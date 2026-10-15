@@ -11,6 +11,10 @@ import { identifyCredential } from "../modules/auth/lib/index.ts";
  * guest. Read by `pnpm mcp` only.
  */
 export default defineMcp({
+  // stdio: one client that starts this process (`pnpm mcp --token …`).
+  // For remote agents, `{ http: { port: 3100 } }` serves MCP's Streamable
+  // HTTP on 127.0.0.1:3100/mcp, each request identified by its
+  // `Authorization: Bearer` (see the commented block in nginx/production.conf).
   transport: "stdio",
   identify: (ctx, credential) => identifyCredential(ctx, credential),
 });

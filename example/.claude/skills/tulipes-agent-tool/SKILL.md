@@ -105,6 +105,11 @@ export default defineMcp({
 claude mcp add my-app -- pnpm --silent mcp --token "$TOKEN"   # or TULIPES_MCP_TOKEN
 ```
 
+For remote agents, `transport: { http: { port: 3100 } }` serves MCP's
+Streamable HTTP at `http://127.0.0.1:3100/mcp` instead; every request is
+identified by its own `Authorization: Bearer`, and in production the
+process refuses to listen without an `identify`.
+
 No `identify`, or a credential it does not accept, is a guest. `identify`
 runs again on every list and call, so a revoked token or a changed role
 applies to a running session. Every call writes one audit line to stderr;

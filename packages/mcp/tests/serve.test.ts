@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { expect, onTestFinished, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { fixture } from "../../core/tests/fixture.ts";
 import { serveMcp } from "../src/serve.ts";
 
@@ -84,4 +85,56 @@ test("developmentIdentity takes the role from MCP_ROLE, and is refused in produc
 
   vi.stubEnv("APP_ENV", "production");
   await expect(serve(config)).rejects.toThrow(/developmentIdentity\(\) reads the role from MCP_ROLE, which is refused when APP_ENV is production/);
+});
+
+describe("the http transport", () => {
+  const httpConfig = (identify: string) => ({ "config/mcp.config.js": `import { defineMcp } from '@tulipes/mcp';
+    export default defineMcp({ transport: { http: { port: 0 } }${identify} });` });
+  const identifyByBearer = `, identify: (ctx, credential) => credential === 'full'
+    ? { isAuthenticated: true, user: { _id: 'u1' }, session: null, role: 'admin' }
+    : credential === 'narrow' ? { isAuthenticated: true, user: { _id: 'u2' }, session: null, role: 'admin', scopes: ['probe:web:*'] } : null`;
+
+  async function listen(files: Record<string, string>) {
+    const { rootDir } = await fixture({ ...app, ...files });
+    const audit: string[] = [];
+    const served = await serveMcp({ rootDir, argv: [], audit: (line) => audit.push(line) });
+    onTestFinished(() => served.close());
+    const connect = async (token?: string) => {
+      const client = new Client({ name: "test", version: "0" });
+      await client.connect(new StreamableHTTPClientTransport(new URL(served.url!), {
+        requestInit: { headers: token ? { authorization: `Bearer ${token}` } : {} },
+      }));
+      onTestFinished(() => client.close());
+      return client;
+    };
+    return { served, connect, audit };
+  }
+
+  test("identifies every request by its bearer: each client sees what its own credential reaches", async () => {
+    const { served, connect, audit } = await listen(httpConfig(identifyByBearer));
+    expect(served.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+    const names = async (token?: string) => (await (await connect(token)).listTools()).tools.map((tool) => tool.name);
+    expect(await names("full")).toEqual(["probe_web_count", "probe_bo_purge"]);
+    expect(await names("narrow")).toEqual(["probe_web_count"]);
+    expect(await names()).toEqual(["probe_web_count"]);
+
+    const result = await (await connect("full")).callTool({ name: "probe_bo_purge", arguments: {} });
+    expect((result.content as { text: string }[])[0]!.text).toBe('{"data":{"purgedBy":"admin"}}');
+    expect(JSON.parse(audit.at(-1)!)).toMatchObject({ tool: "probe_bo_purge", actor: "u1", outcome: "ok" });
+  });
+
+  test("answers only POST on its path", async () => {
+    const { served } = await listen(httpConfig(identifyByBearer));
+    expect((await fetch(served.url!)).status).toBe(405);
+    expect((await fetch(new URL("/elsewhere", served.url), { method: "POST", body: "{}" })).status).toBe(404);
+  });
+
+  test("refuses to serve every caller on the network as a guest in production", async () => {
+    vi.stubEnv("APP_ENV", "production");
+    await expect(listen(httpConfig(""))).rejects.toThrow(/http transport has no identify.*refused when APP_ENV is production/);
+  });
+
+  test("rejects a transport it does not know", async () => {
+    await expect(listen({ "config/mcp.config.js": `export default { transport: { sse: true } };` })).rejects.toThrow(/not supported — "stdio" or \{ http: \{ port \} \}/);
+  });
 });

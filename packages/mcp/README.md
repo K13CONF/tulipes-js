@@ -42,6 +42,10 @@ export default defineMcp({ transport: "stdio", identify: (ctx, credential) => id
 claude mcp add my-app -- pnpm --silent mcp --token "$TOKEN"   # or TULIPES_MCP_TOKEN
 ```
 
+- `transport: { http: { port, host?, path? } }` serves MCP's Streamable
+  HTTP (stateless) on its own port, default `127.0.0.1` and `/mcp`; each
+  request is identified by its `Authorization: Bearer`. Without an
+  `identify` it refuses to listen when `APP_ENV` is production or staging.
 - No `identify`, or `null` from it, is a guest. `identify` runs on every
   list and call, so a revocation applies to a running session.
 - `developmentIdentity("MCP_ROLE")` takes the role from an environment
