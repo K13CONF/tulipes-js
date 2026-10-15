@@ -652,6 +652,32 @@ new settings up as it does every module's.
 **Acceptance:** the door's six behaviours in §5 pass; `tulipes spec`
 documents the five endpoints; a run's list view omits the transcript.
 
+Status: implemented on 2026-10-15. Eight endpoints, not five: the owner's
+`agents:web:runs:*` — start (202, queued), list (newest first, no
+transcript, `?status=`), read (with `waiting_on`: each waiting call's tool,
+its description and input — what the person approves), approve, cancel —
+and the back office's `agents:bo:runs:*` (list, read, cancel any run;
+never approve: a run acts with its owner's authority, so only its owner
+consents). `user` holds `agents:web:runs:*` from the module's own ACL;
+admin and sysadmin hold `agents:*` from the auth module's. Another
+person's run is 404, never 403. Approval must answer every waiting call
+and only those (422 `DECISIONS_INCOMPLETE`), queues the run and bumps its
+segment in one write (a second answer is 409 `RUN_NOT_WAITING`);
+cancelling an ended run is 409 `RUN_ENDED`. The use cases are
+`helpers/runs.ts` (`startRun`, `listRuns`, `readRun`, `cancelRun`,
+`approveRun`), the controllers only bind them to a request.
+
+**The socket namespace is not in S04.3.** Every namespace in the app is
+unauthenticated today; a `/agents` namespace would show one person's runs
+to anyone connected. It waits for authenticated socket rooms (§9).
+
+Tests: the door over HTTP — the lifecycle with the result read back, an
+approval round trip with the incomplete and repeated answers, ownership
+and the back office, a token scoped away from agents (403
+`OUT_OF_SCOPE`) and one scoped to them (the run keeps its scopes), input
+validation and a guest. The agents suites: 48 tests. Core's inspection
+test now counts the reference app's 38 routes (10 in scope `bo`).
+
 ### S04.4 — Long runs and evidence (medium)
 
 `contextEditing` and `compaction` behind their settings; the notes replay
@@ -731,6 +757,9 @@ Open:
   to the run and read back by a `run_read_result(id, range)` tool, instead
   of truncated.
 - **A console view** of runs in the settings module's console.
+- **Live run events over sockets**, once namespaces can authenticate a
+  connection and scope a room to a user: `/agents` with one room per run's
+  owner.
 - **A second ModelClient** behind the same port, to prove the port and
   to let an app choose.
 - **Evals in CI** with recorded model responses, when a recording format

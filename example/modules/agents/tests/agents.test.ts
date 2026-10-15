@@ -87,7 +87,8 @@ test("a run started with a scoped API token is refused outside its scopes, and s
   const issued = await issueToken(ctx(), account.userId, { name: "agent", scopes: ["hello:web:*"] });
   const auth = (await identifyApiToken(ctx(), issued.secret))!;
   const started = await startRun(ctx(), auth, { goal: "Reset the counters." });
-  expect(started.actor).toMatchObject({ scopes: ["hello:web:*"], tokenId: issued.token_id });
+  const stored = await ctx().models!.get("AgentRun").findById(started.id).lean() as Record<string, unknown>;
+  expect(stored).toMatchObject({ scopes: ["hello:web:*"], token_id: issued.token_id });
 
   // The admin could reset; the token's scopes cannot, so the tool is not even offered —
   // and a call to it anyway comes back as the registry's refusal.
@@ -114,4 +115,93 @@ test("starting a run needs the key, and a signed-in caller", async () => {
   // The key is a read-only environment value; a deployment without it is a config without it.
   const unconfigured = { config: { agents: {} } } as unknown as RuntimeCtx;
   await expect(startRun(unconfigured, await caller("user"), { goal: "x" })).rejects.toMatchObject({ status: 503, code: "AGENT_UNCONFIGURED" });
+});
+
+// ── The door ─────────────────────────────────────────────────────────
+
+type Summary = { id: string; status: string; result?: { outcome: string }; waiting_on?: { id: string; tool: string; description: string }[]; reason?: string };
+
+test("over HTTP: start answers 202 queued, the run is read back with its result, and the list leaves transcripts out", async () => {
+  const user = await app.as("user");
+  const started = await app.post<Summary>(app.api("/agents/runs"), { goal: "How many greetings are there?" }, { as: user });
+  expect(started.status).toBe(202);
+  expect(started.data).toMatchObject({ status: "queued", turns: 0 });
+
+  await composeLoop(ctx(), { model: new ScriptedModel([turn([finish("done", "Three.", "Listed them.")])]) }).run(started.data!.id);
+
+  const read = await app.get<Summary & { transcript: unknown[]; steps: unknown[] }>(app.api(`/agents/runs/${started.data!.id}`), { as: user });
+  expect(read.status).toBe(200);
+  expect(read.data).toMatchObject({ status: "succeeded", result: { outcome: "done" } });
+  expect(read.data!.transcript.length).toBeGreaterThan(1);
+
+  const list = await app.get<Record<string, unknown>[]>(app.api("/agents/runs"), { as: user });
+  expect(list.data!.map((run) => run.id)).toContain(started.data!.id);
+  expect(list.data!.every((run) => !("transcript" in run))).toBe(true);
+  expect(list.body.meta).toMatchObject({ total_items: expect.any(Number) });
+});
+
+test("over HTTP: a waiting run says what it waits on; approval must answer every call, then queues the run again", async () => {
+  const admin = await app.as("admin");
+  const started = await app.post<Summary>(app.api("/agents/runs"), { goal: "Reset the counters." }, { as: admin });
+  const reset = toolUse("hello_bo_greetings_reset", { confirm: true });
+  const model = new ScriptedModel([turn([reset]), turn([finish()])]);
+  await composeLoop(ctx(), { model }).run(started.data!.id);
+
+  const waiting = await app.get<Summary>(app.api(`/agents/runs/${started.data!.id}`), { as: admin });
+  expect(waiting.data).toMatchObject({ status: "waiting_approval", waiting_on: [{ id: reset.id, tool: "hello_bo_greetings_reset", description: expect.stringContaining("Reset") }] });
+
+  const incomplete = await app.post(app.api(`/agents/runs/${started.data!.id}/approve`), { decisions: { toolu_other: "allow" } }, { as: admin });
+  expect(incomplete.status).toBe(422);
+  expect(incomplete.errors[0]).toMatchObject({ code: "DECISIONS_INCOMPLETE" });
+
+  const approved = await app.post<Summary>(app.api(`/agents/runs/${started.data!.id}/approve`), { decisions: { [reset.id]: "allow" } }, { as: admin });
+  expect(approved.data).toMatchObject({ status: "queued" });
+  // A second answer to the same wait finds nothing waiting.
+  expect((await app.post(app.api(`/agents/runs/${started.data!.id}/approve`), { decisions: { [reset.id]: "allow" } }, { as: admin })).status).toBe(409);
+
+  expect((await composeLoop(ctx(), { model }).run(started.data!.id)).status).toBe("succeeded");
+});
+
+test("over HTTP: another person's run is not found; the back office reads and cancels any run", async () => {
+  const owner = await app.as("user");
+  const other = await app.register();
+  const admin = await app.as("admin");
+  const { data } = await app.post<Summary>(app.api("/agents/runs"), { goal: "x" }, { as: owner });
+
+  expect((await app.get(app.api(`/agents/runs/${data!.id}`), { as: other })).status).toBe(404);
+  expect((await app.post(app.api(`/agents/runs/${data!.id}/cancel`), undefined, { as: other })).status).toBe(404);
+  expect((await app.get(app.api(`/agents/bo/runs`), { as: owner })).status).toBe(403);
+
+  expect((await app.get(app.api(`/agents/bo/runs/${data!.id}`), { as: admin })).status).toBe(200);
+  const cancelled = await app.post<Summary>(app.api(`/agents/bo/runs/${data!.id}/cancel`), undefined, { as: admin });
+  expect(cancelled.data).toMatchObject({ status: "cancelled" });
+  expect((await app.post(app.api(`/agents/runs/${data!.id}/cancel`), undefined, { as: owner })).status).toBe(409);
+
+  // A job that picks a cancelled run up stops there and asks the model nothing.
+  const model = new ScriptedModel([]);
+  expect((await composeLoop(ctx(), { model }).run(data!.id)).status).toBe("cancelled");
+  expect(model.requests).toEqual([]);
+});
+
+test("over HTTP: a token scoped away from agents cannot start one; a token scoped to them can, and the run keeps its scopes", async () => {
+  const account = await app.as("user");
+  const narrow = await issueToken(ctx(), account.userId, { name: "hello only", scopes: ["hello:web:*"] });
+  const refused = await app.post(app.api("/agents/runs"), { goal: "x" }, { token: narrow.secret });
+  expect(refused.status).toBe(403);
+  expect(refused.errors[0]).toMatchObject({ code: "OUT_OF_SCOPE" });
+
+  const agentic = await issueToken(ctx(), account.userId, { name: "agent", scopes: ["agents:web:runs:*", "hello:web:*"] });
+  const started = await app.post<Summary>(app.api("/agents/runs"), { goal: "x" }, { token: agentic.secret });
+  expect(started.status).toBe(202);
+  const stored = await ctx().models!.get("AgentRun").findById(started.data!.id).lean() as Record<string, unknown>;
+  expect(stored).toMatchObject({ scopes: ["agents:web:runs:*", "hello:web:*"], token_id: agentic.token_id });
+});
+
+test("over HTTP: the input is validated, and a guest is refused", async () => {
+  const user = await app.as("user");
+  const blank = await app.post(app.api("/agents/runs"), { goal: "   " }, { as: user });
+  expect(blank.status).toBe(422);
+  expect(blank.errors[0]).toMatchObject({ field: "goal" });
+  expect((await app.get(app.api("/agents/runs/not-an-id"), { as: user })).status).toBe(422);
+  expect((await app.post(app.api("/agents/runs"), { goal: "x" })).status).toBe(401);
 });

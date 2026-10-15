@@ -136,6 +136,9 @@ importers:
       '@tulipes/mongoose':
         specifier: workspace:*
         version: link:../../../packages/mongoose
+      express:
+        specifier: ^5
+        version: 5.2.1
       mongoose:
         specifier: ^8
         version: 8.24.5(socks@2.8.10)

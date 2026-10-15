@@ -298,7 +298,7 @@ test("the reference app inspects deterministically with connections denied and n
   const inspect = () => boot({ rootDir: resolve("example"), mode: "backend", inspect: true, handleSignals: false });
 
   const first = await inspect();
-  expect(first.ctx.routes.all()).toHaveLength(30);
+  expect(first.ctx.routes.all()).toHaveLength(38);
   const documentsFirst = await documents(first.ctx);
   await first.shutdown();
 
@@ -344,7 +344,7 @@ test("CLI writes specs for a freshly generated production app without services",
   run(app.rootDir, ["init", "generated", "--preset", "production"]);
   const root = app.rootDir + "/generated";
 
-  expect(run(root, ["routes"])).toContain("30 endpoint(s)");
+  expect(run(root, ["routes"])).toContain("38 endpoint(s)");
   run(root, ["spec", "--openapi", "docs/openapi.json", "--postman", "docs/collection.json"]);
   const { readFile } = await import("node:fs/promises");
   const openapi = JSON.parse(await readFile(root + "/docs/openapi.json", "utf8"));
@@ -353,7 +353,7 @@ test("CLI writes specs for a freshly generated production app without services",
   expect(openapi["x-tulipes-roles"].map((role: { name: string }) => role.name)).toEqual(["guest", "user", "admin", "sysadmin"]);
 
   // One surface: the back office alone.
-  expect(run(root, ["routes", "--scope", "bo"])).toContain('7 endpoint(s) in scope "bo"');
+  expect(run(root, ["routes", "--scope", "bo"])).toContain('10 endpoint(s) in scope "bo"');
   run(root, ["spec", "--openapi", "docs/bo.json", "--scope", "bo"]);
   const backOffice = JSON.parse(await readFile(root + "/docs/bo.json", "utf8"));
   expect(backOffice["x-tulipes-scopes"]).toEqual(["bo"]);
