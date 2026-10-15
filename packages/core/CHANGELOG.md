@@ -9,10 +9,16 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
-## [Unreleased] — the 0.13 line
+## [0.13.0-rc.1] — 2026-10-15
 
+The 0.13 line's first candidate, on npm's `next` tag; `latest` stays on 0.12.0.
 Additive over 0.12; see the 0.13 section of [MIGRATING.md](./MIGRATING.md).
 The agent surface and `@tulipes/mcp` stay experimental.
+Packages: core `0.13.0-rc.1`, `@tulipes/cli` `0.4.0-rc.1`, `@tulipes/mcp`
+`0.2.0-rc.1` (core `^0.13.0-rc.1`), and republished for their core range only:
+`@tulipes/spec` `0.4.1-rc.1`, `@tulipes/mongoose` and `@tulipes/bullmq`
+`0.2.2-rc.1`, `@tulipes/testing` `0.1.2-rc.1`, `@tulipes/socket.io`
+`0.1.4-rc.1`.
 
 ### Added
 

@@ -44,6 +44,7 @@ Maintained lines, to be updated in each release PR:
 | Line | Status |
 |---|---|
 | core 0.12.x, cli 0.3.x, spec 0.4.x, mongoose and bullmq 0.2.1+, socket.io 0.1.3+, mcp and testing 0.1.1+ | current; normal fixes target these; the agent surface and `@tulipes/mcp` are experimental (above) |
+| core 0.13.0-rc.1, cli 0.4.0-rc.1, mcp 0.2.0-rc.1 (and the republished spec, providers, testing, socket.io) | candidates only (`next`); `latest` stays on 0.12.0 until 0.13.0 — an MCP process, API tokens, credential scopes; the agent surface and `@tulipes/mcp` stay experimental |
 | core 0.12.0-rc.1 and rc.2 | candidates only (`next`); superseded by 0.12.0 — upgrade rather than expecting fixes |
 | core 0.11.x, cli 0.2.x, spec 0.3.2, providers 0.2.0 | previous stable; critical security fixes evaluated until the next core minor ships |
 | core 0.10.x, cli 0.1.x, spec 0.3.0–0.3.1, providers 0.1.x | unmaintained |
