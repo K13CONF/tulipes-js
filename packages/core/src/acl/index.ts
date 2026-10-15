@@ -8,6 +8,7 @@ export {
   isUnscopedRai,
   parseRai,
   RAI_SEGMENT,
+  scopesCover,
   RAI_SHAPE,
   type Rai,
   type RaiParts,

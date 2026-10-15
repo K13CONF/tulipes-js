@@ -16,7 +16,7 @@ export class WebAgentController {
 
   tools(): RequestHandler {
     return (req: Request, res: Response) => {
-      res.respond({ data: this.#ctx.agent.manifest(roleOf(req)) });
+      res.respond({ data: this.#ctx.agent.manifest({ ...req.auth, role: roleOf(req) }) });
     };
   }
 

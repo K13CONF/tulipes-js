@@ -66,6 +66,13 @@ export interface Auth {
   user: AuthUser | null;
   /** This request's session, or null when there is none. */
   session: AuthSession | null;
+  /**
+   * The grant patterns this credential is limited to (`hello:web:*`,
+   * `users:bo:list`, `*`), read from the stored credential, never from the
+   * client. Absent means the role's full grant; a scope the role lacks
+   * grants nothing, and `[]` reaches nothing.
+   */
+  scopes?: readonly string[];
 }
 
 /**

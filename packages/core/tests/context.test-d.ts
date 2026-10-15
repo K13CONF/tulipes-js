@@ -48,6 +48,12 @@ requireQueues(backend).queue("users.welcome");
 // The agent surface is on every runtime context, typed from the registry.
 void backend.agent.manifest("admin").tools[0]?.input_schema;
 void backend.agent.invoke("hello_reset-counts", { confirm: true }, { isAuthenticated: true, user: null, session: null, role: "admin" });
+// A credential's scopes ride on the actor; the manifest filters by role or by actor.
+const scoped = { isAuthenticated: true, user: null, session: null, role: "admin", scopes: ["hello:web:*"] } as const;
+void backend.agent.manifest(scoped);
+void backend.agent.invoke("hello_web_greetings", {}, scoped);
+// @ts-expect-error Scopes are grant patterns, a list of strings.
+void backend.agent.manifest({ isAuthenticated: true, user: null, session: null, role: "admin", scopes: "hello:web:*" });
 declare const worker: import("../src/boot/index.ts").RuntimeCtx;
 void worker.agent.manifest();
 declare const early: import("../src/boot/index.ts").Ctx;
