@@ -45,7 +45,7 @@ and Redis on 127.0.0.1, npm registry reachable, no Docker. Every job of
 | `scaffold-smoke.mjs production` (services) | **fails on this Mac at the app's own suite**: 46 of 48 pass, the two failures are the rate-limit pair (201 parallel connects, `ECONNRESET`, `kern.ipc.somaxconn=128`), as on 0.12.0-rc.2. Install, sync, typecheck, offline routes and spec passed before it. | to record on Linux |
 | the same smoke with only its `test` step skipped (a temporary copy of the script, deleted) | pass: boot, worker, start-smoke, `mcp-smoke.mjs` (stdio MCP process), pm2-smoke | — |
 | `ingress-smoke.mjs`, `failure-smoke.mjs` | not run (Docker) | — |
-| MCP cold start to `initialize` (`docs/design/0.13-measurements.md`) | not measured for this candidate | — |
+| MCP cold start to `initialize` ([0.13-measurements.md](../design/0.13-measurements.md)) | median 452 ms over five runs (first 992 ms), against 438 ms for the HTTP backend's banner on the same app and machine | — |
 
 ## Publication
 

@@ -6,16 +6,24 @@ if (process.env.REQUIRE_INTEGRATION_TESTS === "1" && (!process.env.TEST_MONGO_UR
 
 export default defineConfig({
   test: {
-    include: ["packages/*/tests/**/*.test.ts"],
+    // The agents harness runs here too: it boots nothing and needs no service,
+    // so it is the reference app's one suite that belongs in the unit lane.
+    include: ["packages/*/tests/**/*.test.ts", "example/modules/agents/tests/harness.test.ts"],
     testTimeout: 10_000,
     hookTimeout: 15_000,
     restoreMocks: true,
     unstubEnvs: true,
     coverage: {
       provider: "v8",
-      thresholds: { statements: 77, branches: 62, functions: 82, lines: 79 },
+      thresholds: {
+        statements: 77,
+        branches: 62,
+        functions: 82,
+        lines: 79,
+        "example/modules/agents/helpers/harness/**/*.ts": { statements: 90, branches: 85, functions: 90, lines: 90 },
+      },
       reporter: ["text", "json-summary", "lcov"],
-      include: ["packages/core/src/boot/**/*.ts", "packages/core/src/acl/**/*.ts", "packages/core/src/env/**/*.ts"],
+      include: ["packages/core/src/boot/**/*.ts", "packages/core/src/acl/**/*.ts", "packages/core/src/env/**/*.ts", "example/modules/agents/helpers/harness/**/*.ts"],
     },
   },
 });

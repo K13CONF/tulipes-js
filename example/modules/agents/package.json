@@ -1,0 +1,18 @@
+{
+  "name": "@app/agents",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "tulipes": {
+    "tier": "app",
+    "priority": 960,
+    "dependsOn": [
+      "auth",
+      "core"
+    ]
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.134.0",
+    "@tulipes/core": "workspace:*"
+  }
+}
