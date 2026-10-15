@@ -1,8 +1,7 @@
 # Release — core 0.13.0, the 0.13 line, stable
 
-Status: **prepared, not tagged, not published.** Tagging `v0.13.0` on the
-merge commit publishes every package to npm's `latest` tag through the
-publish workflow; it is the maintainer's action. No candidate was
+Status: **published on 2026-10-15** to npm's `latest` tag, from `v0.13.0`
+on `a61bf13`. No candidate was
 published for this line: the prepared `0.13.0-rc.1`
 ([record](./release-0.13.0-rc.1.md)) was never tagged, and on 2026-10-15
 the maintainer chose to publish 0.13.0 directly. Owning items: S01–S05 of
@@ -57,16 +56,24 @@ MongoDB 7.0 and Redis 7.2 on 127.0.0.1, no Docker. Every job of
 
 | Check | Local | CI |
 |---|---|---|
-| frozen install, `typecheck`, `test:types` | pass, lockfile unchanged by the bumps | to record |
-| `test:coverage` (MongoDB, Redis, `REQUIRE_INTEGRATION_TESTS=1`) | 40 files, 413 passed, 0 skipped; 94.84 % statements, 91.37 % branches, 94.08 % functions, 95.92 % lines; the agents harness 97.97 / 94.21 / 100 / 100 against its own floor | to record |
-| example `sync` + `typecheck`, guide parity | pass, no drift | to record |
-| `artifacts.mjs prepare` + `verify`, `audit.mjs`, scaffold parity | eight archives verify; audit clean; parity pass | to record |
-| smokes: minimal, production offline, composition, upgrade | pass (minimal includes the MCP smoke; upgrade: 0.11.0 → `migrate 0.12` → `migrate 0.13` → boots on the 0.13.0 archives) | to record |
-| production smoke (services) | the app's suite 98 passed, 8 skipped (the live eval), 2 failed (the macOS rate-limit pair); with only the test step skipped: boot, worker with `agents.run`, start, MCP and pm2 smokes pass | to record on Linux |
+| frozen install, `typecheck`, `test:types` | pass, lockfile unchanged by the bumps | pass |
+| `test:coverage` (MongoDB, Redis, `REQUIRE_INTEGRATION_TESTS=1`) | 40 files, 413 passed, 0 skipped; 94.84 % statements, 91.37 % branches, 94.08 % functions, 95.92 % lines; the agents harness 97.97 / 94.21 / 100 / 100 against its own floor | pass |
+| example `sync` + `typecheck`, guide parity | pass, no drift | pass |
+| `artifacts.mjs prepare` + `verify`, `audit.mjs`, scaffold parity | eight archives verify; audit clean; parity pass | pass |
+| smokes: minimal, production offline, composition, upgrade | pass (minimal includes the MCP smoke; upgrade: 0.11.0 → `migrate 0.12` → `migrate 0.13` → boots on the 0.13.0 archives) | pass |
+| production smoke (services) | the app's suite 98 passed, 8 skipped (the live eval), 2 failed (the macOS rate-limit pair); with only the test step skipped: boot, worker with `agents.run`, start, MCP and pm2 smokes pass | pass on Linux, the rate-limit pair included |
 | MCP cold start | 452 ms median to `initialize` ([measurements](../design/0.13-measurements.md)) | — |
 | agents live eval | **not run: no key** | — |
 
 ## Publication
 
-To record after the tag: the merge commit, the `v0.13.0` tag, the publish
-run, registry integrity against the manifest, dist-tags.
+- Merge commit `a61bf13` on `master`; CI on it passed
+  ([run 38739971251](https://github.com/kemora13conf/bp-backend-express/actions/runs/38739971251)).
+- Tag `v0.13.0` on `a61bf13`; the publish workflow re-ran the verify jobs
+  and published the eight archives
+  ([run 38742088173](https://github.com/kemora13conf/bp-backend-express/actions/runs/38742088173)).
+- Registry: each of the eight versions' `dist.integrity` matches the
+  digest in the run's `manifest.json` (commit `a61bf13`); `latest` is core
+  0.13.0, cli 0.4.0, mcp 0.2.0, spec 0.4.1, mongoose and bullmq 0.2.2,
+  testing 0.1.2, socket.io 0.1.4. The registry served the last four a few
+  minutes after the run ended. `next` still names the 0.12 candidates.
