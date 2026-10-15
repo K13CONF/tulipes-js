@@ -1050,13 +1050,13 @@ test("an API token is issued once, reaches what its role grants and its scopes c
   expect((await get("/api/v1/hello/secret", secret)).status).toBe(200);
   const outside = await get("/users", secret);
   expect(outside.status).toBe(403);
-  expect((await outside.json()).errors[0].code).toBe("OUT_OF_SCOPE");
+  expect(await outside.json()).toMatchObject({ errors: [{ code: "OUT_OF_SCOPE" }] });
 
   // Listed without the secret; the stored row holds only a hash.
-  const listed = await (await get("/api/v1/auth/tokens", user.access_token)).json();
+  const listed = await (await get("/api/v1/auth/tokens", user.access_token)).json() as { data: unknown };
   expect(listed.data).toEqual([expect.objectContaining({ token_id, name: "claude-code laptop", scopes: ["hello:web:*"], last_used_at: expect.any(String) })]);
   expect(JSON.stringify(listed)).not.toContain(secret.split("_").at(-1));
-  const row = await app.handle.ctx.models!.get("ApiToken").findOne({ token_id }).select("+secret_hash").lean() as { secret_hash: string };
+  const row = await app.handle.ctx.models!.get("ApiToken").findOne({ token_id }).select("+secret_hash").lean() as unknown as { secret_hash: string };
   expect(row.secret_hash).not.toContain(secret.split("_").at(-1));
 
   // Another user cannot revoke it; its owner can, and the next request is a guest.
@@ -1087,7 +1087,8 @@ test("an API token cannot issue tokens, rejects bad scopes, expires, and dies wi
   const changed = await post("/api/v1/auth/password", { password: randomBytes(24).toString("hex") }, user.access_token);
   expect(changed.status).toBe(200);
   expect((await get("/users", secret)).status).toBe(401);
-  expect((await (await get("/api/v1/auth/tokens", (await changed.json()).data.access_token)).json()).data).toEqual([]);
+  const replacement = tokens.parse(await changed.json()).data.access_token;
+  expect(await (await get("/api/v1/auth/tokens", replacement)).json()).toMatchObject({ data: [] });
 });
 
 // Keep this test last: it boots a second replica, which configures passport
