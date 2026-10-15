@@ -15,5 +15,13 @@
   "sessionEnded": "Session terminée",
   "emailRequired": "Une adresse email est requise",
   "emailInvalid": "Doit être une adresse email valide",
-  "passwordRequired": "Un mot de passe est requis"
+  "passwordRequired": "Un mot de passe est requis",
+  "tokenNameRequired": "Un jeton doit avoir un nom",
+  "tokenNameTooLong": "Le nom d'un jeton fait au plus 100 caractères",
+  "scopeInvalid": "Une portée est une permission ou un motif comme hello:web:* ou *",
+  "tooManyScopes": "Un jeton porte au plus 32 portées",
+  "expiryInvalid": "L'expiration est un nombre entier de jours entre 1 et 365",
+  "tokenNeedsSession": "Les jetons d'API sont émis depuis une session connectée, pas par un autre jeton",
+  "noSuchToken": "Jeton introuvable",
+  "tokenRevoked": "Jeton révoqué"
 }

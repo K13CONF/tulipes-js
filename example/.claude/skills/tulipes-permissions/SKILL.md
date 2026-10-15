@@ -167,10 +167,29 @@ so a demotion takes effect immediately.
 A route that only cares that somebody is signed in still declares a RAI
 and grants it to `user`; there is no separate "just needs auth" guard.
 
+## Scopes: a credential that reaches less
+
+A credential may carry `req.auth.scopes`: grant patterns in the same
+grammar as `acl.allow()` (`hello:web:*`, `users:bo:list`, `*`). A request
+is allowed when the role grants the permission **and** a scope covers it,
+over a route and over an action alike, and `ctx.agent.manifest(actor)`
+lists only those tools. A scope the role lacks grants nothing; `[]`
+reaches nothing; no `scopes` is the role's full grant. Scopes are read from
+the stored credential, never from the client.
+
+The production preset's API tokens are where scopes come from: a signed-in
+user issues one with `POST /auth/tokens { name, scopes?, expires_in_days? }`
+(the secret is returned once), lists them with `GET /auth/tokens` and
+revokes one with `DELETE /auth/tokens/:token_id`. Issue the narrowest
+scope the task needs — `hello:web:*` for an agent that greets. A token
+cannot issue tokens, and a password change retires every token.
+
 ## Denials
 
 The RAI answers 401 when the caller is a guest (signing in would help) and
-403 when they are authenticated but lack the grant (it would not).
+403 when they are authenticated but lack the grant (it would not). A
+scoped credential whose role holds the grant but whose scopes do not
+cover it gets 403 `OUT_OF_SCOPE`, so a client can tell the two apart.
 
 ## Gotchas
 

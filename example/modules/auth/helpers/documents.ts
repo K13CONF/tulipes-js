@@ -30,6 +30,21 @@ export interface SessionAttrs {
   created_at: Date;
 }
 
+export interface ApiTokenAttrs {
+  _id: Types.ObjectId;
+  token_id: string;
+  user: Types.ObjectId;
+  name: string;
+  /** select:false — only resolution asks for it. */
+  secret_hash?: string;
+  /** Absent: the user's full role. */
+  scopes?: string[];
+  credential_version: string;
+  last_used_at?: Date;
+  expires_at?: Date;
+  created_at: Date;
+}
+
 /**
  * `req.auth.user` and `req.auth.session` are hydrated documents, not lean
  * objects: the plugins and instance methods are available on them, and a

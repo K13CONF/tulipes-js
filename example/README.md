@@ -64,7 +64,7 @@ before writing your own:
 |---|---|
 | `pnpm dev` | regenerate types, run the backend process with `node --watch` |
 | `pnpm worker` | run the queue-consumer process (needs a queue first) | <!-- feature:queues -->
-| `pnpm mcp --token <access token>` | serve the modules' actions to an MCP client on stdio (`config/mcp.config.ts` says who the caller is) |
+| `pnpm mcp --token <api token>` | serve the modules' actions to an MCP client on stdio (`config/mcp.config.ts` says who the caller is) |
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm check` | validate env against every module contract — CI gate |
 | `pnpm tulipes new module <name>` | scaffold a module (`--scope bo` for the back office) |
@@ -140,6 +140,16 @@ Sessions are rows, so a signed-in account can see and end its own
 devices — `GET /auth/sessions`, `DELETE /auth/sessions/:sid`. Ending
 one takes effect on the next request that device makes, even though
 its access token is still signed and unexpired.
+
+API tokens are for agents, MCP clients and scripts: a signed-in user
+issues one with `POST /auth/tokens` (`{ name, scopes?, expires_in_days? }`),
+sees the secret once (`tulipes-example_<id>_<secret>`), lists them with
+`GET /auth/tokens` and revokes one with `DELETE /auth/tokens/:token_id`.
+`scopes` are grant patterns (`hello:web:*`) that narrow the user's role,
+never widen it; a call outside them is refused 403 `OUT_OF_SCOPE`. The role
+is read from the user on each use, a password change retires every token,
+and a token cannot issue another. `pnpm mcp --token <secret>` serves the
+app's actions as that token.
 
 Passwords never touch the User document: the hash lives in the auth
 module's `Credential` model, `select: false`, so a route that

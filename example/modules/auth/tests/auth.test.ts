@@ -1033,6 +1033,65 @@ test("an authenticated request on a cache hit performs no database read", async 
   }
 });
 
+async function issue(token: string, body: unknown) {
+  const response = await post("/api/v1/auth/tokens", body, token);
+  return { status: response.status, body: await response.json() as { data: { token_id: string; secret: string; scopes: string[] | null } | null; errors: { code: string; field: string | null }[] } };
+}
+
+test("an API token is issued once, reaches what its role grants and its scopes cover, and is refused once revoked", async () => {
+  const user = await account();
+  const issued = await issue(user.access_token, { name: "claude-code laptop", scopes: ["hello:web:*"] });
+  expect(issued.status).toBe(201);
+  const { token_id, secret } = issued.body.data!;
+  expect(secret).toMatch(new RegExp(`^tulipes-example_${token_id}_[a-f0-9]{64}$`));
+  expect(issued.body.data!.scopes).toEqual(["hello:web:*"]);
+
+  // In scope and granted to the role: reached. Granted but out of scope: refused as such.
+  expect((await get("/api/v1/hello/secret", secret)).status).toBe(200);
+  const outside = await get("/users", secret);
+  expect(outside.status).toBe(403);
+  expect((await outside.json()).errors[0].code).toBe("OUT_OF_SCOPE");
+
+  // Listed without the secret; the stored row holds only a hash.
+  const listed = await (await get("/api/v1/auth/tokens", user.access_token)).json();
+  expect(listed.data).toEqual([expect.objectContaining({ token_id, name: "claude-code laptop", scopes: ["hello:web:*"], last_used_at: expect.any(String) })]);
+  expect(JSON.stringify(listed)).not.toContain(secret.split("_").at(-1));
+  const row = await app.handle.ctx.models!.get("ApiToken").findOne({ token_id }).select("+secret_hash").lean() as { secret_hash: string };
+  expect(row.secret_hash).not.toContain(secret.split("_").at(-1));
+
+  // Another user cannot revoke it; its owner can, and the next request is a guest.
+  const other = await account();
+  expect((await fetch(app.base + "/api/v1/auth/tokens/" + token_id, { method: "DELETE", headers: { authorization: "Bearer " + other.access_token } })).status).toBe(404);
+  expect((await fetch(app.base + "/api/v1/auth/tokens/" + token_id, { method: "DELETE", headers: { authorization: "Bearer " + user.access_token } })).status).toBe(200);
+  expect((await get("/api/v1/hello/secret", secret)).status).toBe(401);
+});
+
+test("an API token cannot issue tokens, rejects bad scopes, expires, and dies with a password change", async () => {
+  const user = await account();
+  const { secret } = (await issue(user.access_token, { name: "unscoped" })).body.data!;
+  expect((await get("/users", secret)).status).toBe(200);
+
+  const minted = await issue(secret, { name: "successor" });
+  expect(minted).toMatchObject({ status: 403, body: { errors: [{ code: "TOKEN_NEEDS_SESSION" }] } });
+  expect((await issue(user.access_token, { name: "bad", scopes: ["users:read"] })).status).toBe(422);
+  expect((await issue(user.access_token, { name: "bad", expires_in_days: 0 })).status).toBe(422);
+
+  const expiring = (await issue(user.access_token, { name: "short", expires_in_days: 1 })).body.data!;
+  await app.handle.ctx.models!.get("ApiToken").updateOne({ token_id: expiring.token_id }, { expires_at: new Date(Date.now() - 1000) });
+  expect((await get("/users", expiring.secret)).status).toBe(401);
+
+  // A forged secret for a real token id is not a caller.
+  const forged = secret.replace(/[a-f0-9]{64}$/, "0".repeat(64));
+  expect((await get("/users", forged)).status).toBe(401);
+
+  const changed = await post("/api/v1/auth/password", { password: randomBytes(24).toString("hex") }, user.access_token);
+  expect(changed.status).toBe(200);
+  expect((await get("/users", secret)).status).toBe(401);
+  expect((await (await get("/api/v1/auth/tokens", (await changed.json()).data.access_token)).json()).data).toEqual([]);
+});
+
+// Keep this test last: it boots a second replica, which configures passport
+// (a process-wide singleton) with its own context and then shuts it down.
 test("a revocation on one replica is refused on the very next request on another", async () => {
   const next = await boot({
     rootDir,

@@ -1,7 +1,7 @@
 import { appCache } from "@app/core";
 import type { Ctx } from "@tulipes/core/boot";
 
-import type { SessionAttrs, UserAttrs } from "./documents.ts";
+import type { ApiTokenAttrs, SessionAttrs, UserAttrs } from "./documents.ts";
 
 /**
  * What a bearer token resolves to, kept in the app cache (Redis in
@@ -22,6 +22,7 @@ export interface CachedIdentity {
 }
 
 const KEY = "auth:session:";
+const TOKEN_KEY = "auth:token:";
 
 /** How long an entry may live: the setting, bounded by the access token's own lifetime. */
 export function cacheTtlSeconds(ctx: Ctx): number {
@@ -46,14 +47,42 @@ export async function forgetSession(ctx: Ctx, sid: string): Promise<void> {
   await appCache(ctx).del(KEY + sid);
 }
 
+/** What an API token resolves to: its user and the token row, without the hash. */
+export interface CachedTokenIdentity {
+  user: UserAttrs;
+  token: ApiTokenAttrs;
+}
+
+export async function readTokenIdentity(ctx: Ctx, tokenId: string): Promise<CachedTokenIdentity | null> {
+  if (cacheTtlSeconds(ctx) === 0) return null;
+  return appCache(ctx).get<CachedTokenIdentity>(TOKEN_KEY + tokenId);
+}
+
+export async function writeTokenIdentity(ctx: Ctx, tokenId: string, identity: CachedTokenIdentity): Promise<void> {
+  const ttl = cacheTtlSeconds(ctx);
+  if (ttl === 0) return;
+  await appCache(ctx).set(TOKEN_KEY + tokenId, identity, ttl);
+}
+
+/** Forget one API token: the next request with it takes the cold path. */
+export async function forgetToken(ctx: Ctx, tokenId: string): Promise<void> {
+  await appCache(ctx).del(TOKEN_KEY + tokenId);
+}
+
 /**
- * Forget every session of a user — after a password change, a role
- * change or a deletion. The sids come from the rows that exist now, so
- * this runs BEFORE the rows are deleted when both happen.
+ * Forget every session and API token of a user — after a password change,
+ * a role change or a deletion. The ids come from the rows that exist now,
+ * so this runs BEFORE the rows are deleted when both happen.
  */
 export async function forgetUser(ctx: Ctx, userId: string): Promise<void> {
-  const rows = await ctx.models!.get<{ sid: string }>("Session").find({ user: userId }).select("sid -_id").lean();
-  await Promise.all(rows.map((row) => forgetSession(ctx, row.sid)));
+  const [sessions, tokens] = await Promise.all([
+    ctx.models!.get<{ sid: string }>("Session").find({ user: userId }).select("sid -_id").lean(),
+    ctx.models!.get<{ token_id: string }>("ApiToken").find({ user: userId }).select("token_id -_id").lean(),
+  ]);
+  await Promise.all([
+    ...sessions.map((row) => forgetSession(ctx, row.sid)),
+    ...tokens.map((row) => forgetToken(ctx, row.token_id)),
+  ]);
 }
 
 /** `15m`, `1h`, `30d`, `900` (seconds) — the subset of ms/jsonwebtoken durations a TTL is written in. */

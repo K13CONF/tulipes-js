@@ -40,14 +40,15 @@ export default function authAcl(acl: AclBuilder): void {
   acl.allow("guest", "auth:web:login", "auth:web:register", "auth:web:refresh");
 
   // Signed in: end your session, read yourself, change your own password,
-  // and manage the devices you are signed in on (`auth:web:sessions:*`
-  // covers listing them and ending one).
+  // manage the devices you are signed in on (`auth:web:sessions:*` covers
+  // listing them and ending one) and your API tokens.
   acl.allow(
     "user",
     "auth:web:logout",
     "auth:web:me",
     "auth:web:password",
     "auth:web:sessions:*",
+    "auth:web:tokens:*",
   );
   // `admin` is granted each feature namespace EXPLICITLY rather than "*".
   // A wildcard would also reach settings:*, and the infrastructure console

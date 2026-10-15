@@ -103,8 +103,10 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    apart.** `agent/<module>.agent.ts` lists the module's actions — id,
    description, input schema, handler — and nothing is derived from the
    routes. An action and a route share logic through `helpers/`; neither
-   calls the other. `ctx.agent` carries every action in every process.
-   → skill `tulipes-agent-tool`
+   calls the other. `ctx.agent` carries every action in every process,
+   and `pnpm mcp` serves them to MCP clients. Give an agent a credential
+   limited to scopes (grant patterns, `hello:web:*`): a scope only ever
+   narrows the user's role. → skills `tulipes-agent-tool`, `tulipes-permissions`
 15. **A module's tests live in `modules/<name>/tests/` and boot the app
    through `@tulipes/testing`**: `useTestApp({ rootDir }, { beforeAll,
    afterAll })` once per file, `app.get(app.api("/x"))` with the envelope
@@ -154,6 +156,7 @@ luck.
 |---|---|
 | `pnpm dev` | run the backend process (regenerates types first) |
 | `pnpm worker` | run the queue-consumer process |
+| `pnpm mcp [--token t]` | serve the modules' actions to an MCP client on stdio; `config/mcp.config.ts` identifies the caller |
 | `pnpm sync` | regenerate `types/tulipes.d.ts` + `.env.example` |
 | `pnpm tulipes routes [--scope s]` | every endpoint with the roles that reach it, offline |
 | `pnpm tulipes roles [--role r]` | every role with its description, extras and grants, offline |

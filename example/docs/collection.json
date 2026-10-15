@@ -756,6 +756,112 @@
       ]
     },
     {
+      "name": "tokens",
+      "item": [
+        {
+          "name": "Issue an API token",
+          "request": {
+            "method": "POST",
+            "description": "A named, revocable bearer limited to scopes; the secret is returned once",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/tokens",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "tokens"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"string\",\n  \"scopes\": [\n    \"string\"\n  ],\n  \"expires_in_days\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "List API tokens",
+          "request": {
+            "method": "GET",
+            "description": "The caller's live tokens, without secrets",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/tokens",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "tokens"
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Revoke an API token",
+          "request": {
+            "method": "DELETE",
+            "description": "The next request carrying it is a guest",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/tokens/{{token_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "tokens",
+                "{{token_id}}"
+              ],
+              "variable": [
+                {
+                  "key": "token_id",
+                  "value": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        }
+      ]
+    },
+    {
       "name": "users",
       "item": [
         {

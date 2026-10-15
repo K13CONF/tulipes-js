@@ -6,6 +6,7 @@ import type { Ctx } from "@tulipes/core/boot";
 import type { ToolActor } from "@tulipes/core/agent";
 import type { Auth } from "@tulipes/core/http";
 
+import { identifyApiToken, isApiToken } from "./api-tokens.ts";
 import { verifyPassword } from "./passwords.ts";
 import {
   isRevoked,
@@ -156,12 +157,18 @@ async function identifyClaims(ctx: Ctx, claims: TokenClaims): Promise<Auth | und
  * Who a bearer credential belongs to, outside a request: the actor an MCP
  * process (`config/mcp.config.ts`) or a job acts as, with the role read from
  * the user, never from the token. Null for anything that is not a live
- * access token. API tokens resolve here too once 0.13-S02 lands.
+ * access token or a live API token.
  */
 export async function identifyCredential(ctx: Ctx, credential: string | undefined): Promise<ToolActor | null> {
-  const claims = credential ? verify(ctx, credential, "access") : undefined;
-  const resolved = claims && await identifyClaims(ctx, claims);
+  const resolved = credential ? await identifyBearer(ctx, credential) : undefined;
   return resolved ? { ...resolved, role: resolved.user!.role } : null;
+}
+
+/** An API token by its shape, otherwise an access JWT. */
+async function identifyBearer(ctx: Ctx, bearer: string): Promise<Auth | undefined> {
+  if (isApiToken(bearer)) return identifyApiToken(ctx, bearer);
+  const claims = verify(ctx, bearer, "access");
+  return claims && identifyClaims(ctx, claims);
 }
 
 /**
@@ -189,9 +196,19 @@ function touchInterval(ctx: Ctx): number {
 /**
  * Runs on every request. Populates `req.auth`, and never rejects: an
  * unauthenticated caller becomes the guest, and the ACL decides from there.
+ * An API token is told from a JWT by its shape and resolved without
+ * passport; everything else is the jwt strategy's.
  */
-export function authenticate(): import("express").RequestHandler {
+export function authenticate(ctx: Ctx): import("express").RequestHandler {
   return (req, res, next) => {
+    const bearer = /^Bearer (.+)$/.exec(req.header("authorization") ?? "")?.[1];
+    if (bearer && isApiToken(bearer)) {
+      identifyApiToken(ctx, bearer).then((resolved) => {
+        req.auth = resolved ?? { ...GUEST };
+        next();
+      }, next);
+      return;
+    }
     passport.authenticate(
       "jwt",
       { session: false },

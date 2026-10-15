@@ -10,8 +10,11 @@ import {
   newPassword,
   refreshBody,
   registration,
+  issuedToken,
   sidParam,
+  tokenIdParam,
   tokenPair,
+  tokenRequest,
 } from "../schemas/auth.schemas.ts";
 
 /**
@@ -30,7 +33,7 @@ export default function authRoutes(ctx: BackendCtx): void {
     configurePassport(ctx);
     return passport.initialize();
   }));
-  app.use(lazy(() => authenticate()));
+  app.use(lazy(() => authenticate(ctx)));
 
   const router = Router();
 
@@ -94,6 +97,33 @@ export default function authRoutes(ctx: BackendCtx): void {
       description: "Set a new password and end every other session",
       body: newPassword,
     }), auth.changePassword());
+
+  // API tokens: what a user gives an agent or an MCP client (`pnpm mcp
+  // --token`). `auth:web:tokens:*` covers all three.
+  router.post("/tokens", rai({
+      id: "auth:web:tokens:issue",
+      status: 201,
+      name: "Issue an API token",
+      description: "A named, revocable bearer limited to scopes; the secret is returned once",
+      folder: "tokens",
+      body: tokenRequest,
+      returns: issuedToken,
+    }), auth.issueToken());
+
+  router.get("/tokens", rai({
+      id: "auth:web:tokens",
+      name: "List API tokens",
+      description: "The caller's live tokens, without secrets",
+      folder: "tokens",
+    }), auth.tokens());
+
+  router.delete("/tokens/:token_id", rai({
+      id: "auth:web:tokens:revoke",
+      name: "Revoke an API token",
+      description: "The next request carrying it is a guest",
+      folder: "tokens",
+      params: tokenIdParam,
+    }), auth.revokeToken());
 
   routes.mount(router, `${config.api!.prefix}/auth`);
 }
