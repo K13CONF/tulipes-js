@@ -11,6 +11,38 @@ what makes it work under nvm.
 
 ---
 
+## 0.13.0 — an MCP process, API tokens, credential scopes
+
+Additive: an app on 0.12 runs unchanged. Nothing to do for scopes until a
+credential carries them; `req.auth.scopes` absent is the role's full grant.
+
+**The MCP process.** `tulipes migrate 0.13` adds `mcp.ts`,
+`config/mcp.config.ts`, the `mcp` script, `@tulipes/mcp` as a dependency and
+`mcp.ts` in the tsconfig's `include`, and changes nothing that exists. Then
+`pnpm install`, and `pnpm mcp` serves the modules' actions on stdio
+(`claude mcp add <name> -- pnpm --silent mcp --token "$TOKEN"`).
+For remote agents, `transport: { http: { port: 3100 } }` in the config
+serves Streamable HTTP on its own port; the production nginx template has
+the commented `location = /mcp` to expose it.
+
+**API tokens (production preset).** The auth module is your code, so the
+command does not edit it. Without `identifyCredential` in
+`modules/auth/lib/index.ts` the migrated config identifies by `MCP_ROLE`,
+which is development only, and the report lists what to copy from the
+reference app: `models/api-token.model.ts`, `helpers/api-tokens.ts`, the
+`identifyCredential`/`authenticate(ctx)` change in `helpers/passport.ts`,
+the token identities in `helpers/session-cache.ts` (so `forgetUser()`
+forgets tokens too), the `/auth/tokens` controller methods, routes,
+schemas and messages, and `"auth:web:tokens:*"` for `user` in
+`module.acl.ts`. With those in place, delete `config/mcp.config.ts` and run
+the command again: it writes the config that identifies through the auth
+module.
+
+**A refusal to read.** A scoped credential refused by its scopes rather
+than its role answers 403 with code `OUT_OF_SCOPE`, not `FORBIDDEN`.
+
+---
+
 ## 0.12.0 — environment values in the config
 
 `ctx.Environment` is gone. A module's variables are its **environment

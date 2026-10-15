@@ -15,5 +15,13 @@
   "sessionEnded": "Session ended",
   "emailRequired": "An email address is required",
   "emailInvalid": "Must be a valid email address",
-  "passwordRequired": "A password is required"
+  "passwordRequired": "A password is required",
+  "tokenNameRequired": "A token needs a name",
+  "tokenNameTooLong": "A token name is at most 100 characters",
+  "scopeInvalid": "A scope is a permission or a pattern such as hello:web:* or *",
+  "tooManyScopes": "A token carries at most 32 scopes",
+  "expiryInvalid": "Expiry is a whole number of days between 1 and 365",
+  "tokenNeedsSession": "API tokens are issued from a signed-in session, not by another token",
+  "noSuchToken": "No such token",
+  "tokenRevoked": "Token revoked"
 }

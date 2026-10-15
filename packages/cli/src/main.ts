@@ -13,6 +13,7 @@ import { runSpec } from "./spec.ts";
 import { runAgentManifest } from "./agent.ts";
 import { runMigrate } from "./migrate.ts";
 import { runMigrate012 } from "./migrate-0.12.ts";
+import { runMigrate013 } from "./migrate-0.13.ts";
 import { runConfigImport } from "./config-import.ts";
 import { appCoreVersion, cliVersion, coreVersion } from "./package-info.ts";
 
@@ -43,6 +44,7 @@ Usage:
   tulipes migrate 0.12         give every RAI id a scope (users:read → users:web:read) and move the
                                  environment into the config (tulipes.env keyed by name, ctx.config.<module>.<name>)
                                  --scope <scope>  the scope to insert (default: web)
+  tulipes migrate 0.13         add the MCP process: mcp.ts, config/mcp.config.ts, the mcp script and @tulipes/mcp
   tulipes config:import        carry .envs values that became settings into the store
                                  --env <APP_ENV>  --from <file>  --dry-run
   tulipes agent manifest       print every tool the app exposes to agents, as JSON
@@ -89,11 +91,19 @@ export async function main(argv: readonly string[]): Promise<void> {
       const [target, flag, scope, ...extra] = rest;
       const valid = target !== undefined && (flag === undefined || (flag === "--scope" && scope !== undefined && !scope.startsWith("-") && extra.length === 0));
       if (!valid) {
-        console.error("Usage: tulipes migrate 0.11 | tulipes migrate 0.12 [--scope <scope>]");
+        console.error("Usage: tulipes migrate 0.11 | tulipes migrate 0.12 [--scope <scope>] | tulipes migrate 0.13");
         process.exitCode = 2;
         return;
       }
       const options = scope === undefined ? {} : { scope };
+      if (target === "0.13") {
+        if (flag !== undefined) {
+          console.error("--scope applies to tulipes migrate 0.12 only");
+          process.exitCode = 2;
+          return;
+        }
+        return runMigrate013(rootDir);
+      }
       return target === "0.12" ? runMigrate012(rootDir, options) : runMigrate(rootDir, target, options);
     }
     case "env:check":

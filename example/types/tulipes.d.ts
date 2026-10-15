@@ -48,6 +48,8 @@ declare module "@tulipes/core/config" {
 
 declare module "@tulipes/mongoose" {
   interface KnownModels {
+    /** [auth] modules/auth/models/api-token.model.ts */
+    "ApiToken": (typeof import("./../modules/auth/models/api-token.model.ts"))["default"];
     /** [auth] modules/auth/models/credential.model.ts */
     "Credential": (typeof import("./../modules/auth/models/credential.model.ts"))["default"];
     /** [auth] modules/auth/models/revoked-token.model.ts */

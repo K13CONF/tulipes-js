@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -7,6 +7,7 @@ import { migrate, rewriteInspection, rewriteParameterProperties, rewriteSpecifie
 import { migrate012, rewriteAllowCalls } from "../src/migrate-0.12.ts";
 import { configNameOf, migrateEnv } from "../src/migrate-0.12-env.ts";
 import { migrateScaffoldIdioms } from "../src/migrate-0.12-scaffold.ts";
+import { migrate013 } from "../src/migrate-0.13.ts";
 import { parseEnv, runConfigImport } from "../src/config-import.ts";
 
 /**
@@ -551,4 +552,38 @@ export default function credentials({ Environment }: RuntimeCtx): void {
   expect(rewritten).not.toContain("Environment");
   expect(changed).toEqual(["modules/auth/bootstrap/credentials.bootstrap.ts: reads config.auth.*, names the variables in its message"]);
   expect(await readFile(join(app.rootDir, "modules/auth/helpers/tokens.ts"), "utf8")).toContain("edited past recognition");
+});
+
+test("migrate 0.13 adds the MCP process, identifies through auth when it can, and runs once", async () => {
+  const pkg = { name: "@acme/shop", private: true, type: "module", scripts: { start: "node app.ts" }, dependencies: { "@tulipes/core": "^0.12.0" }, devDependencies: { "@tulipes/mcp": "^0.1.1" } };
+  const tsconfig = { compilerOptions: {}, include: ["app.ts", "modules"] };
+  const app = await fixture({
+    "package.json": JSON.stringify(pkg),
+    "tsconfig.json": JSON.stringify(tsconfig),
+    "modules/auth/lib/index.ts": `export { auth } from "../helpers/auth.ts";\n`,
+  });
+
+  const report = migrate013(app.rootDir);
+  expect(report.changed).toEqual([
+    "mcp.ts: added",
+    "config/mcp.config.ts: added",
+    'package.json: scripts.mcp = "node mcp.ts"',
+    'package.json: dependencies["@tulipes/mcp"] = "^0.1.1" (mcp.ts runs in production)',
+    'tsconfig.json: include "mcp.ts"',
+  ]);
+  // An auth module without identifyCredential: the development identity, and the files to copy.
+  expect(await readFile(app.rootDir + "/config/mcp.config.ts", "utf8")).toContain('developmentIdentity("MCP_ROLE")');
+  expect(report.todos).toEqual([expect.stringContaining("modules/auth/helpers/api-tokens.ts")]);
+  expect(await readFile(app.rootDir + "/mcp.ts", "utf8")).toContain("claude mcp add shop");
+  const migrated = JSON.parse(await readFile(app.rootDir + "/package.json", "utf8"));
+  expect(migrated).toMatchObject({ scripts: { mcp: "node mcp.ts" }, dependencies: { "@tulipes/mcp": "^0.1.1" }, devDependencies: {} });
+  expect(JSON.parse(await readFile(app.rootDir + "/tsconfig.json", "utf8")).include).toEqual(["app.ts", "mcp.ts", "modules"]);
+
+  expect(migrate013(app.rootDir)).toEqual({ changed: [], todos: [] });
+
+  // With API tokens copied in, a fresh config identifies through them.
+  await app.write("modules/auth/lib/index.ts", `export { identifyCredential } from "../helpers/passport.ts";\n`);
+  await rm(app.rootDir + "/config/mcp.config.ts");
+  expect(migrate013(app.rootDir)).toEqual({ changed: ["config/mcp.config.ts: added"], todos: [] });
+  expect(await readFile(app.rootDir + "/config/mcp.config.ts", "utf8")).toContain("identifyCredential(ctx, credential)");
 });

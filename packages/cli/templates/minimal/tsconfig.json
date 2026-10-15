@@ -14,6 +14,7 @@
   },
   "include": [
     "app.ts",
+    "mcp.ts",
     "modules",
     "types",
     "config",

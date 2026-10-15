@@ -1,6 +1,6 @@
 ---
 name: tulipes-agent-tool
-description: Use when a Tulipes module should offer something to AI agents — declaring an action, describing the module, building an agent inside the app from the other modules' actions, or wiring the app to Claude Code through MCP. Covers agent/*.agent.ts, ctx.agent, the manifest, the agent door and tulipes-mcp.
+description: Use when a Tulipes module should offer something to AI agents — declaring an action, describing the module, building an agent inside the app from the other modules' actions, or wiring the app to Claude Code through MCP. Covers agent/*.agent.ts, ctx.agent, the manifest, the agent door, `pnpm mcp` and config/mcp.config.ts.
 ---
 
 # Offering a module's actions to agents
@@ -84,19 +84,43 @@ const result = await ctx.agent.invoke(name, input, actor); // ACL, then schema, 
 A long run belongs in a queue job (`queues/`), where `ctx.agent` is the
 same registry.
 
-## The door and MCP
+## MCP: `pnpm mcp`
 
-For agents outside the process, the app's `agent` module serves the
-manifest at `GET <prefix>/agent/tools`, filtered to the caller's role, and
-runs actions at `POST <prefix>/agent/tools/<name>`. Any client with a
-bearer token the auth module accepts can use it. For Claude Code or Claude
-Desktop:
+The app is its own MCP server. `mcp.ts` (beside `app.ts`) boots the app in
+script mode and serves the actions in process: `tools/list` is
+`ctx.agent.manifest(actor)`, `tools/call` is `ctx.agent.invoke()`, so the
+ACL, the credential's scopes and the input schemas decide exactly as they
+do over HTTP. Who the caller is comes from `config/mcp.config.ts`:
 
-```sh
-pnpm add -D @tulipes/mcp
-claude mcp add my-app -- pnpm tulipes-mcp --url http://localhost:3000/api/v1/agent --token "$TOKEN"
+```ts
+export default defineMcp({
+  transport: "stdio",
+  // The production preset resolves the bearer through the auth module;
+  // the minimal preset uses developmentIdentity("MCP_ROLE"), refused in production.
+  identify: (ctx, credential) => identifyCredential(ctx, credential),
+});
 ```
 
-`tulipes-mcp` lists the manifest as MCP tools and calls each through the
-door with that token, so the app's own auth and ACL decide — it adds no
+```sh
+claude mcp add my-app -- pnpm --silent mcp --token "$TOKEN"   # or TULIPES_MCP_TOKEN
+```
+
+For remote agents, `transport: { http: { port: 3100 } }` serves MCP's
+Streamable HTTP at `http://127.0.0.1:3100/mcp` instead; every request is
+identified by its own `Authorization: Bearer`, and in production the
+process refuses to listen without an `identify`.
+
+No `identify`, or a credential it does not accept, is a guest. `identify`
+runs again on every list and call, so a revoked token or a changed role
+applies to a running session. Every call writes one audit line to stderr;
+stdout is the protocol, and the app's own logs are moved off it.
+
+## The door
+
+For agents that reach the app over HTTP, the `agent` module serves the
+manifest at `GET <prefix>/agent/tools`, filtered to the caller's role and
+scopes, and runs actions at `POST <prefix>/agent/tools/<name>`. The
+`tulipes-mcp` bin bridges that door to stdio
+(`pnpm tulipes-mcp --url http://localhost:3000/api/v1/agent --token "$TOKEN"`)
+for a client that cannot start a process beside the app; it adds no
 identity of its own and never touches the database.

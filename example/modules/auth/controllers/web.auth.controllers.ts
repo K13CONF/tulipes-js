@@ -7,6 +7,7 @@ import {
   type FieldIssue,
 } from "@tulipes/core/http";
 
+import { issueToken, listTokens, revokeToken } from "../helpers/api-tokens.ts";
 import { auth } from "../helpers/auth.ts";
 import type { PasswordIdentity, UserDoc } from "../helpers/documents.ts";
 import { setPassword } from "../helpers/passwords.ts";
@@ -293,6 +294,43 @@ export class WebAuthController {
           ...tokens,
         },
       });
+    };
+  }
+
+  /**
+   * Issue an API token for the caller. Only from a signed-in session: a
+   * token cannot issue tokens, or a leaked one would mint its successors.
+   * The secret is in this response and nowhere else, ever.
+   */
+  issueToken(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      if (!req.auth.session) throw new HttpError(403, "tokenNeedsSession", { code: "TOKEN_NEEDS_SESSION" });
+      const { name, scopes, expires_in_days } = req.body as { name: string; scopes?: string[]; expires_in_days?: number };
+      const token = await issueToken(this.#ctx, String(req.auth.user!._id), {
+        name,
+        ...(scopes && { scopes: [...new Set(scopes)] }),
+        ...(expires_in_days !== undefined && { expiresInDays: expires_in_days }),
+      });
+      res.respond({ status: 201, data: token });
+    };
+  }
+
+  /** The caller's live API tokens, without secrets. */
+  tokens(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const rows = await listTokens(this.#ctx, String(req.auth.user!._id));
+      res.respond({ data: rows, meta: { total_items: rows.length } });
+    };
+  }
+
+  /** Revoke one of the caller's tokens; the next request carrying it is a guest. */
+  revokeToken(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const tokenId = String(req.params.token_id);
+      if (!await revokeToken(this.#ctx, String(req.auth.user!._id), tokenId)) {
+        throw new HttpError(404, "noSuchToken", { field: "token_id" });
+      }
+      res.respond({ data: { message: req.t("tokenRevoked"), token_id: tokenId } });
     };
   }
 

@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { isGrant } from "@tulipes/core/acl";
 
 /**
  * Request shapes for the auth endpoints, used twice from one declaration:
@@ -34,4 +35,25 @@ export const tokenPair = z.object({
   access_token: z.string(),
   refresh_token: z.string(),
   expires_in: z.string(),
+});
+
+// Scopes are grant patterns, as module.acl.ts writes them: `hello:web:*`,
+// `users:bo:list`, `*`. A scope the user's role lacks grants nothing.
+export const tokenRequest = z.object({
+  name: z.string("tokenNameRequired").trim().min(1, "tokenNameRequired").max(100, "tokenNameTooLong"),
+  scopes: z.array(z.string("scopeInvalid").refine(isGrant, "scopeInvalid")).max(32, "tooManyScopes").optional(),
+  expires_in_days: z.int("expiryInvalid").min(1, "expiryInvalid").max(365, "expiryInvalid").optional(),
+});
+
+export const tokenIdParam = z.object({
+  token_id: z.string().regex(/^[a-f0-9]{16}$/, "noSuchToken"),
+});
+
+export const issuedToken = z.object({
+  token_id: z.string(),
+  name: z.string(),
+  scopes: z.array(z.string()).nullable(),
+  expires_at: z.iso.datetime().nullable(),
+  created_at: z.iso.datetime(),
+  secret: z.string(),
 });

@@ -13,6 +13,7 @@
   "scripts": {
     "dev": "tulipes dev",
     "worker": "node worker.ts",
+    "mcp": "node mcp.ts",
     "sync": "tulipes sync",
     "check": "tulipes env:check",
     "typecheck": "tsc --noEmit",
@@ -33,6 +34,7 @@
   "dependencies": {
     "@tulipes/bullmq": "workspace:*",
     "@tulipes/core": "workspace:*",
+    "@tulipes/mcp": "workspace:*",
     "@tulipes/mongoose": "workspace:*",
     "@tulipes/socket.io": "workspace:*",
     "ioredis": "^5",

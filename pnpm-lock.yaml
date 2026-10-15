@@ -45,6 +45,9 @@ importers:
       '@tulipes/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@tulipes/mcp':
+        specifier: workspace:*
+        version: link:../packages/mcp
       '@tulipes/mongoose':
         specifier: workspace:*
         version: link:../packages/mongoose
