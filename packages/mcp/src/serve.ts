@@ -140,6 +140,9 @@ export async function serveMcp(options: ServeMcpOptions): Promise<McpProcess> {
       await handle.shutdown();
     };
     server.onclose = () => void handle.shutdown();
+    // The client went away (it closes stdin to end the session): close, so
+    // the app shuts down and the process exits instead of lingering.
+    if (!options.transport) process.stdin.once("end", () => void server.close());
     return { handle, server, close };
   } catch (error) {
     await handle.shutdown();

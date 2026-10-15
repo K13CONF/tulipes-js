@@ -44,7 +44,9 @@ async function withBackend(use) {
 
 /** One MCP session: initialize, then each call in order; returns the results and both streams. */
 async function session(args, env, calls) {
-  const child = spawn('pnpm', ['--silent', 'mcp', ...args], { env: { ...process.env, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  // Detached, so the whole group can be stopped: pnpm does not forward a
+  // signal to `node mcp.ts` on every platform.
+  const child = spawn('pnpm', ['--silent', 'mcp', ...args], { env: { ...process.env, ...env }, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', chunk => (stdout += chunk));
@@ -60,23 +62,27 @@ async function session(args, env, calls) {
     }
     throw new Error(`no MCP reply ${id}\nstderr: ${stderr}`);
   };
+  const results = [];
+  let forced = false;
   try {
     send({ id: 0, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'mcp-smoke', version: '0' } } });
     await reply(0);
     send({ method: 'notifications/initialized' });
-    const results = [];
     for (const [index, call] of calls.entries()) {
       send({ id: index + 1, ...call });
       results.push((await reply(index + 1)).result);
     }
     // Nothing but the protocol on stdout: the banner, logs and audit lines are on stderr.
     for (const line of stdout.trim().split('\n')) assert.equal(JSON.parse(line).jsonrpc, '2.0', 'non-protocol line on stdout: ' + line);
-    return { results, stderr };
   } finally {
+    // Closing stdin is how a client ends a stdio session: the server shuts
+    // the app down and exits. The group kill is the backstop.
     child.stdin.end();
-    child.kill('SIGTERM');
-    await exited;
+    const force = setTimeout(() => { forced = true; try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, 10_000);
+    try { await exited; } finally { clearTimeout(force); }
   }
+  assert.ok(!forced, 'pnpm mcp did not exit within 10s of its client closing stdin');
+  return { results, stderr };
 }
 
 const names = result => result.tools.map(tool => tool.name);
