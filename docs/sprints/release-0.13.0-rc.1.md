@@ -1,6 +1,12 @@
 # Release — core 0.13.0-rc.1, the 0.13 line's first candidate
 
-Status: **prepared locally, not tagged, not published.** Published to npm's
+Status: **superseded — never tagged, never published.** On 2026-10-15 the
+maintainer took S04 (the agents module) into the line and then chose to
+publish 0.13.0 directly as stable, without a candidate; see
+[release-0.13.0.md](./release-0.13.0.md). What follows is the record as it
+stood.
+
+Originally: **prepared locally, not tagged, not published.** Published to npm's
 `next` tag; `latest` stays on 0.12.0. Owning items: S01, S02, S03 and S05 of
 [the 0.13 plan](./0.13-plan.md). S04 (a reference agent) is not part of this
 candidate. Tagging and publishing are authorized operations, not side effects

@@ -752,7 +752,10 @@ overturn):
    between two tool calls in one process, while this loop pauses for
    approval, persists every step and resumes in another worker — the case
    the API skill names for owning the loop.
-3. **The 0.13 line carries S04**, so `0.13.0-rc.1` as prepared on
+3. **The 0.13 line carries S04.** (Superseded on 2026-10-15: no candidate
+   is published — 0.13.0 goes to `latest` directly, and the live eval of
+   S04.4 is not run, there being no key; the module ships experimental.)
+   Originally: `0.13.0-rc.1` as prepared on
    `4d0871d` (untagged) is superseded: the bumps stay, the candidate that
    is tagged is the one that carries the module, as `0.13.0-rc.1` if the
    tag never moved, otherwise rc.2. The release record is rewritten with
