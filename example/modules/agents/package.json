@@ -9,10 +9,30 @@
     "dependsOn": [
       "auth",
       "core"
-    ]
+    ],
+    "env": {
+      "anthropicApiKey": {
+        "key": "ANTHROPIC_API_KEY",
+        "type": "secret",
+        "group": "agents",
+        "description": "Claude API key for agent runs; unset, the app boots and serves MCP as usual and starting a run answers 503"
+      },
+      "anthropicBaseUrl": {
+        "key": "ANTHROPIC_BASE_URL",
+        "type": "url",
+        "group": "agents",
+        "description": "Another endpoint for the Claude API (a proxy or a gateway); unset is the API itself"
+      }
+    }
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.134.0",
-    "@tulipes/core": "workspace:*"
+    "@app/auth": "workspace:*",
+    "@app/core": "workspace:*",
+    "@tulipes/bullmq": "workspace:*",
+    "@tulipes/core": "workspace:*",
+    "@tulipes/mongoose": "workspace:*",
+    "mongoose": "^8",
+    "zod": "^3.25"
   }
 }

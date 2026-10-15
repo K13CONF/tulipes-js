@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { ToolActor } from "@tulipes/core/agent";
 
 import {
+  ModelRejected,
   TERMINAL,
   type ApprovalPolicy,
   type Clock,
@@ -140,7 +141,13 @@ export class RunLoop {
       if (!current) return this.#end(runId, "failed", { reason: "credential_revoked" }, elapsed);
       job.actor = current;
 
-      const turn = await this.#turn(run, job);
+      let turn: ModelTurn;
+      try {
+        turn = await this.#turn(run, job);
+      } catch (error) {
+        if (error instanceof ModelRejected) return this.#end(runId, "failed", { reason: error.reason }, elapsed);
+        throw error;
+      }
       if (turn.stopReason === "max_tokens") return this.#end(runId, "failed", { reason: "truncated" }, elapsed);
       if (turn.stopReason === "model_context_window_exceeded") return this.#end(runId, "exhausted", { reason: "context_window" }, elapsed);
 
@@ -151,7 +158,9 @@ export class RunLoop {
       if (turn.stopReason === "refusal") {
         return this.#end(runId, "failed", { reason: turn.refusalCategory ? `refusal:${turn.refusalCategory}` : "refusal" }, elapsed);
       }
-      if (turn.stopReason === "pause_turn") continue;
+      // The server paused its own loop, or compacted the history: either
+      // way the turn is appended as it came and the model is asked again.
+      if (turn.stopReason === "pause_turn" || turn.stopReason === "compaction") continue;
 
       if (calls.length > 0) {
         const answered = await this.#answer(run, job, { interrupted: false });
@@ -236,7 +245,7 @@ export class RunLoop {
       }
     }
 
-    const results: Anthropic.ToolResultBlockParam[] = run.pending.map((call) => {
+    const results: Anthropic.Beta.BetaToolResultBlockParam[] = run.pending.map((call) => {
       const answer = answers.get(call.id)!;
       return { type: "tool_result", tool_use_id: call.id, content: answer.content, ...(answer.isError && { is_error: true }) };
     });
@@ -310,13 +319,13 @@ export class RunLoop {
 
 function toolCalls(turn: ModelTurn): PendingCall[] {
   return turn.content
-    .filter((block): block is Anthropic.ToolUseBlock => block.type === "tool_use")
+    .filter((block): block is Anthropic.Beta.BetaToolUseBlock => block.type === "tool_use")
     .map((block) => ({ id: block.id, name: block.name, input: block.input }));
 }
 
 function lastText(turn: ModelTurn): string {
   return turn.content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
     .map((block) => block.text)
     .join("\n")
     .trim();

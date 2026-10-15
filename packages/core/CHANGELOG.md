@@ -39,6 +39,11 @@ Packages: core `0.13.0-rc.1`, `@tulipes/cli` `0.4.0-rc.1`, `@tulipes/mcp`
   once, retired by a password change; `identifyCredential()` resolves them
   and access JWTs alike.
 - **`tulipes migrate 0.13`** adds the MCP process to an app on 0.12.
+- **`Auth.credentialId`**: the id of the API token behind a request (never
+  the secret), absent for a session. The reference app's auth module sets
+  it; the MCP process's audit line carries it as `credential`, so an owner
+  with several tokens can tell which one made a call; an agent run records
+  it to stop when the token is revoked.
 
 ### Security
 

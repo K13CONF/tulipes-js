@@ -93,7 +93,7 @@ export class MemoryRunStore implements RunStore {
     return this.#update(runId, (run) => { if (!TERMINAL.has(run.status)) run.executing = true; });
   }
 
-  async appendResults(runId: string, results: Anthropic.ToolResultBlockParam[], elapsedMs: number): Promise<Run> {
+  async appendResults(runId: string, results: Anthropic.Beta.BetaToolResultBlockParam[], elapsedMs: number): Promise<Run> {
     return this.#append(runId, (run) => {
       run.transcript.push({ role: "user", content: results });
       run.toolCalls += results.length;

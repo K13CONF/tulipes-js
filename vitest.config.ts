@@ -6,9 +6,9 @@ if (process.env.REQUIRE_INTEGRATION_TESTS === "1" && (!process.env.TEST_MONGO_UR
 
 export default defineConfig({
   test: {
-    // The agents harness runs here too: it boots nothing and needs no service,
-    // so it is the reference app's one suite that belongs in the unit lane.
-    include: ["packages/*/tests/**/*.test.ts", "example/modules/agents/tests/harness.test.ts"],
+    // The agents harness and its model adapter run here too: they boot
+    // nothing and need no service, so they belong in the unit lane.
+    include: ["packages/*/tests/**/*.test.ts", "example/modules/agents/tests/harness.test.ts", "example/modules/agents/tests/anthropic-client.test.ts"],
     testTimeout: 10_000,
     hookTimeout: 15_000,
     restoreMocks: true,

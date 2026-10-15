@@ -36,6 +36,12 @@ declare module "@tulipes/core/config" {
       /** AUTH_ADMIN_PASSWORD — Password for the seeded admin account; change it after the first login */
       readonly adminPassword: string;
     };
+    "agents": {
+      /** ANTHROPIC_API_KEY — Claude API key for agent runs; unset, the app boots and serves MCP as usual and starting a run answers 503 */
+      readonly anthropicApiKey: string | undefined;
+      /** ANTHROPIC_BASE_URL — Another endpoint for the Claude API (a proxy or a gateway); unset is the API itself */
+      readonly anthropicBaseUrl: string | undefined;
+    };
   }
   interface GlobalConfig {
     "core"?: (typeof import("./../modules/core/module.config.ts"))["default"]["schema"]["_zod"]["output"] & EnvValues["core"];
@@ -43,6 +49,7 @@ declare module "@tulipes/core/config" {
     "auth"?: (typeof import("./../modules/auth/module.config.ts"))["default"]["schema"]["_zod"]["output"] & EnvValues["auth"];
     "users"?: (typeof import("./../modules/users/module.config.ts"))["default"]["schema"]["_zod"]["output"];
     "hello"?: (typeof import("./../modules/hello/module.config.ts"))["default"]["schema"]["_zod"]["output"];
+    "agents"?: (typeof import("./../modules/agents/module.config.ts"))["default"]["schema"]["_zod"]["output"] & EnvValues["agents"];
   }
 }
 
@@ -62,13 +69,16 @@ declare module "@tulipes/mongoose" {
     "Greeting": (typeof import("./../modules/hello/models/greeting.model.ts"))["default"];
     /** [config] modules/config/models/config-audit.model.ts */
     "ConfigAudit": (typeof import("./../modules/config/models/config-audit.model.ts"))["default"];
+    /** [agents] modules/agents/models/run.model.ts */
+    "AgentRun": (typeof import("./../modules/agents/models/run.model.ts"))["default"];
   }
 }
 
 declare module "@tulipes/bullmq" {
   interface KnownJobs extends
     JobsOf<typeof import("./../modules/users/queues/users.queues.ts")>,
-    JobsOf<typeof import("./../modules/hello/queues/hello.queues.ts")> {}
+    JobsOf<typeof import("./../modules/hello/queues/hello.queues.ts")>,
+    JobsOf<typeof import("./../modules/agents/queues/agents.queues.ts")> {}
 }
 
 export {};

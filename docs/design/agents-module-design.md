@@ -599,6 +599,50 @@ test completes against the fake model through the real store and the real
 registry; the production smoke's worker boots with the processor; the key
 is absent from every log line and from the run document.
 
+Status: implemented on 2026-10-15. The module splits its helpers in two:
+`helpers/harness/` is the core (ports, loop, prompt, policy, budgets,
+guard, shaper, events — no infrastructure), `helpers/adapters/` is what
+touches the outside (`AnthropicModelClient`, `MongoRunStore` and
+`MongoStepLog`, `RegistryToolSource`, `AuthIdentity`), and
+`helpers/compose.ts` is the one composition root; `helpers/runs.ts` holds
+`startRun` and `enqueue`; `queues/agents.queues.ts` is the processor.
+Decisions the implementation took, recorded here because they change §3:
+
+- **The beta Messages surface throughout.** Refusal fallbacks, context
+  editing and compaction are typed only there, so the transcript, the
+  turns and the stop reasons are the beta types (`compaction` is a stop
+  reason, handled like `pause_turn`).
+- **Tools are sent non-strict.** Every call is validated by the action's
+  own schema in `invoke()`, and a rejected input reaches the model as an
+  actionable 422; strict mode would add a way for a request to fail (a
+  schema the API does not accept) without adding a check.
+- **A 4xx from the API ends the run** (`ModelRejected`, reason
+  `model_rejected:<status>`); a 5xx, a 529 or a network failure throws,
+  and BullMQ retries the job (3 attempts, exponential backoff). The last
+  attempt's failure ends the run `failed: error` rather than leaving it
+  `running`. A key removed while a run is queued ends it
+  `agent_unconfigured`.
+- **`Auth.credentialId`** (core, additive): the API token's id behind a
+  request, set by the auth module, recorded on the run as `token_id`; the
+  auth lib gains `isTokenLive()` for `AuthIdentity`. The MCP audit line
+  carries it too (decision 9 of the 0.13 plan).
+- **One job per segment**: the job id is `<run id>-<segment>`, the segment
+  bumped at start and at each approval, so a retried enqueue is still one
+  job and two jobs never work on one run.
+- **`steps` keeps the last 200** (open decision 10).
+- **Without queues there is no agents module**: `tulipes init
+  --no-queues` leaves `modules/agents/` out, as it leaves `worker.ts` out
+  (open decision 11); the composition smoke covers it.
+
+Evidence (this Mac, Node 24.14.0, MongoDB and Redis local): the root
+lane 412 tests with coverage (harness 98.0 / 94.2 / 100 / 100), the
+example suite 90 of 93 (the macOS rate-limit pair, and the config test's
+grants updated for `agents:*`), the agents integration suite 4 tests on
+the real store, registry and identity, the adapter's 3 unit tests; pack,
+audit, parity, and the minimal, offline, composition, upgrade and
+production smokes, the production one with the worker's `agents.run`
+processor registered and the agents suite passing inside the scaffold.
+
 ### S04.3 — The door (medium)
 
 Routes, controllers, schemas, i18n; `helpers/runs.ts`; the sockets

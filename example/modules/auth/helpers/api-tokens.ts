@@ -121,7 +121,19 @@ function resolve(ctx: Ctx, user: UserAttrs, token: ApiTokenAttrs): Auth {
     // issuing another token) is refused to it.
     session: null,
     ...(token.scopes && { scopes: token.scopes }),
+    credentialId: token.token_id,
   };
+}
+
+/**
+ * Whether a token still authenticates its user: not revoked, not expired,
+ * not retired by a password change. For work that outlives the request
+ * that started it — an agent run checks this before every step.
+ */
+export async function isTokenLive(ctx: Ctx, tokenId: string, userId: string): Promise<boolean> {
+  const token = await ctx.models!.get<ApiTokenAttrs>("ApiToken").findOne({ token_id: tokenId, user: userId }).lean();
+  if (!token || !live(token)) return false;
+  return token.credential_version === await currentCredentialVersion(ctx, userId);
 }
 
 function live(token: ApiTokenAttrs): boolean {

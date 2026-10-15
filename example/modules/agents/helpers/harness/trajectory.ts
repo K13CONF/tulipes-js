@@ -62,11 +62,11 @@ function history(transcript: readonly TranscriptMessage[]): { calls: Call[]; res
     if (typeof message.content === "string") continue;
     for (const block of message.content) {
       if (block.type === "tool_use") {
-        const use = block as Anthropic.ToolUseBlockParam;
+        const use = block as Anthropic.Beta.BetaToolUseBlockParam;
         names.set(use.id, use.name);
         calls.push({ name: use.name, key: `${use.name}:${stableJson(use.input)}` });
       } else if (block.type === "tool_result") {
-        const result = block as Anthropic.ToolResultBlockParam;
+        const result = block as Anthropic.Beta.BetaToolResultBlockParam;
         results.push({ name: names.get(result.tool_use_id) ?? "", error: result.is_error === true });
       }
     }

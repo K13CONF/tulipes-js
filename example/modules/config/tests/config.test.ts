@@ -88,7 +88,7 @@ test("the console describes every module without a secret's value and only admin
     description: "Runs the back office",
     defined_by: "auth",
     extras: { level: 2 },
-    grants: ["agent:*", "auth:*", "config:bo:describe", "config:bo:read", "hello:*", "users:*"],
+    grants: ["agent:*", "agents:*", "auth:*", "config:bo:describe", "config:bo:read", "hello:*", "users:*"],
   });
 
   const auth = data.modules.find((module) => module.name === "auth") as { variables: Record<string, unknown>[]; settings: { values: Record<string, unknown>; version: number }; routes: Record<string, unknown>[] };

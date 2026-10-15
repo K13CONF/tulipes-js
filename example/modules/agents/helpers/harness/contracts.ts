@@ -4,16 +4,16 @@ import type { ToolActor } from "@tulipes/core/agent";
 /**
  * The ports of the harness. The run loop depends on these and on nothing
  * concrete: the model, the app's actions, the run's storage, the policy
- * and the identity are each an adapter composed in `queues/`, and a test
- * composes fakes instead. Nothing here is imported at runtime — the SDK
- * is reached for its types only, so the API's own shapes are never
- * redefined.
+ * and the identity are each an adapter in `helpers/adapters/`, composed in `helpers/compose.ts`,
+ * and a test composes fakes instead. The SDK is reached for its types
+ * only, so the API's own shapes are never redefined — the beta surface's,
+ * which carries refusal fallbacks, context editing and compaction.
  */
 
 export type JsonSchema = Record<string, unknown>;
 
 /** What a turn's transcript entries are: the API's message shape, verbatim. */
-export type TranscriptMessage = Anthropic.MessageParam;
+export type TranscriptMessage = Anthropic.Beta.BetaMessageParam;
 
 /** One tool as the model sees it, plus the one fact the policy decides on. */
 export interface ToolDefinition {
@@ -47,7 +47,7 @@ export interface ToolSource {
 
 // ── The model ────────────────────────────────────────────────────────
 
-export type StopReason = Anthropic.StopReason;
+export type StopReason = Anthropic.Beta.BetaStopReason;
 
 export interface TokenUsage {
   input: number;
@@ -66,16 +66,32 @@ export interface ModelRequest {
 
 export interface ModelTurn {
   /** Appended to the transcript exactly as received. */
-  content: Anthropic.ContentBlock[];
+  content: Anthropic.Beta.BetaContentBlock[];
   stopReason: StopReason;
   /** Only on a refusal: the classifier's category, when it gave one. */
   refusalCategory?: string | null;
   usage: TokenUsage;
 }
 
-/** One request to the model. Which model, its effort and its caching are the adapter's. */
+/**
+ * One request to the model. Which model, its effort and its caching are the
+ * adapter's. A request the API refuses as such (a 4xx: bad input, a bad key,
+ * a model that does not exist) throws `ModelRejected`, and the run ends; any
+ * other failure throws as it is, and the job is retried.
+ */
 export interface ModelClient {
   complete(request: ModelRequest): Promise<ModelTurn>;
+}
+
+/** The API refused the request itself: retrying it unchanged cannot succeed. */
+export class ModelRejected extends Error {
+  readonly reason: string;
+
+  constructor(reason: string, message: string) {
+    super(message);
+    this.name = "ModelRejected";
+    this.reason = reason;
+  }
 }
 
 // ── The run ──────────────────────────────────────────────────────────
@@ -150,7 +166,7 @@ export interface RunStore {
   awaitApproval(runId: string, elapsedMs: number): Promise<Run>;
   beginExecution(runId: string): Promise<Run>;
   /** Checkpoint B: one user message answering every pending call; clears pending and decisions. */
-  appendResults(runId: string, results: Anthropic.ToolResultBlockParam[], elapsedMs: number): Promise<Run>;
+  appendResults(runId: string, results: Anthropic.Beta.BetaToolResultBlockParam[], elapsedMs: number): Promise<Run>;
   /** A mid-conversation operator message (`role: "system"`). */
   appendOperatorNote(runId: string, text: string): Promise<Run>;
   /** The one-time reminder to finish properly, as a user turn (a system message may not follow an assistant turn). */

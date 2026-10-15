@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 
-import type { ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages/messages";
+import type { BetaToolResultBlockParam as ToolResultBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 
-import type { ApprovalPolicy, RunLimits, TranscriptMessage } from "../helpers/harness/contracts.ts";
+import { ModelRejected, type ApprovalPolicy, type RunLimits, type TranscriptMessage } from "../helpers/harness/contracts.ts";
 import { FanOutEvents } from "../helpers/harness/events.ts";
 import { BudgetLimits, type Budgets } from "../helpers/harness/limits.ts";
 import { ModeApprovalPolicy } from "../helpers/harness/policy.ts";
@@ -500,5 +500,24 @@ describe("edges", () => {
 
   test("a sink failure with no handler is still swallowed", async () => {
     await expect(new FanOutEvents([{ emit: () => { throw new Error("x"); } }]).emit({ runId: "r", kind: "end", outcome: "done" })).resolves.toBeUndefined();
+  });
+});
+
+describe("the model's own failures", () => {
+  test("a request the API rejects ends the run with its reason; other failures throw, so the job retries", async () => {
+    const rejected = new ScriptedModel([() => { throw new ModelRejected("model_rejected:400", "bad request"); }]);
+    expect(await compose({ model: rejected }).loop.run("r1")).toMatchObject({ status: "failed", reason: "model_rejected:400" });
+
+    const overloaded = new ScriptedModel([() => { throw new Error("529 overloaded"); }]);
+    const { loop, store } = compose({ model: overloaded });
+    await expect(loop.run("r1")).rejects.toThrow("529 overloaded");
+    expect((await store.load("r1"))!.status).toBe("running");
+  });
+
+  test("a compaction stop appends the turn and asks the model again", async () => {
+    const model = new ScriptedModel([turn([text("summary")], "compaction"), turn([finish()])]);
+    const run = await compose({ model }).loop.run("r1");
+    expect(run.status).toBe("succeeded");
+    expect(model.requests[1]!.messages.at(-1)!.role).toBe("assistant");
   });
 });

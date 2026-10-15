@@ -160,7 +160,7 @@ function inProcess(handle: BootHandle, identify: () => Promise<ToolActor>, audit
       const startedAt = Date.now();
       const actor = await identify();
       const line = (outcome: string) => audit(JSON.stringify({
-        mcp: "call", tool: tool.name, actor: actorId(actor), role: actor.role, outcome, ms: Date.now() - startedAt,
+        mcp: "call", tool: tool.name, actor: actorId(actor), ...(actor.credentialId && { credential: actor.credentialId }), role: actor.role, outcome, ms: Date.now() - startedAt,
       }));
       try {
         const data = await agent.invoke(tool.name, input ?? {}, actor);

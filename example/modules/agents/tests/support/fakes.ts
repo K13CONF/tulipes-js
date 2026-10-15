@@ -20,9 +20,9 @@ export const ACTOR: ToolActor = { isAuthenticated: true, user: null, session: nu
 /** A model that plays a script: one turn per request, in order, and keeps what it was sent. */
 export class ScriptedModel implements ModelClient {
   readonly requests: ModelRequest[] = [];
-  readonly #script: ((request: ModelRequest) => ModelTurn)[];
+  readonly #script: ((request: ModelRequest) => ModelTurn | Promise<ModelTurn>)[];
 
-  constructor(script: (ModelTurn | ((request: ModelRequest) => ModelTurn))[]) {
+  constructor(script: (ModelTurn | ((request: ModelRequest) => ModelTurn | Promise<ModelTurn>))[]) {
     this.#script = script.map((step) => (typeof step === "function" ? step : () => step));
   }
 
@@ -40,19 +40,19 @@ export class ScriptedModel implements ModelClient {
 
 let ids = 0;
 
-export function toolUse(name: string, input: unknown = {}, id = `toolu_${++ids}`): Anthropic.ToolUseBlock {
-  return { type: "tool_use", id, name, input, caller: { type: "direct" } } as Anthropic.ToolUseBlock;
+export function toolUse(name: string, input: unknown = {}, id = `toolu_${++ids}`): Anthropic.Beta.BetaToolUseBlock {
+  return { type: "tool_use", id, name, input, caller: { type: "direct" } } as Anthropic.Beta.BetaToolUseBlock;
 }
 
-export function text(value: string): Anthropic.TextBlock {
+export function text(value: string): Anthropic.Beta.BetaTextBlock {
   return { type: "text", text: value, citations: null };
 }
 
-export function turn(content: Anthropic.ContentBlock[], stopReason?: ModelTurn["stopReason"], usage = { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 }): ModelTurn {
+export function turn(content: Anthropic.Beta.BetaContentBlock[], stopReason?: ModelTurn["stopReason"], usage = { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 }): ModelTurn {
   return { content, stopReason: stopReason ?? (content.some((block) => block.type === "tool_use") ? "tool_use" : "end_turn"), usage };
 }
 
-export function finish(outcome: "done" | "blocked" | "partial" = "done", summary = "Did it.", verification = "Read it back."): Anthropic.ToolUseBlock {
+export function finish(outcome: "done" | "blocked" | "partial" = "done", summary = "Did it.", verification = "Read it back."): Anthropic.Beta.BetaToolUseBlock {
   return toolUse("run_finish", { outcome, summary, verification });
 }
 
