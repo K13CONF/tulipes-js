@@ -192,7 +192,7 @@ function warnAboutBreakingChanges(current: string | undefined, latest: string): 
       `This crossed ${to - from} minor version(s), each of which may have`,
       "changed something breaking. Before running the app:",
       "",
-      `  https://github.com/kemora13conf/bp-backend-express/blob/v${latest}/packages/core/MIGRATING.md`,
+      `  https://github.com/K13CONF/tulipes-js/blob/v${latest}/packages/core/MIGRATING.md`,
       "",
       "It is ordered oldest-first, because the steps build on each other.",
     ].join("\n"),

@@ -17,7 +17,7 @@ See [inspection](../core/README.md#inspection) in the core README.
 
 Version 0.3.0-rc.5 supports core `^0.9.0-rc.3 || ^0.10.0-rc.1`. Install the candidate
 with `pnpm add -D @tulipes/spec@next`. See the core
-[migration guide](https://github.com/kemora13conf/bp-backend-express/blob/v0.9.0-rc.3/packages/core/MIGRATING.md#090-rc3--production-security-upgrade-overview)
+[migration guide](https://github.com/K13CONF/tulipes-js/blob/v0.9.0-rc.3/packages/core/MIGRATING.md#090-rc3--production-security-upgrade-overview)
 when upgrading from an earlier release.
 
 The source is the RAI registry, populated by building the same native routers

@@ -2,8 +2,8 @@
 
 Tulipes is an experimental, opinionated TypeScript framework for modular Express
 applications with strict boot-time validation. It is MIT licensed. Maintenance
-and release ownership belong to GitHub `@kemora13conf`, npm `by_kemora_13`;
-contact abdelghanielmouak@gmail.com. Contributions are welcome through the
+and release ownership belong to the GitHub organisation `K13CONF`, npm `by_kemora_13`;
+contact support@k13conf.com. Contributions are welcome through the
 restricted repository or this contact. Repository and issue links in package
 metadata require access. Source visibility is outside this sprint.
 

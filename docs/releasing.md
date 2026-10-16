@@ -1,6 +1,6 @@
 # Releasing
 
-The release owner is `@kemora13conf`. Repository visibility remains private.
+The release owner is the GitHub organisation `K13CONF`. Repository visibility remains private.
 No release is created just by merging a feature PR.
 
 1. Update versions of every changed published package, changelog, migration notes

@@ -46,4 +46,4 @@ dependency ranges follow the core this CLI bundles.
 ## Versions
 
 `0.1.1` bundles core `0.10.1` and scaffolds for it. See core's
-[MIGRATING.md](https://github.com/kemora13conf/bp-backend-express/blob/master/packages/core/MIGRATING.md#unreleased--install-the-cli-package).
+[MIGRATING.md](https://github.com/K13CONF/tulipes-js/blob/master/packages/core/MIGRATING.md#unreleased--install-the-cli-package).

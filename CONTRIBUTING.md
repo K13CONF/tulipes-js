@@ -3,7 +3,7 @@
 Tulipes is an experimental TypeScript framework. The source repository currently
 has restricted access; collaborators can open issues and pull requests here.
 For access or ordinary package questions, contact the npm owner at
-abdelghanielmouak@gmail.com. Report vulnerabilities through [SECURITY.md](SECURITY.md).
+support@k13conf.com. Report vulnerabilities through [SECURITY.md](SECURITY.md).
 
 Use Node 24.x and the pinned Yarn version:
 

@@ -1,6 +1,6 @@
 # Security policy
 
-Send vulnerability reports privately to **abdelghanielmouak@gmail.com**, the
+Send vulnerability reports privately to **support@k13conf.com**, the
 existing public npm owner contact for `@tulipes/core` (`by_kemora_13`). Include
 affected versions, reproduction steps, expected impact and a minimal example.
 Omit live credentials and customer data. Do not disclose exploit details in an

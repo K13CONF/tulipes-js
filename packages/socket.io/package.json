@@ -35,7 +35,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kemora13conf/bp-backend-express.git",
+    "url": "git+https://github.com/K13CONF/tulipes-js.git",
     "directory": "packages/socket.io"
   },
   "keywords": [
@@ -48,8 +48,8 @@
   "engines": {
     "node": ">=24.0.0 <25"
   },
-  "homepage": "https://github.com/kemora13conf/bp-backend-express/tree/master/packages/socket.io#readme",
+  "homepage": "https://github.com/K13CONF/tulipes-js/tree/master/packages/socket.io#readme",
   "bugs": {
-    "url": "https://github.com/kemora13conf/bp-backend-express/issues"
+    "url": "https://github.com/K13CONF/tulipes-js/issues"
   }
 }

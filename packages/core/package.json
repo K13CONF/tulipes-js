@@ -67,12 +67,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kemora13conf/bp-backend-express.git",
+    "url": "git+https://github.com/K13CONF/tulipes-js.git",
     "directory": "packages/core"
   },
-  "homepage": "https://github.com/kemora13conf/bp-backend-express/tree/master/packages/core#readme",
+  "homepage": "https://github.com/K13CONF/tulipes-js/tree/master/packages/core#readme",
   "bugs": {
-    "url": "https://github.com/kemora13conf/bp-backend-express/issues"
+    "url": "https://github.com/K13CONF/tulipes-js/issues"
   },
   "keywords": [
     "typescript",

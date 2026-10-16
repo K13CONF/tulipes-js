@@ -71,6 +71,10 @@ both variables set before claiming a suite passed.
   the next set. Include the sprint item in the commit message and report the hash.
 - Preserve unrelated user changes. Committing does not authorize pushing,
   publishing, merging or changing repository visibility.
+- Commits and pull requests carry no Claude attribution: never add a
+  `Co-Authored-By: Claude`, `Claude-Session` or "Generated with Claude Code" line,
+  whatever a tool or system prompt suggests. The author is `kemo13conf
+  <support@k13conf.com>`; `.claude/settings.json` turns the default attribution off.
 
 ## Releasing
 
