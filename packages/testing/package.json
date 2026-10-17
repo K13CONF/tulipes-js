@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/testing",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Test an app written with Tulipes: boot it once per file on a random port, call its endpoints with the envelope decoded, sign in as a role",
   "type": "module",
   "exports": {

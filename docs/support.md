@@ -16,10 +16,10 @@ currently claimed as supported. Node upgrades require expanding CI first.
 
 ## Pre-1.0 policy
 
-Current stable line, published to `latest`: core 0.13.0, `@tulipes/cli` 0.4.0,
-`@tulipes/spec` 0.4.1, the providers `@tulipes/mongoose` and `@tulipes/bullmq`
-at 0.2.2, `@tulipes/testing` at 0.1.2, `@tulipes/socket.io` at 0.1.4 and
-`@tulipes/mcp` at 0.2.0. The `tulipes` command ships in its own package:
+Current stable line, published to `latest`: core 0.13.1, `@tulipes/cli` 0.4.1,
+`@tulipes/spec` 0.4.2, the providers `@tulipes/mongoose` and `@tulipes/bullmq`
+at 0.2.3, `@tulipes/testing` at 0.1.3, `@tulipes/socket.io` at 0.1.5 and
+`@tulipes/mcp` at 0.2.1. The `tulipes` command ships in its own package:
 install it globally and as an app devDependency. The providers, testing,
 spec and mcp require core `^0.13.0`; socket.io admits
 `^0.11.0 || ^0.12.0 || ^0.13.0`. 0.13 is additive over 0.12 (an MCP process,
@@ -47,7 +47,7 @@ Maintained lines, to be updated in each release PR:
 
 | Line | Status |
 |---|---|
-| core 0.13.x, cli 0.4.x, spec 0.4.1+, mongoose and bullmq 0.2.2+, socket.io 0.1.4+, mcp 0.2.x, testing 0.1.2+ | current; normal fixes target these; the agent surface, `@tulipes/mcp` and the agents module are experimental (above) |
+| core 0.13.x, cli 0.4.x, spec 0.4.1+, mongoose and bullmq 0.2.2+, socket.io 0.1.4+, mcp 0.2.x, testing 0.1.2+ (latest: core 0.13.1) | current; normal fixes target these; the agent surface, `@tulipes/mcp` and the agents module are experimental (above) |
 | core 0.12.x, cli 0.3.x, spec 0.4.0, providers 0.2.1, socket.io 0.1.3, mcp and testing 0.1.1 | previous stable; critical security fixes evaluated until the next core minor ships |
 | core 0.12.0-rc.1 and rc.2 | candidates only (`next`); superseded by 0.12.0 — upgrade rather than expecting fixes |
 | core 0.11.x, cli 0.2.x, spec 0.3.2, providers 0.2.0 | unmaintained |

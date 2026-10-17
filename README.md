@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="assets/tulipesjs-logo.png" alt="TulipesJs" width="440">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="packages/core/assets/brand/lockup-horizontal-dark.svg">
+  <img src="packages/core/assets/brand/lockup-bloom.svg" alt="tulipesjs" width="440">
+</picture>
 
 **The Express framework that refuses to start when something is wrong.**
 
