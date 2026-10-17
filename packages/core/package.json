@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/core",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Module-based Express framework runtime: convention-driven boot pipeline, one config for settings and environment values, ACL and the provider seam for models, queues and sockets",
   "type": "module",
   "exports": {

@@ -9,6 +9,32 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [0.13.1] — 2026-10-17
+
+A patch with no API change: the new brand, and documentation fixes. No
+migration. Packages: core `0.13.1`, `@tulipes/cli` `0.4.1`, `@tulipes/mcp`
+`0.2.1`, `@tulipes/spec` `0.4.2`, `@tulipes/mongoose` and `@tulipes/bullmq`
+`0.2.3`, `@tulipes/testing` `0.1.3`, `@tulipes/socket.io` `0.1.5` —
+republished because packing pins each to core's version.
+
+### Changed
+
+- The logo: a geometric tulip and a serif `tulipesjs` wordmark replace the
+  photographic tulip. Core ships the brand kit under `assets/brand/` — the
+  mark, light and dark lockups, tiles, a social card, and `lockup-bloom.svg`,
+  the README header, which opens the tulip once on load (CSS only; still
+  under `prefers-reduced-motion`). Every package README loads it from
+  this version. `assets/tulipesjs-logo.png` is gone; READMEs of earlier
+  versions pin their own copy and keep working.
+- This README: the Node badge reads 24.x, the stable line is 0.13, and the
+  requirements say pnpm rather than Yarn workspaces.
+
+### Fixed
+
+- `tulipes new module`'s agent file said every route is already a tool.
+  Routes have not been tools since 0.11; the comment now says an agent sees
+  only the actions the file declares.
+
 ## [0.13.0] — 2026-10-15
 
 The 0.13 line, published directly as stable on npm's `latest` tag — no
