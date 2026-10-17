@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://cdn.jsdelivr.net/npm/@tulipes/core@0.7.1/assets/tulipesjs-logo.png" alt="TulipesJs" width="440">
+<img src="https://cdn.jsdelivr.net/npm/@tulipes/core@0.13.1/assets/brand/lockup-bloom.svg" alt="tulipesjs" width="440">
 
 **The Express framework that refuses to start when something is wrong.**
 

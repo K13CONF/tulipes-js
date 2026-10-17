@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://cdn.jsdelivr.net/npm/@tulipes/core@0.7.1/assets/tulipesjs-logo.png" alt="TulipesJs" width="340">
+<img src="https://cdn.jsdelivr.net/npm/@tulipes/core@0.13.1/assets/brand/lockup-bloom.svg" alt="tulipesjs" width="340">
 
 </div>
 
