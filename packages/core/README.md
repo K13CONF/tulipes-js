@@ -5,7 +5,7 @@
 **The Express framework that refuses to start when something is wrong.**
 
 [![npm](https://img.shields.io/npm/v/@tulipes/core?color=%23cb3837&label=%40tulipes%2Fcore)](https://www.npmjs.com/package/@tulipes/core)
-![node](https://img.shields.io/badge/node-%E2%89%A5%2020.11-5FA04E)
+![node](https://img.shields.io/badge/node-24.x-5FA04E)
 ![types](https://img.shields.io/badge/types-included-3178C6)
 ![express](https://img.shields.io/badge/express-5-000000)
 
@@ -30,8 +30,8 @@ TulipesBootError: Boot aborted during "environment" — 3 issue(s):
 
 ## Quick start
 
-Requires Node 24.x and pnpm. The 0.10 line is stable — its API is settled
-and breaking changes wait for 0.11 — but no production pilot has run it yet;
+Requires Node 24.x and pnpm. The 0.13 line is stable — its API is settled
+and breaking changes wait for 0.14 — but no production pilot has run it yet;
 the [compatibility policy](../../docs/support.md) says exactly what that leaves
 unproven.
 
@@ -804,8 +804,8 @@ declarations and bootstrap cleanups, see [the migration guide](./MIGRATING.md).
 
 ## Versioning
 
-`0.10` is the current stable line: its contracts are settled and a breaking
-change waits for `0.11`. Before it, `0.x` minors broke freely — `0.2` through
+`0.13` is the current stable line: its contracts are settled and a breaking
+change waits for `0.14`. Before it, `0.x` minors broke freely — `0.2` through
 `0.5` each did. The
 [CHANGELOG](./CHANGELOG.md) records what changed and
 [MIGRATING.md](./MIGRATING.md) gives the upgrade steps, including the one
@@ -816,7 +816,7 @@ data migration that can lock users out of an app if it is skipped (the
 
 ## Requirements
 
-Node.js 24.x · Yarn workspaces · MongoDB when an app declares the models
+Node.js 24.x · pnpm · MongoDB when an app declares the models
 provider, Redis when it declares queues (or uses Redis itself, as the
 production preset's cache and rate limiter do).
 
