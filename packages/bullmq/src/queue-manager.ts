@@ -42,6 +42,7 @@ declare module "@tulipes/core/boot" {
      * Produce a job. The queue must have been defined by some module; a
      * queue with a declared schema validates the payload before enqueueing
      * it, and a name `tulipes sync` knows types the payload at the call site.
+     * A recurring job is `schedule()`'s job: BullMQ 6 has no `repeat` here.
      */
     add<N extends string>(queueName: N, jobName: string, data: JobData<N>, options?: JobsOptions): Promise<void>;
     /**
@@ -207,8 +208,11 @@ export class QueueManager implements QueuesCapability {
     options?: JobsOptions,
   ): Promise<void> {
     const queue = this.queue(queueName);
-    const zoned = options?.repeat ? { ...options, repeat: this.#zoned(options.repeat) } : options;
-    await queue.add(jobName, this.#validate(queueName, data), zoned);
+    // BullMQ 6 dropped add()'s repeat option; an untyped caller would otherwise get a one-off job.
+    if (options && "repeat" in options) {
+      throw new Error(`queues.add("${queueName}", "${jobName}") no longer takes a repeat option — use queues.schedule(queue, schedulerId, repeat, job)`);
+    }
+    await queue.add(jobName, this.#validate(queueName, data), options);
   }
 
   async schedule<N extends string>(

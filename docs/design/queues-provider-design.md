@@ -103,6 +103,9 @@ export { QueueManager, QueueRegistry };
 
 ## 4. Package and compatibility
 
+- Since 0.3.0 the dependency is `bullmq ^6.3.16`: BullMQ 6 drops legacy
+  repeatable jobs, so `add()` lost `repeat` and `schedule()` is the only
+  recurring path. See `docs/sprints/bullmq-6-plan.md`.
 - `@tulipes/bullmq` 0.1.0-rc.1; `dependencies`: `bullmq ^5`, `ioredis ^5` (the
   app never imports BullMQ; a second ioredis copy next to the app's own is
   harmless — no `instanceof` crosses the boundary); `peerDependencies`:

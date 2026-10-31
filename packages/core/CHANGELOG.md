@@ -9,6 +9,19 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [Unreleased]
+
+`@tulipes/bullmq` `0.3.0` and `@tulipes/cli` `0.4.2`, whose scaffold pins
+the new provider. Core is unchanged. See MIGRATING, "@tulipes/bullmq 0.3.0".
+
+### Changed
+
+- **Breaking (`@tulipes/bullmq`):** BullMQ `^6.3.16`, up from `^5`. It
+  drops the unmaintained cron-parser 4 that made installs warn about a
+  deprecated subdependency. `ctx.queues.add()` no longer takes `repeat`;
+  recurring jobs go through `ctx.queues.schedule()`, and an untyped `repeat`
+  throws instead of becoming a one-off job.
+
 ## [0.13.1] — 2026-10-17
 
 A patch with no API change: the new brand, and documentation fixes. No
