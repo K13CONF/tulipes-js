@@ -1,0 +1,21 @@
+{
+  "name": "@tulipes-site/docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "node scripts/cli-reference.mjs && astro build",
+    "preview": "astro preview",
+    "check": "node scripts/check-build.mjs",
+    "api:coverage": "node scripts/api-coverage.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.8",
+    "astro": "7.4.4",
+    "sharp": "0.35.5",
+    "starlight-typedoc": "0.23.2",
+    "typedoc": "0.28.20",
+    "typedoc-plugin-markdown": "4.14.1",
+    "typescript": "6.0.3"
+  }
+}
