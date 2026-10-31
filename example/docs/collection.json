@@ -640,6 +640,333 @@
       ]
     },
     {
+      "name": "runs",
+      "item": [
+        {
+          "name": "Start an agent run",
+          "request": {
+            "method": "POST",
+            "description": "Queues a run that pursues the goal with the caller's permissions, narrowed by the credential's scopes",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"goal\": \"string\",\n  \"context\": \"string\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "List my agent runs",
+          "request": {
+            "method": "GET",
+            "description": "The caller's runs, newest first, without transcripts",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "runs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "per_page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "queued",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Read an agent run",
+          "request": {
+            "method": "GET",
+            "description": "One of the caller's runs: status, result, the calls it waits on, notes, steps and transcript",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/runs/{{run_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "runs",
+                "{{run_id}}"
+              ],
+              "variable": [
+                {
+                  "key": "run_id",
+                  "value": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Answer an agent run's waiting calls",
+          "request": {
+            "method": "POST",
+            "description": "Allow or deny each call the run waits on; the run resumes at once",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/runs/{{run_id}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "runs",
+                "{{run_id}}",
+                "approve"
+              ],
+              "variable": [
+                {
+                  "key": "run_id",
+                  "value": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decisions\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Cancel an agent run",
+          "request": {
+            "method": "POST",
+            "description": "Stops the run; a call already running finishes, nothing after it starts",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/runs/{{run_id}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "runs",
+                "{{run_id}}",
+                "cancel"
+              ],
+              "variable": [
+                {
+                  "key": "run_id",
+                  "value": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "runs (back office)",
+      "item": [
+        {
+          "name": "List all agent runs",
+          "request": {
+            "method": "GET",
+            "description": "Every run, newest first, without transcripts",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/bo/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "bo",
+                "runs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "per_page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "queued",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Read any agent run",
+          "request": {
+            "method": "GET",
+            "description": "Any run, with its transcript and steps",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/bo/runs/{{run_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "bo",
+                "runs",
+                "{{run_id}}"
+              ],
+              "variable": [
+                {
+                  "key": "run_id",
+                  "value": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Cancel any agent run",
+          "request": {
+            "method": "POST",
+            "description": "Stops a run whoever started it",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/bo/runs/{{run_id}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "bo",
+                "runs",
+                "{{run_id}}",
+                "cancel"
+              ],
+              "variable": [
+                {
+                  "key": "run_id",
+                  "value": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        }
+      ]
+    },
+    {
       "name": "sessions",
       "item": [
         {
@@ -1016,6 +1343,87 @@
               "path": [
                 "users",
                 "deleted"
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Browse users",
+          "request": {
+            "method": "GET",
+            "description": "Search, filter, sort, group and resolve sessions, within the declared policy",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/directory",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "directory"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Page number, from 1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Rows per page, clamped by config.pagination.maxLimit"
+                },
+                {
+                  "key": "search",
+                  "value": "string",
+                  "disabled": true,
+                  "description": "One search term. Matched on: email"
+                },
+                {
+                  "key": "sort",
+                  "value": "string",
+                  "disabled": true,
+                  "description": "JSON: [[\"field\",\"asc\"|\"desc\"], …]. Sortable: created_at, email, role; when grouped, the group keys and count"
+                },
+                {
+                  "key": "filter",
+                  "value": "string",
+                  "disabled": true,
+                  "description": "JSON: [[field, operator, value], [\"or\" | \"and\", …conditions], …]. Filterable: role (string: = != in); email (string: = like starts); created_at (date: > >= < <=)"
+                },
+                {
+                  "key": "fields",
+                  "value": "string",
+                  "disabled": true,
+                  "description": "JSON: [field, …] to return. Allowed: email, role, created_at"
+                },
+                {
+                  "key": "resolve",
+                  "value": "string",
+                  "disabled": true,
+                  "description": "JSON: [[relation, { fields, sort, limit, resolve }], …]. Relations: sessions (ip, user_agent, last_seen_at, created_at; at most 10)"
+                },
+                {
+                  "key": "group",
+                  "value": "string",
+                  "disabled": true,
+                  "description": "JSON: [field, …] to group by; rows become { key, count }. Groupable: role"
+                },
+                {
+                  "key": "tree",
+                  "value": "true",
+                  "disabled": true,
+                  "description": "With group: nest the buckets, one level per key"
+                }
               ]
             }
           },

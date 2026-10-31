@@ -1,9 +1,19 @@
 # List queries — a controlled query language for list endpoints
 
-Status: **approved 2026-10-31, not started.** Decisions taken: app code in
-`@app/core` (production preset); `per_page` stays; the named `resolve`
-form; JSON params in the query string; `search` added; `group` in v1 as an
-aggregation with one builder per pipeline stage.
+Status: **built 2026-10-31 on `feat/bullmq-6`** (Q1–Q5 plus the tree
+output), verified locally. Decisions taken: app code in `@app/core`
+(production preset); `per_page` stays; the named `resolve` form; JSON
+params in the query string; `search` added; `group` in v1 as an
+aggregation with one builder per pipeline stage; `tree=true` folds the
+buckets server-side.
+
+**As built, where it differs from the text below:** the reference endpoint
+is `GET /users/directory` (`users:bo:list`), because the web router already
+owns `GET /users`; refusals are **422**, the app's validation status, not
+400; the top-level filter is always kept as the implicit `and` node, so an
+issue path mirrors the client's JSON exactly (`filter.0.2.2.0`);
+`listQuery(policy)` writes the policy's allowlist into each parameter's
+description in the generated spec. Source is about 760 lines, comments included.
 
 ## What exists today
 
@@ -58,13 +68,17 @@ GET /api/v1/bo/users
 | `fields` | `[field, …]` | Projection. Absent means the policy's `fields` default. Refused with `group`. |
 | `resolve` | `[[relation, { fields?, sort?, limit? }], …]` | Populate, depth ≤ 3. No `filter` inside a resolve (see translation). Refused with `group`. |
 | `group` | `[field, …]` | Buckets by every listed field; order is the key order. Response rows become `{ key: { status, role }, count }`. |
+| `tree` | `true` | With `group`: rows become `{ key, count, groups: [{ key, count, groups? }] }`, one level per key; pagination counts top-level nodes. |
 
 **Why `group` is flat.** The proposed nested form
 (`[["age"], ["status", ["sort", …]]]`) and SQL `GROUP BY age, status` carry
 the same information: a bucket per distinct combination. The flat form
 has one shape to validate, one `$group` stage, and sorting by any key field
-or by `count` replaces per-level sort. A client that wants a tree folds the
-flat buckets in a dozen lines. A `tree: true` output option is deferred.
+or by `count` replaces per-level sort. `tree=true` is the same buckets
+folded in the pipeline: one (`$sort`, `$group`) pair per level below the
+top, deepest first, with positional key aliases so a dotted field never
+becomes a path inside `_id`. A sort key orders the level it names, `count`
+orders every level, and an unnamed level is ordered by its key.
 
 Operators, v1: `=`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `nin`, `like`
 (contains, case-insensitive), `starts` (prefix; the one that can use an
@@ -205,9 +219,11 @@ Roughly 450 lines of source. No new dependency.
 | **Q5 docs** | The skill file (both copies); `example/AGENTS.md` where list endpoints are described; CHANGELOG. `tulipes new module` keeps the plain list; adopting the query is a documented edit in v1. |
 
 Deferred, recorded so they aren't silently dropped: `agg` metrics in
-`$group`, `tree` output for groups, filters inside `resolve`, a SQL
-translator, cursor pagination (`after` token), `tulipes new module
---query`.
+`$group`, filters inside `resolve`, a SQL translator, cursor pagination
+(`after` token), `tulipes new module --query`, and `search: "text"`
+together with `group` on a soft-deleting model (verified to fail:
+MongoDB requires `$text` in the first stage and the plugin's `$match`
+comes first).
 
 ## Prior art, briefly
 

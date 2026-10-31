@@ -49,6 +49,9 @@ fills in `page`, `per_page` and `total_pages` from the request and the
 count. Without it, `meta` stays clean — a single record does not carry
 four null pagination keys.
 
+When clients should search, filter, sort or group the list, don't extend
+this by hand: declare a `listQuery(policy)` → skill `tulipes-list-query`.
+
 ## Failures are thrown, never responded
 
 The terminal handler builds the same envelope from a thrown error, so a

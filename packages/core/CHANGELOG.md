@@ -36,6 +36,18 @@ each to core's version, so all eight are republished. See MIGRATING,
   recurring jobs go through `ctx.queues.schedule()`, and an untyped `repeat`
   throws instead of becoming a one-off job.
 
+### Added
+
+- **List queries in the production preset** (`@app/core`): `listQuery(policy)`
+  for `rai({ query })` parses `search`, `sort`, `filter` (nested `and` /
+  `or`), `fields`, `resolve` (populate, depth 3), `group` and `tree`, and
+  refuses anything outside the endpoint's allowlist with a 422 naming the
+  value. `toMongoose()` compiles it stage by stage, with a `system` query
+  the client cannot override, and `runQuery()` returns the page and its
+  total. The reference app's `GET /users/directory` (`users:bo:list`) uses
+  it; skill `tulipes-list-query`. Apps generated earlier can copy
+  `modules/core/helpers/query/`; nothing changes for them otherwise.
+
 ### Fixed
 
 - `tulipes new module` wrote `^0.1.1` for the provider packages, a range

@@ -21,6 +21,13 @@ record.
   2026-10-23, after 0.13.1): the lockfile moves to body-parser 2.4.0 under
   express 5.2.1, which already allows `^2.2.1`. Fresh installs of
   generated apps get it with no range change.
+- **List queries** in the production preset (`@app/core`): `listQuery(policy)`
+  with `toMongoose`/`runQuery`, the reference `GET /users/directory`
+  (`users:bo:list`) and skill `tulipes-list-query`. Design and decisions:
+  [`list-query-design.md`](../design/list-query-design.md). This adds the
+  reference app's 39th endpoint (11 in `bo`) and regenerates
+  `example/docs/{openapi,collection}.json`, which had also been missing the
+  0.13 agents-run endpoints.
 - **`tulipes new module`** now writes the provider versions the CLI
   scaffolds with, not `^0.1.1`.
 - **Test fix:** provider-matrix's "starts nothing" test counted Redis
@@ -38,6 +45,18 @@ Local: this Mac, 2026-10-31, Node 24.14.0, pnpm 10.28.0, MongoDB and Redis
 on 127.0.0.1, Docker not running. **No CI run yet**: the branch isn't
 pushed. Everything below used the committed harnesses unmodified, on the
 final versions.
+
+Re-run after the list-query work landed (same machine and date):
+
+| CI job | Local result |
+|---|---|
+| tests | 42 files, 484 passed; 94.75 / 90.07 / 94.83 / 95.88; the query helpers' grammar, policy and stages above their own 90/85 floors |
+| example suite (`example/`, services) | 15 files, 179 passed, 8 skipped (the live-model evals, which need `AGENTS_LIVE=1`) |
+| pack, workspace audit | eight archives verify; no high/critical |
+| minimal, production `--offline-only`, composition, upgrade | pass |
+| production (MongoDB, Redis) | pass, 84.3 s; the generated app's own suite ran 15 files, 179 passed |
+
+Before it:
 
 | CI job | Local result |
 |---|---|
