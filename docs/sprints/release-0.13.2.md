@@ -60,6 +60,14 @@ smokes and upgrade pass again):
 | minimal, production `--offline-only`, composition, upgrade | pass |
 | production (MongoDB, Redis) | pass, 84.3 s; the generated app's own suite ran 15 files, 179 passed |
 
+Docker harness, 2026-10-31, Docker 29.5.2, on the `3f1b985` archives:
+`failure-smoke.mjs` passed with 12 observations: primary SIGKILLed
+mid-refresh (client saw 200), election to :27102, rotated token 200 and
+pre-failure replay 401, re-login 200; Redis down: limited endpoint 503,
+unlimited 200, limiter back after ~1 s; shutdown with a member down exits
+0. Its Redis outage exercises the rate limiter's client; BullMQ 6 under a
+Redis outage is not observed by any harness. `ingress-smoke.mjs` not run.
+
 Before it:
 
 | CI job | Local result |
@@ -78,8 +86,7 @@ billing` writes `@tulipes/mongoose ^0.2.4`, `@tulipes/bullmq ^0.3.0` and
 `@tulipes/socket.io ^0.1.6`. The reference app's backend and worker on
 BullMQ 6 processed a real job end to end (in the plan).
 
-Not run: `failure-smoke.mjs` (it exercises Redis loss, which matters for
-BullMQ 6) and `ingress-smoke.mjs`, both needing Docker. CI covers Node
+Not run: `ingress-smoke.mjs` (Docker; nothing it exercises changed). CI covers Node
 24.0.0; only 24.14.0 was used here, and macOS was the only minimal OS.
 
 ## Before publishing
