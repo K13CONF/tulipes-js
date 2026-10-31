@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { useTestApp } from "@tulipes/testing";
+import { listQueryDefaults } from "@app/core";
 
 import { testEnv, testSettings } from "../../../tests/support.ts";
 
@@ -50,6 +51,10 @@ beforeAll(async () => {
 
 const browse = (query: Record<string, unknown>) =>
   app.get<Row[]>("/users/directory", { as: admin, query: Object.fromEntries(Object.entries(query).map(([key, value]) => [key, typeof value === "string" ? value : json(value)])) });
+
+test("the core bootstrap sets the app-wide query time limit from config.pagination", () => {
+  expect(listQueryDefaults().maxTimeMS).toBe(app.ctx.config.pagination!.maxTimeMs);
+});
 
 test("only the back office may browse", async () => {
   const user = await app.register();

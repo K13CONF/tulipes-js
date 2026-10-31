@@ -26,9 +26,8 @@ export class BoUsersController {
    */
   list(): RequestHandler {
     return async (req: Request, res: Response) => {
-      const compiled = toMongoose(req.query as unknown as ParsedListQuery, req.page, {
-        maxTimeMS: this.#ctx.config.pagination?.maxTimeMs,
-      });
+      // App-wide defaults (config.pagination.maxTimeMs) apply; pass { maxTimeMS } here to override.
+      const compiled = toMongoose(req.query as unknown as ParsedListQuery, req.page);
       const { data, total_items } = await runQuery(this.#ctx.models!.get("User"), compiled);
       res.respond({ data, meta: total_items === undefined ? {} : { total_items } });
     };

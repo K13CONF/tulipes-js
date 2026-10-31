@@ -34,11 +34,17 @@ import { runQuery, toMongoose, type ParsedListQuery } from "@app/core";
 
 const compiled = toMongoose(req.query as unknown as ParsedListQuery, req.page, {
   system: { tenant: req.auth.tenant },                   // ANDed outside the client's query
-  maxTimeMS: this.#ctx.config.pagination?.maxTimeMs,
+  // maxTimeMS: 15_000,                                  // only to override the app-wide default
 });
 const { data, total_items } = await runQuery(this.#ctx.models!.get("User"), compiled);
 res.respond({ data, meta: total_items === undefined ? {} : { total_items } });
 ```
+
+App-wide defaults come from `config.pagination` (`maxTimeMs`, the ceiling
+for each find, count or aggregate): the core module's
+`list-query.bootstrap.ts` hands them to `configureListQueries()` at boot.
+An option passed to `toMongoose()` wins for that call; `system` is never
+global, because it belongs to the endpoint.
 
 `rai` runs the policy after the access check, so `req.query` is the
 parsed AST by the time the handler sees it. Anything outside the policy is

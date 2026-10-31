@@ -193,3 +193,21 @@ describe("grouped", () => {
     expect(compiled).not.toHaveProperty("count");
   });
 });
+
+describe("app-wide defaults", () => {
+  test("configureListQueries sets the default; a call's option overrides it; undefined keeps it", async () => {
+    const { configureListQueries, listQueryDefaults } = await import("../helpers/query/index.ts");
+    const before = listQueryDefaults().maxTimeMS;
+    try {
+      configureListQueries({ maxTimeMS: 1_234 });
+      expect(list({}).maxTimeMS).toBe(1_234);
+      expect(grouped({ group: ["role"] }).maxTimeMS).toBe(1_234);
+      expect(list({}, { maxTimeMS: 50 }).maxTimeMS).toBe(50);
+
+      configureListQueries({ maxTimeMS: undefined });
+      expect(listQueryDefaults().maxTimeMS).toBe(1_234);
+    } finally {
+      configureListQueries({ maxTimeMS: before });
+    }
+  });
+});
