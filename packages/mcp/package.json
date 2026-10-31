@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "MCP server over a Tulipes app's agent manifest: its tools, served on stdio, called through the app's own HTTP door",
   "type": "module",
   "bin": {

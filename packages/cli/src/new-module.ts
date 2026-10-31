@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { BootReport } from "@tulipes/core/errors";
 import { readProviderDeclarations } from "@tulipes/core/boot";
 import { coreVersion } from "./package-info.ts";
+import { readVersions } from "./template.ts";
 
 /**
  * `tulipes new module <name>` — scaffold every contract a module can hold,
@@ -117,6 +118,8 @@ function renderModule(
   const Model = pascal(name);
   // Named after its file: web.billing.controllers.ts → WebBillingController.
   const Controller = `${pascal(surface)}${Model}Controller`;
+  // The provider versions this CLI scaffolds apps with; a fixed range went stale with each release.
+  const provider = (pkg: string): string => `^${readVersions()[pkg]}`;
 
   const files: [string, string][] = [
     // One file per locale the app already ships. The module IS the i18n
@@ -143,9 +146,9 @@ function renderModule(
         "@tulipes/core": `^${coreVersion()}`,
         [`${scope}/core`]: "workspace:*",
         express: "^5",
-        ...(models && { "@tulipes/mongoose": "^0.1.1", mongoose: "^8" }),
-        ...(queues && { "@tulipes/bullmq": "^0.1.1" }),
-        ...(sockets && { "@tulipes/socket.io": "^0.1.1" }),
+        ...(models && { "@tulipes/mongoose": provider("@tulipes/mongoose"), mongoose: "^8" }),
+        ...(queues && { "@tulipes/bullmq": provider("@tulipes/bullmq") }),
+        ...(sockets && { "@tulipes/socket.io": provider("@tulipes/socket.io") }),
       },
     })],
 

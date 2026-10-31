@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/spec",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Generate OpenAPI documents and Postman collections from a Tulipes app's declared routes",
   "type": "module",
   "exports": {
@@ -30,7 +30,7 @@
     "@tulipes/core": "workspace:*",
     "@types/node": "^24.2.0",
     "typescript": "^7.0.2",
-    "zod": "^3.25"
+    "zod": "^4.6.6"
   },
   "repository": {
     "type": "git",

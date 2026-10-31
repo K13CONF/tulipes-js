@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { BackendCtx } from "@tulipes/core/boot";
+import { listQuery } from "@app/core";
 
 import { BoUsersController } from "../controllers/bo.users.controllers.ts";
 import { createBody, emailParam } from "../schemas/users.schemas.ts";
@@ -21,6 +22,28 @@ export default function boUsersRoutes(ctx: BackendCtx): void {
       description: "Adds the account and queues its welcome email",
       body: createBody,
     }), users.create());
+
+  // The list-query language: everything a client may search, filter, sort,
+  // project, resolve or group on is named here, and nothing else gets through.
+  router.get("/directory", rai({
+      id: "users:bo:list",
+      name: "Browse users",
+      description: "Search, filter, sort, group and resolve sessions, within the declared policy",
+      query: listQuery({
+        search: ["email"],
+        filter: {
+          role: ["=", "!=", "in"],
+          email: ["=", "like", "starts"],
+          created_at: { type: "date", ops: [">", ">=", "<", "<="] },
+        },
+        sort: ["created_at", "email", "role"],
+        fields: ["email", "role", "created_at"],
+        resolve: {
+          sessions: { fields: ["ip", "user_agent", "last_seen_at", "created_at"], sort: ["created_at", "last_seen_at"], maxLimit: 10 },
+        },
+        group: ["role"],
+      }),
+    }), users.list());
 
   router.get("/deleted", rai({
       id: "users:bo:list:deleted",

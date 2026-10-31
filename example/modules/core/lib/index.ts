@@ -21,6 +21,32 @@ export { LOG_FILES, logger, moduleLogger } from "../helpers/logger/index.ts";
 export { lazy } from "../helpers/lazy.ts";
 
 export {
+  grammar,
+  grammarFor,
+  LIMITS,
+  listQuery,
+  operators,
+  configureListQueries,
+  listQueryDefaults,
+  runQuery,
+  toMongoose,
+  type CompileOptions,
+  type CompiledQuery,
+  type ListQueryDefaults,
+  type QueryResult,
+  type Condition,
+  type FieldType,
+  type FilterRule,
+  type ListQuery,
+  type Operator,
+  type ParsedListQuery,
+  type QueryPolicy,
+  type Resolve,
+  type ResolvePolicy,
+  type SortKey,
+} from "../helpers/query/index.ts";
+
+export {
   baseSchemaOptions,
   baseModelPlugin,
   softDeletePlugin,

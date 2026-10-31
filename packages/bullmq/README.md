@@ -47,7 +47,8 @@ await requireQueues(ctx).add("billing.send-invoice", "send", { invoiceId });
 ```
 
 Recurring work is a job scheduler, keyed so that calling it on every boot
-updates rather than duplicates. A cron `pattern` fires in the app's
+updates rather than duplicates. `add()` takes no `repeat`: BullMQ 6
+removed it. A cron `pattern` fires in the app's
 `config.timezone.default` unless it names its own `tz`:
 
 ```ts

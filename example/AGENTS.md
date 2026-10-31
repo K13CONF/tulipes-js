@@ -79,6 +79,10 @@ require dedicated TEST_MONGO_URI and TEST_REDIS_URL services.
    `params`, from `zod/v4`) rather than hand-rolled `if` checks. The same
    declaration generates the OpenAPI and Postman documents, so they cannot
    describe a shape the endpoint rejects. → skill `tulipes-spec`
+   A list clients may search, filter, sort or group declares
+   `query: listQuery(policy)` from `@app/core` and runs it with
+   `toMongoose` + `runQuery`; never build a filter from `req.query` by hand.
+   → skill `tulipes-list-query`
 9. **User-facing strings are keys, never literals.** `req.t("notFound")`
    inside a route reads that module's `i18n/<locale>.json` — the module is
    the namespace and `rai()` binds it. Never concatenate a translated

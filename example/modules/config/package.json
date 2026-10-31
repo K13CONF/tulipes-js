@@ -18,6 +18,6 @@
     "@tulipes/mongoose": "workspace:*",
     "express": "^5",
     "mongoose": "^8",
-    "zod": "^3.25"
+    "zod": "^4.6.6"
   }
 }

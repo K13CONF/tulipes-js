@@ -9,6 +9,54 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [0.13.2] — 2026-10-31
+
+A patch to core with no API change, a security fix in what apps install,
+and a breaking minor of `@tulipes/bullmq`. Packages: core `0.13.2`,
+`@tulipes/cli` `0.4.2`, `@tulipes/mcp` `0.2.2`, `@tulipes/spec` `0.4.3`,
+`@tulipes/mongoose` `0.2.4`, `@tulipes/bullmq` **`0.3.0`**,
+`@tulipes/testing` `0.1.4`, `@tulipes/socket.io` `0.1.6`. Packing pins
+each to core's version, so all eight are republished. See MIGRATING,
+"0.13.2" and "@tulipes/bullmq 0.3.0".
+
+### Security
+
+- **zod GHSA-mrhx-c7xc-m3w5** (high, fixed in 4.6.6): new apps and the
+  reference app depend on `zod ^4.6.6` instead of `^3.25`. Core accepts
+  `^3.25 || ^4.6.6`, so an app still on 3.25 keeps booting, but it stays
+  exposed until it moves (MIGRATING).
+
+### Changed
+
+- Core's own schemas import `zod/v4`, the API both majors serve. A missing
+  `"tulipes"` manifest field is still reported as `Required`.
+- **Breaking (`@tulipes/bullmq`):** BullMQ `^6.3.16`, up from `^5`. It
+  drops the unmaintained cron-parser 4 that made installs warn about a
+  deprecated subdependency. `ctx.queues.add()` no longer takes `repeat`;
+  recurring jobs go through `ctx.queues.schedule()`, and an untyped `repeat`
+  throws instead of becoming a one-off job.
+
+### Added
+
+- **List queries in the production preset** (`@app/core`): `listQuery(policy)`
+  for `rai({ query })` parses `search`, `sort`, `filter` (nested `and` /
+  `or`), `fields`, `resolve` (populate, depth 3), `group` and `tree`, and
+  refuses anything outside the endpoint's allowlist with a 422 naming the
+  value. `toMongoose()` compiles it stage by stage, with a `system` query
+  the client cannot override, and `runQuery()` returns the page and its
+  total. The reference app's `GET /users/directory` (`users:bo:list`) uses
+  it; skill `tulipes-list-query`. The query time limit is app-wide,
+  `config.pagination.maxTimeMs`, applied at boot by the core module's
+  `list-query.bootstrap.ts`; a controller passes `{ maxTimeMS }` to
+  override it. Apps generated earlier can copy
+  `modules/core/helpers/query/`; nothing changes for them otherwise.
+
+### Fixed
+
+- `tulipes new module` wrote `^0.1.1` for the provider packages, a range
+  that admits only 0.1.x. It now pins the versions the CLI scaffolds apps
+  with.
+
 ## [0.13.1] — 2026-10-17
 
 A patch with no API change: the new brand, and documentation fixes. No

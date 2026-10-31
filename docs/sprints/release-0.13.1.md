@@ -1,6 +1,7 @@
 # Release — core 0.13.1, the new brand
 
-Status: **prepared on 2026-10-17** on `release/0.13.1`; not yet tagged.
+Status: **published on 2026-10-17** to npm's `latest` tag, from `v0.13.1`
+on `999bb01`.
 A patch on the 0.13 line with no API change, so no candidate. It carries
 `bd45f0a` (README and scaffold-comment fixes) and the rebrand.
 
@@ -50,10 +51,10 @@ Local: this Mac, 2026-10-17, Node 24, pnpm 10.28.0, MongoDB and Redis on
 
 | Check | Local | CI |
 |---|---|---|
-| frozen install, `typecheck`, `test:types` | pass; the bumps leave the lockfile unchanged | |
-| `test:coverage` (MongoDB, Redis, `REQUIRE_INTEGRATION_TESTS=1`) | 40 files, 413 passed; 94.84 / 91.37 / 94.08 / 95.92, the same as 0.13.0 | |
-| `artifacts.mjs prepare` + `verify` | eight archives verify; core has `assets/brand/*.svg` and no PNG; the CLI's `versions.json` pins the new versions | |
-| scaffold smoke, minimal, local archives | pass: packed install, generated types, tests, specs, backend/shutdown, mcp (13.6 s) | |
+| frozen install, `typecheck`, `test:types` | pass; the bumps leave the lockfile unchanged | pass |
+| `test:coverage` (MongoDB, Redis, `REQUIRE_INTEGRATION_TESTS=1`) | 40 files, 413 passed; 94.84 / 91.37 / 94.08 / 95.92, the same as 0.13.0 | pass |
+| `artifacts.mjs prepare` + `verify` | eight archives verify; core has `assets/brand/*.svg` and no PNG; the CLI's `versions.json` pins the new versions | pass |
+| scaffold smoke, minimal, local archives | pass: packed install, generated types, tests, specs, backend/shutdown, mcp (13.6 s) | pass |
 
 A stale root `node_modules` from before pnpm (real directories dated
 2026-08-29) first failed `settings.test.ts`. The fixture linked a second
@@ -63,4 +64,23 @@ CI installs fresh.
 
 ## Publication
 
-Pending.
+- Merged locally (`git merge --no-ff release/0.13.1`) as `999bb01` and
+  pushed to `master`. PR #38's CI passed every job beforehand.
+- Tag `v0.13.1` on `999bb01`. The publish workflow re-ran the verify jobs
+  and published the eight archives
+  ([run 39047298433](https://github.com/K13CONF/tulipes-js/actions/runs/39047298433)).
+- Registry: each of the eight versions' `dist.integrity` matches the
+  digest in the run's `manifest.json` (commit `999bb01`). `latest` is core
+  0.13.1, cli 0.4.1, mcp 0.2.1, spec 0.4.2, mongoose and bullmq 0.2.3,
+  testing 0.1.3 and socket.io 0.1.5. Mongoose and bullmq were served at
+  once; the other six took a few more minutes.
+- `https://cdn.jsdelivr.net/npm/@tulipes/core@0.13.1/assets/brand/lockup-bloom.svg`
+  returns 200 `image/svg+xml`.
+- Registry smokes, run locally on the run's archives: minimal passed in
+  14.6 s (the install, generated types, tests, specs, backend/shutdown and
+  mcp); production, against local MongoDB and Redis, passed the same steps
+  and the worker in 78.1 s.
+- **Unexpected:** the publish emitted npm provenance statements (sigstore),
+  and `gh repo view` reports the repository as **PUBLIC**.
+  `docs/releasing.md` says it is private and that provenance stays off.
+  Backlog: confirm with the maintainer and update `docs/releasing.md`.

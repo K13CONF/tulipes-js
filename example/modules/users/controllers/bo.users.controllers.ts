@@ -2,6 +2,7 @@ import { forgetUser } from "@app/auth";
 import type { Request, RequestHandler, Response } from "express";
 import type { Ctx } from "@tulipes/core/boot";
 import { HttpError } from "@tulipes/core/http";
+import { runQuery, toMongoose, type ParsedListQuery } from "@app/core";
 
 /**
  * The users back office — the users:bo:* endpoints, granted to admin
@@ -14,6 +15,22 @@ export class BoUsersController {
 
   constructor(ctx: Ctx) {
     this.#ctx = ctx;
+  }
+
+  /**
+   * users:bo:list. rai has already parsed and policed the query, so
+   * req.query is the AST; this compiles it, runs it, and responds. A
+   * `system` filter here (a tenant, an owner) would be ANDed outside
+   * anything the client sent. Soft-deleted users need none: the model's
+   * plugin already keeps them out of find, count and aggregate.
+   */
+  list(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      // App-wide defaults (config.pagination.maxTimeMs) apply; pass { maxTimeMS } here to override.
+      const compiled = toMongoose(req.query as unknown as ParsedListQuery, req.page);
+      const { data, total_items } = await runQuery(this.#ctx.models!.get("User"), compiled);
+      res.respond({ data, meta: total_items === undefined ? {} : { total_items } });
+    };
   }
 
   /** Soft delete: the row stays in mongo but leaves every ordinary query. */

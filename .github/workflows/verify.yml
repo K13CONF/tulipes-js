@@ -5,7 +5,8 @@ permissions:
   contents: read
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    # ubuntu-24.04 ships kernel 7.0.0, where mongo:8 refuses to start (SERVER-121912; fixed builds need 7.0.14+). Back to ubuntu-latest once it does.
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -162,7 +163,8 @@ jobs:
           path: reports/
   production:
     needs: pack
-    runs-on: ubuntu-latest
+    # ubuntu-24.04 ships kernel 7.0.0, where mongo:8 refuses to start (SERVER-121912; fixed builds need 7.0.14+). Back to ubuntu-latest once it does.
+    runs-on: ubuntu-22.04
     services:
       mongo:
         image: mongo:8

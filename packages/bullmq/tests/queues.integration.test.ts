@@ -102,7 +102,7 @@ integration(
 
     manager.forModule("probe", new BootReport()).define(name);
 
-    const client = await manager.queue(name).client;
+    const client = await manager.queue(name).getBackend().client;
     const close = Queue.prototype.close;
 
     vi.spyOn(Queue.prototype, "close").mockImplementation(function (
@@ -217,10 +217,10 @@ integration(
       await expect(queues.schedule(name, "bad", { pattern: "0 2 * * *" }, { name: "run", data: {} as never }))
         .rejects.toThrow(/Job data for queue/);
 
-      // The older repeat option on add() gets the same default.
-      await queues.add(name, "legacy", { id: "d" }, { repeat: { pattern: "0 4 * * *" } });
-      const legacy = (await queue.getJobSchedulers()).find((scheduler) => scheduler.pattern === "0 4 * * *");
-      expect(legacy?.tz).toBe("Africa/Casablanca");
+      // BullMQ 6 has no repeat on add(); an untyped caller is told where it went.
+      await expect(queues.add(name, "legacy", { id: "d" }, { repeat: { pattern: "0 4 * * *" } } as never))
+        .rejects.toThrow(/use queues\.schedule/);
+      expect(await queue.getJobSchedulersCount()).toBe(3);
 
       expect(await queues.unschedule(name, "paris")).toBe(true);
       expect(await queue.getJobScheduler("paris")).toBeUndefined();

@@ -79,7 +79,7 @@ test("new module emits model and bootstrap files only for apps that declare a mo
   });
   await runNewModule(declared.rootDir, "notes");
   expect(await readFile(declared.rootDir + "/modules/notes/models/notes.model.ts", "utf8")).toContain('from "@tulipes/mongoose"');
-  expect(JSON.parse(await readFile(declared.rootDir + "/modules/notes/package.json", "utf8")).dependencies).toMatchObject({ "@tulipes/mongoose": expect.any(String), mongoose: "^8" });
+  expect(JSON.parse(await readFile(declared.rootDir + "/modules/notes/package.json", "utf8")).dependencies).toMatchObject({ "@tulipes/mongoose": `^${JSON.parse(await readFile(new URL("../../mongoose/package.json", import.meta.url), "utf8")).version}`, mongoose: "^8" });
 
   await runNewModule(declared.rootDir, "plain", { models: false });
   expect(await exists(declared.rootDir + "/modules/plain/models")).toBe(false);

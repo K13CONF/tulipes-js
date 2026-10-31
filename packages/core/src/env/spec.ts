@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v4";
 
 /**
  * The shape of a module's environment contract — the `tulipes.env` key of

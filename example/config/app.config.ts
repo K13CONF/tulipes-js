@@ -108,6 +108,8 @@ const appConfig = ((env) => ({
   pagination: {
     defaultLimit: 20,
     maxLimit: 100,
+    /** Ceiling for one list query (find, count or aggregate); see @app/core's query helpers. */
+    maxTimeMs: 5_000,
   },
 })) satisfies AppConfigFn;
 

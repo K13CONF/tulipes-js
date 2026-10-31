@@ -11,6 +11,55 @@ what makes it work under nvm.
 
 ---
 
+## 0.13.2 — zod 4.6.6
+
+Recommended for every app, though nothing breaks without it. zod below
+4.6.6 can exhaust memory validating an oversized constrained collection
+(GHSA-mrhx-c7xc-m3w5, high). That includes 3.25.x, whose `zod/v4` is the
+same code. In the root `package.json` and in every module `package.json`
+that lists zod, set `"zod": "^4.6.6"`, then run `pnpm install`. Imports
+stay `zod/v4`; zod 4 serves that path. Core accepts either major, so the
+app's version is what gets installed.
+
+---
+
+## @tulipes/bullmq 0.3.0 — BullMQ 6
+
+Only apps that declare `"queues": "@tulipes/bullmq"`. Core is unchanged.
+BullMQ 6 replaces the unmaintained cron-parser 4 (the `deprecated
+subdependencies` warning on install) and removes legacy repeatable jobs.
+
+1. **`add(…, { repeat })` is gone.** It fails to compile, and an untyped
+   call throws. Make recurring work a scheduler, keyed so every boot updates
+   it instead of adding a second one:
+
+   ```ts
+   // before
+   await ctx.queues.add("billing", "send", data, { repeat: { pattern: "0 2 * * *" } });
+   // after
+   await ctx.queues.schedule("billing", "nightly", { pattern: "0 2 * * *" }, { name: "send", data });
+   ```
+
+   Repeat jobs that an app on BullMQ 5.79 or later already created keep
+   firing under BullMQ 6, under a hashed scheduler id. To swap one for a
+   named schedule, find its key with `ctx.queues.queue(name).getJobSchedulers()`
+   and `unschedule()` it.
+2. **Repeat options:** `utc: true` becomes `tz: "UTC"`. `currentDate` and
+   `nthDayOfWeek` are no longer accepted.
+3. **Direct BullMQ use through `ctx.queues.queue(name)`:** `Queue#client` is
+   now `getBackend().client`. `Worker#resume()` must be awaited. The `paused`
+   job state, `debounce`/`debounced` (use `deduplication`), `Job#discard()`
+   (throw `UnrecoverableError`), `getRepeatableJobs()` and
+   `removeRepeatable*()` are removed. BullMQ's guide:
+   <https://docs.bullmq.io/guide/migrations/migrate-from-v5-to-v6>.
+4. Redis written by BullMQ **5.0–5.x before the scheduler format** (keys
+   like `name:::tz:pattern`) is refused by BullMQ 6 with "Legacy repeatable
+   job metadata is not supported". Tulipes never shipped such a BullMQ, so
+   this matters only to a Redis shared with an older app. Migrate those on
+   BullMQ 5 first.
+
+---
+
 ## 0.13.0 — an MCP process, API tokens, credential scopes
 
 Additive: an app on 0.12 runs unchanged. Nothing to do for scopes until a

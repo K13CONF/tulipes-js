@@ -15,4 +15,8 @@ const userSchema = new Schema(
   baseSchemaOptions,
 );
 
+// The auth module's sessions of this account. A virtual, so nothing is
+// stored on the user; `?resolve=["sessions"]` on users:bo:list populates it.
+userSchema.virtual("sessions", { ref: "Session", localField: "_id", foreignField: "user" });
+
 export default { name: "User", schema: userSchema } satisfies ModelDef;
