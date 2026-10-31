@@ -1,9 +1,7 @@
 # Release — core 0.13.2, BullMQ 6 and zod 4.6.6
 
-Status: **prepared 2026-10-31 on `feat/bullmq-6`, not published.** Nothing
-has been pushed, tagged or uploaded. More changes are expected before
-publication; when they land, rerun the evidence below and update this
-record.
+Status: **published on 2026-10-31** to npm's `latest` tag, from `v0.13.2`
+on `ace4b14` (PR #39). See Publication below.
 
 ## Scope
 
@@ -96,3 +94,31 @@ Not run: `ingress-smoke.mjs` (Docker; nothing it exercises changed). CI covers N
    Redis away from BullMQ 6.
 3. Set the CHANGELOG date. Push, open the PR, and wait for green CI.
    Merge, then tag `v0.13.2` per [`releasing.md`](../releasing.md).
+
+## Publication
+
+- PR #39's first CI runs failed before any project code ran: GitHub's
+  `ubuntu-24.04` image (20261025) moved to kernel 7.0.0-azure, where every
+  `mongo:8` image refuses to start (SERVER-121912; MongoDB's fixed builds
+  start again on 7.0.14+). `71b2299` moves the two jobs that start MongoDB
+  (`tests`, `production`) to `ubuntu-22.04` (kernel 6.8) with a note to
+  return to `ubuntu-latest` once the kernel reaches 7.0.14. CI then passed
+  every job on both the push and the pull-request run.
+- Merged on GitHub as `ace4b14`. Its author is the account's noreply
+  address, not `support@k13conf.com` (a GitHub merge takes the account's
+  identity); the commits it merges carry the right author. Left as is:
+  correcting it means rewriting `master` under a published tag.
+- Tag `v0.13.2` on `ace4b14`. The publish workflow re-ran every verify job
+  and published the eight archives
+  ([run 41211429673](https://github.com/K13CONF/tulipes-js/actions/runs/41211429673)).
+- Registry: each of the eight versions' `dist.integrity` matches the
+  digest in the run's `manifest.json` (commit `ace4b14`). `latest` is core
+  0.13.2, cli 0.4.2, mcp 0.2.2, spec 0.4.3, mongoose 0.2.4, bullmq 0.3.0,
+  testing 0.1.4 and socket.io 0.1.6. Metadata was served within 70 s; the
+  socket.io 0.1.6 tarball returned 404 for about 5 minutes after
+  publication, then 200, and its bytes match the integrity.
+- Registry smokes, run locally on the run's archives: minimal passed in
+  14.4 s; production, against local MongoDB and Redis, passed in 82.8 s,
+  the generated app's suite 15 files, 181 passed. The first production
+  attempt failed on that socket.io 404 and passed once it was served.
+
