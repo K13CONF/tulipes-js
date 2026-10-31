@@ -3,10 +3,10 @@ import type { Server as HttpServer } from "node:http";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 import { BootReport } from "../errors/boot-error.ts";
-import { providerCapabilities, type ModuleRequirement, type ProviderCapability } from "../modules/manifest.ts";
+import { manifestParse, providerCapabilities, type ModuleRequirement, type ProviderCapability } from "../modules/manifest.ts";
 import type { ModuleFiles } from "../modules/explorer.ts";
 import type { SettingsStore } from "../config/settings-store.ts";
 import type { Cleanup } from "./cleanup.ts";
@@ -138,7 +138,7 @@ export function readProviderDeclarations(rootDir: string, report: BootReport): P
     return {};
   }
   if (json.tulipes === undefined) return {};
-  const parsed = declarationSchema.safeParse(json.tulipes);
+  const parsed = declarationSchema.safeParse(json.tulipes, manifestParse);
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
       report.add({

@@ -30,7 +30,7 @@
     "@tulipes/core": "workspace:*",
     "@types/node": "^24.2.0",
     "typescript": "^7.0.2",
-    "zod": "^3.25"
+    "zod": "^4.6.6"
   },
   "repository": {
     "type": "git",

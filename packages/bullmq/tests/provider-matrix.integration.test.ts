@@ -42,13 +42,14 @@ async function clientNames(): Promise<string[]> {
 
 integration("a REDIS_URL without a declaration starts nothing, even with the provider installed", async () => {
   const app = await fixture({ "modules/probe/package.json": redisMeta });
-  const before = (await clientNames()).length;
+  // Counted in this process: CLIENT LIST is server-wide and races with test files running in parallel.
+  const connect = vi.spyOn(Redis.prototype, "connect");
 
   const handle = await app.boot({ mode: "script" });
 
   expect(handle.ctx.queues).toBeUndefined();
   expect(handle.providers).toEqual([]);
-  expect((await clientNames()).length).toBe(before);
+  expect(connect).not.toHaveBeenCalled();
 });
 
 integration("a declared provider without config.bullmq.redisUrl is a boot error naming the key to wire", async () => {

@@ -14,8 +14,17 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `@tulipes/bullmq` `0.3.0` and `@tulipes/cli` `0.4.2`, whose scaffold pins
 the new provider. Core is unchanged. See MIGRATING, "@tulipes/bullmq 0.3.0".
 
+### Security
+
+- **zod GHSA-mrhx-c7xc-m3w5** (high, fixed in 4.6.6): new apps and the
+  reference app depend on `zod ^4.6.6` instead of `^3.25`. Core accepts
+  `^3.25 || ^4.6.6`, so an app still on 3.25 keeps booting, but it stays
+  exposed until it moves (MIGRATING).
+
 ### Changed
 
+- Core's own schemas import `zod/v4`, the API both majors serve. A missing
+  `"tulipes"` manifest field is still reported as `Required`.
 - **Breaking (`@tulipes/bullmq`):** BullMQ `^6.3.16`, up from `^5`. It
   drops the unmaintained cron-parser 4 that made installs warn about a
   deprecated subdependency. `ctx.queues.add()` no longer takes `repeat`;

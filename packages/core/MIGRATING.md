@@ -11,6 +11,18 @@ what makes it work under nvm.
 
 ---
 
+## 0.13.2 — zod 4.6.6
+
+Recommended for every app, though nothing breaks without it. zod below
+4.6.6 can exhaust memory validating an oversized constrained collection
+(GHSA-mrhx-c7xc-m3w5, high). That includes 3.25.x, whose `zod/v4` is the
+same code. In the root `package.json` and in every module `package.json`
+that lists zod, set `"zod": "^4.6.6"`, then run `pnpm install`. Imports
+stay `zod/v4`; zod 4 serves that path. Core accepts either major, so the
+app's version is what gets installed.
+
+---
+
 ## @tulipes/bullmq 0.3.0 — BullMQ 6
 
 Only apps that declare `"queues": "@tulipes/bullmq"`. Core is unchanged.

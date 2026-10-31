@@ -1,6 +1,15 @@
-import { z } from "zod";
+import { z } from "zod/v4";
 
 import { envDeclarationSchema, type EnvDeclaration } from "../env/spec.ts";
+
+/**
+ * Parse options for package.json "tulipes" keys. zod 4 words a missing field
+ * "Invalid input: expected string, received undefined"; boot reports keep "Required".
+ */
+export const manifestParse = {
+  error: (issue: { code?: string; input?: unknown }) =>
+    issue.code === "invalid_type" && issue.input === undefined ? "Required" : undefined,
+};
 
 /**
  * A module's ordering metadata lives under the "tulipes" key of its
