@@ -1,7 +1,8 @@
 # Plan — `@tulipes/bullmq` on BullMQ 6
 
-Status: **implemented 2026-10-31 on `feat/bullmq-6`**, verified locally. Not
-yet through CI, not released.
+Status: **implemented 2026-10-31 on `feat/bullmq-6`**, verified locally,
+prepared as part of 0.13.2 ([release record](./release-0.13.2.md)). Not yet
+through CI, not published.
 
 ## Why
 
@@ -125,17 +126,10 @@ Not run: `failure-smoke.mjs` and `ingress-smoke.mjs` (need Docker), the
 `--no-queues --no-sockets` and minimal scaffold variants (CI runs them),
 `upgrade-smoke.mjs`.
 
-## Backlog found on the way
+## Backlog found on the way: resolved
 
-- **zod advisory GHSA-mrhx-c7xc-m3w5** (published 2026-10-01, high, fixed in
-  4.6.6). `example/package.json` and the CLI's app template pin
-  `zod ^3.25`, which resolves to 3.25.76. The production scaffold smoke's
-  audit gate refuses it, so CI's production job will fail on any branch,
-  this one included, until the template moves to `zod ^4.6.6`. The app
-  imports `zod/v4`, which zod 4 also serves. Its own change set.
-- **`new-module.ts:146-148`** writes `"^0.1.1"` for `@tulipes/mongoose`,
-  `@tulipes/bullmq` and `@tulipes/socket.io` into new module manifests. On
-  0.x that range admits only 0.1.x, already behind 0.2.3 and now 0.3.0.
-- **Publication path.** Publishing is gated on a `v<core-version>` tag, and
-  core doesn't change here. Shipping bullmq 0.3.0 needs either a core patch
-  (0.13.2, which bumps every archive) or a release-process decision.
+- zod GHSA-mrhx-c7xc-m3w5: fixed in `6b99a0d` (apps on `zod ^4.6.6`, core on
+  `zod/v4`). The production smoke passes its real audit gate.
+- `new-module.ts` provider ranges: fixed in `aa9712c`.
+- Publication path: bundled into core 0.13.2, which republishes all eight
+  archives. See the release record.

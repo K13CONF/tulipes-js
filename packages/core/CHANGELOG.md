@@ -9,10 +9,15 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
-## [Unreleased]
+## [0.13.2] — unreleased (prepared 2026-10-31)
 
-`@tulipes/bullmq` `0.3.0` and `@tulipes/cli` `0.4.2`, whose scaffold pins
-the new provider. Core is unchanged. See MIGRATING, "@tulipes/bullmq 0.3.0".
+A patch to core with no API change, a security fix in what apps install,
+and a breaking minor of `@tulipes/bullmq`. Packages: core `0.13.2`,
+`@tulipes/cli` `0.4.2`, `@tulipes/mcp` `0.2.2`, `@tulipes/spec` `0.4.3`,
+`@tulipes/mongoose` `0.2.4`, `@tulipes/bullmq` **`0.3.0`**,
+`@tulipes/testing` `0.1.4`, `@tulipes/socket.io` `0.1.6`. Packing pins
+each to core's version, so all eight are republished. See MIGRATING,
+"0.13.2" and "@tulipes/bullmq 0.3.0".
 
 ### Security
 
@@ -30,6 +35,12 @@ the new provider. Core is unchanged. See MIGRATING, "@tulipes/bullmq 0.3.0".
   deprecated subdependency. `ctx.queues.add()` no longer takes `repeat`;
   recurring jobs go through `ctx.queues.schedule()`, and an untyped `repeat`
   throws instead of becoming a one-off job.
+
+### Fixed
+
+- `tulipes new module` wrote `^0.1.1` for the provider packages, a range
+  that admits only 0.1.x. It now pins the versions the CLI scaffolds apps
+  with.
 
 ## [0.13.1] — 2026-10-17
 
