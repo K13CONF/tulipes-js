@@ -1,6 +1,7 @@
 # Docs site — the Tulipes documentation on GitHub Pages
 
 Status: planned on 2026-10-31 against `be58e97` (0.13.2). Nothing implemented.
+Decisions in §7 settled on 2026-10-31.
 
 The brief, in the maintainer's words: a documentation site for the framework,
 deployed with GitHub Pages, covering every detail, built to rank well in search.
@@ -69,11 +70,17 @@ Every detail must stay correct, so content is not copied from one place to anoth
 
 ### 2.4 URL and hosting
 
-- Default URL: `https://k13conf.github.io/tulipes-js/`, with Astro `base: "/tulipes-js"`.
-- A custom domain (open decision §7.1) is better for SEO because links from
-  npm, GitHub and blogs then build authority for a domain the project owns.
-  The site must be able to switch domains with a one-line `site`/`base` change
-  and a `CNAME` file.
+- URL: `https://k13conf.github.io/tulipes-js/`, with Astro `base: "/tulipes-js"`
+  (free; §7). Keep `site`/`base` in one place, so moving to a custom domain later
+  means changing one line and adding a `CNAME` file.
+- Crawlers only read `robots.txt` at the host root (`k13conf.github.io/robots.txt`),
+  and only the org's `K13CONF/k13conf.github.io` repo can publish that file. So
+  the sitemap is submitted directly in Search Console and Bing, and the site
+  also links it from the `<head>`. Optionally, create the org root repo with a
+  `robots.txt` that names the sitemap (D08).
+- A later domain move cannot use server-side 301 redirects on Pages. Search
+  engines would have to follow canonical links and meta refreshes instead,
+  which is slower. That is the price of the free URL.
 - Pages serves no custom headers and no server-side redirects. Moved pages get
   static redirect stubs (`<meta http-equiv="refresh">` plus `rel="canonical"`
   pointing to the new URL), produced by Astro `redirects`.
@@ -152,8 +159,8 @@ These are site-wide. Each item is checked by tooling in D06/D07, not by memory.
 - A visible "Last updated" date (from git) and an "Edit this page" link.
 
 **Site-wide**
-- `sitemap-index.xml` (only canonical pages, with `lastmod`), and `robots.txt`
-  pointing to the sitemap.
+- `sitemap-index.xml` (only canonical pages, with `lastmod`), linked from
+  every page's `<head>` and submitted by hand (see §2.4 for why `robots.txt` cannot do it).
 - A `404.html` with search and the main links. Pages serves it automatically.
 - `<html lang="en">`. If translations come later (backlog), add `hreflang` pairs.
 - `llms.txt` and `llms-full.txt` (`starlight-llms-txt`), because AI assistants
@@ -171,8 +178,10 @@ These are site-wide. Each item is checked by tooling in D06/D07, not by memory.
   `docs/releasing.md` rules and is not a standalone publish.
 - Set the GitHub repo homepage and topics (`nodejs`, `express`, `typescript`,
   `framework`, `mcp`, `rbac`, `mongoose`, `bullmq`).
-- Verify the site in Google Search Console and Bing Webmaster Tools (an HTML
-  file in `site/public/`), and submit the sitemap.
+- Verify the site in Google Search Console as a **URL-prefix** property
+  `https://k13conf.github.io/tulipes-js/` (a domain property needs DNS, which
+  github.io does not give us) using an HTML file in `site/public/`. Do the same
+  in Bing Webmaster Tools, and submit the sitemap to both.
 - Point the README badges and npm READMEs at the site.
 
 **Keywords to target** (one primary keyword per page, used in its title, h1,
@@ -188,8 +197,8 @@ plugin", "BullMQ Express integration", "role-based access control Node.js",
   `assets/brand-kit/`), `site`/`base`/`trailingSlash` set, and `docs.yml` as in §2.5.
 - **Done when:** `pnpm install --frozen-lockfile` passes; `scripts/artifacts.mjs verify`
   passes unchanged; `pnpm typecheck` is unchanged; the workflow deploys
-  a landing page and the 404 page to the Pages URL; `sitemap-index.xml` and
-  `robots.txt` are served.
+  a landing page and the 404 page to the Pages URL; `sitemap-index.xml` is
+  served and linked from the `<head>`.
 
 ### D02 — Generated reference: API and CLI
 - `starlight-typedoc` for all 20 entry points; a CLI help extraction script.
@@ -231,11 +240,12 @@ plugin", "BullMQ Express integration", "role-based access control Node.js",
   on a throwaway branch) and passes on master.
 
 ### D08 — Launch
-- Custom domain if chosen (§7.1), `homepage` fields staged for the next
-  release, repo homepage and topics, Search Console and Bing verification,
-  sitemap submitted.
-- **Done when:** the domain serves HTTPS; Search Console shows the sitemap
-  read with no errors; `site:` search returns the landing page (record the date).
+- `homepage` fields staged for the next release, repo homepage and topics,
+  Search Console (URL-prefix) and Bing verification, sitemap submitted;
+  optionally the org root repo with a `robots.txt`.
+- **Done when:** `https://k13conf.github.io/tulipes-js/` serves HTTPS; Search
+  Console shows the sitemap read with no errors; `site:` search returns the
+  landing page (record the date).
 
 ## 6. Evidence this plan expects
 
@@ -252,21 +262,22 @@ profile, throttling, commit).
 
 ## 7. Decisions
 
-Open:
-1. **Domain.** `k13conf.github.io/tulipes-js/` (no cost, weaker brand) or a
-   custom domain such as `tulipes.dev` or `docs.k13conf.com` (recommended).
-2. **Versioned docs.** Latest only (recommended until 1.0) or one copy per
-   minor version line.
-3. **README trimming in D04.** This changes what npm shows on the next
-   publish. Confirm before D04.
+Taken on 2026-10-31 by the maintainer:
+- **Domain:** the free `k13conf.github.io/tulipes-js/`. A custom domain is backlog.
+- **Versioned docs:** latest only until 1.0. Each `/upgrade/` page names the
+  version it applies to.
+- **README trimming in D04:** approved. The shorter READMEs reach npm with each
+  package's next publish.
 
-Taken:
+Taken in this plan:
 - Starlight over VitePress and Docusaurus (§2.1).
 - Generated over copied for the API, CLI, changelog and migration pages (§2.3).
 - The site is a private workspace, and core gains no dependency (§2.2).
 
 ## 8. Backlog
 
+- A custom domain (better for search ranking; needs DNS and a `CNAME` file; old URLs can only use meta-refresh redirects).
+- Versioned docs per minor line once 1.0 ships.
 - Translations (`hreflang`) once the i18n story for docs exists.
 - Interactive playground (StackBlitz) for the minimal preset.
 - A blog/news section for release posts (extra pages to index, plus RSS).
