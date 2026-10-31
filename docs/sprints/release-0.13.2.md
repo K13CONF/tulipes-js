@@ -27,7 +27,9 @@ record.
   [`list-query-design.md`](../design/list-query-design.md). This adds the
   reference app's 39th endpoint (11 in `bo`) and regenerates
   `example/docs/{openapi,collection}.json`, which had also been missing the
-  0.13 agents-run endpoints.
+  0.13 agents-run endpoints. The query time limit is app-wide
+  (`config.pagination.maxTimeMs`, set at boot by `list-query.bootstrap.ts`)
+  and overridable per call (`3f1b985`).
 - **`tulipes new module`** now writes the provider versions the CLI
   scaffolds with, not `^0.1.1`.
 - **Test fix:** provider-matrix's "starts nothing" test counted Redis
@@ -46,7 +48,9 @@ on 127.0.0.1, Docker not running. **No CI run yet**: the branch isn't
 pushed. Everything below used the committed harnesses unmodified, on the
 final versions.
 
-Re-run after the list-query work landed (same machine and date):
+Re-run after the list-query work landed (same machine and date; after
+`3f1b985`: CI test job 485 passed, example suite 181 passed, production
+smokes and upgrade pass again):
 
 | CI job | Local result |
 |---|---|

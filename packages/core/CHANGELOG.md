@@ -9,7 +9,7 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
-## [0.13.2] — unreleased (prepared 2026-10-31)
+## [0.13.2] — 2026-10-31
 
 A patch to core with no API change, a security fix in what apps install,
 and a breaking minor of `@tulipes/bullmq`. Packages: core `0.13.2`,
@@ -45,7 +45,10 @@ each to core's version, so all eight are republished. See MIGRATING,
   value. `toMongoose()` compiles it stage by stage, with a `system` query
   the client cannot override, and `runQuery()` returns the page and its
   total. The reference app's `GET /users/directory` (`users:bo:list`) uses
-  it; skill `tulipes-list-query`. Apps generated earlier can copy
+  it; skill `tulipes-list-query`. The query time limit is app-wide,
+  `config.pagination.maxTimeMs`, applied at boot by the core module's
+  `list-query.bootstrap.ts`; a controller passes `{ maxTimeMS }` to
+  override it. Apps generated earlier can copy
   `modules/core/helpers/query/`; nothing changes for them otherwise.
 
 ### Fixed
