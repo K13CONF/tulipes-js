@@ -1,0 +1,16 @@
+{
+  "name": "@tulipes-site/docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "node scripts/check-build.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.8",
+    "astro": "7.4.4",
+    "sharp": "0.35.5"
+  }
+}

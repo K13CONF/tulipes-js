@@ -1,0 +1,71 @@
+---
+title: Tulipes, the fail-closed Express framework
+description: Tulipes is a TypeScript framework for Express 5 that checks modules, roles, environment, models and queues at boot, and reports every problem at once.
+template: splash
+hero:
+  tagline: The Express framework that refuses to start when something is wrong.
+  actions:
+    - text: View on GitHub
+      link: https://github.com/K13CONF/tulipes-js
+      icon: github
+    - text: "@tulipes/core on npm"
+      link: https://www.npmjs.com/package/@tulipes/core
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+You write **modules**: one folder per feature, holding its own routes, models,
+config, permissions and background jobs. Tulipes discovers them, orders them,
+validates them and wires them into a running Express 5 API.
+
+Everything that can be checked is checked at boot, and every failure is
+reported **in aggregate**. Ten missing environment variables is one crash
+listing ten problems, not ten restarts.
+
+```txt
+TulipesBootError: Boot aborted during "environment" — 3 issue(s):
+  ✖ [core]  required variable "MONGO_URI" has no value
+  ✖ [users] variable "USERS_MAX_SESSIONS": "abc" is not a number
+  ✖ [users] required variable "USERS_ADMIN_EMAIL" has no value
+```
+
+## Quick start
+
+Tulipes needs Node.js 24 and pnpm 10.
+
+```sh
+npm install -g @tulipes/cli
+tulipes init my-api
+cd my-api
+pnpm install
+pnpm sync
+pnpm dev
+```
+
+Open `http://localhost:3000/api/v1/hello`. The default minimal preset needs no
+MongoDB, Redis or credentials. Run `tulipes init my-api --preset production`
+for authentication, users, settings, a database, queues, sockets and
+deployment files.
+
+## Why Tulipes
+
+<CardGrid>
+  <Card title="Modules, not layers" icon="puzzle">
+    A feature lives in one folder. Delete the folder and the feature is gone,
+    with no leftover registration in six other files.
+  </Card>
+  <Card title="Fail closed, everywhere" icon="warning">
+    Missing variables, dependency cycles, duplicate ACL grants and colliding
+    queue names all stop the boot with a full report. Unknown roles are denied.
+  </Card>
+  <Card title="One codebase, three processes" icon="seti:config">
+    The same app boots as an HTTP backend, a queue worker or a one-shot script,
+    with the same modules and the same configuration.
+  </Card>
+  <Card title="Generated types" icon="seti:typescript">
+    `tulipes sync` generates types from your modules, so a wrong model name,
+    job payload or environment variable does not compile.
+  </Card>
+</CardGrid>

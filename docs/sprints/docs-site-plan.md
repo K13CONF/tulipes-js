@@ -1,6 +1,6 @@
 # Docs site — the Tulipes documentation on GitHub Pages
 
-Status: planned on 2026-10-31 against `be58e97` (0.13.2). Nothing implemented.
+Status: planned on 2026-10-31 against `be58e97` (0.13.2). D01 built and checked locally, not yet deployed.
 Decisions in §7 settled on 2026-10-31.
 
 The brief, in the maintainer's words: a documentation site for the framework,
@@ -199,6 +199,19 @@ plugin", "BullMQ Express integration", "role-based access control Node.js",
   passes unchanged; `pnpm typecheck` is unchanged; the workflow deploys
   a landing page and the 404 page to the Pages URL; `sitemap-index.xml` is
   served and linked from the `<head>`.
+- **Progress, 2026-10-31 (local only):** `site/` workspace (Astro 7.4.4,
+  Starlight 0.42.8), brand lockups from `packages/core/assets/brand/`, landing
+  page, noindex 404, `docs.yml`. Frontmatter schema enforces title ≤ 50
+  (+ " | Tulipes" = ≤ 60) and description 120–160. `pnpm --filter
+  @tulipes-site/docs check` checks the built HTML for an absolute canonical URL, one h1,
+  `lang="en"`, unique titles and descriptions, the sitemap and the 404. It
+  failed as expected on a page with its canonical removed. `pnpm install
+  --frozen-lockfile` and `pnpm typecheck` pass. The lockfile keeps vite 8.3.3
+  and vitest 5.0.3 and only gains an optional `yaml` peer. `artifacts.mjs`
+  names its 8 packages explicitly, so `site/` cannot enter an archive.
+  **Remaining:** set Pages Source to "GitHub Actions", merge to master, and
+  record the workflow run and deployed URL. Known harmless build warnings: empty `i18n`
+  collection, and a `/404` route-priority notice (the custom 404 renders).
 
 ### D02 — Generated reference: API and CLI
 - `starlight-typedoc` for all 20 entry points; a CLI help extraction script.
