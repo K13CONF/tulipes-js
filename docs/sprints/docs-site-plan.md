@@ -307,6 +307,7 @@ Taken in this plan:
 
 ## 8. Backlog
 
+- (Found here, not part of the docs work.) `packages/core/tests/inspection.test.ts` › "CLI writes specs for a freshly generated production app without services" timed out at the 10 s default on Node 24.0.0 (run 41244951990, 2026-10-31) and passed on re-run. It needs its own timeout or a faster fixture.
 - API URLs use TypeDoc's module names, not import paths: `core/index/…` for `@tulipes/core` and `mongoose/settings-provider/…` for `@tulipes/mongoose/settings`. Fix this before D08 so no URL has to move after launch (a `@module` tag in each entry file, or a URL rewrite in the plugin).
 - Write the 390 missing TSDoc comments; D07 makes `api:coverage --strict` fail the build.
 - A custom domain (better for search ranking; needs DNS and a `CNAME` file; old URLs can only use meta-refresh redirects).
