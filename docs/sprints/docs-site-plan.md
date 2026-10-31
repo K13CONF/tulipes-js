@@ -218,6 +218,24 @@ plugin", "BullMQ Express integration", "role-based access control Node.js",
 - **Done when:** every export in `exports` has a page; all 18 commands have a
   page whose flags match `--help` output; the build lists any export without
   TSDoc (a warning for now).
+- **Progress, 2026-10-31 (local only):** `starlight-typedoc` 0.23.2 / TypeDoc
+  0.28.20 runs once for each of the 7 importable packages, with one entry
+  point per `exports` subpath (`site/api-packages.mjs`). This produces 253 API
+  pages. TypeDoc only supports TypeScript up to 6.0, so the site pins
+  `typescript@6.0.3` for itself, and the repo stays on 7.0.2. `site/typedoc-seo.mjs` gives
+  each page a title of the form `<name> · <import path>` (this fixed 7 duplicate titles the check caught,
+  such as `provider` in four packages) and a description of 120–160 characters
+  built from the TSDoc summary. It has a self-check (`node site/typedoc-seo.mjs`).
+  `site/scripts/cli-reference.mjs` runs `packages/cli/src/bin.ts --help` from
+  source and writes 14 command pages (the 18 `main.ts` cases include aliases
+  for help and version, and `migrate 0.11/0.12/0.13` share one page). starlight-typedoc
+  never calls TypeDoc's validation, so `pnpm --filter @tulipes-site/docs
+  api:coverage` runs it separately: **390 exported symbols lack TSDoc**
+  (core 259, mcp 32, spec 29, mongoose 27, testing 27, bullmq 15, socket.io 1;
+  mostly interface properties). The build has 269 pages, the check passes, and the sitemap
+  has 268 URLs (all but the 404).
+  **Remaining:** CI run on the PR. The CLI flags are shown verbatim in a
+  `txt` block until D04 adds prose.
 
 ### D03 — Getting started and the core concepts
 - `/start/*` and `/concepts/*` written from the core README, `framework-poc.md`
@@ -289,6 +307,8 @@ Taken in this plan:
 
 ## 8. Backlog
 
+- API URLs use TypeDoc's module names, not import paths: `core/index/…` for `@tulipes/core` and `mongoose/settings-provider/…` for `@tulipes/mongoose/settings`. Fix this before D08 so no URL has to move after launch (a `@module` tag in each entry file, or a URL rewrite in the plugin).
+- Write the 390 missing TSDoc comments; D07 makes `api:coverage --strict` fail the build.
 - A custom domain (better for search ranking; needs DNS and a `CNAME` file; old URLs can only use meta-refresh redirects).
 - Versioned docs per minor line once 1.0 ships.
 - Translations (`hreflang`) once the i18n story for docs exists.

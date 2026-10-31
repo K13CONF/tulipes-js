@@ -31,9 +31,12 @@ jobs:
         with:
           node-version: '24'
       - uses: pnpm/action-setup@v4
-      - run: pnpm install --frozen-lockfile --filter @tulipes-site/docs...
+      # Full install: the API reference reads every package's types, the CLI reference runs the CLI.
+      - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @tulipes-site/docs build
       - run: pnpm --filter @tulipes-site/docs check
+      # Report only until D07 adds --strict.
+      - run: pnpm --filter @tulipes-site/docs api:coverage
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist
