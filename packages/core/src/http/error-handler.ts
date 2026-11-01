@@ -213,14 +213,17 @@ export function errorHandler(
     // Express middleware signals client faults with a numeric status on the
     // error — a body over the parser's limit is 413, malformed JSON is 400.
     // Flattening those to 500 would blame the server for the caller's
-    // mistake, so 4xx statuses are honored and their messages passed
-    // through (they describe the request, never our internals).
+    // mistake, so 4xx statuses are honored. Only an error that marks itself
+    // safe to show (`expose`, as body-parser's and http-errors' do) keeps its
+    // message: an SDK error with a 4xx status may carry a provider's body.
     const status = clientErrorStatus(error);
     if (status !== undefined) {
       fail(status, [
         {
           field: null,
-          message: (error as Error).message,
+          message: (error as { expose?: unknown }).expose === true
+            ? (error as Error).message
+            : (STATUS_CODES[status] ?? "request error").toLowerCase(),
           code: STATUS_CODES[status] ?? `HTTP_${status}`,
         },
       ]);

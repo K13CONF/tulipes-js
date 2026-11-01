@@ -157,6 +157,33 @@ integration("a jobs export defines its queue and validates every payload a produ
   }
 });
 
+integration("a worker refuses a job that no longer fits its schema, once, and parses the ones that do", async () => {
+  const name = `probe.${randomUUID()}`;
+  const seen: unknown[] = [];
+  vi.stubGlobal("__probeSeen", seen);
+  const app = await withQueues(name, {
+    "modules/probe/queues/probe.queues.js": `
+      import { z } from 'zod/v4';
+      export const jobs = { ${JSON.stringify(name)}: z.object({ id: z.string(), tries: z.number().int().default(1) }) };
+      export default (ctx, queues) => queues.process(${JSON.stringify(name)}, async (job) => { globalThis.__probeSeen.push(job.data); });
+    `,
+  });
+  const handle = await app.boot({ mode: "worker", listen: false });
+  // Straight into Redis, past the producer's check: what an older release or a hand-written job leaves.
+  const raw = new Queue(name, { connection: { url: redisUrl! } });
+  try {
+    const bad = await raw.add("run", { id: 42 }, { attempts: 3 });
+    await raw.add("run", { id: "ok" });
+    await expect.poll(() => seen).toEqual([{ id: "ok", tries: 1 }]);
+    await expect.poll(async () => (await raw.getJob(bad.id!))?.failedReason ?? "").toMatch(/id: Invalid input/);
+    expect((await raw.getJob(bad.id!))?.attemptsMade).toBe(1);
+  } finally {
+    await raw.obliterate({ force: true });
+    await raw.close();
+    await handle.shutdown();
+  }
+});
+
 integration("a queue with a schema from two modules is a boot error naming the first", async () => {
   const name = `probe.${randomUUID()}`;
   const app = await withQueues(name, {

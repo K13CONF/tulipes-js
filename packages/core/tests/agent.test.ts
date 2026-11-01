@@ -126,6 +126,9 @@ test("a custom access checker decides on actions too, and the manifest stops fil
     const denied = await call({});
     expect({ status: denied.status, body: await denied.json() }).toMatchObject({ status: 401 });
     expect((await call({ "x-key": "open" })).status).toBe(200);
+    // Without a request the checker cannot decide, and the plain ACL is not the app's policy.
+    await expect(handle.ctx.agent!.invoke("probe_web_count", {}, { isAuthenticated: true, user: null, session: null, role: "admin" }))
+      .rejects.toMatchObject({ status: 403, code: "ACCESS_CHECKER_NEEDS_REQUEST" });
   } finally {
     await handle.shutdown();
   }

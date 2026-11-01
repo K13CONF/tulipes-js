@@ -34,6 +34,19 @@ While the major version is `0`, a minor bump may carry breaking changes —
   stays on stderr); `developmentIdentity()` is refused on the http transport;
   an http transport without `identify` is refused unless `APP_ENV` names
   development or test.
+- A non-`HttpError` with a 4xx status keeps its message only when it marks
+  itself `expose: true` (body-parser and http-errors do); otherwise the
+  status text is sent. An SDK error with a 4xx status could carry a
+  provider's response body.
+- `parsePage` clamps `?page` to `maxPage` (default 1000), so a client cannot
+  make `skip` scan without bound.
+- **Breaking for apps with a custom access checker:** `agent.invoke()` without
+  a request (the MCP process, agent runs) is refused with 403
+  `ACCESS_CHECKER_NEEDS_REQUEST` instead of falling back to the plain ACL,
+  which is not the policy such an app chose.
+- `@tulipes/bullmq`: a worker parses each job with the queue's schema before
+  the handler runs, as the producer does; a job that no longer fits fails
+  once, without retries.
 
 ### Changed
 

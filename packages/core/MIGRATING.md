@@ -126,6 +126,12 @@ fixes from the same audit arrive with the upgrade and need nothing here.
    signature in `helpers/harness/contracts.ts` and the two lines around
    `beginExecution` in `helpers/harness/run-loop.ts`.
 
+10. **No IPv4-mapped proxy ranges.** `modules/security/helpers/proxy.ts`
+    accepted `::ffff:0.0.0.0/96` in `TRUST_PROXY_CIDRS`, which proxy-addr
+    matches against every IPv4 peer, so any client could set its own
+    `req.ip` through `X-Forwarded-For`. Copy the reference app's check, and
+    write any such entry in IPv4 form.
+
 ---
 
 ## Unreleased — grants outside a module's own ids

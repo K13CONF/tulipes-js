@@ -192,6 +192,15 @@ export class AgentRegistry {
     }
     const { tool, action } = resolved;
 
+    // The app's checker decides from a request. A caller with none — the MCP
+    // process, an agent run — cannot be judged by it, and the plain ACL is
+    // not the policy the app chose: refuse rather than fall back.
+    if (this.#routes?.checker && !request) {
+      throw new HttpError(403, "checkerNeedsRequest", {
+        code: "ACCESS_CHECKER_NEEDS_REQUEST",
+        defaultMessage: "this app decides access with a custom checker, which needs an HTTP request; this caller has none",
+      });
+    }
     const refusal = this.#routes?.checker && request
       ? (await this.#routes.checker(request, { id: tool.permission, name: tool.title, description: tool.description })) === true
         ? undefined
