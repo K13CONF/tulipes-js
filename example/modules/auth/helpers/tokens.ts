@@ -275,8 +275,10 @@ export async function touchSession(
 
 /** End one session: the refresh half dies with its row, and its cached identity with it. */
 export async function endSession(ctx: Ctx, sid: string): Promise<boolean> {
-  await forgetSession(ctx, sid);
+  // The row first, then the cache, as revokeToken does; the forget marker
+  // covers a request that read the row before it went.
   const result = await ctx.models!.get("Session").deleteOne({ sid });
+  await forgetSession(ctx, sid);
   return result.deletedCount === 1;
 }
 

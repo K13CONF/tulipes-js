@@ -33,7 +33,12 @@ export class BoUsersController {
     };
   }
 
-  /** Soft delete: the row stays in mongo but leaves every ordinary query. */
+  /**
+   * Soft delete: the row stays in mongo but leaves every ordinary query.
+   * Only an account whose role ranks below the caller's: an admin cannot
+   * lock a sysadmin (or another admin) out, and nobody deletes themselves
+   * here. A role without a level counts as the highest.
+   */
   softDelete(): RequestHandler {
     return async (req: Request, res: Response) => {
       const user = await this.#ctx.models!.get("User").findOne({ email: req.params.email });
@@ -42,11 +47,18 @@ export class BoUsersController {
       if (user.get("email") === this.#ctx.config.auth?.adminEmail?.toLowerCase()) {
         throw new HttpError(409, "seededAdmin", { code: "SEEDED_ADMIN" });
       }
+      const caller = req.auth!.user!;
+      if (String(user._id) === String(caller._id)) throw new HttpError(403, "deleteSelf", { code: "DELETE_SELF" });
+      const level = (role: unknown) => {
+        const value = this.#ctx.acl?.role(String(role))?.level;
+        return typeof value === "number" ? value : Infinity;
+      };
+      if (level(user.get("role")) >= level(caller.role)) throw new HttpError(403, "outranks", { code: "OUTRANKS" });
 
-      // The account leaves every query, so its sessions resolve to nobody on
-      // the cold path; the cached identities would not know, so they go too.
-      await forgetUser(this.#ctx, String(user._id));
+      // The row first, then the cached identities: its sessions resolve to
+      // nobody on the cold path, and the cache must not keep answering for it.
       await (user as unknown as { softDelete(): Promise<unknown> }).softDelete();
+      await forgetUser(this.#ctx, String(user._id));
       res.respond({ data: { email: req.params.email, soft_deleted: true } });
     };
   }

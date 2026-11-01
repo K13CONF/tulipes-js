@@ -85,6 +85,27 @@ fixes from the same audit arrive with the upgrade and need nothing here.
    the configured cost) and use `done(null, await verifyNothing(ctx, password))`
    in both early returns.
 
+6. **A forgotten identity stays forgotten.** Signing out cleared the identity
+   cache before deleting the session, and any request that read the rows just
+   before a revocation could write them back just after it, keeping a revoked
+   session or token working for up to `auth.cacheTtlSeconds`. In
+   `modules/auth/helpers/session-cache.ts`, copy the reference app's
+   `write()`/`forget()` pair: a forget leaves a marker for one TTL, and a write
+   under a marker is skipped. Route `writeIdentity`, `forgetSession`,
+   `writeTokenIdentity` and `forgetToken` through them. In
+   `modules/auth/helpers/tokens.ts`, `endSession` deletes the row first, then
+   forgets.
+
+7. **The back office deletes only accounts that rank below the caller.**
+   `softDelete` in `modules/users/controllers/bo.users.controllers.ts` checked
+   the caller's permission but not the target, so an admin could lock every
+   sysadmin out. Compare the roles' `level` (`ctx.acl.role(name)?.level`, an
+   unknown level counting as the highest) and refuse with 403 `OUTRANKS` when
+   the target's is at or above the caller's, and with 403 `DELETE_SELF` for
+   the caller's own account. Add the `outranks` and `deleteSelf` keys to
+   `modules/users/i18n/*.json`. If your roles define no `level`, define one:
+   without it every delete is refused.
+
 ---
 
 ## Unreleased — grants outside a module's own ids

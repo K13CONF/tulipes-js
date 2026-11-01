@@ -173,3 +173,18 @@ test("a soft-deleted seeded admin stops the boot with a message that names the w
 
   await expect(seedAdmin(ctx as never)).rejects.toThrow(`the seeded admin account ${email} is soft-deleted — restore it`);
 });
+
+test("the back office deletes only accounts that rank below the caller, never the caller", async () => {
+  const sysadmin = await app.as("sysadmin");
+  const other = await app.as("admin");
+  const plain = await app.register();
+  const del = (account: { email: string }, as: { access_token: string }) =>
+    app.delete(`/users/${encodeURIComponent(account.email)}`, { as });
+  const me = await app.get<{ user: { email: string } }>(app.api("/auth/me"), { as: admin });
+
+  expect(await del(sysadmin, admin)).toMatchObject({ status: 403, errors: [expect.objectContaining({ code: "OUTRANKS" })] });
+  expect(await del(other, admin)).toMatchObject({ status: 403, errors: [expect.objectContaining({ code: "OUTRANKS" })] });
+  expect(await del(me.data!.user, admin)).toMatchObject({ status: 403, errors: [expect.objectContaining({ code: "DELETE_SELF" })] });
+  expect((await del(other, sysadmin)).status).toBe(200);
+  expect((await del(plain, admin)).status).toBe(200);
+});

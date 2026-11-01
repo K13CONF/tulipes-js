@@ -7,6 +7,7 @@ import { boot } from "@tulipes/core/boot";
 import { useTestApp } from "@tulipes/testing";
 
 import { testEnv, testSettings } from "../../../tests/support.ts";
+import { forgetSession, readIdentity, writeIdentity } from "../helpers/session-cache.ts";
 
 const rootDir = fileURLToPath(new URL("../../../", import.meta.url));
 const app = useTestApp({ rootDir, env: testEnv(), settings: testSettings() }, { beforeAll, afterAll });
@@ -1052,6 +1053,18 @@ test("a failed login costs one bcrypt compare whether or not the email has an ac
   } finally {
     compare.mockRestore();
   }
+});
+
+test("a request that read a session before it was forgotten cannot cache it again", async () => {
+  const sid = "forgotten-" + randomBytes(6).toString("hex");
+  const identity = { user: { _id: "u1" }, session: { sid } } as never;
+  await writeIdentity(app.handle.ctx, sid, identity);
+  expect(await readIdentity(app.handle.ctx, sid)).not.toBeNull();
+
+  await forgetSession(app.handle.ctx, sid);
+  // The late write of a request that read the rows before the forget.
+  await writeIdentity(app.handle.ctx, sid, identity);
+  expect(await readIdentity(app.handle.ctx, sid)).toBeNull();
 });
 
 test("an API token is issued once, reaches what its role grants and its scopes cover, and is refused once revoked", async () => {
