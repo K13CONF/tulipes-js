@@ -237,6 +237,11 @@ value is never shown:
   only;
 - it never reaches a settings file or a listing of `ctx.config`.
 
+A `url` is shown, but never its credentials. The user and password before `@`,
+and a `password=`, `token=` or `secret=` query parameter, appear as `•••`:
+`mongodb://•••@db-1:27017,db-2:27017/app?replicaSet=rs0`. Your code still reads
+the full value from `ctx.config`.
+
 Secrets are never settings. A settings field tagged `.meta({ secret: true })`
 is refused at boot:
 `field "apiKey" is marked secret — secrets are environment variables, never settings`.

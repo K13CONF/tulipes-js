@@ -85,12 +85,13 @@ export class ResolvedEnv implements EnvInspector {
   snapshot(): { module: string; name: string; key: string; value: VariableValue | undefined; redacted: boolean }[] {
     return this.#entries.map((entry) => {
       const secret = entry.spec.type === "secret";
+      const value = secret && entry.value !== undefined ? "•••" : ResolvedEnv.#shown(entry, entry.value);
       return {
         module: entry.module,
         name: entry.configKey,
         key: entry.spec.key,
-        value: secret && entry.value !== undefined ? "•••" : entry.value,
-        redacted: secret && entry.value !== undefined,
+        value,
+        redacted: value !== entry.value,
       };
     });
   }
@@ -105,12 +106,22 @@ export class ResolvedEnv implements EnvInspector {
       group: entry.spec.group,
       required: entry.spec.required ?? false,
       enum: entry.spec.enum,
-      default: isSecret ? undefined : entry.spec.default,
+      default: isSecret ? undefined : ResolvedEnv.#shown(entry, entry.spec.default),
       source: entry.source,
       isSet: entry.value !== undefined,
       isSecret,
-      value: isSecret ? undefined : entry.value,
+      value: isSecret ? undefined : ResolvedEnv.#shown(entry, entry.value),
     };
+  }
+
+  /**
+   * A `url` is not a secret, but a connection string often carries one:
+   * `mongodb://user:password@host/db`, `redis://:password@host`, or
+   * `?password=` in the query. Those parts are masked wherever a value is
+   * shown; scheme, hosts and path stay readable.
+   */
+  static #shown(entry: ResolvedVariable, value: VariableValue | undefined): VariableValue | undefined {
+    return entry.spec.type === "url" && typeof value === "string" ? withoutCredentials(value) : value;
   }
 
   static #group(entries: readonly ResolvedVariable[]): EnvValues {
@@ -123,4 +134,11 @@ export class ResolvedEnv implements EnvInspector {
     // by codegen and built as `{}`.
     return Object.freeze(grouped) as EnvValues;
   }
+}
+
+/** `scheme://user:pass@hosts/path?password=x` → `scheme://•••@hosts/path?password=•••`. */
+export function withoutCredentials(url: string): string {
+  return url
+    .replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/?#]*@/i, "$1•••@")
+    .replace(/([?&](?:password|pass|pwd|secret|token|access_?key|api_?key)=)[^&#]*/gi, "$1•••");
 }

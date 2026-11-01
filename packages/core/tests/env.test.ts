@@ -97,6 +97,21 @@ test("a secret is described without its value and snapshotted redacted", async (
   expect(resolved.values.probe!.token).toBe("s3cret-value");
 });
 
+test("credentials inside a url value are masked wherever the value is shown", () => {
+  vi.stubEnv("PROBE_UPSTREAM", "mongodb://app:p@ss@a.internal:27017,b.internal:27017/db?replicaSet=rs0&password=q");
+  const resolved = resolveEnv(asManifests({ probe: probeEnv }), { appEnv: "test", envsDir: "/nowhere" }, new BootReport());
+
+  const masked = "mongodb://•••@a.internal:27017,b.internal:27017/db?replicaSet=rs0&password=•••";
+  expect(resolved.describe("probe").find((v) => v.name === "upstream")).toMatchObject({ isSecret: false, value: masked });
+  expect(resolved.snapshot().find((line) => line.name === "upstream")).toMatchObject({ value: masked, redacted: true });
+  expect(JSON.stringify(resolved.describe("probe")) + JSON.stringify(resolved.snapshot())).not.toMatch(/app:p|ss@a|=q/);
+  expect(resolved.values.probe!.upstream).toContain("app:p@ss@");
+
+  vi.stubEnv("PROBE_UPSTREAM", "redis://cache.internal:6379/0");
+  const plain = resolveEnv(asManifests({ probe: probeEnv }), { appEnv: "test", envsDir: "/nowhere" }, new BootReport());
+  expect(plain.snapshot().find((line) => line.name === "upstream")).toMatchObject({ value: "redis://cache.internal:6379/0", redacted: false });
+});
+
 // ── the boot: ctx.config ─────────────────────────────────────────────────
 
 const routes = `

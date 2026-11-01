@@ -19,6 +19,11 @@ While the major version is `0`, a minor bump may carry breaking changes —
   reference app's `whoami` and `ping` handlers called a missing
   acknowledgement, so any anonymous client could crash the backend: see
   MIGRATING, "security fixes (app code)", step 1.
+- A `url` environment value no longer shows its credentials. The config
+  console (`describe`), `snapshot()` and `tulipes env:check` mask the user and
+  password before `@` and credential query parameters: `mongodb://•••@host/db`.
+  Before, an admin who may read the config saw the database and Redis
+  passwords inside `MONGO_URI` and `REDIS_URL`. Nothing to change in an app.
 
 ### Changed
 
