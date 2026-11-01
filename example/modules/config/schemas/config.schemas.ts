@@ -8,6 +8,6 @@ export const moduleParam = z.object({
 export const changeBody = z.object({
   /** A patch over the stored values; the module's own schema validates the result. */
   values: z.record(z.string(), z.unknown()),
-  /** The version read before editing; a different stored version refuses the write. */
-  version: z.number().int().positive().optional(),
+  /** The version read before editing; a different stored version refuses the write. Required, so a stale editor always fails. */
+  version: z.number().int().positive(),
 });

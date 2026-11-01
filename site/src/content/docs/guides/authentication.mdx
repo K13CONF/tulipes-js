@@ -137,7 +137,7 @@ reference app:
 | `GET /me` | `auth:web:me` | user | the caller and the session behind the request |
 | `GET /sessions` | `auth:web:sessions` | user | every device this account is signed in on |
 | `DELETE /sessions/:sid` | `auth:web:sessions:end` | user | sign one device out |
-| `POST /password` | `auth:web:password` | user | change the password, end every other session |
+| `POST /password` | `auth:web:password` | user | change the password (`current_password` and `password`), end every other session |
 | `POST /tokens`, `GET /tokens`, `DELETE /tokens/:token_id` | `auth:web:tokens:*` | user | API tokens, see [API tokens and scopes](/tulipes-js/guides/api-tokens-and-scopes/) |
 
 `admin` and `sysadmin` hold `auth:*`, so they reach all of them.
@@ -469,7 +469,10 @@ const version = await setPassword(ctx, userId, "a new password");
 random `version` in one atomic update. Sessions and API tokens record the
 version they were issued under, and every authentication checks it against the
 current credential, so after a password change nothing from before resolves.
-`POST /auth/password` passes the caller's session version as `expectedVersion`,
+`POST /auth/password` takes `{ "current_password": "…", "password": "…" }` and
+refuses a wrong current password with 422 `CURRENT_PASSWORD_INCORRECT`, so a
+stolen access token, which lives minutes, cannot become a new password. It
+passes the caller's session version as `expectedVersion`,
 so a delayed request cannot overwrite a newer password, and answers with a fresh
 token pair so the device that made the change stays signed in:
 

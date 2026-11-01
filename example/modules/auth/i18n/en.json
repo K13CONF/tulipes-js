@@ -24,5 +24,7 @@
   "tokenNeedsSession": "API tokens are issued from a signed-in session, not by another token",
   "noSuchToken": "No such token",
   "tokenRevoked": "Token revoked",
-  "passwordTooLong": "A password can be at most 72 bytes (72 plain letters, fewer with accents or emoji)"
+  "passwordTooLong": "A password can be at most 72 bytes (72 plain letters, fewer with accents or emoji)",
+  "currentPasswordRequired": "Enter your current password",
+  "currentPasswordIncorrect": "The current password is incorrect"
 }

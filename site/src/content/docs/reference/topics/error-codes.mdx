@@ -118,6 +118,8 @@ mounted at `/users`, outside the prefix, on purpose.
 | 503 | `REFRESH_UNAVAILABLE` | The refresh rotation could not be acknowledged by the store. |
 | 404 | `NO_SUCH_SESSION` | `DELETE /api/v1/auth/sessions/:sid` for a session that is not yours. |
 | 422 | `PASSWORD_TOO_SHORT` | New password under 8 characters on `POST /api/v1/auth/password`. |
+| 422 | `PASSWORD_TOO_LONG` | Password over 72 bytes (bcrypt's limit) on register or `POST /api/v1/auth/password`. |
+| 422 | `CURRENT_PASSWORD_INCORRECT` | `current_password` missing or wrong on `POST /api/v1/auth/password`. |
 | 403 | `TOKEN_NEEDS_SESSION` | `POST /api/v1/auth/tokens` called with an API token instead of a session. |
 | 404 | `NO_SUCH_TOKEN` | `DELETE /api/v1/auth/tokens/:token_id` for an unknown token. |
 

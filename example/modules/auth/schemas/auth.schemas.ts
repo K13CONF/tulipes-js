@@ -28,6 +28,7 @@ export const refreshBody = z.object({
 });
 
 export const newPassword = z.object({
+  current_password: z.string("currentPasswordRequired").min(1, "currentPasswordRequired"),
   password: z.string("passwordTooShort").min(8, "passwordTooShort").refine(fitsBcrypt, "passwordTooLong"),
 });
 

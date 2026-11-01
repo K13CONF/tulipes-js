@@ -120,7 +120,7 @@ test("a run started from a session stops once the owner changes their password",
   const model = new ScriptedModel([
     turn([toolUse("hello_web_greetings")]),
     async () => {
-      const changed = await app.post(app.api("/auth/password"), { password: randomBytes(24).toString("hex") }, { as: user });
+      const changed = await app.post(app.api("/auth/password"), { current_password: user.password, password: randomBytes(24).toString("hex") }, { as: user });
       expect(changed.status).toBe(200);
       return turn([toolUse("hello_web_greetings")]);
     },

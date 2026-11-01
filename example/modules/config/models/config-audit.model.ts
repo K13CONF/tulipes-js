@@ -2,13 +2,16 @@ import { Schema } from "mongoose";
 import type { ModelDef } from "@tulipes/mongoose";
 
 /**
- * A requested settings change, acknowledged before it is applied. Only the
+ * A requested settings change, acknowledged before it is applied, and then
+ * what became of it (`settings.change_completed` with an `outcome`). Only the
  * namespace, the field names and the version travel — never a value, so
  * the record can be read by anyone who may read the audit without seeing
  * what was written.
  */
 const configAuditSchema = new Schema({
-  action: { type: String, required: true, enum: ["settings.change_requested"] },
+  action: { type: String, required: true, enum: ["settings.change_requested", "settings.change_completed"] },
+  /** On a completion record: what became of the change. */
+  outcome: { type: String, enum: ["applied", "applied_on_change_failed", "refused", "conflict", "failed"] },
   module: { type: String, required: true },
   keys: { type: [String], required: true },
   version: { type: Number, required: true },

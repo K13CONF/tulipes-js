@@ -600,7 +600,7 @@ test("password change in the same JWT second revokes both devices and keeps the 
 
     const changed = await post(
       "/api/v1/auth/password",
-      { password },
+      { current_password: initial.password, password },
       initial.access_token,
     );
 
@@ -731,7 +731,7 @@ test.each(["login", "password", "cleanup", "credential-write"])(
           })
         : post(
             "/api/v1/auth/password",
-            { password: firstPassword },
+            { current_password: initial.password, password: firstPassword },
             initial.access_token,
           );
 
@@ -760,7 +760,7 @@ test.each(["login", "password", "cleanup", "credential-write"])(
 
       const changed = await post(
         "/api/v1/auth/password",
-        { password: latestPassword },
+        { current_password: operation === "password" || operation === "cleanup" ? firstPassword : initial.password, password: latestPassword },
         access,
       );
 
@@ -815,7 +815,7 @@ test("failed session cleanup after password replacement cannot preserve old sess
     try {
       const changed = await post(
         "/api/v1/auth/password",
-        { password },
+        { current_password: initial.password, password },
         initial.access_token,
       );
 
@@ -872,6 +872,20 @@ test("failed session cleanup after password replacement cannot preserve old sess
   }
 });
 
+test("a password change needs the current password", async () => {
+  const user = await account();
+  const next = randomBytes(24).toString("hex");
+  const missing = await post("/api/v1/auth/password", { password: next }, user.access_token);
+  expect(missing.status).toBe(422);
+  expect(await missing.json()).toMatchObject({ errors: [{ field: "current_password" }] });
+  const wrong = await post("/api/v1/auth/password", { current_password: "not-it", password: next }, user.access_token);
+  expect(wrong.status).toBe(422);
+  expect(await wrong.json()).toMatchObject({ errors: [{ field: "current_password", code: "CURRENT_PASSWORD_INCORRECT" }] });
+  // Nothing changed: the session still stands and the old password still signs in.
+  expect((await get("/api/v1/auth/me", user.access_token)).status).toBe(200);
+  expect((await post("/api/v1/auth/login", { email: user.email, password: user.password })).status).toBe(200);
+});
+
 test("a failed credential write preserves the old password and session", async () => {
   const initial = await account();
   const password = randomBytes(24).toString("hex");
@@ -882,7 +896,7 @@ test("a failed credential write preserves the old password and session", async (
 
   try {
     expect(
-      (await post("/api/v1/auth/password", { password }, initial.access_token))
+      (await post("/api/v1/auth/password", { current_password: initial.password, password }, initial.access_token))
         .status,
     ).toBe(500);
   } finally {
@@ -1121,7 +1135,7 @@ test("an API token cannot issue tokens, rejects bad scopes, expires, and dies wi
   const forged = secret.replace(/[a-f0-9]{64}$/, "0".repeat(64));
   expect((await get("/api/v1/auth/me", forged)).status).toBe(401);
 
-  const changed = await post("/api/v1/auth/password", { password: randomBytes(24).toString("hex") }, user.access_token);
+  const changed = await post("/api/v1/auth/password", { current_password: user.password, password: randomBytes(24).toString("hex") }, user.access_token);
   expect(changed.status).toBe(200);
   expect((await get("/api/v1/auth/me", secret)).status).toBe(401);
   const replacement = tokens.parse(await changed.json()).data.access_token;
@@ -1181,7 +1195,7 @@ test("a revocation on one replica is refused on the very next request on another
     // account: every path that revokes forgets the cached identity first.
     const second = await account();
     expect((await me(second.access_token)).status).toBe(200);
-    const changed = await post("/api/v1/auth/password", { password: randomBytes(24).toString("hex") }, second.access_token);
+    const changed = await post("/api/v1/auth/password", { current_password: second.password, password: randomBytes(24).toString("hex") }, second.access_token);
     expect(changed.status).toBe(200);
     expect((await me(second.access_token)).status).toBe(401);
 

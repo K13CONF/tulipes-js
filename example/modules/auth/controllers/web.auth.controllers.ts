@@ -9,8 +9,8 @@ import {
 
 import { issueToken, listTokens, revokeToken } from "../helpers/api-tokens.ts";
 import { auth } from "../helpers/auth.ts";
-import type { PasswordIdentity, UserDoc } from "../helpers/documents.ts";
-import { setPassword } from "../helpers/passwords.ts";
+import type { CredentialDoc, PasswordIdentity, UserDoc } from "../helpers/documents.ts";
+import { setPassword, verifyPassword } from "../helpers/passwords.ts";
 import {
   endSession,
   listSessions,
@@ -269,8 +269,16 @@ export class WebAuthController {
   changePassword(): RequestHandler {
     return async (req: Request, res: Response) => {
       const userId = String(req.auth.user!._id);
-      const { password } = (req.body ?? {}) as { password?: string };
+      const { password, current_password } = (req.body ?? {}) as { password?: string; current_password?: string };
       this.#assertPassword(password);
+
+      // A stolen access token lives minutes; without this check it could set
+      // a password of the thief's choosing and keep the account for good.
+      const credential = await this.#ctx.models!.get<CredentialDoc>("Credential")
+        .findOne({ user: userId }).select("+password_hash").lean();
+      if (!credential || !current_password || !(await verifyPassword(current_password, credential.password_hash))) {
+        throw new HttpError(422, "currentPasswordIncorrect", { field: "current_password", code: "CURRENT_PASSWORD_INCORRECT" });
+      }
 
       // Capture the version written by this change, even if another change races.
       const expectedVersion = req.auth.session?.credential_version;

@@ -149,6 +149,23 @@ fixes from the same audit arrive with the upgrade and need nothing here.
     - `modules/core/helpers/logger/index.ts`: pino `redact` paths for
       authorization headers, cookies, passwords and tokens.
 
+12. **Two API changes for clients.**
+    - `POST /api/v1/auth/password` requires `current_password` and answers 422
+      `CURRENT_PASSWORD_INCORRECT` when it is missing or wrong. A stolen access
+      token lives minutes; without the check it could set a new password and
+      keep the account. Copy the check from `changePassword` in
+      `modules/auth/controllers/web.auth.controllers.ts`, the
+      `current_password` field in `modules/auth/schemas/auth.schemas.ts`, and
+      the `currentPasswordRequired` and `currentPasswordIncorrect` keys. Update
+      every client that changes passwords.
+    - `PATCH /api/v1/config/:module` requires `version`
+      (`modules/config/schemas/config.schemas.ts`), so an edit from a stale read
+      is always refused. The controller also records each change's outcome:
+      copy `auditOutcome()` from `modules/config/helpers/audit.ts`, the
+      `outcome` field and the `settings.change_completed` action in
+      `models/config-audit.model.ts`, and the `outcome(...)` calls in the
+      controller's `change()`.
+
 ---
 
 ## Unreleased — grants outside a module's own ids

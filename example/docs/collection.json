@@ -218,7 +218,7 @@
           "name": "Change password",
           "request": {
             "method": "POST",
-            "description": "Set a new password and end every other session",
+            "description": "Set a new password, given the current one, and end every other session",
             "header": [
               {
                 "key": "Content-Type",
@@ -244,7 +244,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"password\": \"string\"\n}",
+              "raw": "{\n  \"current_password\": \"string\",\n  \"password\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

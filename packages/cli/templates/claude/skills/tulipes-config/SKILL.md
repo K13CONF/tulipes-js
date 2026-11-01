@@ -61,7 +61,7 @@ object is replaced in place when a write lands.
 |---|---|
 | `GET /config` | every module in load order: manifest, environment values (config name, variable, type, source — a secret's value never), settings with schema, live values and stored version, endpoints with the roles that reach them |
 | `GET /config/:module` | the same for one module |
-| `PATCH /config/:module` | `{ values: { … }, version? }` — a patch over the stored values, validated by the module's schema (422 with the field), refused when `version` is not the stored one (409 `STALE_VERSION`), audited before it lands, applied at once in every replica |
+| `PATCH /config/:module` | `{ values: { … }, version }` — a patch over the stored values, validated by the module's schema (422 with the field), refused when `version` is not the stored one (409 `STALE_VERSION`), audited before it lands, applied at once in every replica |
 
 `config:bo:read` and `config:bo:describe` are granted to `admin` and `sysadmin`;
 `config:bo:write` to `sysadmin` only. The audit (`config_audit_events`) holds

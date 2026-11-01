@@ -3,7 +3,7 @@ import type { Ctx } from "@tulipes/core/boot";
 import { SettingsConflictError, SettingsValidationError } from "@tulipes/core/config";
 import { HttpError, ValidationError } from "@tulipes/core/http";
 
-import { auditChange } from "../helpers/audit.ts";
+import { auditChange, auditOutcome, type AuditOutcome } from "../helpers/audit.ts";
 import { describeModule, describeRoles } from "../helpers/describe.ts";
 
 /**
@@ -46,13 +46,13 @@ export class BoConfigController {
   change(): RequestHandler {
     return async (req: Request, res: Response) => {
       const namespace = String(req.params.module);
-      const { values, version } = req.body as { values: Record<string, unknown>; version?: number };
+      const { values, version } = req.body as { values: Record<string, unknown>; version: number };
       if (!this.#ctx.settings.namespaces().includes(namespace)) {
         throw new HttpError(404, "noSuchModule", { field: "module" });
       }
 
       const current = this.#ctx.settings.describe(namespace).stored.version;
-      if (version !== undefined && version !== current) {
+      if (version !== current) {
         throw new HttpError(409, "staleVersion", {
           code: "STALE_VERSION",
           vars: { version: String(version), current: String(current) },
@@ -65,13 +65,18 @@ export class BoConfigController {
       await auditChange(this.#ctx, req, { module: namespace, keys: Object.keys(values), version: current });
 
       const user = req.auth.user!;
+      const outcome = (result: AuditOutcome, written?: number) =>
+        auditOutcome(this.#ctx, req, { module: namespace, keys: Object.keys(values), version: written ?? current, outcome: result });
       try {
         const written = await this.#ctx.settings.set(namespace, values, { id: String(user._id), label: user.email });
+        await outcome(written.onChangeFailed ? "applied_on_change_failed" : "applied", written.version);
+        const action = written.onChangeFailed ? "on_change_failed" : written.requiresRestart.length > 0 ? "restart_required" : undefined;
         res.respond({
           data: { module: namespace, values: written.values, version: written.version, requires_restart: written.requiresRestart },
-          ...(written.requiresRestart.length > 0 && { meta: { action: "restart_required" } }),
+          ...(action && { meta: { action } }),
         });
       } catch (error) {
+        await outcome(error instanceof SettingsValidationError ? "refused" : error instanceof SettingsConflictError ? "conflict" : "failed");
         if (error instanceof SettingsValidationError) {
           throw new ValidationError(error.issues.map((issue) => ({ field: issue.path.map(String).join(".") || "values", message: issue.message })));
         }
