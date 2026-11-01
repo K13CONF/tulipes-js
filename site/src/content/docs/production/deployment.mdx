@@ -70,7 +70,11 @@ It decides three things at once:
 
 - which file supplies environment values: `.envs/.env.<APP_ENV>`;
 - which settings file core's file store uses when no settings provider is declared: `config/settings.<APP_ENV>.json`;
-- whether a 500 response carries the real error message (development only).
+- whether a 500 response carries the real error message (development and test only).
+
+When `APP_ENV` is not set, the process reads the development files but answers like production: a 500 carries no error message, the MCP process returns `internal error`, and the boot prints a warning. A server that forgot the variable does not leak its internals. `tulipes dev` sets `APP_ENV=development` for you; set it yourself for `node app.ts`, `pnpm worker` or `pnpm mcp` on a development machine when you want the real messages.
+
+The placeholder-credential check in the production preset still runs only when `APP_ENV` is `production` or `staging`, so make sure every server sets it. The PM2 file's default `env` block is development: start it with `--env production`.
 
 Each module declares the variables it needs in its `package.json` under `tulipes.env`. A value resolves from **`process.env`, then `.envs/.env.<APP_ENV>`, then the declared default**, so values injected by a container or a process manager always win over the file. Every missing or invalid value is reported at once, and a `secret` is never printed. The full list is in [environment variables](/tulipes-js/reference/topics/environment-variables/).
 

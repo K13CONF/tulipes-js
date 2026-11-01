@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { fixture, url } from "./fixture.ts";
 
 /**
@@ -323,4 +323,33 @@ test("a shutdown requested from a signal listener shares the same operation", as
 
   expect(state.calls).toBe(1);
   expect(state.reentrant).toBe(stopping);
+});
+
+test("without APP_ENV the boot reads development files but hides internals; a named development shows them", async () => {
+  const app = await fixture({
+    "modules/probe/module.acl.js": `export default acl => acl.defineRole('guest').allow('guest', 'probe:web:read');`,
+    "modules/probe/routes/probe.routes.js": `
+      import { Router } from 'express';
+      export default ctx => Router().get('/fail', ctx.rai({ id: 'probe:web:read' }), () => { throw new Error('db at 10.0.0.5'); });
+    `,
+  });
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  try {
+    vi.stubEnv("APP_ENV", undefined);
+    const unset = await app.boot({ appEnv: undefined });
+    expect(unset.ctx).toMatchObject({ appEnv: "development", appEnvDefaulted: true });
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("APP_ENV is not set"));
+    const hidden = await (await fetch(url(unset) + "/fail", { headers: { connection: "close" } })).json();
+    expect(hidden.errors[0].message).toBe("internal server error");
+
+    const named = await app.boot({ appEnv: "development" });
+    expect(named.ctx.appEnvDefaulted).toBeUndefined();
+    const shown = await (await fetch(url(named) + "/fail", { headers: { connection: "close" } })).json();
+    expect(shown.errors[0].message).toBe("internal: db at 10.0.0.5");
+  } finally {
+    error.mockRestore();
+    stderr.mockRestore();
+    vi.unstubAllEnvs();
+  }
 });

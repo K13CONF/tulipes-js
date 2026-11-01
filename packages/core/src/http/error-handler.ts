@@ -182,8 +182,10 @@ export function notFoundHandler(): RequestHandler {
  * no stack, nothing — except in development, where hiding them only slows
  * the developer down.
  */
-export function errorHandler(appEnv: AppEnv): ErrorRequestHandler {
-  const revealInternals = appEnv === "development" || appEnv === "test";
+export function errorHandler(
+  appEnv: AppEnv,
+  revealInternals = appEnv === "development" || appEnv === "test",
+): ErrorRequestHandler {
 
   return (error: unknown, req, res, _next) => {
     const fail = (status: number, errors: ApiError[]): void => {

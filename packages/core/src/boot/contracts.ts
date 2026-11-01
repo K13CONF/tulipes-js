@@ -31,6 +31,13 @@ export interface Ctx {
    */
   appEnv: AppEnv;
   /**
+   * True when APP_ENV was not set and `appEnv` is development by default
+   * only. Internals stay hidden then (`revealsInternals`), and a module that
+   * refuses development defaults outside development should refuse them
+   * here too.
+   */
+  appEnvDefaulted?: true;
+  /**
    * Every module in load order, with its manifest and resolved directory.
    *
    * The authoritative answer to "what modules does this app have?" —

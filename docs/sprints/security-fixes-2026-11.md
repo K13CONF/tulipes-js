@@ -132,6 +132,11 @@ notes warn.
   explicitly development, and refuse `developmentIdentity()` on the HTTP
   transport (two hardening notes).
 - Core tests for unset, development and production. **Decision D1** below.
+- As built: the placeholder-credential guard was **not** extended to an unset
+  `APP_ENV`. It would have stopped `pnpm worker`, `pnpm start` and `pnpm mcp`
+  on every development machine (the tutorials run them without the variable,
+  and the minimal preset's MCP config uses `developmentIdentity()` on stdio).
+  The deployment page says to set `APP_ENV` on every server instead.
 
 ### SEC-10 — `publicDomain` reaches the root-run nginx script
 

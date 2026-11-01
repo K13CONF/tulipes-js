@@ -9,7 +9,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { AgentTool, ToolActor } from "@tulipes/core/agent";
-import { boot, type BootHandle, type RuntimeCtx } from "@tulipes/core/boot";
+import { boot, revealsInternals, type BootHandle, type RuntimeCtx } from "@tulipes/core/boot";
 import { ANONYMOUS, GUEST_ROLE, HttpError } from "@tulipes/core/http";
 
 import { createServer, type ToolOutcome, type ToolSource } from "./server.ts";
@@ -120,8 +120,12 @@ export async function serveMcp(options: ServeMcpOptions): Promise<McpProcess> {
 
     if (!options.transport && typeof config.transport === "object") {
       diverted?.restore();
-      if (!config.identify && (handle.ctx.appEnv === "production" || handle.ctx.appEnv === "staging")) {
-        throw new Error(`config/mcp.config: the http transport has no identify, which would serve every caller on the network as a guest — refused when APP_ENV is ${handle.ctx.appEnv}`);
+      if (variable) {
+        // One role from the environment for every caller on the network.
+        throw new Error(`config/mcp.config: developmentIdentity() gives every http caller the role in ${variable} — use it with stdio only, and identify http callers from a credential`);
+      }
+      if (!config.identify && !revealsInternals(handle.ctx)) {
+        throw new Error(`config/mcp.config: the http transport has no identify, which would serve every caller on the network as a guest — refused unless APP_ENV is set to development or test`);
       }
       const { http, url } = await serveHttp(config.transport.http, source);
       process.stderr.write(`[tulipes] mcp mode · http ${url} · ${config.identify ? "bearer identified per request" : "every caller a guest"}\n`);
@@ -173,7 +177,8 @@ function inProcess(handle: BootHandle, identify: () => Promise<ToolActor>, audit
         }
         line("failed");
         process.stderr.write(`${(error as Error).stack ?? String(error)}\n`);
-        return { ok: false, message: (error as Error).message };
+        // The stack is on stderr; a client sees the message only where the HTTP error handler would show it.
+        return { ok: false, message: revealsInternals(handle.ctx) ? (error as Error).message : "internal error" };
       }
     },
   };

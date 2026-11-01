@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import express, { type Express } from "express";
 
-import { mirrorNodeEnv, resolveAppEnv, type AppEnv } from "./app-env.ts";
+import { isAppEnvDefaulted, mirrorNodeEnv, resolveAppEnv, revealsInternals, type AppEnv } from "./app-env.ts";
 import { bindEnvValues, resolveEnv } from "../env/index.ts";
 import { BootReport } from "../errors/boot-error.ts";
 import { discoverModules } from "../modules/discovery.ts";
@@ -138,7 +138,11 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   // the routes. The manifests are read once here and sorted in phase 2.
   const envReport = new BootReport();
   const appEnv = resolveAppEnv(options.appEnv, envReport);
+  const appEnvDefaulted = isAppEnvDefaulted(options.appEnv);
   envReport.throwIfAny("environment");
+  if (appEnvDefaulted && !options.inspect) {
+    process.stderr.write("[tulipes] APP_ENV is not set: reading the development files, answering like production (no internals in errors). Set APP_ENV.\n");
+  }
   if (!options.inspect) mirrorNodeEnv(appEnv);
   const graphReport = new BootReport();
   const manifests = discoverModules(join(options.rootDir, "modules"), graphReport);
@@ -177,6 +181,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
   const ctx: Ctx = {
     mode,
     appEnv,
+    ...(appEnvDefaulted && { appEnvDefaulted: true as const }),
     modules: order,
     config: {},
     settings,
@@ -191,7 +196,7 @@ export async function boot(options: BootOptions): Promise<BootHandle> {
         // Bounds live in config.pagination, so every list endpoint in the
         // app clamps identically and no caller can ask for ten thousand.
         bindRespond(req, res, ctx.config.pagination ?? {});
-        if (appEnv === "development") warnOnRawResponse(req, res);
+        if (appEnv === "development" && !appEnvDefaulted) warnOnRawResponse(req, res);
       },
     ),
     t: (namespace, locale) => i18n.t(namespace, locale),
@@ -439,7 +444,7 @@ async function startBackend(
   await loadRoutes(app, explored, handle.ctx.routes, handle.ctx as BackendCtx, report);
 
   app.use(notFoundHandler());
-  app.use(errorHandler(handle.ctx.appEnv));
+  app.use(errorHandler(handle.ctx.appEnv, revealsInternals(handle.ctx)));
 
   // Every route must have declared a RAI. Checked here, once everything is
   // mounted, so the failure is a refused boot rather than an endpoint that

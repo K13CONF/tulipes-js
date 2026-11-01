@@ -24,6 +24,16 @@ While the major version is `0`, a minor bump may carry breaking changes —
   password before `@` and credential query parameters: `mongodb://•••@host/db`.
   Before, an admin who may read the config saw the database and Redis
   passwords inside `MONGO_URI` and `REDIS_URL`. Nothing to change in an app.
+- A process started without `APP_ENV` still reads the development files but
+  no longer reveals internals: a 500 carries `internal server error`, and the
+  boot prints a warning. `ctx.appEnvDefaulted` is `true` then, and
+  `revealsInternals(ctx)` (from `@tulipes/core/boot`) answers whether
+  messages may reach a client. `tulipes dev` sets `APP_ENV=development`.
+- `@tulipes/mcp`: an unexpected tool failure reaches the client as
+  `internal error` unless `APP_ENV` names development or test (the stack
+  stays on stderr); `developmentIdentity()` is refused on the http transport;
+  an http transport without `identify` is refused unless `APP_ENV` names
+  development or test.
 
 ### Changed
 
