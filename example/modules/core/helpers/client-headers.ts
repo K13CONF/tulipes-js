@@ -90,7 +90,6 @@ export function clientHeaders(): RequestHandler {
       return next(new HttpError(400, "clientHeadersRequired", {
         code: "CLIENT_HEADERS_REQUIRED",
         defaultMessage: `Missing required headers: ${missing.join(", ")}`,
-        details: { headers: missing },
       }));
     }
     req.client = client;

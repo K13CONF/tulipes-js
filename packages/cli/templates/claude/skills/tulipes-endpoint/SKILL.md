@@ -147,7 +147,8 @@ Express 5 forwards rejected async handlers to the terminal handler, so
 
 ```
 module routers, in load order:
-  sys modules      request ids, helmet, cors, logging, body parsing,
+  sys modules      client headers (req.client, X-Request-Id echoed),
+                   helmet, cors, logging, body parsing,
                    then auth resolving req.auth (guest if no token)
   app modules      your feature routes, each gated by its RAI
 notFoundHandler    framework — 404 for anything unclaimed

@@ -30,7 +30,7 @@ line, and lets the module order put them first:
 
 ```txt
 request
-  -> core       X-Request-Id
+  -> core       client headers: req.client, X-Request-Id echoed
   -> security   trust proxy, helmet, CORS, pino-http,
                 rate limits (/auth, /config, /settings), express.json
   -> auth       passport, req.auth
@@ -55,7 +55,10 @@ export default function securityRoutes(ctx: BackendCtx): void {
       err || res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
     genReqId: (_req, res) => String(res.getHeader("X-Request-Id") ?? ""),
     serializers: {
-      req: (req: { method: string; url: string }) => ({ method: req.method, url: req.url }),
+      req: (req: { method: string; url: string; raw: { client?: Partial<ClientHeaders> } }) => {
+        const { platform, appVersion, appMode, deviceId } = req.raw.client ?? {};
+        return { method: req.method, url: req.url, platform, appVersion, appMode, deviceId };
+      },
       res: (res: { statusCode: number }) => ({ status: res.statusCode }),
     },
   })));
@@ -178,6 +181,15 @@ refuses `"*"` with credentials, because browsers reject that combination:
 corsOrigins "*" cannot be combined with corsCredentials — list the origins explicitly
 ```
 
+Two more things `corsOptions()` decides. It lists `X-Request-Id` in
+`exposedHeaders`, because a browser may only read the response headers CORS
+names, and a web client shows that id in its error messages. And it sets no
+`allowedHeaders`, so the `cors` package reflects whatever the preflight asks
+for: the `X-Platform`, `X-App-Version` and other
+[client headers](/tulipes-js/guides/client-headers/) need no list. If you ever
+set `allowedHeaders` explicitly, add every one of them, or browsers block each
+request at the preflight.
+
 Remember that a disallowed origin can still send some requests, and command-line
 clients ignore CORS entirely. The ACL is what protects an endpoint.
 
@@ -185,10 +197,11 @@ clients ignore CORS entirely. The ACL is what protects an endpoint.
 
 Every request is logged through the app's logger (`logger(ctx)` from
 `@app/core`), at `info` for success, `warn` for 4xx and `error` for 5xx or a
-thrown error. The serializers keep only the method, the URL and the status: no
+thrown error. The serializers keep the method, the URL, the status and the
+platform, app version, app mode and device id from `req.client`: no raw
 headers, so no `Authorization` value ever reaches a log file. The request id is
-the `X-Request-Id` header the core module set, so a log line and a client's
-response can be matched. See [logging](/tulipes-js/guides/logging/) for where the
+the `X-Request-Id` the core module echoed, the client's own when it sent a valid
+one, so a log line and a client's error message name the same request. See [logging](/tulipes-js/guides/logging/) for where the
 lines go.
 
 ## The body-size limit

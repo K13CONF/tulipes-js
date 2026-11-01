@@ -149,7 +149,10 @@ app.use(lazy(() => pinoHttp({
     err || res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
   genReqId: (_req, res) => String(res.getHeader("X-Request-Id") ?? ""),
   serializers: {
-    req: (req: { method: string; url: string }) => ({ method: req.method, url: req.url }),
+    req: (req: { method: string; url: string; raw: { client?: Partial<ClientHeaders> } }) => {
+      const { platform, appVersion, appMode, deviceId } = req.raw.client ?? {};
+      return { method: req.method, url: req.url, platform, appVersion, appMode, deviceId };
+    },
     res: (res: { statusCode: number }) => ({ status: res.statusCode }),
   },
 })));
@@ -159,13 +162,16 @@ app.use(lazy(() => pinoHttp({
 |---|---|
 | `lazy(...)` | the logger reads environment values, which inspection refuses while a router is built; this builds it on the first request |
 | `customLogLevel` | a 5xx is an error (so it reaches the errors-only file), a 4xx a warning, the rest info |
-| `genReqId` | reuses the `X-Request-Id` the core module set earlier in the pipeline, so a client-reported id finds its line |
-| `serializers` | only the method, URL and status: no headers, so no `Authorization` value in a log |
+| `genReqId` | reuses the `X-Request-Id` the core module echoed earlier in the pipeline, so the id a client reports finds its line |
+| `serializers` | the method, URL, status and what the client said about itself (`req.client`): no raw headers, so no `Authorization` value in a log |
 
-The core module, which loads first, sets the header:
+The core module, which loads first, binds `req.client` from the
+[client headers](/tulipes-js/guides/client-headers/) and echoes the request
+id, the client's own when it sent a valid one:
 
-```ts title="modules/core/routes/core.routes.ts"
-res.setHeader("X-Request-Id", randomUUID());
+```ts title="modules/core/helpers/client-headers.ts"
+req.client = client;
+res.setHeader("X-Request-Id", client.requestId);
 ```
 
 ## Reading the logs live

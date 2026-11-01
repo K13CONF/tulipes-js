@@ -11,6 +11,29 @@ what makes it work under nvm.
 
 ---
 
+## Client headers (optional, app code)
+
+Both presets now read the headers every client sends — `X-Platform`,
+`X-App-Version`, `X-App-Mode`, `X-Device-Id`, `X-Request-Id` — into
+`req.client` in the core module, defaulting invalid values and echoing the
+request id (the client's own when valid). Core is unchanged; an existing
+app is not affected until it copies the files, which are its own code:
+
+1. Copy `modules/core/helpers/client-headers.ts` from the reference app
+   (the minimal preset's is identical) and mount it first in
+   `modules/core/routes/core.routes.ts` with `ctx.app.use(clientHeaders())`,
+   replacing the `res.setHeader("X-Request-Id", randomUUID())` line. Export
+   it from `modules/core/lib/index.ts` if other modules read `req.client`.
+2. Production preset: in `modules/security/helpers/hardening.ts` add
+   `exposedHeaders: ["X-Request-Id"]` to both objects `corsOptions()`
+   returns; in `security.routes.ts` the pino `req` serializer may add
+   `platform`, `appVersion`, `appMode` and `deviceId` from `req.raw.client`;
+   in `modules/config`, add `request_id: String` to the `ConfigAudit`
+   schema and `request_id: req.client.requestId` in `auditChange()`.
+3. Copy `modules/core/tests/client-headers.test.ts` and run `pnpm test`.
+
+---
+
 ## 0.13.2 — zod 4.6.6
 
 Recommended for every app, though nothing breaks without it. zod below

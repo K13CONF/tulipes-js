@@ -1,6 +1,18 @@
 # Plan — client headers on every request
 
-Status: planned on 2026-11-01 against `d099209` (master after PR #41). Nothing implemented.
+Status: planned on 2026-11-01 against `d099209` (master after PR #41).
+C01–C04 implemented the same day on `feat/client-headers`, verified locally only
+(not through CI, not released): `pnpm typecheck` clean; the example suite 186
+passed, 8 skipped (the agents live eval), including the new
+`modules/core/tests/client-headers.test.ts` (5 cases: valid values normalized,
+invalid values defaulted with a generated uuid, the required check, the live
+round-trip, the preflight and `Access-Control-Expose-Headers`) and the
+`request_id` assertion in `config.test.ts`; `packages/cli` presets test 15 passed
+with the round-trip asserted on a scaffolded minimal app; the site builds (350
+pages) and `pnpm check` passes. Not done: the manual curl against `pnpm dev`
+(the live test covers the same path). C05 waits for the release.
+`details` on the required-header error was dropped: the envelope never
+serializes it, the message already names the headers.
 
 The brief: port the "client headers" feature of another project (a legacy
 Express app) into every Tulipes app — the reference app in `example/`, which
@@ -81,7 +93,6 @@ export function clientHeaders(): RequestHandler {
       return next(new HttpError(400, "clientHeadersRequired", {
         code: "CLIENT_HEADERS_REQUIRED",
         defaultMessage: `Missing required headers: ${missing.join(", ")}`,
-        details: { headers: missing },
       }));
     }
     req.client = client;

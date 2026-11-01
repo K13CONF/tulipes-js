@@ -459,15 +459,17 @@ Core mounts no middleware. Where yours goes depends on its reach:
 | one endpoint | after its `rai()` handler |
 
 Global middleware lives in sys modules because they load first. The core
-module's routes file is the reference app's global slot; it builds its
-middleware lazily because it needs Redis:
+module's routes file is the reference app's global slot. It mounts the
+[client headers](/tulipes-js/guides/client-headers/) parser directly, and
+builds the cache middleware lazily because that one needs Redis:
 
 ```ts title="modules/core/routes/core.routes.ts"
 export default function coreRoutes(ctx: BackendCtx): void {
+  ctx.app.use(clientHeaders());
+
   ctx.app.use(lazy(() => {
     const cache = appCache(ctx);
     return (async (_req, res, next) => {
-      res.setHeader("X-Request-Id", randomUUID());
       const served = await cache.wrap("stats:served-sample", 10, async () => Date.now());
       res.setHeader("X-Stats-Sample", String(served));
       next();
