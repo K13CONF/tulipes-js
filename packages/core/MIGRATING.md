@@ -106,6 +106,16 @@ fixes from the same audit arrive with the upgrade and need nothing here.
    `modules/users/i18n/*.json`. If your roles define no `level`, define one:
    without it every delete is refused.
 
+8. **`publicDomain` is a hostname.** `scripts/deploy-nginx.ts` runs as root,
+   names a file after `core.publicDomain` and pastes it into the nginx server
+   block, and the setting accepted any string. Copy
+   `modules/core/helpers/hostname.ts`, use `z.string().regex(HOSTNAME, …)` for
+   `publicDomain` in `modules/core/module.config.ts`, and copy the reference
+   app's `scripts/deploy-nginx.ts`: it checks the value again, refuses a path
+   outside `sites-available`, and restores what it changed when `nginx -t`
+   fails. Check the stored value first (`GET /config/core`): a value that is
+   not a hostname now fails validation at boot.
+
 ---
 
 ## Unreleased — grants outside a module's own ids
