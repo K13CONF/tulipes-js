@@ -20,7 +20,10 @@ export default async function seedAdmin(ctx: DatabaseCtx): Promise<void> {
   const email = adminEmail.toLowerCase();
   const User = ctx.models.get<UserDoc>("User");
 
-  let user: Pick<UserDoc, "_id"> | null = await User.findOne({ email }).lean();
+  // Deleted rows included: the email stays unique in the index after a soft
+  // delete, so a lookup that skips them would try to insert it again.
+  const find = () => User.findOne({ email }).setOptions({ withDeleted: true }).lean<Pick<UserDoc, "_id"> & { is_deleted?: boolean }>();
+  let user = await find();
 
   if (!user) {
     try {
@@ -29,8 +32,16 @@ export default async function seedAdmin(ctx: DatabaseCtx): Promise<void> {
       // Backend and worker boot together, so both may reach this at once.
       // The loser of that race just reads the row the winner inserted.
       if ((error as { code?: number }).code !== 11000) throw error;
-      user = await User.findOne({ email }).lean();
+      user = await find();
     }
+  }
+
+  if (user?.is_deleted) {
+    // Restoring it would undo an administrator's decision; saying so is the
+    // only safe default.
+    throw new Error(
+      `the seeded admin account ${email} is soft-deleted — restore it (is_deleted: false) or set ADMIN_EMAIL to another address`,
+    );
   }
 
   // Only set the password when there is no credential yet, so a rotated

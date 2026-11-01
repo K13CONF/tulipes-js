@@ -10,5 +10,9 @@
   "welcome": {
     "subject": "Bienvenue, {{email}}"
   },
-  "emailInvalid": "Doit être une adresse email valide"
+  "emailInvalid": "Doit être une adresse email valide",
+  "emailUnavailable": "Cette adresse email ne peut pas être utilisée",
+  "seededAdmin": "Le compte administrateur initial ne peut pas être supprimé ; changez d'abord ADMIN_EMAIL",
+  "outranks": "Vous ne pouvez pas supprimer un compte dont le rôle est égal ou supérieur au vôtre",
+  "deleteSelf": "Vous ne pouvez pas supprimer votre propre compte ici"
 }

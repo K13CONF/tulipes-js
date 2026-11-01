@@ -45,6 +45,22 @@ fixes from the same audit arrive with the upgrade and need nothing here.
    as a route any signed-in caller reaches needs another one, such as
    `GET /api/v1/auth/me`. Run `pnpm spec` to refresh `docs/openapi.json`.
 
+3. **A soft-deleted email is still taken.** The unique index on `email`
+   includes soft-deleted rows, but three lookups skipped them. Soft-deleting the
+   seeded admin then made every later boot fail with a duplicate-key error, and
+   registering or creating a deleted address answered 500. Copy from the
+   reference app, or change by hand:
+   - `modules/auth/bootstrap/seed-admin.bootstrap.ts`: look the account up with
+     `.setOptions({ withDeleted: true })`, and throw a message naming the
+     account when the row it finds is soft-deleted.
+   - `modules/auth/controllers/web.auth.controllers.ts` (register) and
+     `modules/users/controllers/bo.users.controllers.ts` (create): count with
+     `withDeleted` and answer 422 `emailUnavailable`; map an E11000 from
+     `create()` to the same answer.
+   - `softDelete` in the same back-office controller refuses the `ADMIN_EMAIL`
+     account with 409 `SEEDED_ADMIN`. Add the `emailUnavailable` and
+     `seededAdmin` keys to `modules/users/i18n/*.json`.
+
 ---
 
 ## Unreleased — grants outside a module's own ids

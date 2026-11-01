@@ -38,6 +38,10 @@ export class BoUsersController {
     return async (req: Request, res: Response) => {
       const user = await this.#ctx.models!.get("User").findOne({ email: req.params.email });
       if (!user) throw new HttpError(404, "notFound");
+      // The boot seeds this account; deleting it would stop every later boot.
+      if (user.get("email") === this.#ctx.config.auth?.adminEmail?.toLowerCase()) {
+        throw new HttpError(409, "seededAdmin", { code: "SEEDED_ADMIN" });
+      }
 
       // The account leaves every query, so its sessions resolve to nobody on
       // the cold path; the cached identities would not know, so they go too.
@@ -66,7 +70,15 @@ export class BoUsersController {
       // `field` is what puts this against the input in the envelope.
       if (!email) throw new HttpError(422, "emailRequired", { field: "email" });
 
-      await this.#ctx.models!.get("User").create({ email });
+      const User = this.#ctx.models!.get("User");
+      // Deleted accounts included: their email is still taken in the index.
+      if (await User.countDocuments({ email }).setOptions({ withDeleted: true }).limit(1)) {
+        throw new HttpError(422, "emailUnavailable", { field: "email" });
+      }
+      await User.create({ email }).catch((error: { code?: number }) => {
+        if (error.code === 11000) throw new HttpError(422, "emailUnavailable", { field: "email" });
+        throw error;
+      });
       // The locale travels with the job: the worker has no request to
       // negotiate from, so whoever queues the work owns that decision.
       await this.#ctx.queues!.add("users.welcome", "welcome", {
