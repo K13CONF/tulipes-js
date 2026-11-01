@@ -6,7 +6,9 @@ report is outside the repository, at `~/security-audit-skill/tulipes-js/run-1/`
 `vulnerabilities.html` for a readable overview). Branch: continue on
 `feat/client-headers` after R02, or a new `fix/security-2026-11` branched from it.
 
-Status: **planned**. Nothing below is implemented yet.
+Status: **implemented locally, 2026-11-01.** Not pushed, not through CI, not
+released. Commits `678e5f0`…`a837f51` on `feat/client-headers`; evidence and
+what was left out are at the end.
 
 > The repository is public. This plan names unfixed issues; push it together
 > with the fixes, not before. The high finding (SEC-01) affects every app
@@ -244,6 +246,68 @@ CI and a release are separate steps that need their own authorization.
 - **D3 — required `version` on config writes.** Recommended: yes, in 0.14,
   since 0.14 is already breaking.
 
+## Decisions taken
+
+- **D1:** an unset `APP_ENV` hides internals and warns; the boot continues.
+  The placeholder-credential guard was not extended (see SEC-09).
+- **D2:** a password change requires `current_password`.
+- **D3:** `PATCH /config/:module` requires `version`.
+
 ## Validation evidence
 
-None yet.
+Local, Node 24, MongoDB and Redis on localhost
+(`TEST_MONGO_URI=mongodb://127.0.0.1:27017/tulipes_tests`,
+`TEST_REDIS_URL=redis://127.0.0.1:6379/3`), after `a837f51`:
+
+| Check | Result |
+|---|---|
+| `pnpm typecheck` | exit 0 |
+| `pnpm test:types` | exit 0 |
+| root `pnpm test` | 42 files, 499 passed |
+| example suite (`pnpm vitest run` in `example/`) | 16 files, 201 passed, 8 skipped (agents live eval) |
+| presets (`pnpm vitest run --root packages/cli tests/presets.test.ts`) | 15 passed |
+| site `pnpm build && pnpm check` | 351 pages, passed |
+
+New regression tests were checked to fail without their fix for SEC-01,
+SEC-05, SEC-11 and the SEC-12 error-handler change (fix removed, test run,
+fix restored).
+
+| Item | Commit | Where it lands |
+|---|---|---|
+| SEC-01 | `678e5f0` | `@tulipes/socket.io` + app (MIGRATING 1) |
+| SEC-02 | `a25041e` | app (MIGRATING 2) |
+| SEC-03 | `2ecb163` | core |
+| SEC-04 | `481b340` | app (MIGRATING 3) |
+| SEC-05 | `2fcf3d4` | app (MIGRATING 4) |
+| SEC-06 | `10446a5` | app (MIGRATING 5) |
+| SEC-07, SEC-08 | `ca7a04b` | app (MIGRATING 6, 7) |
+| SEC-09 | `dce6581` | core, mcp, cli |
+| SEC-10 | `74b6b6c` | app (MIGRATING 8) |
+| SEC-11 | `fc2d872` | app (MIGRATING 9) |
+| SEC-12 | `c2c9d27` | core, bullmq, app (MIGRATING 10) |
+| SEC-13, SEC-14 | `7b2efb2` | app, core, docs (MIGRATING 11) |
+| SEC-15 (D2, D3, audit outcome, onChange) | `24833c1`, `a837f51` | app, core (MIGRATING 12) |
+| SEC-16 | `3b606b1` | CI, scripts, cli |
+
+## Backlog (not done in this sprint)
+
+- **Route and action ids bound to their module** (SEC-15). Implemented and
+  reverted: both presets comply, but 19 framework tests declare fixture ids
+  under other module names. Needs its own change set that reworks those
+  fixtures; breaking for apps that borrow ids.
+- **Socket.IO handshake auth and origin allowlist** (SEC-15). The provider has
+  no options hook and today's namespaces carry no account data. Design it
+  with the first namespace that does.
+- **Per-account login backoff** (SEC-15). A lockout lets anyone lock a victim
+  out; needs a policy decision (delay vs. lock, reset rules) first.
+- **`resume()` lease** (SEC-11). Two racing jobs can still both request a model
+  turn; writes are already claimed once.
+- **Cache marker atomicity** (SEC-07). The marker check and the write are two
+  Redis calls; a Lua script would make a revocation exact.
+- **Unset `APP_ENV` and the placeholder guard** (SEC-09), and the PM2 file's
+  development default `env` block: decide whether servers should refuse to
+  start without an explicit `APP_ENV`.
+- `.envs/.env.development` "NOT committed" comment: correct for generated
+  apps, which ignore `.envs/`; left as is.
+- Release bookkeeping (C05): core 0.14 with R02 and these fixes; every package
+  repacks.
