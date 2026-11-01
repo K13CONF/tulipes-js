@@ -20,6 +20,20 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
   return bcrypt.compare(plain, hash);
 }
 
+const dummies = new Map<number, Promise<string>>();
+
+/**
+ * Burn one compare when there is no account or no credential, at the
+ * configured cost, so a failed login takes as long either way and the
+ * response time does not tell which emails have accounts.
+ */
+export async function verifyNothing(ctx: Ctx, plain: string): Promise<false> {
+  const cost = rounds(ctx);
+  if (!dummies.has(cost)) dummies.set(cost, bcrypt.hash(randomUUID(), cost));
+  await bcrypt.compare(plain, await dummies.get(cost)!);
+  return false;
+}
+
 /**
  * Set or replace a user's password and invalidate every session they have.
  *

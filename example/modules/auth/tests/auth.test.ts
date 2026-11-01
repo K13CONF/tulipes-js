@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import bcrypt from "bcryptjs";
 import { z } from "zod/v4";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { boot } from "@tulipes/core/boot";
@@ -1038,6 +1039,21 @@ async function issue(token: string, body: unknown) {
   return { status: response.status, body: await response.json() as { data: { token_id: string; secret: string; scopes: string[] | null } | null; errors: { code: string; field: string | null }[] } };
 }
 
+test("a failed login costs one bcrypt compare whether or not the email has an account", async () => {
+  const known = await account();
+  const compare = vi.spyOn(bcrypt, "compare");
+  try {
+    for (const email of [known.email, `nobody-${randomBytes(6).toString("hex")}@example.test`]) {
+      compare.mockClear();
+      const response = await post("/api/v1/auth/login", { email, password: "not-the-password" });
+      expect(response.status).toBe(401);
+      expect(compare).toHaveBeenCalledTimes(1);
+    }
+  } finally {
+    compare.mockRestore();
+  }
+});
+
 test("an API token is issued once, reaches what its role grants and its scopes cover, and is refused once revoked", async () => {
   const user = await account();
   const issued = await issue(user.access_token, { name: "claude-code laptop", scopes: ["hello:web:*"] });
@@ -1164,3 +1180,4 @@ test("a revocation on one replica is refused on the very next request on another
     await next.shutdown();
   }
 });
+

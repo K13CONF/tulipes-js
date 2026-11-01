@@ -77,6 +77,14 @@ fixes from the same audit arrive with the upgrade and need nothing here.
      `actor.sessionId` is set and the session is no longer live.
    Runs created before the change carry no `session_id` and finish as before.
 
+5. **A failed login takes as long for an unknown email.** The local strategy in
+   `modules/auth/helpers/passport.ts` returned at once when no account or
+   credential matched, skipping bcrypt, so the response time told which
+   emails have accounts. Copy `verifyNothing()` from the reference app's
+   `modules/auth/helpers/passwords.ts` (one compare against a dummy hash at
+   the configured cost) and use `done(null, await verifyNothing(ctx, password))`
+   in both early returns.
+
 ---
 
 ## Unreleased — grants outside a module's own ids

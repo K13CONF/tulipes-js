@@ -7,7 +7,7 @@ import type { ToolActor } from "@tulipes/core/agent";
 import type { Auth } from "@tulipes/core/http";
 
 import { identifyApiToken, isApiToken } from "./api-tokens.ts";
-import { verifyPassword } from "./passwords.ts";
+import { verifyNothing, verifyPassword } from "./passwords.ts";
 import {
   isRevoked,
   loadSession,
@@ -49,7 +49,7 @@ export function configurePassport(ctx: Ctx): void {
           const user = await ctx.models!
             .get<UserDoc>("User")
             .findOne({ email: String(email).toLowerCase() });
-          if (!user) return done(null, false);
+          if (!user) return done(null, await verifyNothing(ctx, password));
 
           // The hash is select:false, so it has to be asked for by name.
           const Credential = ctx.models!.get<CredentialDoc>("Credential");
@@ -57,7 +57,7 @@ export function configurePassport(ctx: Ctx): void {
             .findOne({ user: user._id })
             .select("+password_hash")
             .lean();
-          if (!credential) return done(null, false);
+          if (!credential) return done(null, await verifyNothing(ctx, password));
 
           const ok = await verifyPassword(password, credential.password_hash);
           if (!ok) return done(null, false);
