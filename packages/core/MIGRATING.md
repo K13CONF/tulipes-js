@@ -132,6 +132,23 @@ fixes from the same audit arrive with the upgrade and need nothing here.
     `req.ip` through `X-Forwarded-For`. Copy the reference app's check, and
     write any such entry in IPv4 form.
 
+11. **Smaller fixes in the reference app.** Copy what applies:
+    - `modules/core/helpers/query/policy.ts` and `mongoose/stages.ts`: look
+      fields and relations up with `Object.hasOwn`, so `constructor` or
+      `toString` in a list query is a 400, not a 500; `resolveStage` passes
+      the list's `maxTimeMS` to every populate (`mongoose/run.ts`).
+    - `modules/users/controllers/bo.users.controllers.ts` `listDeleted`: page
+      with `req.page`.
+    - `modules/auth/schemas/auth.schemas.ts` and `helpers/passwords.ts`
+      (`setPassword`): refuse a password over 72 bytes, which bcrypt would
+      silently cut; add `passwordTooLong` to `modules/auth/i18n/*.json`.
+    - `modules/agents/helpers/harness/run-loop.ts`: read `run.decisions` with
+      `Object.hasOwn`; `trajectory.ts`: quote a tool name in the repetition
+      note only when it has a tool name's shape; `helpers/runs.ts`: show
+      `ctx.agent.parseInput(call.name, call.input)` in `waiting_on`.
+    - `modules/core/helpers/logger/index.ts`: pino `redact` paths for
+      authorization headers, cookies, passwords and tokens.
+
 ---
 
 ## Unreleased — grants outside a module's own ids

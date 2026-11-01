@@ -131,10 +131,11 @@ describe("plain list", () => {
 
   test("resolve: policy fields by default, per-parent limit capped by the policy, nested", () => {
     expect(list({ resolve: ["sessions"] }).populate).toEqual([
-      { path: "sessions", select: "ip created_at", perDocumentLimit: 10 },
+      { path: "sessions", select: "ip created_at", options: { maxTimeMS: 5_000 }, perDocumentLimit: 10 },
     ]);
-    expect(list({ resolve: [["sessions", { fields: ["ip"], sort: [["created_at", "desc"]], limit: 3, resolve: ["device"] }]] }).populate).toEqual([
-      { path: "sessions", select: "ip", options: { sort: { created_at: -1 } }, perDocumentLimit: 3, populate: [{ path: "device", select: "name" }] },
+    // Every populate carries the list's time limit, nested ones included.
+    expect(list({ resolve: [["sessions", { fields: ["ip"], sort: [["created_at", "desc"]], limit: 3, resolve: ["device"] }]] }, { maxTimeMS: 900 }).populate).toEqual([
+      { path: "sessions", select: "ip", options: { sort: { created_at: -1 }, maxTimeMS: 900 }, perDocumentLimit: 3, populate: [{ path: "device", select: "name", options: { maxTimeMS: 900 } }] },
     ]);
   });
 });

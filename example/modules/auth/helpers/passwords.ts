@@ -41,6 +41,8 @@ export async function verifyNothing(ctx: Ctx, plain: string): Promise<false> {
  * compromise: leaving other devices signed in would defeat it.
  */
 export async function setPassword(ctx: Ctx, userId: string, plain: string, expectedVersion?: string): Promise<string> {
+  // bcrypt ignores bytes past 72; the schemas refuse those, and so does this, for every other caller.
+  if (Buffer.byteLength(plain, "utf8") > 72) throw new HttpError(422, "passwordTooLong", { field: "password" });
   const password_hash = await hashPassword(ctx, plain);
   const version = randomUUID();
 

@@ -177,3 +177,25 @@ test("a script process carries the same surface and can invoke an action under t
     await handle.shutdown();
   }
 });
+
+test("parseInput shows what invoke() would execute: defaults applied, or undefined when it does not parse", async () => {
+  const app = await fixture({
+    "modules/probe/module.acl.js": acl,
+    "modules/probe/routes/probe.routes.js": routes,
+    "modules/probe/agent/probe.agent.js": `
+      import { action, defineAgent } from '@tulipes/core/agent';
+      import { z } from 'zod';
+      export default defineAgent({ summary: 'Resets.', actions: [
+        action({ id: 'probe:web:reset', description: 'Reset', input: z.object({ confirm: z.boolean(), scope: z.string().default('all') }), handler: () => 1 }),
+      ] });`,
+  });
+  const handle = await app.boot({ listen: false });
+  try {
+    const agent = handle.ctx.agent!;
+    expect(agent.parseInput("probe_web_reset", { confirm: true })).toEqual({ confirm: true, scope: "all" });
+    expect(agent.parseInput("probe_web_reset", { confirm: "yes" })).toBeUndefined();
+    expect(agent.parseInput("no_such_tool", {})).toBeUndefined();
+  } finally {
+    await handle.shutdown();
+  }
+});

@@ -118,7 +118,8 @@ function checkCondition(node: Condition, rules: NonNullable<QueryPolicy["filter"
     node.items.forEach((item, index) => checkCondition(item, rules, [...path, index + offset], issue, 1));
     return;
   }
-  const declared = rules[node.field];
+  // Own keys only: "constructor" or "toString" must not pass as a declared field.
+  const declared = Object.hasOwn(rules, node.field) ? rules[node.field] : undefined;
   if (!declared) return issue([...path, 0], `"${node.field}" is not filterable`);
   const rule: FilterRule = Array.isArray(declared) ? { type: "string", ops: declared } : (declared as FilterRule);
   if (!rule.ops.includes(node.op)) return issue([...path, 1], `"${node.op}" is not allowed on "${node.field}"`);
@@ -169,7 +170,7 @@ function checkSort(sort: readonly SortKey[], allowed: readonly string[], path: P
 /** Option issues sit under [i, 1, option]: a relation given as a bare name has no options to be wrong. */
 function checkResolve(list: readonly Resolve[], policies: Record<string, ResolvePolicy>, path: PropertyKey[], issue: Issue): void {
   list.forEach((entry, index) => {
-    const declared = policies[entry.relation];
+    const declared = Object.hasOwn(policies, entry.relation) ? policies[entry.relation] : undefined;
     if (!declared) return issue([...path, index], `"${entry.relation}" cannot be resolved here`);
     const options = [...path, index, 1];
     if (entry.fields) checkFields(entry.fields, declared.fields, [...options, "fields"], issue);

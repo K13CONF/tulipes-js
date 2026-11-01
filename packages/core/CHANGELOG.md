@@ -44,6 +44,8 @@ While the major version is `0`, a minor bump may carry breaking changes —
   a request (the MCP process, agent runs) is refused with 403
   `ACCESS_CHECKER_NEEDS_REQUEST` instead of falling back to the plain ACL,
   which is not the policy such an app chose.
+- `agent.parseInput(name, input)`: the input as `invoke()` would hand it to
+  the handler, for an approval screen that shows what will run.
 - `@tulipes/bullmq`: a worker parses each job with the queue's schema before
   the handler runs, as the producer does; a job that no longer fits fails
   once, without retries.

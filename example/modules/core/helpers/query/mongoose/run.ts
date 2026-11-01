@@ -93,7 +93,7 @@ export function toMongoose(
       match,
       sort: sortStage(query),
       ...(project && { project }),
-      populate: resolveStage(query.resolve, query.policy.resolve),
+      populate: resolveStage(query.resolve, query.policy.resolve, maxTimeMS),
       skip: page.skip,
       limit: page.per_page,
       count: counted,

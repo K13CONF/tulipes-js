@@ -163,6 +163,19 @@ export class AgentRegistry {
     return this.#tools.get(name)?.tool;
   }
 
+  /**
+   * The input as the handler would receive it — defaults applied,
+   * transforms run — or undefined when it does not parse. What an approval
+   * screen shows, so the owner approves what `invoke()` will execute.
+   */
+  parseInput(name: string, input: unknown): unknown {
+    const action = this.#tools.get(name)?.action;
+    if (!action) return undefined;
+    if (!action.input) return input;
+    const result = action.input.safeParse(input ?? {});
+    return result.success ? result.data : undefined;
+  }
+
   manifest(caller?: string | ToolActor): AgentManifest {
     const tools = this.tools(caller);
     const names = new Set(tools.map((tool) => tool.name));

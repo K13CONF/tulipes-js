@@ -64,12 +64,17 @@ export class BoUsersController {
   }
 
   listDeleted(): RequestHandler {
-    return async (_req: Request, res: Response) => {
+    return async (req: Request, res: Response) => {
+      // Paged like every list: the tombstones only grow.
+      const { skip, per_page } = req.page;
       const deleted = await this.#ctx.models!
         .get("User")
         .find({ is_deleted: true })
         .setOptions({ withDeleted: true } as Record<string, unknown>)
         .select("email role -_id")
+        .sort({ email: 1 })
+        .skip(skip)
+        .limit(per_page)
         .lean();
 
       res.respond({ data: deleted });

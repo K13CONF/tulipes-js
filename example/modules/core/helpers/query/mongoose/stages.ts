@@ -208,18 +208,19 @@ export function projectStage(query: ParsedListQuery): Record<string, 1> | undefi
  * whole page. A limit is per parent (`perDocumentLimit`), which costs one
  * query per parent: that is why the policy caps it with `maxLimit`.
  */
-export function resolveStage(list: readonly Resolve[], policies: Record<string, ResolvePolicy> | undefined): PopulateOptions[] {
+export function resolveStage(list: readonly Resolve[], policies: Record<string, ResolvePolicy> | undefined, maxTimeMS?: number): PopulateOptions[] {
   return list.map((entry) => {
-    const policy = policies?.[entry.relation];
+    const policy = policies && Object.hasOwn(policies, entry.relation) ? policies[entry.relation] : undefined;
     const fields = entry.fields ?? policy?.fields ?? [];
     const sort = entry.sort?.length ? Object.fromEntries(entry.sort.map((key) => [key.field, order(key)])) : undefined;
     const limit = entry.limit ?? policy?.maxLimit;
     return {
       path: entry.relation,
       ...(fields.length && { select: fields.join(" ") }),
-      ...(sort && { options: { sort } }),
+      // Each populate is its own query; the list's time limit applies to it too.
+      ...((sort || maxTimeMS !== undefined) && { options: { ...(sort && { sort }), ...(maxTimeMS !== undefined && { maxTimeMS }) } }),
       ...(limit !== undefined && { perDocumentLimit: limit }),
-      ...(entry.resolve?.length && { populate: resolveStage(entry.resolve, policy?.resolve) }),
+      ...(entry.resolve?.length && { populate: resolveStage(entry.resolve, policy?.resolve, maxTimeMS) }),
     };
   });
 }

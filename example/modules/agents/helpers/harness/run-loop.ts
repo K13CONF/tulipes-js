@@ -273,7 +273,8 @@ export class RunLoop {
       return { call, kind: "answer", content: `No tool named "${call.name}" is available to this run. Use one of the tools you were given.` };
     }
     if (interrupted && !tool.readOnly) return { call, kind: "answer", content: INTERRUPTED };
-    const recorded = run.decisions[call.id];
+    // Own keys only: a call id the model chose must not reach Object.prototype.
+    const recorded = Object.hasOwn(run.decisions, call.id) ? run.decisions[call.id] : undefined;
     switch (this.#deps.policy.decide(tool, recorded)) {
       case "allow":
         return { call, kind: "execute", tool };

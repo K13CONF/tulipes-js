@@ -1067,6 +1067,14 @@ test("a request that read a session before it was forgotten cannot cache it agai
   expect(await readIdentity(app.handle.ctx, sid)).toBeNull();
 });
 
+test("a password past bcrypt's 72 bytes is refused, not silently cut", async () => {
+  const email = randomBytes(8).toString("hex") + "@example.test";
+  const response = await post("/api/v1/auth/register", { email, password: "é".repeat(37) });
+  expect(response.status).toBe(422);
+  expect(await response.json()).toMatchObject({ errors: [{ field: "password" }] });
+  expect((await post("/api/v1/auth/register", { email, password: "a".repeat(72) })).status).toBe(201);
+});
+
 test("an API token is issued once, reaches what its role grants and its scopes cover, and is refused once revoked", async () => {
   const user = await account();
   const issued = await issue(user.access_token, { name: "claude-code laptop", scopes: ["hello:web:*"] });

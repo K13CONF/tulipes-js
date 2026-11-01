@@ -23,5 +23,6 @@
   "expiryInvalid": "Expiry is a whole number of days between 1 and 365",
   "tokenNeedsSession": "API tokens are issued from a signed-in session, not by another token",
   "noSuchToken": "No such token",
-  "tokenRevoked": "Token revoked"
+  "tokenRevoked": "Token revoked",
+  "passwordTooLong": "A password can be at most 72 bytes (72 plain letters, fewer with accents or emoji)"
 }

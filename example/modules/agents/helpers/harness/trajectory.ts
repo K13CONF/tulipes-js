@@ -43,11 +43,14 @@ export class RepetitionGuard implements TrajectoryGuard {
     if (!last) return { kind: "ok" };
     let repeats = 0;
     for (let index = calls.length - 1; index >= 0 && calls[index]!.key === last.key; index--) repeats++;
-    if (repeats >= this.#thresholds.repeatFail) return { kind: "fail", reason: `"${last.name}" called ${repeats} times in a row with the same input` };
+    // The name is the model's text, and the warning is an operator note the model is told to follow:
+    // quote it only when it has a tool name's shape.
+    const name = /^[A-Za-z0-9_-]{1,64}$/.test(last.name) ? `"${last.name}"` : "the same tool";
+    if (repeats >= this.#thresholds.repeatFail) return { kind: "fail", reason: `${name} called ${repeats} times in a row with the same input` };
     if (repeats >= this.#thresholds.repeatWarn) {
       return {
         kind: "warn",
-        note: `"${last.name}" has now been called ${repeats} times in a row with the same input. The same call returns the same result: change the input, use another tool, or finish with run_finish.`,
+        note: `${name} has now been called ${repeats} times in a row with the same input. The same call returns the same result: change the input, use another tool, or finish with run_finish.`,
       };
     }
     return { kind: "ok" };

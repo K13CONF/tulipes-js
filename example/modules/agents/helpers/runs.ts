@@ -158,7 +158,8 @@ export function summaryOf(ctx: RuntimeCtx, doc: RunDocument) {
         id: call.id,
         tool: call.name,
         description: ctx.agent.find(call.name)?.description ?? "",
-        input: call.input,
+        // What will run: the action's schema may add defaults or transform the model's input.
+        input: ctx.agent.parseInput(call.name, call.input) ?? call.input,
       })),
     }),
     created_at: doc.created_at,

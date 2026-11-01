@@ -397,6 +397,13 @@ run, never halfway through one:
 `writes` mode, an action without it always waits for a person. Mark only actions
 that truly change nothing.
 
+`approval: "none"` removes the only check between what a tool returns and the
+next write. A run reads tool results as text, so content written by someone else
+(a comment, a profile, an email body) can steer the model into calling a write
+action. Use `none` only when no readable action returns content another person
+controls. The approval screen shows each call's input as the action will receive
+it, defaults applied.
+
 The loop also stops a run that goes in circles: the same tool with the same input
 three times in a row gets a note telling the model so, five times ends the run
 `failed`, and three consecutive errors from one tool end it too.
