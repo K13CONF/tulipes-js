@@ -66,6 +66,7 @@ async function patch(path: string, body: unknown, token: string) {
     headers: {
       "content-type": "application/json",
       authorization: "Bearer " + token,
+      "x-request-id": "req-audit-1",
     },
     body: JSON.stringify(body),
   });
@@ -125,7 +126,7 @@ test("a settings write is validated by the module's schema, refused on a stale v
   expect(greeted.data.message).toMatch(/^Howdy/);
 
   const audit = await app.handle.ctx.models!.get("ConfigAudit").find({ actor: user.userId }).sort({ recorded_at: -1 }).lean();
-  expect(audit[0]).toMatchObject({ action: "settings.change_requested", module: "hello", keys: ["greeting"], version: before, actor_role: "sysadmin" });
+  expect(audit[0]).toMatchObject({ action: "settings.change_requested", module: "hello", keys: ["greeting"], version: before, actor_role: "sysadmin", request_id: "req-audit-1" });
   expect(JSON.stringify(audit)).not.toContain("Howdy");
 
   expect((await patch("/api/v1/config/nope", { values: {} }, user.access_token)).status).toBe(404);

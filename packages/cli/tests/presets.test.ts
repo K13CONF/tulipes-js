@@ -68,6 +68,8 @@ test("the default preset declares no infrastructure and supplies runnable test/s
         assert.equal(response.headers.get("x-content-type-options"), "nosniff");
         assert.equal((await response.json()).success, true);
       }
+      const echoed = await fetch(base + '/api/v1/hello', { headers: { 'x-request-id': 'req-12345678' } });
+      assert.equal(echoed.headers.get('x-request-id'), 'req-12345678');
     } finally { await handle.shutdown(); }
   `,
   );

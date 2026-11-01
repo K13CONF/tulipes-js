@@ -13,7 +13,9 @@ export interface HardeningSettings {
  * that serves HTML and its own assets; this one serves JSON and nothing
  * else, so the policy can be far stricter.
  */
-export function helmetOptions(settings: Pick<HardeningSettings, "hstsMaxAge">): HelmetOptions {
+export function helmetOptions(
+  settings: Pick<HardeningSettings, "hstsMaxAge">,
+): HelmetOptions {
   const maxAge = settings.hstsMaxAge;
 
   return {
@@ -35,11 +37,23 @@ export function helmetOptions(settings: Pick<HardeningSettings, "hstsMaxAge">): 
 }
 
 /**
+ * Response headers browser JavaScript may read across origins. The request
+ * id the core module echoes is one: a client shows it in an error message
+ * so support can find the log line. `allowedHeaders` is deliberately unset,
+ * so the X-* headers a client sends are reflected from the preflight.
+ */
+const EXPOSED_HEADERS = [
+  "X-Request-Id", // Expose the request ID so clients can correlate with server logs
+];
+
+/**
  * CORS controls which browser origins can read responses. An empty list
  * grants no cross-origin access; it does not reject incoming HTTP requests.
  * Authentication and any future cookie/CSRF checks remain separate controls.
  */
-export function corsOptions(settings: Pick<HardeningSettings, "corsOrigins" | "corsCredentials">): CorsOptions {
+export function corsOptions(
+  settings: Pick<HardeningSettings, "corsOrigins" | "corsCredentials">,
+): CorsOptions {
   const raw = settings.corsOrigins.trim();
   // This controls Access-Control-Allow-Credentials, not token extraction.
   // Explicit Bearer headers do not require cookie authentication to be enabled.
@@ -50,10 +64,16 @@ export function corsOptions(settings: Pick<HardeningSettings, "corsOrigins" | "c
     // browser rejects the response, so the schema refuses the combination
     // rather than storing a policy that silently fails in production.
     if (credentials) {
-      throw new Error('corsOrigins "*" cannot be combined with corsCredentials — list the origins explicitly');
+      throw new Error(
+        'corsOrigins "*" cannot be combined with corsCredentials — list the origins explicitly',
+      );
     }
 
-    return { origin: true, credentials: false };
+    return {
+      origin: true,
+      credentials: false,
+      exposedHeaders: EXPOSED_HEADERS,
+    };
   }
 
   const origins = raw
@@ -61,5 +81,5 @@ export function corsOptions(settings: Pick<HardeningSettings, "corsOrigins" | "c
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-  return { origin: origins, credentials };
+  return { origin: origins, credentials, exposedHeaders: EXPOSED_HEADERS };
 }

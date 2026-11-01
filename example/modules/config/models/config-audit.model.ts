@@ -15,6 +15,7 @@ const configAuditSchema = new Schema({
   actor: { type: String, required: true },
   actor_role: { type: String, required: true },
   ip: String,
+  request_id: String,
   app_env: { type: String, required: true },
   mode: { type: String, required: true },
   recorded_at: { type: Date, required: true },

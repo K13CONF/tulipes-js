@@ -27,6 +27,7 @@ export async function auditChange(
       actor: String(user._id),
       actor_role: user.role,
       ip: req.ip,
+      request_id: req.client.requestId,
       app_env: ctx.appEnv,
       mode: ctx.mode,
       recorded_at: new Date(),
