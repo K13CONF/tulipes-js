@@ -20,6 +20,7 @@ const runSchema = new Schema(
     user: { type: Schema.Types.ObjectId, ref: "User", required: true },
     scopes: { type: [String], default: undefined },
     token_id: { type: String },
+    session_id: { type: String },
     goal: { type: String, required: true },
     status: { type: String, required: true, enum: ["queued", "running", "waiting_approval", "succeeded", "failed", "cancelled", "exhausted"], default: "queued" },
     transcript: { type: [Schema.Types.Mixed], default: [] },

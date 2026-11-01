@@ -227,6 +227,15 @@ function validClaims(
 }
 
 /** A live session owned by the token subject. TTL cleanup is not authorization. */
+/**
+ * Whether a session still stands: not ended, not expired, still on the
+ * current credential version. What an agent run started from a session
+ * checks before each step, as isTokenLive does for a token.
+ */
+export async function isSessionLive(ctx: Ctx, sid: string, userId: string): Promise<boolean> {
+  return Boolean(await loadSession(ctx, sid, userId));
+}
+
 export async function loadSession(
   ctx: Ctx,
   sid: string,

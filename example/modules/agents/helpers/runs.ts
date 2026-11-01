@@ -34,6 +34,8 @@ export async function startRun(ctx: RuntimeCtx, auth: Auth, input: StartRun) {
     user: (auth.user as { _id: unknown })._id,
     ...(auth.scopes && { scopes: [...auth.scopes] }),
     ...(auth.credentialId && { token_id: auth.credentialId }),
+    // A session-started run is bound to that session, so it ends with it.
+    ...(!auth.credentialId && auth.session?.sid && { session_id: auth.session.sid }),
     goal: input.goal,
     transcript: [openingMessage(input.goal, input.context)],
     status: "queued",

@@ -61,6 +61,22 @@ fixes from the same audit arrive with the upgrade and need nothing here.
      account with 409 `SEEDED_ADMIN`. Add the `emailUnavailable` and
      `seededAdmin` keys to `modules/users/i18n/*.json`.
 
+4. **An agent run started from a session ends with that session.** A run
+   recorded the API token that started it but nothing about a session, so a
+   run started by someone holding a stolen access token kept acting after the
+   owner changed their password. Store the session and check it at each step:
+   - `modules/agents/models/run.model.ts`: add `session_id: { type: String }`
+     (and `session_id?: string` in `RunDocument`, `sessionId?: string` in
+     `RunActor`, mapped in `toRun()`).
+   - `modules/agents/helpers/runs.ts` (`startRun`): when there is no
+     `auth.credentialId`, store `session_id: auth.session.sid`.
+   - `modules/auth/helpers/tokens.ts`: add `isSessionLive(ctx, sid, userId)`
+     (`Boolean(await loadSession(ctx, sid, userId))`) and export it from
+     `modules/auth/lib/index.ts`.
+   - `modules/agents/helpers/adapters/auth-identity.ts`: return `null` when
+     `actor.sessionId` is set and the session is no longer live.
+   Runs created before the change carry no `session_id` and finish as before.
+
 ---
 
 ## Unreleased — grants outside a module's own ids

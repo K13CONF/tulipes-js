@@ -19,6 +19,7 @@ export interface RunDocument {
   user: unknown;
   scopes?: string[];
   token_id?: string;
+  session_id?: string;
   goal: string;
   status: RunStatus;
   transcript: Run["transcript"];
@@ -160,6 +161,7 @@ export function toRun(doc: RunDocument): Run {
       userId: String(doc.user),
       ...(doc.scopes && { scopes: doc.scopes }),
       ...(doc.token_id && { tokenId: doc.token_id }),
+      ...(doc.session_id && { sessionId: doc.session_id }),
     },
     transcript: doc.transcript,
     pending: doc.pending,

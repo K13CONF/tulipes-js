@@ -108,6 +108,27 @@ test("a run started with a scoped API token is refused outside its scopes, and s
   expect(run).toMatchObject({ status: "failed", reason: "credential_revoked" });
 });
 
+test("a run started from a session stops once the owner changes their password", async () => {
+  const user = await app.as("user");
+  const started = await app.post<{ id: string }>(app.api("/agents/runs"), { goal: "List the greetings." }, { as: user });
+  expect(started.status).toBe(202);
+  const stored = await ctx().models!.get("AgentRun").findById(started.data!.id).lean() as Record<string, unknown>;
+  expect(stored).toMatchObject({ session_id: expect.any(String) });
+  expect(stored).not.toHaveProperty("token_id");
+
+  const model = new ScriptedModel([
+    turn([toolUse("hello_web_greetings")]),
+    async () => {
+      const changed = await app.post(app.api("/auth/password"), { password: randomBytes(24).toString("hex") }, { as: user });
+      expect(changed.status).toBe(200);
+      return turn([toolUse("hello_web_greetings")]);
+    },
+  ]);
+
+  const run = await composeLoop(ctx(), { model }).run(started.data!.id);
+  expect(run).toMatchObject({ status: "failed", reason: "credential_revoked" });
+});
+
 test("starting a run needs the key, and a signed-in caller", async () => {
   const guest: Auth = { isAuthenticated: false, user: null, session: null };
   await expect(startRun(ctx(), guest, { goal: "x" })).rejects.toMatchObject({ status: 401 });

@@ -1,4 +1,4 @@
-import { isTokenLive } from "@app/auth";
+import { isSessionLive, isTokenLive } from "@app/auth";
 import type { ToolActor } from "@tulipes/core/agent";
 import { requireModels, type Ctx } from "@tulipes/core/boot";
 
@@ -8,7 +8,8 @@ import type { Identity, RunActor } from "../harness/contracts.ts";
  * Who a run acts as, now. The user is read again at every step, so the
  * role is the one they hold now, as in the MCP process; a run started by
  * an API token stops when that token is revoked, expires or is retired by
- * a password change. The scopes are the snapshot taken when the run was
+ * a password change, and one started from a session stops when that
+ * session ends: a sign-out, a password change, an expiry. The scopes are the snapshot taken when the run was
  * created: they only ever narrow.
  */
 export class AuthIdentity implements Identity {
@@ -23,6 +24,7 @@ export class AuthIdentity implements Identity {
     const user = await users.findById(actor.userId);
     if (!user) return null;
     if (actor.tokenId && !(await isTokenLive(this.#ctx, actor.tokenId, actor.userId))) return null;
+    if (actor.sessionId && !(await isSessionLive(this.#ctx, actor.sessionId, actor.userId))) return null;
     return {
       isAuthenticated: true,
       // The auth module types its User document as core's AuthUser; the

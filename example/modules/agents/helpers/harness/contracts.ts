@@ -107,6 +107,8 @@ export interface RunActor {
   scopes?: readonly string[];
   /** Set when an API token created the run; its revocation ends the run. */
   tokenId?: string;
+  /** Set when a signed-in session created the run; signing out or changing the password ends the run. */
+  sessionId?: string;
 }
 
 /** A `tool_use` the model asked for that has no `tool_result` yet. */
