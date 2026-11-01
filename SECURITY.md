@@ -8,8 +8,8 @@ issue or pull request before the maintainer has coordinated a fix.
 
 The maintainer will triage reproducible reports, coordinate a fix and disclosure,
 and identify affected versions in the release notes. There is no guaranteed
-response time or commercial support SLA. The source repository remains private;
-this email does not require repository access.
+response time or commercial support SLA. The source repository is public, but
+report privately by email, not in a public issue.
 
 See [supported releases](docs/support.md). The framework is experimental;
 passing CI is not a production security certification. Authentication, user

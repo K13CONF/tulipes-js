@@ -58,5 +58,5 @@ jobs:
         env:
           RELEASE_BRANCH: ${{ github.event.repository.default_branch }}
           NODE_AUTH_TOKEN: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && secrets.NPM_TOKEN || '' }}
-          # npm cannot generate provenance from a private source repository.
+          # npm generates provenance only from a public source repository.
           NPM_CONFIG_PROVENANCE: ${{ !github.event.repository.private }}

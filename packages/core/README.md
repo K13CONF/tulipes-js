@@ -692,9 +692,9 @@ Claude Code over MCP through that door.
 > [!WARNING]
 > **Experimental.** `@tulipes/core/agent`, the manifest's shape, the `agent`
 > module's two routes, `tulipes agent manifest` and `@tulipes/mcp` are outside
-> the 0.11 compatibility promise: they may change in a patch or minor release
+> the 0.13 compatibility promise: they may change in a patch or minor release
 > without a deprecation period, until real use settles them. Everything else
-> in 0.11 is covered as usual (see `docs/support.md`).
+> in 0.13 is covered as usual (see `docs/support.md`).
 
 <details>
 <summary><b>Subpath exports</b></summary>

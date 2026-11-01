@@ -1,6 +1,6 @@
 # Releasing
 
-The release owner is the GitHub organisation `K13CONF`. Repository visibility remains private.
+The release owner is the GitHub organisation `K13CONF`. The repository is public.
 No release is created just by merging a feature PR.
 
 1. Update versions of every changed published package, changelog, migration notes
@@ -41,9 +41,10 @@ GitHub owner/repository and `publish.yml`, then set repository variable
 npm 11 on Node 24. npm-side trust configuration is a maintainer account action;
 adding this workflow does not configure npm automatically.
 
-Provenance remains disabled for this private repository because npm requires
-public source for provenance. Tokenless authentication and provenance are
-separate capabilities. [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/),
+Provenance follows the repository's visibility: the publish job sets
+`NPM_CONFIG_PROVENANCE` to true whenever the repository is public, which it now
+is, so the next publish carries provenance. npm requires public source for it.
+Tokenless authentication and provenance are separate capabilities. [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/),
 [provenance prerequisites](https://docs.npmjs.com/generating-provenance-statements/).
 
 ## Recovery
