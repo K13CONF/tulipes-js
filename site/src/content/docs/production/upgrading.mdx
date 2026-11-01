@@ -1,0 +1,241 @@
+---
+title: Upgrading Tulipes
+description: How Tulipes versions and support lines work, what tulipes update and tulipes migrate do, and the key steps of every migration from 0.1 to 0.13.2.
+sidebar:
+  order: 6
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Tulipes is pre-1.0, so a minor version may change public contracts. Every such change ships with migration steps, and the larger ones with a command that applies them. This page explains the version policy, the two upgrade commands, and the key steps of each migration. The full text, with every edge case, is [`MIGRATING.md`](https://github.com/K13CONF/tulipes-js/blob/master/packages/core/MIGRATING.md) in the core package.
+
+<Aside type="danger" title="Upgrading from 0.4 or earlier: migrate your data">
+0.5 renamed persisted fields to snake_case (`created_at`, `updated_at`, `last_seen_at`, `password_hash`, `tokens_valid_from`, `expires_at`, `is_deleted`). **Renaming a schema field does not rename it in existing documents.** Rows written before the upgrade keep the old key and stop matching queries, and the first symptom is that **nobody can sign in**, because the credential lookup asks for `password_hash` on documents that hold `passwordHash`. Run the rename (below) before you deploy 0.5 or anything later. It is the one migration that can lock users out.
+</Aside>
+
+## Versions and support
+
+`0.13` is the current stable line: its contracts are settled, and a breaking change waits for `0.14`. Before it, `0.x` minors broke freely; `0.2` through `0.5` each did.
+
+The rules, from the support policy:
+
+- **Patch releases** preserve documented behavior, except for clearly documented security corrections.
+- **A 0.x minor** may change public contracts and must include migration instructions.
+- **Structural changes** ship first as a prerelease on npm's `next` tag; stable releases go to `latest` after the same checks.
+- **Published versions are immutable**; a fix gets a new version.
+- **The supported API** is the documented package exports and types, module file contracts, CLI commands and documented HTTP behavior. Internal source or `dist` paths, private Express internals and undocumented properties have no guarantee.
+- **Experimental:** the agent surface (`@tulipes/core/agent`, `agent/*.agent.ts` files, the manifest, `tulipes agent manifest`), the whole `@tulipes/mcp` package and the production preset's `agents` module may change in any release, patch included, without a deprecation period. Changes are still listed in the changelog and `MIGRATING.md`.
+- Generated auth, settings and operational policy are your code, separate from the core API.
+
+The packages version independently, and packing pins each one's core dependency, so a core release republishes all of them. The current stable set:
+
+| Package | Version | Requires core |
+|---|---|---|
+| `@tulipes/core` | 0.13.2 | |
+| `@tulipes/cli` | 0.4.2 | |
+| `@tulipes/spec` | 0.4.3 | `^0.13.0` |
+| `@tulipes/mongoose` | 0.2.4 | `^0.13.0` |
+| `@tulipes/bullmq` | 0.3.0 (BullMQ 6) | `^0.13.0` |
+| `@tulipes/socket.io` | 0.1.6 | `^0.11.0 \|\| ^0.12.0 \|\| ^0.13.0` |
+| `@tulipes/mcp` | 0.2.2 | `^0.13.0` |
+| `@tulipes/testing` | 0.1.4 | `^0.13.0` |
+
+Maintained lines:
+
+| Line | Status |
+|---|---|
+| core 0.13.x, cli 0.4.x | current; normal fixes target these |
+| core 0.12.x, cli 0.3.x | previous stable; critical security fixes evaluated until the next core minor ships |
+| core 0.12.0-rc.1, rc.2 | candidates only; upgrade rather than expecting fixes |
+| core 0.11.x and older | unmaintained |
+
+Maintenance is best effort, with no guaranteed response time. Node `>=24.0.0 <25` is the supported runtime.
+
+## tulipes update
+
+```sh
+tulipes update
+```
+
+Run it from the app root. It moves the global CLI to the latest published version, reinstalling it into the prefix it already lives in (which is what makes it work under nvm), then rewrites the `@tulipes/*` ranges in the root and every module `package.json` and runs the install. It detects pnpm from the lockfile or the `packageManager` field. If the install cannot run, the manifests are already updated and it says so: install by hand.
+
+`tulipes update` changes versions, not code. It never rewrites your modules, so the steps below that touch application code are still yours. See [`tulipes update`](/tulipes-js/reference/cli/update/).
+
+## tulipes migrate
+
+A breaking minor that can be applied mechanically has a command. Run it with the CLI of the target line, from the app root:
+
+```sh
+tulipes migrate 0.11     # an app generated on 0.10 → the 0.11 layout and contracts
+tulipes migrate 0.12     # scope every RAI id; move the environment into the config
+tulipes migrate 0.13     # add the MCP process
+```
+
+Each one reports every file it changed, leaves a `TODO` comment and a report line wherever it could not decide, and records its mapping in `config/migration-0.11.json` or `config/migration-0.12.json`; delete those once reviewed. Read oldest-first from wherever you are: the steps compose. See [`tulipes migrate`](/tulipes-js/reference/cli/migrate/).
+
+## Migrations, newest first
+
+### 0.13.2: zod 4.6.6
+
+Recommended for every app. zod below 4.6.6 can exhaust memory validating an oversized constrained collection (GHSA-mrhx-c7xc-m3w5, high), including 3.25.x. Set `"zod": "^4.6.6"` in the root `package.json` and every module that lists zod, then `pnpm install`. Imports stay `zod/v4`.
+
+### @tulipes/bullmq 0.3.0: BullMQ 6
+
+Only for apps that declare `"queues": "@tulipes/bullmq"`.
+
+```ts
+// before
+await ctx.queues.add("billing", "send", data, { repeat: { pattern: "0 2 * * *" } });
+// after
+await ctx.queues.schedule("billing", "nightly", { pattern: "0 2 * * *" }, { name: "send", data });
+```
+
+- `add(…, { repeat })` is gone: it fails to compile, and an untyped call throws.
+- Repeat options: `utc: true` becomes `tz: "UTC"`; `currentDate` and `nthDayOfWeek` are no longer accepted.
+- Direct BullMQ use: `Queue#client` is `getBackend().client`, `Worker#resume()` must be awaited, and `debounce`, `Job#discard()`, `getRepeatableJobs()` and `removeRepeatable*()` are removed. See [BullMQ's v6 guide](https://docs.bullmq.io/guide/migrations/migrate-from-v5-to-v6).
+
+### 0.13.0: an MCP process, API tokens, credential scopes
+
+Additive; an app on 0.12 runs unchanged.
+
+- `tulipes migrate 0.13` adds `mcp.ts`, `config/mcp.config.ts`, the `mcp` script and `@tulipes/mcp`. Then `pnpm install`.
+- **API tokens** in the production preset are copied from the reference app's auth module by hand (the command lists the files). Until then the migrated MCP config identifies by `MCP_ROLE`, which is development only.
+- A credential refused by its scopes answers 403 `OUT_OF_SCOPE`, not `FORBIDDEN`.
+- An app with its own `ctx.routes.setAccessChecker()` must apply scopes itself with `scopesCover(req.auth.scopes, info.id)` from `@tulipes/core/acl`.
+- The `agents` module is optional; copy `modules/agents/` from the reference app, grant `agents:*` to `admin` and `sysadmin`, and set `ANTHROPIC_API_KEY`. It needs a worker.
+
+### 0.12.0: scoped RAI ids, environment in the config, time zones
+
+**Scoped ids.** A RAI id is now `module:scope:resource[:extra]`. An app on 0.11 refuses to boot until its ids are rewritten:
+
+```txt
+✖ [auth] resource "auth:login" has no scope — since 0.12 a grant is
+  "module:scope:resource[:extra]" or a prefix wildcard (`tulipes migrate 0.12` rewrites a 0.11 app)
+```
+
+`tulipes migrate 0.12` puts every id in scope `web` (`--scope` picks another): ids in `rai()` under `routes/` and `agent/`, grants in `module.acl.ts`, and string literals equal to an id. Then move back-office ids to `bo` by hand. A prefix grant now reaches every depth.
+
+**Environment in the config.** `ctx.Environment` is gone. `tulipes.env` is an object keyed by the camelCase name, and values are read as `ctx.config.<module>.<name>`, read-only and non-enumerable. Variable names do not change.
+
+```ts
+ctx.Environment.get("MONGO_URI")   →  ctx.config.core.mongoUri
+ctx.Environment.appEnv             →  ctx.appEnv
+```
+
+The same command rewrites declarations and the reads it can see, and wires `server.port`, `mongoose.uri` and `bullmq.redisUrl` in `config/app.config.ts`; the providers read those keys now. Then `pnpm sync`, `pnpm typecheck`, `pnpm test`.
+
+**Time zones** are optional: add a `timezone` block to `config/app.config.ts` and the process runs in that zone from the next boot. Check cron strings and `Date#getHours()` that relied on the server's zone. See [time zones](/tulipes-js/guides/time-zones/).
+
+### 0.11.0: the large one
+
+Most of 0.11 is what `tulipes migrate 0.11` does by itself on an app generated on 0.10:
+
+```sh
+corepack enable                 # pnpm 10 is pinned by the migrated manifest
+tulipes migrate 0.11            # from the app root, with the 0.11 CLI
+pnpm install
+tulipes config:import --env production   # once per environment, from its .envs file
+pnpm sync && pnpm typecheck     # the TODOs are where this may still fail
+```
+
+What it covers:
+
+- **Move to pnpm.** `packageManager: "pnpm@10.28.0"`, a `pnpm-workspace.yaml` listing `modules/*`, `resolutions` moved to `pnpm.overrides`. A module that imports a package it never listed now fails to resolve: add the dependency to that module.
+- **Production without tsx.** Add `allowImportingTsExtensions`, `rewriteRelativeImportExtensions` and `erasableSyntaxOnly` to `tsconfig.json`; relative imports name `.ts`; parameter properties, `enum` and runtime `namespace`s are replaced; scripts become `node app.ts`, `node worker.ts`, `node`; PM2's `interpreter` becomes `"node"`; `tsx` leaves `devDependencies`.
+- **The module root.** A module's root holds `package.json`, `module.config.ts` and `module.acl.ts` only. `index.ts` moves to `lib/index.ts`, `schemas.ts` to `schemas/`, `meta.variables.json` into `package.json`.
+- **Plain routes.** A routes file is a plain function of `BackendCtx` returning a `Router`; `defineRoutes()`, `runtime()` and `tulipes.offline` are gone. `tulipes routes` and `tulipes spec` always inspect.
+- **Settings declarations.** `module.config.ts` exports `defineConfig({ schema, onChange })`; `onReady`, `onDrain` and `onShutdown` move to `bootstrap/*.bootstrap.ts`, which may return its cleanup. What `onDrain` did is now `ctx.signal.addEventListener("abort", …)`.
+- **Settings in the database** (optional): declare `"settings": "@tulipes/mongoose/settings"`; values edited in the JSON file are not carried over, so re-apply them with `tulipes config:import` or `ctx.settings.set()`.
+- **The reference app's console and auth cache** are application code: copy `modules/config/`, reduce `modules/settings/`, copy the auth session cache and call `forgetUser()` where you change roles. Values that became settings (`TRUST_PROXY_CIDRS`, `CORS_*`, `BODY_LIMIT`, `PUBLIC_DOMAIN`, rate limits…) leave `.envs/`.
+
+From a 0.11 candidate (rc.1 or rc.2): install the 0.11.0 CLI, `pnpm update -r "@tulipes/*"`, and run `tulipes migrate 0.11` again; it only rewrites the agent surface to actions.
+
+### 0.10.0: providers
+
+Infrastructure moved out of core into providers, declared in the root `package.json`:
+
+```json title="package.json"
+{ "tulipes": { "providers": { "models": "@tulipes/mongoose", "queues": "@tulipes/bullmq", "sockets": "@tulipes/socket.io" } } }
+```
+
+Add each package to the root and to every module that owns `models/`, `queues/` or `sockets/` files, and change imports from `@tulipes/core/db`, `@tulipes/core/queues` and `@tulipes/core/sockets` to the provider packages. Without the declaration a module with those files is refused in the `providers` phase; with it, a missing `MONGO_URI` or `REDIS_URL` is a boot error. The `tulipes` command moved to `@tulipes/cli`: install it globally and as an app devDependency. See [providers](/tulipes-js/concepts/providers/).
+
+### 0.9.0: minimal default, Node 24, production security
+
+`tulipes init` creates a minimal app by default; pass `--preset production` for the full one. Node `>=24.0.0 <25`. Generated apps must copy the auth deployment guard, move PM2 to `^7.0.4`, and configure unique JWT keys and admin credentials before booting staging or production. The S08 security changes are application code to merge; see the [security model](/tulipes-js/production/security-model/).
+
+### 0.8: reliability contracts
+
+- Exactly one `rai()`, **first** in each endpoint's method chain. Regex, array, optional and wildcard paths fail the boot. One declaration per method and URL template.
+- Nest routers with `ctx.routes.mount(parent, "/prefix", router)` so the prefix is recorded.
+- Shutdown drains HTTP, sockets and queue consumers before cleanup hooks, in reverse module order; MongoDB closes last. `shutdown()` is idempotent; the default budget is 10 seconds (`shutdownTimeoutMs`).
+- Declare non-200 success statuses on the RAI: `rai({ id, status: 201 })`.
+- Custom access checkers may return `Promise<boolean>`; only `true` grants.
+
+### 0.7: the settings module
+
+If you copy the settings module into an existing app, narrow `admin` first: `acl.allow("admin", "*")` reaches `settings:*`. Grant explicit namespaces, define `sysadmin`, and promote one account.
+
+### 0.4 → 0.5: envelope, HttpError, snake_case
+
+**Responses are enveloped.** Every response is `{ success, data, errors, meta }`; clients unwrap `data`. Use `res.respond({ data })` and `res.respond({ status: 201, data })`. In development a route that answers without it logs a warning naming it.
+
+**`HttpError`'s third argument is an options object** and the message is an i18n key whose code derives from it:
+
+```ts
+// before
+throw new HttpError(404, req.t("notFound"), { hint: "…" });
+// after
+throw new HttpError(404, "notFound", { details: { hint: "…" } });
+```
+
+**Persisted fields are snake_case.** Write an idempotent bootstrap before deploying, using `.collection` because the old field no longer exists on the schema:
+
+```ts title="modules/auth/bootstrap/rename-to-snake-case.bootstrap.ts"
+import type { Ctx } from "@tulipes/core/boot";
+
+export default async function renameToSnakeCase({ models }: Ctx): Promise<void> {
+  await models!.get("Credential").collection.updateMany(
+    { passwordHash: { $exists: true } },
+    { $rename: { passwordHash: "password_hash" } },
+  );
+  await models!.get("User").collection.updateMany(
+    { tokensValidFrom: { $exists: true } },
+    { $rename: { tokensValidFrom: "tokens_valid_from" } },
+  );
+  // …and createdAt/updatedAt on every collection that has them.
+}
+```
+
+Delete it once it has run everywhere.
+
+### 0.3 → 0.4: req.auth
+
+`req.principal` is replaced by `req.auth`: `{ isAuthenticated, user, session }`, where `user` is the hydrated user document. Declare its types by augmenting `AuthUser` and `AuthSession` in `@tulipes/core/http`. Refresh tokens moved to `Session` rows; existing refresh tokens are rejected once, forcing one re-login.
+
+### 0.2 → 0.3: RAI is the permission
+
+`requirePermission` and `requireAuth` are gone. Every route declares `rai({ id })`, and a route without one aborts the boot. A public route grants its id to `guest`. Two routes sharing an id also abort the boot.
+
+### 0.1 → 0.2
+
+Additive: a JWT auth module and a `guest` role.
+
+## An upgrade, step by step
+
+<Steps>
+1. Read the [changelog](/tulipes-js/production/changelog/) from your version up, and the matching sections above, oldest first.
+2. Back up the database. If you cross 0.5, write and test the rename bootstrap.
+3. Run `tulipes update`, then the `tulipes migrate` command for each breaking line you cross.
+4. Work through each command's report and its `TODO` comments.
+5. `pnpm sync && pnpm typecheck && pnpm test`, with `TEST_MONGO_URI` and `TEST_REDIS_URL` set.
+6. Deploy to staging first, then production.
+</Steps>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Changelog" href="/tulipes-js/production/changelog/" description="What each release line changed." />
+  <LinkCard title="tulipes migrate" href="/tulipes-js/reference/cli/migrate/" description="The migration command's options." />
+  <LinkCard title="Packages" href="/tulipes-js/packages/core/" description="Each npm package and its version." />
+</CardGrid>

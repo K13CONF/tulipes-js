@@ -1,0 +1,320 @@
+---
+title: Validate input and report errors
+description: Put zod schemas on each rai(), throw HttpError for business rules, and return every error in the envelope, translated into the caller's language.
+sidebar:
+  order: 4
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+The last chapter ended with a `500` for a book without an author. In this
+one, every input to the bookstore is validated by a zod schema declared on
+the route itself, business failures are thrown as `HttpError`s, and every
+error the caller sees comes back in the same envelope, in their language.
+
+## The idea
+
+`rai()` accepts four optional schemas:
+
+| Key | Validates | Effect |
+|---|---|---|
+| `params` | `req.params` | rejected with `422`; on success, replaced by the parsed value |
+| `query` | `req.query` | same; `listQuery()` from chapter 3 is one of these |
+| `body` | `req.body` | same: defaults applied, strings trimmed, numbers coerced if the schema says so |
+| `returns` | nothing | describes the success `data` for the generated documents only |
+
+Validation runs after the access check and before your handler, and all
+three request segments are checked before anything is thrown, so a request
+wrong in the URL **and** the body says so once. The same schemas generate
+the OpenAPI document in [chapter 9](/tulipes-js/tutorial/api-docs/), so the
+documentation can never claim a shape the endpoint rejects.
+
+Schemas come from `zod/v4`, the import the generator understands.
+
+## The schemas
+
+Create a `schemas/` folder in the module:
+
+```ts title="modules/books/schemas/books.schemas.ts"
+import { z } from "zod/v4";
+
+// Every message is an i18n key in this module's namespace.
+const isbn = z.string().regex(/^\d{10}(\d{3})?$/, "isbnInvalid");
+
+const fields = {
+  title: z.string("titleRequired").trim().min(1, "titleRequired"),
+  author: z.string("authorRequired").trim().min(1, "authorRequired"),
+  price: z.number("priceInvalid").nonnegative("priceInvalid"),
+  stock: z.number().int().min(0),
+  published_at: z.iso.date().optional(),
+};
+
+export const isbnParam = z.object({ isbn });
+
+export const createBody = z.object({ isbn, ...fields, stock: fields.stock.default(0) });
+
+// No defaults here: a PATCH that leaves stock out must not reset it to 0.
+export const updateBody = z.object(fields).partial();
+
+export const book = z.object({
+  title: z.string(),
+  author: z.string(),
+  isbn: z.string(),
+  price: z.number(),
+  stock: z.number(),
+  published_at: z.string().optional(),
+  created_at: z.string(),
+});
+```
+
+Each custom message is an **i18n key**: `"titleRequired"`, not a sentence.
+`z.string("titleRequired")` sets the message for a missing or non-string
+value, and `.min(1, "titleRequired")` the message for an empty one, so both
+failures read the same.
+
+<Aside type="caution">
+Do not derive the update schema with `createBody.partial()`. In zod 4 a
+`.default()` still applies inside `.partial()`, so `{"price": 5}` would parse
+to `{ price: 5, stock: 0 }` and every price change would empty the stock.
+Build the update schema from fields that carry no defaults, as above.
+</Aside>
+
+## Declare them on the routes
+
+```ts title="modules/books/routes/bo.books.routes.ts" ins={5,16-17,23-25,31}
+import { Router } from "express";
+import type { BackendCtx } from "@tulipes/core/boot";
+
+import { BoBooksController } from "../controllers/bo.books.controllers.ts";
+import { book, createBody, isbnParam, updateBody } from "../schemas/books.schemas.ts";
+
+export default function boBooksRoutes(ctx: BackendCtx): Router {
+  const { rai } = ctx;
+  const router = Router();
+  const books = new BoBooksController(ctx);
+
+  router.post("/books", rai({
+      id: "books:bo:create",
+      status: 201,
+      name: "Add a book",
+      body: createBody,
+      returns: book,
+    }), books.create());
+
+  router.patch("/books/:isbn", rai({
+      id: "books:bo:update",
+      name: "Change a book",
+      params: isbnParam,
+      body: updateBody,
+      returns: book,
+    }), books.update());
+
+  router.delete("/books/:isbn", rai({
+      id: "books:bo:delete",
+      name: "Withdraw a book",
+      params: isbnParam,
+    }), books.remove());
+
+  return router;
+}
+```
+
+And the detail route in the catalogue:
+
+```ts title="modules/books/routes/web.books.routes.ts" ins={1,6-7}
+import { book, isbnParam } from "../schemas/books.schemas.ts";
+
+  router.get("/books/:isbn", rai({
+      id: "books:web:detail",
+      name: "Read one book",
+      params: isbnParam,
+      returns: book,
+    }), books.detail());
+```
+
+## Business rules are thrown
+
+A schema checks shape. Rules that need the database, like "this ISBN is not
+already in the catalogue", belong in the handler, and a failure is
+**thrown**, never responded:
+
+```ts title="modules/books/controllers/bo.books.controllers.ts" ins={3-7}
+  create(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const Book = requireModels(this.#ctx).get("Book");
+      // req.body is the parsed output of createBody: trimmed, stock defaulted.
+      if (await Book.exists({ isbn: req.body.isbn })) {
+        throw new HttpError(409, "isbnTaken", { field: "isbn", vars: { isbn: req.body.isbn } });
+      }
+      const book = await Book.create(req.body);
+      res.respond({ data: book });
+    };
+  }
+```
+
+`HttpError(status, message, options)` from `@tulipes/core/http` takes:
+
+- `field`: the input the error is about, which puts it against that field in
+  the envelope;
+- `vars`: interpolation values for the key (`{{isbn}}` below);
+- `code`: overrides the code derived from the key;
+- `details`: anything else worth returning, kept outside the envelope's contract.
+
+Express 5 forwards a rejected async handler to the terminal error handler,
+so `throw` is the whole error-handling story. Handlers only write the happy
+path.
+
+## The strings
+
+Add every key, in both locales:
+
+```json title="modules/books/i18n/en.json"
+{
+  "notFound": "No book with this ISBN",
+  "isbnTaken": "A book with ISBN {{isbn}} is already in the catalogue",
+  "isbnInvalid": "An ISBN is 10 or 13 digits",
+  "titleRequired": "A book needs a title",
+  "authorRequired": "A book needs an author",
+  "priceInvalid": "The price must be a number of zero or more"
+}
+```
+
+```json title="modules/books/i18n/fr.json"
+{
+  "notFound": "Aucun livre avec cet ISBN",
+  "isbnTaken": "Un livre avec l'ISBN {{isbn}} est déjà au catalogue",
+  "isbnInvalid": "Un ISBN compte 10 ou 13 chiffres",
+  "titleRequired": "Un livre doit avoir un titre",
+  "authorRequired": "Un livre doit avoir un auteur",
+  "priceInvalid": "Le prix doit être un nombre positif ou nul"
+}
+```
+
+Only the default locale (`en`, set in `config/app.config.ts`) has to be
+complete. A key `fr.json` lacks falls back to English, and outside
+production the gap is written to `modules/books/i18n/fr.missing.json` as a
+work list for a translator. Invalid JSON in either file aborts the boot.
+
+## Try it
+
+Restart, sign in as in chapter 3, and send a book that is wrong four ways:
+
+```sh
+curl -s -X POST http://localhost:3000/api/v1/books \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"title":"  ","isbn":"12-34","price":"free"}'
+```
+
+```json
+{"success":false,"data":null,"errors":[
+  {"field":"isbn","message":"An ISBN is 10 or 13 digits","code":"INVALID_FORMAT"},
+  {"field":"title","message":"A book needs a title","code":"TOO_SMALL"},
+  {"field":"author","message":"A book needs an author","code":"INVALID_TYPE"},
+  {"field":"price","message":"The price must be a number of zero or more","code":"INVALID_TYPE"}
+],"meta":{}}
+```
+
+One `422` lists every field. The title `"  "` was trimmed before `min(1)`
+ran. For a schema failure the code is zod's issue code (`TOO_SMALL`,
+`INVALID_TYPE`, `INVALID_FORMAT`); the message is your key, translated.
+The same in French:
+
+```sh
+curl -s -X POST 'http://localhost:3000/api/v1/books?lang=fr' \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"title":"Kindred","author":"Octavia E. Butler","isbn":"9780807083697","price":-1}'
+```
+
+```json
+{"success":false,"data":null,"errors":[{"field":"price","message":"Le prix doit être un nombre positif ou nul","code":"TOO_SMALL"}],"meta":{}}
+```
+
+A duplicate ISBN is the thrown `HttpError`. Its code comes from the key,
+`isbnTaken` becoming `ISBN_TAKEN`:
+
+```json
+{"success":false,"data":null,"errors":[{"field":"isbn","message":"A book with ISBN 9780807083697 is already in the catalogue","code":"ISBN_TAKEN"}],"meta":{}}
+```
+
+A bad ISBN in the URL is caught by `params` before the database is touched:
+
+```sh
+curl -s http://localhost:3000/api/v1/books/abc
+```
+
+```json
+{"success":false,"data":null,"errors":[{"field":"isbn","message":"An ISBN is 10 or 13 digits","code":"INVALID_FORMAT"}],"meta":{}}
+```
+
+Malformed JSON never reaches `rai()`. The body parser in the security module
+rejects it, and its `400` is honored and wrapped in the same envelope:
+
+```json
+{"success":false,"data":null,"errors":[{"field":null,"message":"Unexpected end of JSON input","code":"BAD_REQUEST"}],"meta":{}}
+```
+
+And a valid book now comes back trimmed, with its default stock:
+
+```sh
+curl -s -X POST http://localhost:3000/api/v1/books \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"title":" Parable of the Sower ","author":"Octavia E. Butler","isbn":"9781538732182","price":11.5}'
+```
+
+```json
+{"success":true,"data":{"title":"Parable of the Sower","author":"Octavia E. Butler","isbn":"9781538732182","price":11.5,"stock":0,"is_deleted":false,"deleted_at":null,"deleted_by":null,"created_at":"2026-11-01T16:07:13.736Z","updated_at":"2026-11-01T16:07:13.736Z"},"errors":[],"meta":{}}
+```
+
+## Several errors from code: ValidationError
+
+When a handler finds several problems itself, it throws them together with
+`ValidationError`, also from `@tulipes/core/http`. The auth module's
+registration does exactly that:
+
+```ts title="modules/auth/controllers/web.auth.controllers.ts"
+const issues: FieldIssue[] = [];
+if (!email) issues.push({ field: "email", message: "emailRequired" });
+if (!password || password.length < 8) {
+  issues.push({ field: "password", message: "passwordTooShort" });
+}
+if (issues.length > 0) throw new ValidationError(issues);
+```
+
+It is always a `422`, and each issue's message is a key or a finished
+string, exactly like `HttpError`'s.
+
+## How the envelope is built
+
+```txt
+ request ─► rai(): ACL ─► params/query/body schemas ─► handler
+                │              │                        │
+           401 / 403      ValidationError         HttpError / throw
+                └──────────────┴───────────┬────────────┘
+                                           ▼
+                         terminal error handler
+                  translate message in the route's namespace
+                  derive code from the key, or use the status
+                                           ▼
+          { success: false, data: null, errors: [...], meta: {} }
+```
+
+Anything thrown that is not an `HttpError` or a `ValidationError`, and is
+not a middleware error carrying a 4xx status, is a bug: it becomes an
+anonymous `500` whose message is `internal server error` outside
+development. The [error codes reference](/tulipes-js/reference/topics/error-codes/)
+lists the codes the framework produces.
+
+## Where we are
+
+Every input to the bookstore is validated, every failure arrives in one
+shape with a stable code and a translated message, and the schemas are ready
+to document the API.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Chapter 5: control access" href="/tulipes-js/tutorial/permissions/" description="Roles, grants and an editor role." />
+  <LinkCard title="Validating requests" href="/tulipes-js/guides/validation/" description="Every schema option and coercion rule." />
+  <LinkCard title="Responses and errors" href="/tulipes-js/concepts/responses-and-errors/" description="The envelope and the error handler in depth." />
+  <LinkCard title="Translations" href="/tulipes-js/guides/translations/" description="Locales, plurals and off-request translation." />
+</CardGrid>

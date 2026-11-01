@@ -1,0 +1,265 @@
+---
+title: RAI ids and the ACL
+description: How RAI ids name every endpoint and permission, how grants and wildcards match, how rai() gates a request, credential scopes and fail-closed defaults.
+sidebar:
+  order: 6
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Every endpoint in a Tulipes app carries one identifier, its **RAI** (Resource
+Access Identifier). The same string names the endpoint in generated documents,
+is the permission the ACL decides on, and marks the route as declared so the
+boot can prove nothing was left unguarded. This page explains the id grammar,
+how roles and grants match it, exactly what `rai()` does on each request, and
+why every default denies.
+
+## RAI ids
+
+```txt
+  {module}:{scope}:{resource}[:{extra}]
+
+  hello:web:greet            module=hello scope=web resource=greet
+  hello:web:greet:by-name    …                      extra=by-name
+  users:bo:list              module=users scope=bo  resource=list
+```
+
+The grammar lives in one place, `packages/core/src/acl/rai-id.ts`, so the route
+scan, the ACL, agent actions and every tool agree on it.
+
+- **module**: the declaring module's short name. A convention; the boot does
+  not check who declared which id.
+- **scope**: the surface the permission serves: `web`, `bo` (back office),
+  `mobile`, anything the app names. The ACL does not interpret it; tools filter
+  by it (`tulipes routes --scope bo`).
+- **resource**: what is reached: `list`, `detail`, `greetings`.
+- **extra**: optional variant or sub-action.
+
+Every segment matches `[a-z][a-z0-9-]*`. The TypeScript type `Rai` requires at
+least three segments, so `rai({ id: "users:read" })` fails in the editor; the
+boot scan refuses anything else. `parseRai(id)` from `@tulipes/core/http`
+splits an id into `{ module, scope, resource, extra? }`.
+
+## Roles and grants
+
+The ACL is built in phase 8 from every `module.acl.ts`, in load order. Roles
+are global and defined once; grants are attached by each module on its own ids.
+
+```ts title="modules/auth/module.acl.ts (excerpt)"
+declare module "@tulipes/core/acl" {
+  interface RoleMeta {
+    /** Higher reaches more. For display and ordering; the ACL decides access. */
+    level?: number;
+  }
+}
+
+export default function authAcl(acl: AclBuilder): void {
+  acl
+    .defineRole("guest", { description: "Any request without a valid token", level: 0 })
+    .defineRole("user", { description: "A signed-in account", level: 1 })
+    .defineRole("admin", { description: "Runs the back office", level: 2 })
+    .defineRole("sysadmin", { description: "Administers the deployment and its settings", level: 3 });
+
+  acl.allow("guest", "auth:web:login", "auth:web:register", "auth:web:refresh");
+  acl.allow("admin", "auth:*", "users:*", "hello:*", "agents:*");
+  // …
+}
+```
+
+```ts title="modules/hello/module.acl.ts"
+import type { AclBuilder } from "@tulipes/core/acl";
+
+export default function helloAcl(acl: AclBuilder): void {
+  acl.allow("guest", "hello:web:greet:*", "hello:web:demo:*");
+  acl.allow("user", "hello:web:secret", "hello:web:greetings:*");
+}
+```
+
+`auth` is a sys module, so its roles exist before `hello` grants on them.
+
+### Role metadata
+
+`defineRole(name, definition)` takes an optional description and any extra
+keys. Augmenting `RoleMeta`, as above, types them: `ctx.acl.role("admin")?.level`
+is a `number`. The stored record is frozen and gains `name` and `definedBy`
+(the module); a definition may not set those two itself. Role names are
+lowercase kebab-case.
+
+### How a grant reaches a permission
+
+A grant is a full id, `*`, or one to three segments followed by `:*`. A
+wildcard covers the bare prefix too. `grantsCovering()` lists, most specific
+first, every grant that reaches a permission; `acl.can(role, permission)` is
+true when the role holds any of them:
+
+```txt
+ grantsCovering("hello:web:greet:by-name")
+   hello:web:greet:by-name
+   hello:web:greet:by-name:*
+   hello:web:greet:*          ← guest holds this
+   hello:web:*
+   hello:*                    ← admin holds this
+   *
+```
+
+So `hello:web:greet:*` reaches both `hello:web:greet` and
+`hello:web:greet:by-name`, and `users:*` reaches every users surface in every
+scope. The ACL, `tulipes routes` and `@tulipes/spec` all resolve through the
+same function, so a generated document cannot disagree with the gate.
+
+The reference app gives `admin` each feature namespace rather than `*` on
+purpose: a wildcard would also reach `settings:*` and `config:bo:write`, and
+make the sysadmin boundary a label rather than a rule.
+
+## How `rai()` gates a request
+
+`rai()` is `ctx.rai`, created by `createRai()` in `packages/core/src/http/rai.ts`.
+It is the first handler of every route, and the route scan refuses the boot
+otherwise. For each request it runs these steps in order:
+
+```txt
+ rai({ id })(req, res, next)
+   1 req.rai = info
+   2 bind  req.t / req.locale      (module namespace, ?lang)
+           req.time / req.timezone (?tz)
+           req.page, res.respond   (config.pagination)
+   3 req.auth unset?  → a fresh copy of the guest value
+   4 role = req.auth.user?.role ?? "guest"
+   5 custom checker set?
+       yes → checker(req, info) === true, else refuse
+       no  → acl.can(role, id)       else refuse
+             scopesCover(scopes, id) else 403 OUT_OF_SCOPE
+   6 validate params, query, body   else 422
+   7 next()  → your handler
+```
+
+Binding comes before the access check so a refusal is phrased in the caller's
+language and the envelope is available. Validation comes after it, never
+before: telling a caller which fields are wrong on a route they may not reach
+would leak its shape.
+
+### `req.auth` and the guest
+
+Core reads exactly one field, `req.auth`:
+
+```ts title="packages/core/src/http/index.ts (excerpt)"
+export interface Auth {
+  isAuthenticated: boolean;
+  user: AuthUser | null;
+  session: AuthSession | null;
+  scopes?: readonly string[];
+  credentialId?: string;
+}
+```
+
+An auth module's only job is to set it before feature routes run. The
+reference app's sys `auth` module mounts its `authenticate(ctx)` middleware on
+`ctx.app` in its routes file, so every request is identified first. Swap JWT
+for sessions or mTLS and nothing else changes. `AuthUser` and `AuthSession` are
+empty in core; the app augments them.
+
+When nothing set `req.auth`, `rai()` gives the request its own copy of the
+anonymous value, `{ isAuthenticated: false, user: null, session: null }`, and
+its role is `guest`. In the minimal preset, which has no auth module, every
+request is a guest. Making an endpoint public means granting it to `guest`;
+there is no "skip auth" flag.
+
+### 401 and 403
+
+A refusal throws an `HttpError` that the terminal handler turns into an
+envelope. Unauthenticated callers get 401 ("sign in and this may work"),
+authenticated ones 403 ("it will not"), so a client can act on the difference:
+
+```json title="401"
+{ "success": false, "data": null, "meta": {},
+  "errors": [{ "field": null, "message": "authentication required", "code": "UNAUTHENTICATED" }] }
+```
+
+```json title="403"
+{ "success": false, "data": null, "meta": {},
+  "errors": [{ "field": null, "message": "role \"user\" may not users:bo:create", "code": "FORBIDDEN" }] }
+```
+
+The messages are the English defaults of the keys `unauthenticated` and
+`forbidden`; a module that defines those keys in its `i18n/` gets them
+translated, with `{{role}}` and `{{permission}}` available to the 403.
+
+## Credential scopes
+
+Since 0.13 a credential can be narrower than its owner's role. An API token
+stores **scopes**, grant patterns such as `hello:web:*`, and the auth module
+copies them to `req.auth.scopes` from the stored credential, never from the
+client. `scopesCover()` applies them after the role check:
+
+```ts title="packages/core/src/acl/rai-id.ts"
+export function scopesCover(scopes: readonly string[] | undefined, permission: string): boolean {
+  return scopes === undefined || grantsCovering(permission).some((grant) => scopes.includes(grant));
+}
+```
+
+| `req.auth.scopes` | Effect |
+|---|---|
+| absent | the role's full grant |
+| `["hello:web:*"]` | only what the role holds **and** the scope covers |
+| `[]` | nothing |
+
+A scope can only take away: a scope the role does not hold grants nothing. A
+request the role allows but the scopes do not is refused with 403 and code
+`OUT_OF_SCOPE`, message `this credential is not scoped to <permission>`.
+`ctx.agent.invoke()` calls the same `accessRefusal()`, so a scoped token is
+narrowed identically over HTTP and over MCP. See
+[API tokens and scopes](/tulipes-js/guides/api-tokens-and-scopes/).
+
+## Replacing the decision
+
+An app whose roles do not live on the user (a claims service, a join table,
+ownership rules) replaces the whole check with
+`ctx.routes.setAccessChecker()`, typically from a sys module's routes file:
+
+```ts title="A sys module's routes file"
+import type { BackendCtx } from "@tulipes/core/boot";
+import { scopesCover } from "@tulipes/core/acl";
+
+export default function accessRoutes({ routes, acl }: BackendCtx): void {
+  routes.setAccessChecker(async (req, info) => {
+    const role = await roleFromClaims(req.auth); // your own lookup
+    return acl.can(role, info.id) && scopesCover(req.auth.scopes, info.id);
+  });
+}
+```
+
+The checker may be async. Only an explicit `true` grants; anything else is
+refused with the same 401 or 403, and a rejected promise reaches the error
+handler. It replaces the scope check too, so apply `scopesCover()` yourself if
+you issue scoped credentials. Under inspection, routes behind a custom checker
+are reported as dynamic: generated documents make no static role claim for
+them.
+
+## Fail-closed defaults
+
+| Situation | Outcome |
+|---|---|
+| a route with no `rai()` | boot refused: `GET /api/v1/x has no rai() declaration` |
+| `rai()` not first, or twice | boot refused: `exactly one rai() must be the first handler` |
+| a malformed id | boot refused: `"users:read" has no scope — since 0.12 …` |
+| one id on two routes | boot refused: `rai id "…" is already declared by …` |
+| `allow()` on an undefined role | boot refused: `allow() on unknown role "editor" — roles must be defined first (defineRole)` |
+| the same grant from two modules | boot refused: `"user" already granted "…" by module "…" — duplicate grant` |
+| a role nobody defined, at request time | denied |
+| no grant for `guest` | 401 for anonymous callers |
+| a custom checker returns anything but `true` | denied |
+
+<Aside type="tip">
+`pnpm tulipes routes` lists every endpoint with the roles that reach it, and
+`pnpm tulipes roles` every role with its grants. Both run offline, so they
+belong in code review.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Permissions" href="/tulipes-js/tutorial/permissions/" description="Grant roles in the tutorial app." />
+  <LinkCard title="Roles and permissions" href="/tulipes-js/guides/roles-and-permissions/" description="Every ACL option, task by task." />
+  <LinkCard title="Authentication" href="/tulipes-js/guides/authentication/" description="How the auth module sets req.auth." />
+  <LinkCard title="Security model" href="/tulipes-js/production/security-model/" description="The threat model these defaults serve." />
+</CardGrid>

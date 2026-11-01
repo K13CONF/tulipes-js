@@ -1,0 +1,144 @@
+---
+title: Security model
+description: The trust boundaries of a Tulipes app and each production security decision, S08a to S08m, written as what Tulipes does and what you must still do.
+sidebar:
+  order: 5
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+This page explains where a Tulipes app draws its trust boundaries and what each production security control does, so you can tell which guarantees come with the framework and which are yours to keep. It is a rewrite, for app developers, of `docs/security-model.md` in the repository. The controls are named S08a to S08m after the sprint that built them; four were retired in 0.11 along with the surface they protected.
+
+<Aside type="note" title="Most of this is your code">
+Core gives you the pipeline: the RAI check on every route, the fail-closed ACL, read-only environment values, settings validation. The auth, users, security, config and settings modules that implement the rest are **scaffolded into the production preset as editable application code**. Upgrading `@tulipes/core` does not change them; fixes reach them as migration steps. Neither preset is an external security audit.
+</Aside>
+
+## Boundaries and controls
+
+```txt
+ client ──TLS──▶ reverse proxy ──▶ Express (untrusted input)
+                                    │
+                    trusted middleware resolves identity (req.auth)
+                                    │
+                    rai() ─▶ ACL: unknown role or denied → refuse
+                                    │
+                    validation (body, query, params) ─▶ handler
+```
+
+**Untrusted clients** reach Express through your TLS reverse proxy. **Trusted middleware** resolves who is calling before the RAI check runs. Middleware is trusted application code: it can end a request before authorization runs, so keep it to what you mean.
+
+**The ACL fails closed.** An unknown role or a permission no grant covers is refused. A RAI id is `module:scope:resource[:extra]`. The scope (`bo`, `web`, …) is a label the ACL does not interpret: it is not a network or tenancy boundary, and a back-office endpoint is protected by the roles granted its id, never by the word `bo` in it. A prefix grant such as `users:bo:*` reaches every id under it, so review prefix grants as carefully as `*`. See [RAI and ACL](/tulipes-js/concepts/rai-and-acl/).
+
+**Configuration has two layers.**
+
+- **Environment values** hold what boot needs before the settings store answers (the port, the connection strings, the log destinations) and the secrets. They are declared in a module's `package.json`, bound read-only and non-enumerable on `ctx.config.<module>`, so no listing, spread or serialization of the namespace carries them.
+- **Settings** are everything else: declared with a schema in the owning module, stored per deployment (the MongoDB `settings` collection in the production preset), and written through `PATCH /config/:module`. `admin` may read the console; only `sysadmin` may write. Every write is validated by the schema, refused on a stale version, audited without its values before it lands, and applied in every replica.
+
+`sysadmin` also reaches the log stream. Keep it separate from ordinary administrators. JWT signing keys and admin credentials are deployment secrets and are never readable through the console.
+
+**Deployment validation.** In staging and production the boot refuses blank or known development signing keys, the seed passwords and default admin identity, and identical access and refresh keys. The error names the variables, never their values:
+
+```txt
+Unsafe production credentials: configure JWT_ACCESS_SECRET, AUTH_ADMIN_PASSWORD
+```
+
+This is a deployment guard, not a password-strength estimator, and it runs at boot, not in `env:check`.
+
+**Errors.** In production a 500 carries no internal message or stack trace; only development shows the real message. See [responses and errors](/tulipes-js/concepts/responses-and-errors/).
+
+**Your part:** restrict infrastructure networking, and protect environment files, backups and logs.
+
+## The decisions
+
+### S08a: administrative restart (retired in 0.11)
+
+**What Tulipes does.** There is no restart endpoint. Settings apply live; a field that cannot apply without a restart is tagged `.meta({ restart: true })`, and a write to it answers `requires_restart` with `meta.action: "restart_required"`.
+
+**What you must do.** Restart from the operator's shell (`pnpm pm2:restart`). The retained check is that PM2 starts and restarts both TypeScript entrypoints with node.
+
+### S08b: session validity and revocation timing
+
+**What Tulipes does.** The auth module caches a resolved session in Redis, shared by every replica, under its session id for `auth.cacheTtlSeconds` (default 60, never longer than `accessTtl`). Every path that revokes (logout, refresh rotation and reuse, a session ended by its owner, a password change, a soft-deleted account, and any code that changes a role through `forgetUser()`) deletes the entry before answering, so the very next request on any replica is refused. A Redis outage is a cache miss, and the database decides. Sessions must belong to the token's subject and expire strictly later than the application clock; an expired row cannot authorize while it waits for TTL cleanup.
+
+**What you must do.** Call `forgetUser(ctx, userId)` from `@app/auth` in any code of yours that writes a user's role or deletes a user. Accept that the cache TTL bounds the one window in which a revocation can be lost: a Redis outage at the moment of revocation. Requests already authenticated are not canceled by deleting a session.
+
+### S08c: password changes and in-flight sessions
+
+**What Tulipes does.** Each password replacement writes a fresh random `Credential.version` with the hash in one atomic update. Sessions store it as `credential_version`; access, refresh and device listing require it to match. Session creation checks validity after insertion, so a delayed login cannot produce a usable session after a newer password change. No MongoDB transaction or replica set is required.
+
+**What you must do.** Deploy all auth helpers, controllers and models together; old running code does not enforce the check. If the cleanup after a password change fails, the endpoint answers 500 but the new password is already in effect: sign in with it.
+
+### S08d: durable settings audit before action (moved to the config module)
+
+**What Tulipes does.** `PATCH /config/:module` inserts a `ConfigAudit` record (namespace, field names, the version the caller read, actor, role, client IP, never a value) with majority acknowledgment, journaling and a 5-second write-concern timeout, before anything is written. An unacknowledged audit is a 503 and no change. Records live in `config_audit_events`, independent of `LOG_LEVEL`. The console never returns a secret's value, so there are no reveals to audit.
+
+**What you must do.** Give the app's database user insert rights on `config_audit_events`, and decide retention and who may read it.
+
+### S08e: explicit proxy trust and client IPs
+
+**What Tulipes does.** The security module sets Express proxy trust from the `security.trustProxyCidrs` setting. Empty (the default) uses the socket peer and ignores forwarded IP, host and protocol headers. Only explicit IPv4/IPv6 addresses or CIDRs with nonzero prefix lengths are accepted; booleans, hop counts, named aliases and invalid entries are refused. For a trusted peer, Express takes the nearest untrusted address in `X-Forwarded-For`, and sessions, audits and rate limits all use that `req.ip`. The committed nginx templates overwrite `X-Forwarded-For`, `X-Forwarded-Host` and `X-Forwarded-Proto` with nginx's own values.
+
+**What you must do.** List only your actual proxy peers (`127.0.0.1/32` for the committed single-ingress template) and firewall the app port, because the app binds every interface and a direct client inside the trusted range can state its own forwarded identity. Add an explicit policy for any additional hop. See [nginx](/tulipes-js/production/nginx/).
+
+### S08f: shared authentication and console request limits
+
+**What Tulipes does.** Redis fixed-window counters run before JSON parsing and Passport. Defaults per client per minute: 20 combined credential POSTs, 120 auth requests in total, 60 console requests (`/config` and `/settings`). They are the `security.rateLimits` setting, rebuilt live when written. Rejected requests answer 429 with `Retry-After` and do not extend the window. Store errors and stalled connections fail closed with a sanitized 503 within one second. Clients are grouped by the proxy-resolved IP; IPv4-mapped addresses map to IPv4 and IPv6 groups by /56. Keys hold an address digest, not credentials.
+
+**What you must do.** Size and tune the quotas: clients behind one NAT share them, fixed windows allow bursts at the boundary, and exhausting the auth quota can delay logout. IP quotas are not account lockout and do not stop distributed attacks. Redis eviction resets counters. Use the same namespace on every replica.
+
+### S08g: constrained settings files (retired in 0.11)
+
+**What Tulipes does.** The console no longer reads or writes `.env` or translation files. Environment values are described through `GET /config` (name, variable, type, source, and a non-secret's resolved value). Core's file store, used when no settings provider is declared, writes `config/settings.<APP_ENV>.json` through an exclusive temporary file and a rename, and never follows a request-supplied path.
+
+**What you must do.** Protect the settings file on hosts that use the file store.
+
+### S08h: bounded log history and streaming
+
+**What Tulipes does.** The settings log stream reads only the configured log basename and its rotation suffixes, refuses links and non-regular files, reads at most the last 256 KiB and 1000 complete lines of history (dropping lines over 16 KiB), and tails at most 64 KiB per one-second poll and 8 MiB overall. Each controller allows four streams, two per account. A stream ends at 60 seconds, at credential expiry or at 1 MiB of output; a slow reader is disconnected.
+
+**What you must do.** Make clients handle the bounded end of a stream and reconnect. These caps are per process; cross-replica capacity is not coordinated.
+
+### S08i: restart acceptance (retired in 0.11)
+
+**What Tulipes does.** Retired with S08a: a restart-tagged write persists, applies on the next boot, and says so in its response.
+
+**What you must do.** Watch for `requires_restart` and restart deliberately.
+
+### S08j: browser authentication
+
+**What Tulipes does.** Access tokens come from the `Authorization` header; refresh tokens from a JSON body. Cookie and URL credentials are ignored and auth responses set no cookies. CORS controls which browser origins may read responses; it does not reject requests, and `corsCredentials` does not install authentication or CSRF middleware.
+
+**What you must do.** If you adopt cookies, follow the app's `docs/browser-auth.md`: cookie attributes, session-bound CSRF validation, exact-origin checks, and browser tests for login, refresh and logout.
+
+### S08k: strict refresh reuse revocation
+
+**What Tulipes does.** Reusing a valid, unexpired refresh token that is no longer current expires that device's whole family (one session id) in a single conditional update. The replay gets 401; every token in the family stops working; other devices survive. Two concurrent refreshes produce one success and one rejection. Signature, expiry, type and claim shapes are verified before any write, so a forged or expired token cannot revoke a live family. A write that MongoDB does not acknowledge answers a sanitized 503 `REFRESH_UNAVAILABLE` without a token pair.
+
+**What you must do.** Coordinate refresh in clients (one refresh in flight at a time) and send the user to sign in after a rejection or an uncertain outcome. This chooses theft containment over transparent retries. Build an incident signal on reuse; alerting is not included.
+
+### S08l: authorization throughout an open log stream
+
+**What Tulipes does.** An open log stream re-checks every second that the session is still live, the credential version matches, and the current role still grants `settings:bo:logs`, with a one-second check timeout. Stale authorization is bounded to about two seconds with a responsive event loop. Opening denials are 403; verification failures and timeouts are a sanitized 503.
+
+**What you must do.** Nothing beyond S08h, but know that a persistent database stall can hold stream capacity until checks settle.
+
+### S08m: signal streams when shutdown begins
+
+**What Tulipes does.** The settings module's `log-streams.bootstrap.ts` listens to `ctx.signal`, which aborts the moment shutdown begins, before HTTP draining. Draining stops admission, closes open streams and aborts pending authorization; openings that arrive late get 503 `LOG_STREAMS_DRAINING`. Healthy streams no longer hold up the HTTP drain.
+
+**What you must do.** Use the same pattern for your own long-lived responses: `ctx.signal.addEventListener("abort", …)` in a bootstrap. A blocked event loop or uncooperative work still needs the shutdown deadline and the supervisor.
+
+## Still yours to verify
+
+Before a production pilot, review and test: proxy trust for your exact hops, proxy-aware rate limits, secure headers and restrictive CORS; client refresh coordination and incident response; audit durability, role boundaries, log redaction; CSRF and cookie flags if you move tokens into cookies; TLS, credential provisioning, backup and restore, process isolation, least-privilege database access, dependency updates and load and recovery. The [production checklist](/tulipes-js/production/checklist/) turns these into items.
+
+Report suspected vulnerabilities through the repository's `SECURITY.md`.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Production checklist" href="/tulipes-js/production/checklist/" description="Every deployment check as a list." />
+  <LinkCard title="Authentication" href="/tulipes-js/guides/authentication/" description="Sessions, refresh and the auth module." />
+  <LinkCard title="Security middleware" href="/tulipes-js/guides/security-middleware/" description="Helmet, CORS, body limits and rate limits." />
+  <LinkCard title="Roles and permissions" href="/tulipes-js/guides/roles-and-permissions/" description="Grants, prefixes and the sysadmin role." />
+</CardGrid>

@@ -1,0 +1,296 @@
+---
+title: Your first module
+description: Scaffold the books module with tulipes new module, learn what each generated file does, declare a route with ctx.rai() and answer through res.respond().
+sidebar:
+  order: 2
+---
+
+import { Aside, Steps, FileTree, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+A feature in Tulipes is a module: one folder under `modules/` holding
+everything the feature needs. In this chapter we generate the `books`
+module, walk through what the generator wrote, trim what the bookstore does
+not need, and make its first endpoint answer.
+
+## Generate the module
+
+```sh
+pnpm tulipes new module books
+```
+
+```txt
+  create modules/books/i18n/en.json
+  create modules/books/i18n/fr.json
+  create modules/books/package.json
+  create modules/books/module.config.ts
+  create modules/books/module.acl.ts
+  create modules/books/helpers/books.helpers.ts
+  create modules/books/controllers/web.books.controllers.ts
+  create modules/books/routes/web.books.routes.ts
+  create modules/books/models/books.model.ts
+  create modules/books/bootstrap/books.bootstrap.ts
+  create modules/books/queues/books.queues.ts
+  create modules/books/agent/books.agent.ts
+  create modules/books/sockets/books.sockets.ts
+
+scaffolded modules/books (@app/books)
+
+next:
+  pnpm install     # the module is a workspace package
+  pnpm sync        # regenerate config types and .env.example
+
+Delete unused files; routes files stay plain functions of the context.
+```
+
+The generator writes a file for every contract the app's providers support:
+because the root `package.json` declares models, queues and sockets, it wrote
+a model, a queue file and a socket file. Each flag turns one off or on
+(`--no-model`, `--no-queues`, `--no-sockets`), and `--scope bo` names the
+surface of its first endpoint. Run the two commands it asks for:
+
+```sh
+pnpm install
+pnpm sync
+```
+
+`pnpm install` links the new workspace package `@app/books` into the app.
+`pnpm sync` regenerates `types/tulipes.d.ts` so the rest of the app knows
+about it.
+
+## What each file does
+
+<FileTree>
+- modules/books/
+  - package.json the module's identity and place in the load order
+  - module.acl.ts who may call its endpoints
+  - module.config.ts its runtime settings
+  - routes/
+    - web.books.routes.ts endpoints, one rai() each
+  - controllers/
+    - web.books.controllers.ts the work behind them
+  - helpers/
+    - books.helpers.ts plain functions
+  - models/
+    - books.model.ts a schema declaration
+  - bootstrap/
+    - books.bootstrap.ts startup work
+  - queues/
+    - books.queues.ts jobs and their processors
+  - sockets/
+    - books.sockets.ts a Socket.IO namespace
+  - agent/
+    - books.agent.ts actions offered to AI agents
+  - i18n/
+    - en.json
+    - fr.json
+</FileTree>
+
+### package.json
+
+```json title="modules/books/package.json"
+{
+  "name": "@app/books",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "tulipes": {
+    "tier": "app",
+    "priority": 100,
+    "dependsOn": [
+      "core"
+    ]
+  },
+  "dependencies": {
+    "@tulipes/core": "^0.13.2",
+    "@app/core": "workspace:*",
+    "express": "^5",
+    "@tulipes/mongoose": "^0.2.4",
+    "mongoose": "^8",
+    "@tulipes/bullmq": "^0.3.0",
+    "@tulipes/socket.io": "^0.1.6"
+  }
+}
+```
+
+The `tulipes` key places the module in the load order: tier `app` loads after
+every `sys` module, `priority` orders modules within a tier, and `dependsOn`
+guarantees `core` loads first. The module imports `@app/core` by package name,
+declared in `dependencies`, so the package manager enforces the boundary: a
+module can only use what it declares. A module's environment variables would
+also go here, under `tulipes.env`; books needs none.
+
+### The routes file
+
+```ts title="modules/books/routes/web.books.routes.ts"
+import { Router } from "express";
+import type { BackendCtx } from "@tulipes/core/boot";
+
+import { WebBooksController } from "../controllers/web.books.controllers.ts";
+
+export default function booksRoutes(ctx: BackendCtx): Router {
+  const router = Router();
+  const controller = new WebBooksController(ctx);
+  router.get("/books", ctx.rai({ id: "books:web:list", name: "List books" }), controller.index());
+  return router;
+}
+```
+
+A routes file is a plain function of the context that returns an Express
+`Router`. Core mounts what it returns under `config.api.prefix`, so this
+route answers at `/api/v1/books`; paths in the file are relative.
+
+Every endpoint starts with `ctx.rai()`, the **route access identifier**
+declaration. `books:web:list` reads as module `books`, scope `web` (the
+client-facing surface), resource `list`. The id is three things at once: the
+endpoint's name in the registry, its permission in the ACL, and its
+operation id in the generated OpenAPI document. A route without `rai()`
+stops the boot.
+
+The file name says the scope first, `web.books.routes.ts`. When a module has
+several files for one scope they move into a folder named after it, the way
+`modules/hello/routes/web/` does. Core reads every `*.routes.ts` either way.
+
+### The controller
+
+```ts title="modules/books/controllers/web.books.controllers.ts"
+import type { Request, RequestHandler, Response } from "express";
+import type { Ctx } from "@tulipes/core/boot";
+
+import { describeBooks } from "../helpers/books.helpers.ts";
+
+export class WebBooksController {
+  readonly #ctx: Ctx;
+
+  constructor(ctx: Ctx) {
+    this.#ctx = ctx;
+  }
+
+  index(): RequestHandler {
+    return (req: Request, res: Response): void => {
+      res.respond({
+        data: {
+          module: describeBooks(),
+          title: req.t("title"),
+          app: this.#ctx.config.app?.name,
+        },
+      });
+    };
+  }
+}
+```
+
+A controller is a class that holds the context, with one method per
+endpoint. Each method **returns** a handler, so the routes file reads like a
+table of contents (`controller.index()`). The class is named after its file:
+`web.books.controllers.ts` exports `WebBooksController`.
+
+`res.respond()` wraps `data` in the envelope. `req.t` is already bound to
+the books module's translations, because `rai()` recorded which module
+declared the route: `req.t("title")` reads `modules/books/i18n/en.json`.
+
+### The ACL file
+
+```ts title="modules/books/module.acl.ts"
+export default function booksAcl(_acl: AclBuilder): void {
+  // _acl.allow("user", "books:web:list");   // the id declared in routes/
+}
+```
+
+The grant is commented out on purpose: granting a role the app does not
+define is a boot error, so the generator lets you choose.
+
+## Trim what we do not need
+
+The bookstore has no runtime settings, no startup work and no agent
+actions, so delete those files:
+
+```sh
+rm modules/books/module.config.ts
+rm -r modules/books/bootstrap modules/books/agent
+```
+
+Every file in a module is optional except `package.json`. A folder that is
+absent is a feature the module does not use, never an error. We keep the
+model, queue and socket files; chapters 3, 6 and 7 rewrite them.
+
+## The first request
+
+Start the app and call the endpoint:
+
+```sh
+pnpm dev
+curl http://localhost:3000/api/v1/books
+```
+
+```json
+{"success":false,"data":null,"errors":[{"field":null,"message":"authentication required","code":"UNAUTHENTICATED"}],"meta":{}}
+```
+
+A `401`. Nobody has been granted `books:web:list`, so the ACL denies it, and
+because the caller is anonymous the answer is "authenticate". An endpoint is
+never public by accident. Make it public the way every public endpoint is
+made public, with a grant to `guest`:
+
+```ts title="modules/books/module.acl.ts"
+import type { AclBuilder } from "@tulipes/core/acl";
+
+export default function booksAcl(acl: AclBuilder): void {
+  acl.allow("guest", "books:web:list");
+}
+```
+
+`pnpm dev` restarts on save. Call it again:
+
+```json
+{"success":true,"data":{"module":"books","title":"books module","app":"bookstore"},"errors":[],"meta":{}}
+```
+
+The banner now counts ten modules, a fourth queue (`books.example`, from
+the scaffolded queue file) and the `/books` socket namespace:
+
+```txt
+  ➜  Queues      redis (4 queue(s))  ● ready  ·  4 processor(s) registered  ·  bullmq
+  ➜  Sockets     /users, /books, /hello  ● ready  ·  socket.io
+  ➜  Modules     10 (core*, security*, auth*, users, books, hello, settings, config, agent, agents)  ·  * sys tier
+```
+
+## See it from the outside
+
+```sh
+pnpm tulipes routes
+```
+
+lists every endpoint of the app, with the module that declared it and the
+roles that reach it. The new one:
+
+```txt
+GET     books:web:list           /api/v1/books                          books     guest
+        List books
+```
+
+`tulipes routes` does not connect to MongoDB or Redis. It runs an
+**inspection boot**: every routes file is built exactly as the server builds
+it, with nothing acquired. That is why a routes file must only build the
+router, and read models or settings inside handlers. A file that reads a
+model while building fails inspection with its path and the reason. See
+[inspection boots](/tulipes-js/concepts/inspection/).
+
+<Aside type="tip">
+Rename `name: "List books"` to something a client would read, like
+`"Browse the catalogue"`. The name and an optional `description` are what
+the generated API documents show.
+</Aside>
+
+## Where we are
+
+`modules/books` exists, its one endpoint is public, and the catalogue is a
+placeholder. Next we give it real data.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Chapter 3: store books in MongoDB" href="/tulipes-js/tutorial/data-and-models/" description="A model, CRUD endpoints and list queries." />
+  <LinkCard title="Modules and load order" href="/tulipes-js/concepts/modules/" description="Every manifest key and how modules are ordered." />
+  <LinkCard title="Routes and controllers" href="/tulipes-js/guides/routes-and-controllers/" description="Nested routers, mounts, middleware." />
+  <LinkCard title="The context object" href="/tulipes-js/concepts/context/" description="What ctx carries, and when." />
+</CardGrid>

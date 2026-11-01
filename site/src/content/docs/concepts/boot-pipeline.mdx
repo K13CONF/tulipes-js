@@ -1,0 +1,310 @@
+---
+title: The boot pipeline
+description: Every phase of a Tulipes boot in order, what each reads and produces, how errors are reported in aggregate per phase, and how shutdown drains and cleans up.
+sidebar:
+  order: 3
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`boot()` turns a folder of modules into a running process in twelve phases.
+Each phase reads one kind of declaration, produces one part of the context, and
+refuses to hand over to the next phase while anything it checked is wrong.
+Knowing the order answers most "why is this undefined here?" questions, and
+explains every boot error you will see. The implementation is one function,
+`boot()` in `packages/core/src/boot/boot.ts`; this page walks it top to bottom.
+
+## The whole pipeline
+
+```txt
+  boot({ rootDir, mode })
+   │
+   1  environment     APP_ENV; module manifests; tulipes.env values
+   2  module graph    tier / priority / dependsOn → load order
+   3  exploration     conventional paths, nothing imported
+   3b providers       package.json declarations vs module requirements
+   │  ── ctx is created here ──
+   4  declarations    config/app.config.ts seed; module.config.ts
+   5  models,settings providers acquire (connect, compile models)
+   6  settings        store → validate → ctx.config.<module>
+   6b environment     env values bound read-only beside settings
+   7  translations    modules/*/i18n → ctx.t, ctx.i18n
+   7b time zones      config.timezone → ctx.time, process TZ
+   8  ACL             module.acl.ts → ctx.acl
+   8b agent           agent/*.agent.ts → ctx.agent
+   9  bootstrap       bootstrap/*.bootstrap.ts → cleanups
+  10  queues,sockets  providers acquire against the full ctx
+  11  fork            backend | worker | script
+  12  banner
+   │
+   ▼
+  BootHandle { mode, ctx, app?, server?, shutdown() }
+```
+
+## Aggregate errors, one phase at a time
+
+Tulipes never crashes on the first problem. Each phase gets a fresh
+`BootReport` (`packages/core/src/errors/boot-error.ts`); every loader `add()`s
+issues to it and keeps going; at the end of the phase `throwIfAny(phase)` throws
+one `TulipesBootError` carrying all of them:
+
+```ts title="packages/core/src/errors/boot-error.ts (excerpt)"
+export interface BootIssue {
+  scope: BootScope;
+  /** Module short-name, when the issue is attributable to a single module. */
+  module?: string;
+  message: string;
+}
+
+export class TulipesBootError extends Error {
+  readonly phase: string;
+  readonly issues: readonly BootIssue[];
+  // …
+}
+```
+
+The message lists every issue, with the module that caused it in brackets:
+
+```txt
+TulipesBootError: Boot aborted during "environment" — 2 issue(s):
+  ✖ [core] required variable "REDIS_URL" has no value (Redis connection string (queues, cache, rate limits))
+  ✖ [core] variable "PORT": "abc" is not a number
+```
+
+Two consequences follow. Ten missing variables are one restart, not ten. And a
+later phase never runs on a broken earlier one: no ACL file executes while a
+settings value is invalid, no bootstrap runs while a grant is wrong. Read the
+whole report before fixing anything.
+
+Code that wants to react to a boot error checks
+`error instanceof TulipesBootError` and reads `error.phase` and `error.issues`.
+
+## Phase by phase
+
+### 1. Environment
+
+**Reads** `APP_ENV` (or `boot({ appEnv })`), every `modules/*/package.json`,
+`.envs/.env.<APP_ENV>` and `process.env`. **Produces** `ctx.appEnv` and the
+resolved environment values, not yet on the context.
+
+`resolveAppEnv()` accepts `development`, `staging`, `production` or `test`; any
+other value is an issue. Outside inspection, `mirrorNodeEnv()` then sets
+`NODE_ENV` when it is unset: `development` and `test` mirror themselves,
+anything else becomes `production`.
+
+Discovery reads each module's manifest (its problems are reported under the
+`"module graph"` phase), then `resolveEnv()` gives every declared variable a
+value with the precedence `process.env` over the file over the declared default,
+and coerces it to its type. See [Configuration](/tulipes-js/concepts/configuration/).
+
+### 2. Module graph
+
+**Produces** the load order every later phase walks. Unknown dependencies, a
+sys module depending on an app module and cycles abort here. See
+[Modules](/tulipes-js/concepts/modules/).
+
+### 3. Exploration
+
+**Produces** the list of conventional file paths for each module. It has no
+failure modes and imports nothing.
+
+Right after it, the boot reads `tulipes.providers` from the app's own
+`package.json` and checks it against what every module requires
+(`checkRequirements()` in `providers.ts`). A module with a `models/` folder in
+an app that declares no models provider fails here, under `"providers"`, before
+a single schema file is imported.
+
+The context object is created next, with `mode`, `appEnv`, `modules`, an empty
+`config`, `settings`, `signal`, `routes`, `rai`, `t`, `i18n` and `time`.
+
+### 4. Declarations
+
+**Reads** `config/app.config.ts` (or `.js`) and every `module.config.ts`.
+**Produces** the app-level seed on `ctx.config`, and the settings declarations.
+
+`loadAppConfigSeed()` calls the default export with the frozen environment
+values and `{ appEnv, mode }`, then merges the result into `ctx.config`. A key
+named after a module is refused: that namespace belongs to the module.
+`declareConfig()` then imports each `module.config.ts`, refuses any export other
+than the default `defineConfig({ schema })`, and checks that every field has a
+default and none is marked secret. No value is read yet. Phase name: `"config"`.
+
+### 5. Models and settings providers
+
+**Produces** `ctx.models` (models provider) and the settings store (settings
+provider), when the app declares them. `@tulipes/mongoose` connects and
+compiles every `models/*.model.ts` here. Providers see no `ctx.config`
+namespaces yet, only the app seed, which is how `config.mongoose.uri` reaches
+them. Phase name: `"providers"`.
+
+Under inspection nothing is acquired: each declared capability becomes a stub
+that throws on use. See [Inspection](/tulipes-js/concepts/inspection/).
+
+### 6. Settings, then environment values
+
+**Produces** `ctx.config.<module>` for every module that declares settings.
+
+`Settings.load()` reads each namespace from the store (the declared provider,
+or core's `FileSettingsStore` at `config/settings.<APP_ENV>.json`), validates
+it against the schema, seeds the defaults on first boot, and assigns the result.
+A stored value the schema rejects is an issue naming the field.
+
+Phase 6b, `bindEnvValues()`, then defines every environment value as a
+read-only, non-enumerable getter on the same namespace object. A name used both
+as a setting and as an environment value is refused under `"environment"`.
+
+### 7. Translations and time zones
+
+**Reads** `config.i18n` and every module's `i18n/<locale>.json`; then
+`config.timezone`. **Produces** the translations behind `ctx.t` and `req.t`,
+and the zone behind `ctx.time`. Invalid JSON, or an empty
+`supportedLocales`, aborts under `"i18n"`; an unknown zone under `"timezone"`.
+Naming a zone also sets the process zone unless `applyToProcess: false`, before
+any bootstrap creates a logger. See
+[Translations](/tulipes-js/guides/translations/) and
+[Time zones](/tulipes-js/guides/time-zones/).
+
+### 8. ACL, then the agent surface
+
+**Produces** `ctx.acl` from every `module.acl.ts`, in load order, and then
+`ctx.agent` from every `agent/*.agent.ts`. An unknown role, a malformed grant,
+or the same grant from two modules aborts under `"acl"`. See
+[RAI and the ACL](/tulipes-js/concepts/rai-and-acl/).
+
+### 9. Bootstrap
+
+**Runs** every `bootstrap/*.bootstrap.ts` in load order, in every mode, with
+the full `RuntimeCtx`. **Produces** the list of cleanups. This is where a
+module seeds rows, ensures indexes, or opens a client:
+
+```ts title="modules/hello/bootstrap/seed-greetings.bootstrap.ts"
+import type { DatabaseCtx } from "@tulipes/core/boot";
+
+export default async function seedGreetings({ models, mode }: DatabaseCtx): Promise<void> {
+  if (mode === "script") return; // a one-off script reads; it does not seed
+  const Greeting = models.get("Greeting");
+
+  try {
+    await Greeting.updateOne(
+      { name: "world" },
+      { $setOnInsert: { name: "world", message: "Hello, world!" } },
+      { upsert: true },
+    );
+  } catch (error) {
+    if ((error as { code?: number }).code !== 11000) throw error;
+  }
+}
+```
+
+A bootstrap returns nothing or one function, its cleanup. Returning anything
+else is an issue, and so is throwing:
+`bootstrap task <file> threw: <message>`. Phase name: `"bootstrap"`. Skipped
+under inspection.
+
+<Aside type="caution">
+Bootstraps run in **every process**, and a backend and a worker usually start
+together. Make them idempotent: upsert, never blind-insert. The hello seed above
+swallows the duplicate-key error a concurrent upsert can raise.
+</Aside>
+
+### 10. Queues and sockets providers
+
+**Produces** `ctx.queues` and `ctx.sockets`. These are acquired after
+bootstrap, so a queue or socket file sees settings, translations, the ACL and
+anything a bootstrap prepared. `@tulipes/bullmq` runs every `queues/*.queues.ts`
+here; `@tulipes/socket.io` runs every `sockets/*.sockets.ts`, in the backend
+only. Skipped under inspection.
+
+### 11. Fork
+
+The only phase that differs by mode. See
+[Process modes](/tulipes-js/concepts/process-modes/).
+
+- **backend**: create the Express app (`ctx.app`), bind `config.api.prefix`,
+  run every routes file in load order (phase name `"routes"`), mount
+  `notFoundHandler()` and `errorHandler()`, scan every route for its `rai()`,
+  create the HTTP server, let providers `attach()` to it, then `listen()` on
+  `boot({ port })`, else `config.server.port`, else 3000.
+- **worker**: every acquired provider that can `serve()` starts consuming
+  (phase name `"workers"`). A total of zero consumers throws
+  `worker mode started with zero processors — no module registered queue work`.
+- **script**: start nothing.
+
+### 12. Banner
+
+For a backend or worker that is up, `printStartupBanner()` prints one table:
+where the server listens or how many queues the worker consumes, each
+provider's status, the settings store and its namespaces, the modules, the
+locales, the time zone, the roles and the runtime. Scripts and inspection print no banner.
+
+Finally, unless `handleSignals: false`, the boot installs `SIGINT` and `SIGTERM`
+handlers that call `shutdown()` and exit with 0, or 1 if shutdown failed.
+
+## A failed boot cleans up after itself
+
+Every phase after 3 runs inside one `try`. When any phase throws, the boot calls
+`handle.shutdown()` first, so a database connection opened in phase 5 is closed
+when phase 8 fails, and then rethrows the original error. Providers make this
+possible by registering each resource through `own()` before awaiting anything
+that can hang. If the cleanup also fails, the boot throws an `AggregateError`
+whose message starts with `Boot failed: ` and ends with `; cleanup also failed`.
+
+## Shutdown
+
+`handle.shutdown()` is idempotent: the first call starts it, later calls return
+the same promise. It runs these steps, all under one deadline
+(`shutdownTimeoutMs`, 10 seconds by default):
+
+```txt
+  shutdown()
+   │
+   1 ctx.signal aborts            long-lived work stops now
+   │ settings watch stops
+   ├────────────────────────┐
+   2 HTTP server closes      provider drain()       concurrently
+   │ (on timeout: close      (queue consumers stop,
+   │  all connections)        sockets disconnect)
+   ├────────────────────────┘
+   3 bootstrap cleanups, in REVERSE load order
+   4 providers dispose(), in REVERSE acquisition order
+   │ (on failure or timeout: forceDispose())
+   5 file settings store closes; process TZ restored
+   6 any failure → AggregateError "Shutdown failed — …"
+```
+
+The order matters. `ctx.signal` fires before the server stops accepting, so a
+server-sent-events handler or a polling loop ends while models and producers
+are still alive. Cleanups run after traffic drains, so a connection a bootstrap
+opened is not closed under a request still using it. Providers go last, because
+everything before them may still need the database.
+
+The deadline is shared: each step gets what is left of it. A step that fails or
+times out is recorded and the remaining steps still run (`Cleanup` in
+`packages/core/src/boot/cleanup.ts`), so one stuck client cannot keep the
+database connection open. The error names the step:
+`<module> bootstrap cleanup (<file>) timed out`.
+
+```ts title="A bootstrap that holds something open"
+import type { RuntimeCtx } from "@tulipes/core/boot";
+
+export default async function poller(ctx: RuntimeCtx) {
+  const timer = setInterval(() => { /* … */ }, 5_000);
+  ctx.signal.addEventListener("abort", () => clearInterval(timer)); // shutdown began
+  return () => { /* close what is left */ };                       // after traffic drains
+}
+```
+
+<Aside type="tip">
+Under PM2, give the process at least as long to stop as the shutdown deadline.
+The reference app's `ecosystem.config.cjs` sets `kill_timeout: 10000`. See
+[PM2](/tulipes-js/production/pm2/).
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="The context" href="/tulipes-js/concepts/context/" description="Which ctx field each phase fills." />
+  <LinkCard title="Process modes" href="/tulipes-js/concepts/process-modes/" description="What phase 11 does in each process." />
+  <LinkCard title="Error codes" href="/tulipes-js/reference/topics/error-codes/" description="Response codes, for errors after boot." />
+  <LinkCard title="Inspection" href="/tulipes-js/concepts/inspection/" description="The same pipeline with nothing acquired." />
+</CardGrid>

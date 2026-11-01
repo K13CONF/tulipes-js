@@ -1,0 +1,436 @@
+---
+title: Agent actions and the agents module
+description: Declare agent actions with defineAgent, call them through ctx.agent and the agent door, print the manifest, and run Claude in the app with the agents module.
+sidebar:
+  order: 26
+---
+
+import { Aside, Steps, FileTree, LinkCard, CardGrid, Badge } from "@astrojs/starlight/components";
+
+An AI agent working with your app needs tools: a name, a description, an input
+schema, and a guarantee that calling one is subject to the same permissions as
+any other request. Tulipes gives each module an `agent/<module>.agent.ts` file
+where it declares **actions** for that purpose. The actions are collected into
+`ctx.agent` in every process, served over HTTP by the `agent` module, over MCP by
+[`@tulipes/mcp`](/tulipes-js/guides/mcp/), and, in the production preset, run by
+Claude itself inside the app through the `agents` module.
+
+<Aside type="caution" title="Experimental">
+`@tulipes/core/agent`, the manifest's shape, the `agent` module's two routes,
+`tulipes agent manifest` and `@tulipes/mcp` are outside the compatibility
+promise. They may change in a patch or minor release without a deprecation
+period. The `agents` module is generated application code in the production
+preset.
+</Aside>
+
+## Routes are the API, actions are the tools
+
+An action is never derived from a route. Routes are shaped for clients (paths,
+pagination, status codes); a tool is shaped for a model (one clear purpose, a
+description that says when to use it, a closed input schema). The two share
+logic through the module's `helpers/`, and neither calls the other:
+
+<FileTree>
+- modules/hello/
+  - agent/
+    - hello.agent.ts the actions
+  - helpers/
+    - greetings.ts `findGreetings()`, used by both
+  - routes/web/hello.greetings.routes.ts `GET /greetings`
+</FileTree>
+
+```ts title="modules/hello/helpers/greetings.ts"
+import { requireModels, type Ctx } from "@tulipes/core/boot";
+
+/**
+ * One query, two callers: the list route pages it, the agent action reads
+ * the first page.
+ */
+export function findGreetings(ctx: Ctx, { skip = 0, limit = 20 } = {}) {
+  const Greeting = requireModels(ctx).get("Greeting");
+  return Promise.all([
+    Greeting.find().select("name message times_used -_id").skip(skip).limit(limit).lean(),
+    Greeting.countDocuments(),
+  ]);
+}
+```
+
+## Declare actions
+
+```ts title="modules/hello/agent/hello.agent.ts"
+import { action, defineAgent } from "@tulipes/core/agent";
+import { requireModels } from "@tulipes/core/boot";
+import { z } from "zod/v4";
+
+import { findGreetings } from "../helpers/greetings.ts";
+
+export default defineAgent({
+  summary: "Greets callers and counts how often each greeting is used.",
+  actions: [
+    action({
+      id: "hello:web:greetings",
+      description: "The stored greetings, with how often each was used",
+      readOnly: true,
+      handler: async (ctx) => (await findGreetings(ctx))[0],
+    }),
+
+    // The ACL decides on the id (admin holds hello:* in the auth module's
+    // ACL), then the schema validates, then this runs.
+    action({
+      id: "hello:bo:greetings:reset",
+      description: "Reset the usage counter of every greeting to zero",
+      input: z.object({ confirm: z.literal(true).describe("Set to true to confirm the reset") }),
+      handler: async (ctx) => {
+        const { modifiedCount } = await requireModels(ctx).get("Greeting").updateMany({}, { times_used: 0 });
+        return { reset: modifiedCount };
+      },
+    }),
+  ],
+});
+```
+
+`defineAgent({ summary?, actions? })` is the file's default export. A module has
+at most one agent file.
+
+- **`summary`**: one or two sentences on what the module does. It goes in the
+  manifest, and the agents module puts it in the model's system prompt.
+- **`actions`**: the actions the module offers. A module with no file offers none.
+
+`action()` exists to type the handler from the input schema; it returns its
+argument unchanged. Its fields:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `id` | yes | a RAI id, `module:scope:resource[:extra]`. It is also the permission, granted in `module.acl.ts` like a route's. It may equal a route's id (both `hello:web:greetings` here), and then one grant covers both |
+| `description` | yes | what the action does and when to use it. The model reads this to choose a tool, so write it for a reader who knows nothing else |
+| `title` | no | a human label, shown by MCP clients |
+| `input` | no | a schema with `safeParse` (use `zod/v4` so it can be described as JSON Schema). Omitted means the action takes no input |
+| `readOnly` | no | `true` when the action changes nothing. MCP clients see it as `readOnlyHint`; the agents module runs read-only calls without approval |
+| `handler` | yes | `(ctx, input, actor) => unknown`. `ctx` is the runtime context, `input` the parsed input, `actor` who is calling |
+
+The `actor` is a `ToolActor`: the caller's `Auth` (`isAuthenticated`, `user`,
+`session`, `scopes`, `credentialId`) plus the `role` the ACL decides on. Read the
+user from `actor.user` exactly as a route reads `req.auth.user`. There is no
+request: an action runs the same way from HTTP, MCP or a job.
+
+Grant the ids like any other permission. `hello:web:greetings` is reached by
+`user` through the hello module's `hello:web:greetings:*` grant, and
+`hello:bo:greetings:reset` only by `admin` and `sysadmin` through `hello:*`. See
+[roles and permissions](/tulipes-js/guides/roles-and-permissions/).
+
+## ctx.agent
+
+After the ACL loads (boot phase 7), core imports every agent file and builds
+`ctx.agent`, an `AgentRegistry`, in every process mode.
+
+### manifest(caller?) and tools(caller?)
+
+```ts
+const manifest = ctx.agent!.manifest({ ...req.auth, role: roleOf(req) });
+```
+
+`caller` is a role name or a `ToolActor`. Pass the actor whenever you have one:
+the tools are then filtered by the role **and** the credential's scopes, so a
+scoped agent is never shown a tool it would be refused. With no caller, every
+tool is listed. `tools(caller?)` returns just the tool list, and `find(name)` one
+tool.
+
+```json title="docs/agent-manifest.json (abridged)"
+{
+  "app": { "name": "tulipes-example" },
+  "authorization": "acl",
+  "modules": [
+    {
+      "name": "hello",
+      "summary": "Greets callers and counts how often each greeting is used.",
+      "tools": ["hello_web_greetings", "hello_bo_greetings_reset"]
+    }
+  ],
+  "tools": [
+    {
+      "name": "hello_bo_greetings_reset",
+      "module": "hello",
+      "permission": "hello:bo:greetings:reset",
+      "description": "Reset the usage counter of every greeting to zero",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "confirm": { "description": "Set to true to confirm the reset", "type": "boolean", "const": true }
+        },
+        "required": ["confirm"],
+        "additionalProperties": false
+      },
+      "read_only": false
+    }
+  ]
+}
+```
+
+- **`name`** is the id with every character outside `[a-zA-Z0-9_-]` replaced by
+  `_`, at most 64 characters: the alphabet Claude and MCP accept for tool names.
+- **`input_schema`** is the zod schema as JSON Schema (input side), with
+  `additionalProperties: false` added to objects, since strict tool use wants
+  closed objects. A schema that cannot be described becomes `{ "type": "object" }`
+  with a warning.
+- **`authorization`** is `"dynamic"` when the app installed a custom access
+  checker; the manifest then cannot filter by role and lists everything.
+
+### invoke(name, input, actor, request?)
+
+```ts
+const result = await ctx.agent!.invoke("hello_bo_greetings_reset", { confirm: true }, actor);
+```
+
+`invoke()` runs an action through the same gate as a route, in the same order:
+
+1. **Who.** 404 `NO_SUCH_TOOL` for an unknown name; then the ACL on the id and
+   the actor's scopes: 401 `UNAUTHENTICATED` for a guest, 403 `FORBIDDEN` for a
+   role without it, 403 `OUT_OF_SCOPE` for a credential whose scopes do not cover
+   it.
+2. **What.** The input is parsed with the action's schema (`{}` when none was
+   given); failures throw a `ValidationError`, 422, one issue per field.
+3. **The handler**, with the parsed input.
+
+All refusals are `HttpError`s, so a route that calls `invoke()` gets the envelope
+for free. Pass `request` when you have one and the app uses a custom access
+checker: the checker then decides, as it does for routes.
+
+## The agent door: HTTP
+
+Both presets include an `agent` module that serves `ctx.agent` to agents outside
+the process:
+
+| Method and path | RAI id | Does |
+|---|---|---|
+| `GET <prefix>/agent/tools` | `agent:web:tools` | the manifest, filtered for the caller |
+| `POST <prefix>/agent/tools/:name` | `agent:web:invoke` | `invoke(name, body, caller, req)` |
+
+```ts title="modules/agent/controllers/web.agent.controllers.ts"
+tools(): RequestHandler {
+  return (req: Request, res: Response) => {
+    res.respond({ data: this.#ctx.agent.manifest({ ...req.auth, role: roleOf(req) }) });
+  };
+}
+
+invoke(): RequestHandler {
+  return async (req: Request, res: Response) => {
+    const name = String(req.params.name);
+    const actor = { ...req.auth, role: roleOf(req) };
+    res.respond({ data: await this.#ctx.agent.invoke(name, req.body, actor, req) });
+  };
+}
+```
+
+The module grants `agent:*` to every role, guest included. That reveals and
+allows nothing extra: the manifest is filtered for the caller, and each action
+checks its own permission before running.
+
+```sh
+curl -X POST http://localhost:3000/api/v1/agent/tools/hello_bo_greetings_reset \
+  -H "authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"confirm":true}'
+```
+
+```json
+{ "success": true, "data": { "reset": 3 }, "errors": [], "meta": {} }
+```
+
+The same call as a `user`:
+
+```json
+{ "success": false, "data": null, "errors": [{ "field": null, "message": "role \"user\" may not hello:bo:greetings:reset", "code": "FORBIDDEN" }], "meta": {} }
+```
+
+## tulipes agent manifest
+
+```sh
+pnpm tulipes agent manifest                     # every tool, as JSON on stdout
+pnpm tulipes agent manifest --role user         # only what that role may call
+pnpm tulipes agent manifest --out docs/agent-manifest.json
+```
+
+It runs an [inspection boot](/tulipes-js/concepts/inspection/), so no service,
+secret or `.env` is needed. `--role` filters by role only (no scopes), which is
+what the door serves a session of that role. The reference app's
+`pnpm manifest` script writes `docs/agent-manifest.json`; commit it, and a
+reviewer sees every change to what agents can do. See
+[the command reference](/tulipes-js/reference/cli/agent/).
+
+## Boot errors
+
+Declarations are checked at boot, in the `agent` phase:
+
+```txt
+Boot aborted during "agent" — 2 issue(s):
+  ✖ [hello] modules/hello/agent/hello.agent.ts: actions[1].description is required
+  ✖ [hello] modules/hello/agent/hello.agent.ts: actions[2].id "hello:reset" has no scope — since 0.12 an id is "module:scope:resource[:extra]" (`tulipes migrate 0.12` rewrites a 0.11 app)
+```
+
+| Message | Cause |
+|---|---|
+| `… must default-export defineAgent({ … })` | a plain object or function as the default export |
+| `one agent/*.agent file per module — found 2` | two files in one module's `agent/` |
+| `actions[n].handler must be a function` | a missing handler |
+| `actions[n].input must be a schema with safeParse` | an input that is not a schema |
+| `actions[n] is a route reference — routes are the API, not tools` | the pre-0.11 route-tool form |
+| `"tools" is "actions" since 0.11.0-rc.3 …` | the old key; `tulipes migrate 0.11` rewrites it |
+| `tool "x" (id) is already exposed by module "y" as "id"` | two ids that map to the same tool name |
+
+## The agents module: Claude inside the app
+
+<Badge text="production preset" variant="note" />
+
+The actions above are for any agent. The production preset also ships
+`modules/agents`, a harness that runs Claude against them as a background job,
+**as the person who asked**: with their role, narrowed by the scopes of the
+credential they used.
+
+### How a run works
+
+```txt
+POST /agents/runs { goal }          worker: agents.run job
+  -> Run document "queued"    --->  load run, re-check the caller
+  -> one agents.run job             tools = manifest for that caller
+  <- 202 { id, status }             loop: model turn -> policy ->
+                                          tool calls -> checkpoint
+GET /agents/runs/:run_id            ends: succeeded | failed |
+  <- status, result, waiting_on           exhausted | cancelled
+                                    or waits: waiting_approval
+POST /agents/runs/:run_id/approve
+  -> queued again, next job resumes
+```
+
+<Steps>
+
+1. A signed-in user or an API token starts a run with a goal. The run records
+   the user, the credential's scopes and token id (never the credential), and
+   enqueues one job. The endpoint answers 202 at once.
+2. The worker composes the harness from the current settings and runs the loop.
+   Each turn's tools are the manifest for that actor, plus two harness tools:
+   `run_note` (a progress note) and `run_finish` (the only way to end, with an
+   outcome of `done`, `blocked` or `partial`, a summary and what was verified).
+3. At every step the identity is re-checked: the role is re-read from the user,
+   and an API token must still be live (`isTokenLive()`). A revoked token, a
+   deleted user or a password change ends the run `failed`.
+4. A call that needs approval stops the job with the run in `waiting_approval`.
+   The owner answers each waiting call, and the run is queued again.
+
+</Steps>
+
+The transcript is stored and append-only, and checkpoints are written before and
+after each turn's tools run, so a retried job resumes where the last one stopped.
+A write interrupted mid-call is never re-run: the model is told to check the
+current state with a read-only tool first.
+
+### The endpoints
+
+| Method and path | RAI id | Who |
+|---|---|---|
+| `POST /agents/runs` (202) | `agents:web:runs:start` | user |
+| `GET /agents/runs` | `agents:web:runs` | user, own runs |
+| `GET /agents/runs/:run_id` | `agents:web:runs:read` | user, own runs |
+| `POST /agents/runs/:run_id/approve` | `agents:web:runs:approve` | user, own runs |
+| `POST /agents/runs/:run_id/cancel` | `agents:web:runs:cancel` | user, own runs |
+| `GET /agents/bo/runs`, `GET /agents/bo/runs/:run_id`, `POST /agents/bo/runs/:run_id/cancel` | `agents:bo:runs*` | admin, sysadmin |
+
+All are under the API prefix. The back office can follow and stop any run but
+never approve one. Another user's run is 404 `NO_SUCH_RUN`, not 403: its
+existence is not theirs to learn.
+
+```sh
+curl -X POST http://localhost:3000/api/v1/agents/runs \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"goal":"Reset the greeting counters.","context":"Only the hello module."}'
+```
+
+`goal` is required (at most 4,000 characters) and `context` optional (at most
+20,000). A run waiting for approval lists the calls it waits on:
+
+```json
+{
+  "id": "6724…",
+  "status": "waiting_approval",
+  "waiting_on": [
+    { "id": "toolu_01…", "tool": "hello_bo_greetings_reset", "description": "Reset the usage counter of every greeting to zero", "input": { "confirm": true } }
+  ]
+}
+```
+
+```sh
+curl -X POST http://localhost:3000/api/v1/agents/runs/6724…/approve \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"decisions":{"toolu_01…":"allow"}}'
+```
+
+Every waiting call needs exactly one decision, `allow` or `deny`; anything else
+is 422 `DECISIONS_INCOMPLETE` with `missing` and `unknown` ids. A denied call is
+returned to the model as declined, so it can explain or try another way.
+Approving a run that is not waiting is 409 `RUN_NOT_WAITING`; cancelling a run
+that ended is 409 `RUN_ENDED`.
+
+Statuses: `queued`, `running`, `waiting_approval`, `succeeded`, `failed`,
+`cancelled`, `exhausted`. `GET /agents/runs?status=…` filters by one.
+
+### Approval modes and budgets
+
+The module's settings, edited live in the console, apply to the next job of every
+run, never halfway through one:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `approval` | `"writes"` | which calls wait for the owner: `none`, `writes` (calls not marked `readOnly`), or `all` |
+| `model` | `"claude-opus-5-5"` | the Claude model every run uses |
+| `effort` | `"high"` | `low`, `medium`, `high`, `xhigh` or `max` |
+| `maxTurns` | `30` | model turns before the run ends `exhausted` |
+| `maxToolCalls` | `100` | tool calls before it ends `exhausted` |
+| `maxOutputTokens` | `200000` | output tokens before it ends `exhausted` |
+| `maxRunMinutes` | `10` | minutes of work, not counting time waiting for approval |
+| `maxTokensPerTurn` | `32000` | `max_tokens` of one turn; a cut-off turn is retried once with twice this |
+| `toolResultMaxChars` | `8000` | longest tool result the model reads; longer is cut, saying what was left out |
+| `contextEditing` | `false` | let the API clear old tool results in long runs (beta) |
+| `compaction` | `false` | let the API summarise the earliest turns near the context window (beta) |
+| `refusalFallback` | `true` | retry a safety refusal on a fallback model |
+| `retentionDays` | `30` | days a finished run and its transcript are kept |
+
+`readOnly` on your actions is therefore a safety input: with the default
+`writes` mode, an action without it always waits for a person. Mark only actions
+that truly change nothing.
+
+The loop also stops a run that goes in circles: the same tool with the same input
+three times in a row gets a note telling the model so, five times ends the run
+`failed`, and three consecutive errors from one tool end it too.
+
+### Setting it up
+
+The API key is an environment value of the module, not a setting:
+
+| Variable | Meaning |
+|---|---|
+| `ANTHROPIC_API_KEY` | the Claude API key. Optional at boot: unset, the app boots and serves MCP as usual, and starting a run answers 503 `AGENT_UNCONFIGURED` |
+| `ANTHROPIC_BASE_URL` | another endpoint for the Claude API (a proxy or a gateway) |
+
+Runs execute in the worker, so `pnpm worker` must be running and the queues
+provider declared. The module's job is `agents.run`, enqueued with
+`attempts: 3` and exponential backoff.
+
+To add it to an app generated before 0.13, copy `modules/agents/` from the
+reference app, add `"agents:*"` to the `admin` and `sysadmin` grants in
+`modules/auth/module.acl.ts`, take the auth module's `isTokenLive` and the
+`credentialId` line of `helpers/api-tokens.ts`, then `pnpm install`, `pnpm sync`
+and set `ANTHROPIC_API_KEY` (`MIGRATING.md`, 0.13.0).
+
+<Aside type="tip">
+A run is for a goal whose steps depend on what the tools return. A known sequence
+of actions is a route or a job. And a feature module never calls a model itself:
+it declares actions, and the agents module is the one place that talks to Claude.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="MCP" href="/tulipes-js/guides/mcp/" description="Serve the same actions to Claude Code and other clients." />
+  <LinkCard title="API tokens and scopes" href="/tulipes-js/guides/api-tokens-and-scopes/" description="Give an agent a credential that reaches less than you." />
+  <LinkCard title="Queues" href="/tulipes-js/guides/queues/" description="The worker that runs agent jobs." />
+  <LinkCard title="tulipes agent" href="/tulipes-js/reference/cli/agent/" description="The manifest command reference." />
+</CardGrid>

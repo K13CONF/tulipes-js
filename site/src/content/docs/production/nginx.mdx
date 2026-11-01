@@ -1,0 +1,206 @@
+---
+title: nginx in front of Tulipes
+description: The committed nginx templates, the deploy-nginx script, proxy trust, TLS, WebSocket upgrades for Socket.IO, SSE streams and the recorded ingress evidence.
+sidebar:
+  order: 3
+---
+
+import { Aside, Steps, FileTree, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+The production preset ships nginx site templates, one per environment, and a script that renders the right one and installs it. The templates are written for one topology: a single public nginx on the same host as the app, proxying to it over loopback. This page explains what each directive is for, how the app must be told to trust the proxy, and what was measured when the template ran in front of a real app.
+
+<FileTree>
+- nginx/
+  - development.conf
+  - staging.conf
+  - production.conf
+- scripts/
+  - deploy-nginx.ts
+</FileTree>
+
+## The production template
+
+```nginx title="nginx/production.conf"
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{DOMAIN}};
+
+    access_log /var/log/nginx/{{DOMAIN}}.access.log;
+    error_log  /var/log/nginx/{{DOMAIN}}.error.log;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    client_max_body_size 1m;
+
+    # location = /mcp { … }   (commented, see below)
+
+    location / {
+        proxy_pass http://127.0.0.1:{{PORT}};
+        proxy_http_version 1.1;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $http_connection;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}
+```
+
+`{{DOMAIN}}` and `{{PORT}}` are placeholders the deploy script fills in. Edit the template in the repository, never the rendered copy in `/etc/nginx/sites-available`.
+
+| Directive | Why |
+|---|---|
+| `location /.well-known/acme-challenge/` | Certbot's HTTP-01 challenge, above the proxy, so issuing and renewing a certificate never touches this file |
+| `client_max_body_size 1m` | Keep it in step with the `security.bodyLimit` setting (default `"1mb"`). If nginx is stricter, an oversized request dies as an nginx HTML page instead of the API's JSON 413 |
+| `proxy_http_version 1.1` + `Upgrade` + `Connection` | Socket.IO's WebSocket upgrade. Without them the handshake still succeeds and every connection silently falls back to HTTP long-polling |
+| `Connection $http_connection` | Passes the client's own header rather than a `map` variable, which would collide as soon as a second site on the server defined the same name |
+| The five `proxy_set_header` lines | Overwrite every forwarding header the client sent; see proxy trust below |
+| `proxy_read_timeout`/`proxy_send_timeout 3600s` | Long-lived WebSockets and SSE streams must outlive nginx's 60-second default |
+
+The staging template is identical except that it adds `add_header X-Robots-Tag "noindex, nofollow" always;` so a leaked staging link never reaches a search index. The development template is HTTP-only on IPv4, without the ACME location; it exists so you can exercise WebSocket upgrades and forwarded headers through a proxy locally before finding out in staging.
+
+## Proxy trust
+
+Express decides the client's IP, protocol and host from the socket peer unless it is told to trust a proxy. The production preset's `security` module sets Express proxy trust from the **`security.trustProxyCidrs` setting**: a comma-separated list of IPv4 or IPv6 addresses or CIDRs with nonzero prefix lengths.
+
+- **Empty (the default):** the socket peer is the client, and `X-Forwarded-*` headers are ignored.
+- **A list:** for a peer inside it, Express walks `X-Forwarded-For` from the app outward and takes the nearest address that is not trusted. Hostname and protocol come from the forwarded headers too.
+- Booleans, hop counts, named subnet aliases, empty entries and invalid addresses are refused by the schema.
+
+For this template, where nginx connects from loopback, the value is `127.0.0.1/32`:
+
+```sh
+curl -X PATCH https://api.example.com/api/v1/config/security \
+  -H "Authorization: Bearer $SYSADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "version": 3, "values": { "trustProxyCidrs": "127.0.0.1/32" } }'
+```
+
+The write is validated, audited and applied in every replica by the module's `onChange`, which calls `app.set("trust proxy", …)`; no restart. `values` is a patch over the stored values; `version` is optional and, when sent, refuses the write if the stored version has moved since you read it with `GET /config/security`. Only `sysadmin` may write. The console is covered in the [settings guide](/tulipes-js/guides/settings/).
+
+The resulting `req.ip` is the address used for sessions, settings audit records and rate-limit buckets. That makes the template's choice of `X-Forwarded-For $remote_addr` (not `$proxy_add_x_forwarded_for`) important: it **replaces** whatever the client sent, so a forged header can never become the client identity.
+
+<Aside type="danger" title="Close the app port">
+`boot()` binds every interface. If `{{PORT}}` is reachable from outside the host, a client can skip nginx entirely: no `client_max_body_size`, no TLS. And with `127.0.0.1/32` trusted, anything running on the host itself can state its own `X-Forwarded-For`. Firewall the port to loopback, or run the app where the platform owns the network boundary. The bind address is not narrowed by default because containers and platform runtimes need every interface.
+</Aside>
+
+These templates assume exactly one proxy. A load balancer or CDN in front of nginx changes the chain completely and needs its own trust and header policy in both nginx and the app; the templates do not recover client addresses behind another hop.
+
+## The deploy script
+
+`scripts/deploy-nginx.ts` renders the template for the current `APP_ENV` and installs it on a Debian or Ubuntu host:
+
+```sh
+APP_ENV=production pnpm script scripts/deploy-nginx.ts --dry-run   # print the rendered file
+sudo -E APP_ENV=production pnpm script scripts/deploy-nginx.ts     # install it
+```
+
+`APP_ENV` picks everything at once, so the template, the domain and the port can never disagree:
+
+- the template is `nginx/<APP_ENV>.conf`;
+- `{{DOMAIN}}` is the `core.publicDomain` setting;
+- `{{PORT}}` is `server.port`, which `config/app.config.ts` wires from `PORT`: the port the backend listens on.
+
+The script boots the app in script mode like every other script, so MongoDB and Redis must be reachable from where you run it. Then it:
+
+<Steps>
+1. Prints the rendered file and stops, with `--dry-run`. This works anywhere, even with the domain still `localhost`.
+2. Refuses if `core.publicDomain` is still `localhost` or empty: set a real hostname through `PATCH /config/core` first.
+3. Refuses unless it runs as root (`sudo -E` keeps the environment).
+4. Refuses if `/etc/nginx/sites-available` does not exist; it targets the Debian/Ubuntu layout only.
+5. Refuses to overwrite an existing `/etc/nginx/sites-available/<domain>` unless you pass `--force`, since that file may have been hand-tuned.
+6. Writes the file and links it into `sites-enabled`. A link already pointing at the right file is fine; a link pointing elsewhere is refused.
+7. Runs `nginx -t`, then `systemctl reload nginx`. If `nginx -t` fails, nothing is reloaded.
+</Steps>
+
+Every refusal prints `deploy-nginx: <reason>` and sets exit code 1, for example:
+
+```txt
+deploy-nginx: core.publicDomain is "localhost" — set a real hostname through the console (PATCH /config/core) before deploying
+```
+
+## TLS
+
+The TLS server block ships commented out on purpose: `nginx -t` fails on certificate paths that do not exist yet, which would make the very first deploy impossible.
+
+<Steps>
+1. Deploy the HTTP-only site and issue a certificate (the ACME location is already there for Certbot's HTTP-01 challenge).
+2. Uncomment the TLS block at the end of the template and repeat the `location /` block inside it:
+
+   ```nginx title="nginx/production.conf"
+   server {
+       listen 443 ssl;
+       listen [::]:443 ssl;
+       http2 on;
+       server_name {{DOMAIN}};
+
+       ssl_certificate     /etc/letsencrypt/live/{{DOMAIN}}/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/{{DOMAIN}}/privkey.pem;
+
+       # …repeat the location / block from above…
+   }
+   ```
+3. Add a 301 redirect to HTTPS in the port 80 server (keeping the ACME location).
+4. Redeploy with `--force`.
+</Steps>
+
+With TLS in place, `X-Forwarded-Proto $scheme` makes `req.secure` true behind the trusted proxy, and the `security.hstsMaxAge` setting (default 15552000 seconds, 180 days; `0` disables it) takes effect, since browsers only honor HSTS over HTTPS.
+
+## WebSockets and SSE
+
+Socket.IO needs the `Upgrade` and `Connection` headers and HTTP/1.1 to the upstream; the template has all three, and the 3600-second timeouts keep idle sockets open.
+
+Server-sent events (the settings module's log stream, for example) need nginx not to buffer the response. The app sends `X-Accel-Buffering: no` on its streams. The ingress run found that nginx 1.27 with this template delivered a stream promptly with or without that header, so do not assume the header is what makes it work: behind a different proxy, or with `proxy_buffering` set elsewhere, measure it again.
+
+## MCP over HTTP
+
+When the MCP process serves Streamable HTTP (`transport: { http: { port: 3100 } }` in `config/mcp.config.ts`), it runs on its own port. The production template carries a commented block to expose it:
+
+```nginx title="nginx/production.conf"
+# location = /mcp {
+#     proxy_pass http://127.0.0.1:3100;
+#     proxy_http_version 1.1;
+#     proxy_set_header Host $host;
+#     proxy_buffering off;
+#     proxy_read_timeout 300s;
+# }
+```
+
+The MCP process identifies every request by its bearer token, so nothing in front of it needs to authenticate. It refuses a body over `maxBodyBytes` (1 MiB by default) with 413, and on a loopback bind it refuses a request whose `Host` is not its own, which blocks DNS rebinding.
+
+## What was measured
+
+`scripts/ingress-smoke.mjs` runs the committed production template in an nginx container in front of a packed production app with a probe module that echoes what the app resolved. It was recorded against 0.10.0-rc.3 and rerun against 0.11.0 (nginx 1.27-alpine, Node 24.14.0, macOS arm64); 9 of 9 checks passed both times. From `docs/design/ingress-evidence.md`:
+
+| Check | Observed |
+|---|---|
+| The rendered template passes `nginx -t` | pass |
+| Client address through the proxy | `req.ip` is the real client |
+| Client sends `X-Forwarded-For: 203.0.113.9` | ignored; overwritten with `$remote_addr` |
+| Client sends `X-Forwarded-Proto: https` over HTTP | `req.protocol = http`, `req.secure = false` |
+| Client sends `X-Forwarded-Host: evil.example` | ignored; `req.hostname` is the real host |
+| 2 MiB body | 413 from nginx, never reaches the app |
+| 512 KiB body | reaches the app (400 from its own JSON parser in the probe) |
+| SSE with and without `X-Accel-Buffering: no` | first events at about 100 ms and 200 ms in both cases |
+| Client connecting straight to the app port from a trusted CIDR | **can** set its own `X-Forwarded-For` |
+
+The last row is why the port must be closed. What the run does not establish: extra hops, TLS (still commented out in the template), sustained load or replicas. Those depend on your topology.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Production checklist" href="/tulipes-js/production/checklist/" description="Everything to verify before real traffic." />
+  <LinkCard title="Security model" href="/tulipes-js/production/security-model/" description="Proxy trust, rate limits and the other controls." />
+  <LinkCard title="Security middleware" href="/tulipes-js/guides/security-middleware/" description="Helmet, CORS, body limits and rate limits in the security module." />
+  <LinkCard title="Sockets" href="/tulipes-js/guides/sockets/" description="Namespaces and clients for Socket.IO." />
+</CardGrid>

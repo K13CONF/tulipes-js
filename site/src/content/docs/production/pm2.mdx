@@ -1,0 +1,136 @@
+---
+title: Running with PM2
+description: The generated ecosystem.config.cjs explained line by line, its three environments, why kill_timeout is 10 seconds, and the pm2 scripts in package.json.
+sidebar:
+  order: 2
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+The production preset supervises its processes with PM2. The generated `ecosystem.config.cjs` starts the backend and the worker, restarts them when they crash, sets `APP_ENV` and `PROCESS_MODE` for each environment, and gives graceful shutdown the time it needs. This page reads the file top to bottom so you can change it with confidence.
+
+PM2 is a devDependency of the app, pinned to `^7.0.4`: earlier releases pulled in a vulnerable js-yaml (see the dependency reviews in the [security model](/tulipes-js/production/security-model/)).
+
+## The file
+
+```js title="ecosystem.config.cjs"
+// CommonJS on purpose: this app is an ESM package, and PM2 reads its
+// config with require().
+
+const modes = (processMode) => ({
+  env: { APP_ENV: "development", PROCESS_MODE: processMode },
+  env_staging: { APP_ENV: "staging", PROCESS_MODE: processMode },
+  env_production: { APP_ENV: "production", PROCESS_MODE: processMode },
+});
+
+/** Shared by both apps. */
+const common = {
+  cwd: __dirname,
+  interpreter: "node",
+  exec_mode: "fork",
+  instances: 1,
+  autorestart: true,
+  max_memory_restart: "512M",
+  kill_timeout: 10000,
+};
+
+module.exports = {
+  apps: [
+    {
+      ...common,
+      name: "tulipes-example",
+      script: "app.ts",
+      error_file: "logs/backend-error.log",
+      out_file: "logs/backend-out.log",
+      ...modes("backend"),
+    },
+    {
+      ...common,
+      name: "tulipes-example-worker",
+      script: "worker.ts",
+      error_file: "logs/worker-error.log",
+      out_file: "logs/worker-out.log",
+      ...modes("worker"),
+    },
+  ],
+};
+```
+
+The comments in the generated file are shortened here; the reasons they give are below. In your app the names carry your app's name instead of `tulipes-example`.
+
+## Line by line
+
+**`.cjs`.** The app is an ESM package (`"type": "module"`), and PM2 loads its config with `require()`. The `.cjs` extension makes that file CommonJS regardless.
+
+**`modes(processMode)`.** Each app gets three environment blocks. `env` is used by a plain `pm2 start`; `env_staging` and `env_production` are selected by `--env staging` and `--env production`. Every block repeats both variables instead of relying on PM2 to merge `env_<name>` over `env`: a half-applied environment (the right `APP_ENV` with the wrong `PROCESS_MODE`) would start the wrong process against the wrong config. The repetition is cheap insurance.
+
+`APP_ENV` is what the app reads; it picks `.envs/.env.<APP_ENV>` and enables the production credential guard. The entrypoint, not `PROCESS_MODE`, decides the mode: `app.ts` boots `backend`, `worker.ts` boots `worker`. `PROCESS_MODE` is a label for operators reading `pm2 env`.
+
+**`cwd: __dirname`.** Every relative path (the script, the log files, `.envs/`) resolves against the app root, wherever you run `pm2` from.
+
+**`interpreter: "node"`.** Node 24 strips types natively, so PM2 runs `app.ts` and `worker.ts` with node itself: no loader, no build step. Apps from before 0.11 had `tsx` here; `tulipes migrate 0.11` changes it.
+
+**`exec_mode: "fork"`, `instances: 1`.** One process each, not PM2's cluster mode. Two reasons: Socket.IO needs sticky sessions or a Redis adapter before a second instance is safe, and every bootstrap task would run once per instance. Scale out only after wiring the adapter; see [more than one replica](/tulipes-js/production/deployment/).
+
+**`autorestart: true`.** PM2 restarts a process that exits. A process that fails to boot exits too, so a bad configuration restarts in a loop; read `pnpm pm2:logs` for the boot report.
+
+**`max_memory_restart: "512M"`.** PM2 restarts a process whose memory passes 512 MB. Tune it to your host.
+
+**`kill_timeout: 10000`.** See below.
+
+**`error_file`, `out_file`.** stdout and stderr per process, under `logs/`. These are separate from the app's own JSON log files (`logs/app-<mode>…`, `logs/error-<mode>…`) written by its pino logger.
+
+## Why kill_timeout is 10 seconds
+
+When PM2 stops or restarts a process it sends `SIGINT`, waits `kill_timeout` milliseconds, then sends `SIGKILL`. PM2's default wait is 1.6 seconds.
+
+A Tulipes process needs longer. On a signal, `boot()` aborts `ctx.signal`, stops HTTP, drains in-flight requests and running jobs, runs every bootstrap cleanup in reverse order, and closes MongoDB and Redis last, all under one deadline that defaults to 10 seconds (`shutdownTimeoutMs`). A `SIGKILL` at 1.6 seconds would cut that short and lose in-flight jobs. Setting `kill_timeout` to the same 10 seconds lets the app use its whole budget.
+
+<Aside type="tip">
+If you raise `shutdownTimeoutMs` in `boot()`, raise `kill_timeout` to match, or a little above it.
+</Aside>
+
+## The scripts
+
+The app's `package.json` wraps every PM2 command so nobody has to remember the file name or the `--env` flag:
+
+| Script | Runs | Use |
+|---|---|---|
+| `pnpm pm2:start` | `pm2 start ecosystem.config.cjs` | Development environment (`env`) |
+| `pnpm pm2:start:staging` | `pm2 start ecosystem.config.cjs --env staging` | Staging |
+| `pnpm pm2:start:production` | `pm2 start ecosystem.config.cjs --env production` | Production |
+| `pnpm pm2:stop` | `pm2 stop ecosystem.config.cjs` | Stop both, keep them registered |
+| `pnpm pm2:restart` | `pm2 restart ecosystem.config.cjs` | Restart both, gracefully |
+| `pnpm pm2:delete` | `pm2 delete ecosystem.config.cjs` | Stop and unregister both |
+| `pnpm pm2:logs` | `pm2 logs` | Tail every process's output |
+| `pnpm pm2:status` | `pm2 status` | One line per process |
+
+## A first production start
+
+<Steps>
+1. Make the environment available to the shell that runs PM2 (or put it in `.envs/.env.production`, which is never committed). Check it with `APP_ENV=production pnpm check`.
+2. Start both processes:
+
+   ```sh
+   pnpm pm2:start:production
+   pnpm pm2:status
+   ```
+3. Read the boot banner or the boot error in `pnpm pm2:logs`.
+4. Make PM2 come back after a reboot with `pm2 save` and `pm2 startup` (PM2's own commands; follow what `pm2 startup` prints).
+</Steps>
+
+## The MCP process
+
+The ecosystem file does not include `mcp.ts`. Over stdio, the MCP process is started by the agent client that talks to it, so there is nothing to supervise. If you serve it over HTTP (`transport: { http: { port: 3100 } }` in `config/mcp.config.ts`), add a third app in the same shape: `script: "mcp.ts"`, its own log files, and `...modes("mcp")`. Then expose it through the commented `location = /mcp` block in the [nginx template](/tulipes-js/production/nginx/).
+
+## Restarts and settings
+
+There is no restart endpoint since 0.11. Settings apply live; a write to a field tagged `.meta({ restart: true })` persists, and its response says `requires_restart` with `meta.action: "restart_required"`. The restart itself is yours: `pnpm pm2:restart`.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="nginx" href="/tulipes-js/production/nginx/" description="Put the backend behind a TLS reverse proxy." />
+  <LinkCard title="Deploying to production" href="/tulipes-js/production/deployment/" description="Processes, environment, shutdown and replicas." />
+  <LinkCard title="Process modes" href="/tulipes-js/concepts/process-modes/" description="What backend, worker and script start." />
+</CardGrid>

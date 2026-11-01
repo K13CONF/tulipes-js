@@ -1,0 +1,85 @@
+---
+title: "Tutorial: build a bookstore API"
+description: What the bookstore tutorial builds, what you need before starting, and a map of its ten chapters from scaffolding the app to deploying it with PM2 and nginx.
+sidebar:
+  order: 0
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+This tutorial builds one application from an empty directory to a deployed
+service: a bookstore API with a public catalogue, a back office for editors,
+background jobs, live notifications, tests and generated API documents.
+Every chapter builds on the previous one, and every command in it was run
+against the published 0.13 packages.
+
+## What we will build
+
+```txt
+                 ┌────────────────────────────────────────────┐
+  guest, user ──►│ GET  /api/v1/books        search, filter,  │
+                 │ GET  /api/v1/books/:isbn  sort, paginate   │
+                 ├────────────────────────────────────────────┤
+  editor,     ──►│ POST   /api/v1/books      add              │
+  admin          │ PATCH  /api/v1/books/:isbn change          │
+                 │ DELETE /api/v1/books/:isbn withdraw (soft) │
+                 └──────┬──────────────────────────┬──────────┘
+                        │ queue "books.added"      │ socket /books
+                        ▼                          ▼
+                 worker process              "book.created"
+                 announces the book          to every client
+```
+
+By the end you will have:
+
+- a `books` module with a `Book` model stored in MongoDB, snake_case fields,
+  timestamps and soft delete;
+- a catalogue clients can search, filter, sort, group and paginate through
+  the list-query language, without a line of query parsing of your own;
+- zod validation on every input, translated errors in English and French,
+  and one response envelope for success and failure;
+- an `editor` role that manages the catalogue, while guests and users only browse;
+- a queue job run by a separate worker process, with retries;
+- a Socket.IO namespace that announces each new book;
+- a test file that signs in as each role;
+- an OpenAPI 3.1 document and a Postman collection;
+- PM2 and nginx configuration for staging and production.
+
+## Prerequisites
+
+- Node 24.x and pnpm 10 ([installation](/tulipes-js/start/installation/)).
+- Docker, or local MongoDB 8 and Redis 7.
+- `curl`, and comfort with TypeScript and Express. You do not need to know
+  Mongoose, BullMQ or Socket.IO; the tutorial shows each piece it uses.
+
+If you have not booted a Tulipes app yet, the
+[quick start](/tulipes-js/start/quick-start/) takes five minutes and
+introduces the envelope and `rai()`.
+
+## The chapters
+
+| # | Chapter | You learn |
+|---|---|---|
+| 1 | [Create the app](/tulipes-js/tutorial/create-the-app/) | the production preset, services, `.envs`, the banner, the boot report |
+| 2 | [Your first module](/tulipes-js/tutorial/first-module/) | `tulipes new module`, module anatomy, `rai()`, controllers, `res.respond()`, `tulipes routes` |
+| 3 | [Store books in MongoDB](/tulipes-js/tutorial/data-and-models/) | model files, `ctx.models`, `tulipes sync`, CRUD, list queries, soft delete |
+| 4 | [Validate input](/tulipes-js/tutorial/validation-and-errors/) | zod on `rai()`, `HttpError`, `ValidationError`, the error envelope, i18n |
+| 5 | [Control access](/tulipes-js/tutorial/permissions/) | RAI ids, grants, a new role, signing in, `tulipes roles` |
+| 6 | [Background jobs](/tulipes-js/tutorial/background-jobs/) | a queue file, the worker process, retries |
+| 7 | [Real time](/tulipes-js/tutorial/realtime/) | a socket namespace, emitting from a controller |
+| 8 | [Test it](/tulipes-js/tutorial/testing/) | `useTestApp`, `app.as(role)`, envelope assertions |
+| 9 | [API documents](/tulipes-js/tutorial/api-docs/) | `tulipes spec`, OpenAPI and Postman |
+| 10 | [Deploy](/tulipes-js/tutorial/deploy/) | `APP_ENV`, PM2, nginx |
+
+<Aside type="note">
+The tutorial calls the app `bookstore`. If you choose another name, the
+package names stay `@app/<module>` and only the app name in the banner,
+the PM2 process names and the default database name change.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Chapter 1: create the app" href="/tulipes-js/tutorial/create-the-app/" description="Scaffold the bookstore and boot it." />
+  <LinkCard title="Architecture overview" href="/tulipes-js/concepts/architecture/" description="The big picture, if you prefer theory first." />
+</CardGrid>

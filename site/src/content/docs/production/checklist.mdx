@@ -1,0 +1,101 @@
+---
+title: Production checklist
+description: What to verify before a Tulipes app takes real traffic, from secrets and proxy trust to audits, log streams, backups and the open pre-1.0 deployment checks.
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Tulipes validates a great deal at boot, but some things only the operator can check: the network, the secrets, the topology and how the app behaves under load. This list collects the deployment checks from the security model, the support policy and the reliability work. Each item says what to do and where the detail lives.
+
+<Aside type="caution" title="Know what is and is not proven">
+The 0.13 contracts are stable and every supported journey runs in CI on each commit, and the harnesses in `scripts/` cover a real nginx ingress and MongoDB/Redis failure. But no production pilot has run this framework yet: there is no load, backup-restore or multi-replica evidence, and no independent security review. The agent surface, `@tulipes/mcp` and the `agents` module are experimental. Choose accordingly, and treat the items below as your own pilot's acceptance work.
+</Aside>
+
+## Runtime and processes
+
+- [ ] Node `>=24.0.0 <25` on every host; no `tsx` anywhere (`node app.ts`, `interpreter: "node"` in PM2). See [deployment](/tulipes-js/production/deployment/).
+- [ ] `pnpm install --frozen-lockfile` on the host, from the committed `pnpm-lock.yaml`.
+- [ ] `APP_ENV=production` on every process. It is not inferred from `NODE_ENV`.
+- [ ] A worker process runs if any module registers queue processors.
+- [ ] The supervisor's kill timeout is at least the shutdown deadline (`kill_timeout: 10000` for the default `shutdownTimeoutMs` of 10 seconds). See [PM2](/tulipes-js/production/pm2/).
+- [ ] Start, restart and stop have been exercised under the supervisor you actually use. The repository's `scripts/pm2-smoke.mjs` does this for PM2.
+- [ ] A health check is wired to a route that needs no token (the minimal preset's `GET /health`; add one to the production preset).
+
+## Secrets and environment
+
+- [ ] `APP_ENV=production pnpm check` resolves every variable with no error.
+- [ ] `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` are unique random keys, different from each other. The boot refuses blanks, the scaffold placeholders and identical keys, but it does not estimate strength.
+- [ ] `AUTH_ADMIN_EMAIL` and `AUTH_ADMIN_PASSWORD` are an operator-owned identity, and the seeded password is changed after the first login.
+- [ ] `.envs/` is not committed and is readable only by the app's user; backups and logs that may contain values are protected too.
+- [ ] Secrets come from the environment or a secret store; `process.env` always wins over `.envs/.env.production`.
+
+## Network and ingress
+
+- [ ] TLS terminates at the reverse proxy; HTTP redirects to HTTPS. See [nginx](/tulipes-js/production/nginx/).
+- [ ] `security.trustProxyCidrs` lists exactly the proxy peers (`127.0.0.1/32` for the committed single-ingress template), nothing broader.
+- [ ] The app port is firewalled to loopback (or owned by the platform). A direct client inside the trusted CIDR can state its own `X-Forwarded-For`.
+- [ ] Any extra hop (load balancer, CDN) has its own explicit trust and header policy in nginx and the app.
+- [ ] nginx `client_max_body_size` matches the `security.bodyLimit` setting.
+- [ ] WebSocket upgrades reach Socket.IO (clients are not stuck on polling), and SSE streams arrive promptly through your actual proxy.
+- [ ] `security.corsOrigins` lists the exact browser origins; `"*"` is not combined with `corsCredentials`.
+- [ ] `security.hstsMaxAge` is set (default 180 days) once HTTPS is working.
+
+## Request limits
+
+- [ ] Rate limits are proxy-aware: the limiter uses the same `req.ip` the proxy policy resolves.
+- [ ] `security.rateLimits` quotas suit your clients. Defaults per client per minute: 20 credential POSTs, 120 auth requests, 60 console requests. Clients behind one NAT share a quota.
+- [ ] Every replica uses the same `security.rateLimits.namespace`; unrelated apps on the same Redis database use different ones.
+- [ ] Redis sizing, persistence and eviction are decided. Eviction resets counters; a Redis outage makes limited endpoints answer 503 `RATE_LIMIT_UNAVAILABLE` (fail closed).
+
+## Authentication and sessions
+
+- [ ] Clients coordinate refresh: reusing a refresh token revokes that device's whole family (401), by design. Clients sign in again after a rejection or an uncertain outcome.
+- [ ] Password-change and concurrent-session regressions in the reference tests still pass after you adapt the auth module.
+- [ ] If you move tokens into cookies: CSRF protection, cookie flags and exact-origin checks are your adaptation. See the browser authentication guide in the app's `docs/browser-auth.md`.
+- [ ] `auth.cacheTtlSeconds` (default 60) is acceptable as the worst-case window for a revocation lost during a Redis outage.
+- [ ] An incident response exists for refresh reuse, which is the signal of a stolen token.
+
+## Roles and administration
+
+- [ ] `sysadmin` is held by as few accounts as possible and kept separate from `admin`: it alone writes settings and reads the log stream.
+- [ ] Prefix grants (`users:bo:*`) are reviewed as carefully as `*`. The scope in an id (`bo`, `web`) is a label, not a network boundary.
+- [ ] Administrative modules you do not use are removed, with their grants.
+- [ ] `tulipes roles` and `tulipes routes` match what you intend each role to reach. See [roles and permissions](/tulipes-js/guides/roles-and-permissions/).
+
+## Audits and logs
+
+- [ ] Every settings write lands an audit record in `config_audit_events` before it applies. The app's database user can insert there, and MongoDB acknowledges with majority and journal.
+- [ ] Audit retention, archive and access are decided.
+- [ ] Log redaction is checked for your own fields; logs do not carry tokens or passwords.
+- [ ] The log stream's bounds (four streams per controller, two per account, 60 seconds, 1 MiB) suit your operators; remember they are per process.
+- [ ] `LOG_DIR` has room for 14 rotated files per destination at up to 20 MB each, and a collector reads them if you need central logs.
+
+## Data and recovery
+
+- [ ] The app's database user has least privilege.
+- [ ] Backups run, and a restore has been rehearsed with a known acceptable data loss.
+- [ ] If upgrading an app from 0.4 or earlier, the 0.5 snake_case field rename has run on the data. See [upgrading](/tulipes-js/production/upgrading/).
+- [ ] Failover behaves as expected on your replica set (the recorded run: a primary killed mid-refresh still returned 200, and reuse detection survived the election).
+
+## Dependencies and releases
+
+- [ ] `zod` is `^4.6.6` (GHSA-mrhx-c7xc-m3w5) in the root and every module that lists it.
+- [ ] PM2 is `^7.0.4`, with the app's dependency overrides from the generated manifest kept.
+- [ ] `pnpm audit` is part of your release process; muted advisories have a written reason.
+- [ ] You are on a maintained line (core 0.13.x today). See [upgrading](/tulipes-js/production/upgrading/).
+
+## Load and topology
+
+- [ ] Sustained load has been run against staging at the replica count you plan.
+- [ ] A second backend replica has a Socket.IO adapter or sticky sessions, and bootstraps are idempotent.
+- [ ] Shutdown under load drains requests and jobs within the deadline.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Security model" href="/tulipes-js/production/security-model/" description="Why each control exists and what it leaves to you." />
+  <LinkCard title="nginx" href="/tulipes-js/production/nginx/" description="Proxy trust, TLS and the deploy script." />
+  <LinkCard title="Upgrading" href="/tulipes-js/production/upgrading/" description="Support policy and migration steps." />
+</CardGrid>

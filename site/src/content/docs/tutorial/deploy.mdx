@@ -1,0 +1,218 @@
+---
+title: Ship the bookstore
+description: Configure the bookstore per APP_ENV, check the production environment in CI, run the backend and worker under PM2, and put the nginx template in front.
+sidebar:
+  order: 10
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+The bookstore runs on a laptop. This last chapter takes it to a server: one
+environment per `APP_ENV`, secrets injected rather than written down, both
+processes supervised by PM2, and nginx in front. It is an overview of the
+pieces the production preset gives you; the
+[production section](/tulipes-js/production/deployment/) covers each in depth.
+
+## There is no build
+
+Node 24 runs the TypeScript files directly, so "building for production" is
+installing dependencies and nothing else. On the server:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm sync          # types and .env.example, from the modules
+pnpm typecheck     # optional on the server; run it in CI
+```
+
+The same files you ran in development are what runs in production. `pnpm
+start` is `node app.ts`, and `pnpm worker` is `node worker.ts`.
+
+## One environment per APP_ENV
+
+The mode comes from `APP_ENV` (`development`, `staging`, `production` or
+`test`), deliberately not `NODE_ENV`, which libraries overload. It picks the
+environment file, `.envs/.env.<APP_ENV>`, and code reads it as `ctx.appEnv`.
+
+The generated staging and production files leave every secret blank on
+purpose:
+
+```sh title=".envs/.env.production"
+PORT=3000
+LOG_LEVEL=info
+
+# MONGO_URI=
+# REDIS_URL=
+# JWT_ACCESS_SECRET=
+# JWT_REFRESH_SECRET=
+# AUTH_ADMIN_EMAIL=
+# AUTH_ADMIN_PASSWORD=
+```
+
+Inject them through the process environment (your container platform, a
+systemd unit, a secrets manager). A value in `process.env` always beats the
+file, which beats the declared default.
+
+## Check before you start
+
+`pnpm check` resolves every declared variable for an environment, without
+booting. It is the gate to run in CI and on the server before a restart:
+
+```sh
+APP_ENV=production pnpm check
+```
+
+```txt
+APP_ENV=production — 17 variable(s) resolved:
+  ✔ config.auth.jwtAccessSecret ← JWT_ACCESS_SECRET=•••
+  ✔ config.auth.jwtRefreshSecret ← JWT_REFRESH_SECRET=•••
+  ✔ config.auth.adminEmail ← AUTH_ADMIN_EMAIL=admin@bookstore.test
+  ✔ config.auth.adminPassword ← AUTH_ADMIN_PASSWORD=•••
+  ✔ config.core.port ← PORT=3000
+  ✔ config.core.mongodbUri ← MONGO_URI=mongodb://127.0.0.1:27017/bookstore_prod
+  ✔ config.core.redisUrl ← REDIS_URL=redis://127.0.0.1:6379/5
+  ✔ config.core.logLevel ← LOG_LEVEL=info
+  …
+```
+
+The auth module adds a second line of defense at boot. Outside development it
+refuses the development secrets and admin account the preset generated, and
+identical access and refresh keys. Booting production with the development
+values gives:
+
+```txt
+TulipesBootError: Boot aborted during "bootstrap" — 1 issue(s):
+  ✖ [auth] bootstrap task …/modules/auth/bootstrap/credentials.bootstrap.ts threw: Unsafe production credentials: configure JWT_ACCESS_SECRET, AUTH_ADMIN_PASSWORD, AUTH_ADMIN_EMAIL, JWT_ACCESS_SECRET / JWT_REFRESH_SECRET (use distinct keys)
+```
+
+Outside development, an unexpected error is also answered with an anonymous
+`internal server error`; the real message goes only to the logs.
+
+## Run both processes under PM2
+
+`ecosystem.config.cjs` defines two PM2 apps, the backend and the worker,
+each with a block per environment:
+
+```js title="ecosystem.config.cjs"
+const modes = (processMode) => ({
+  env: { APP_ENV: "development", PROCESS_MODE: processMode },
+  env_staging: { APP_ENV: "staging", PROCESS_MODE: processMode },
+  env_production: { APP_ENV: "production", PROCESS_MODE: processMode },
+});
+
+const common = {
+  cwd: __dirname,
+  interpreter: "node",
+  exec_mode: "fork",
+  instances: 1,
+  autorestart: true,
+  max_memory_restart: "512M",
+  kill_timeout: 10000,
+};
+
+module.exports = {
+  apps: [
+    { ...common, name: "bookstore", script: "app.ts",
+      error_file: "logs/backend-error.log", out_file: "logs/backend-out.log", ...modes("backend") },
+    { ...common, name: "bookstore-worker", script: "worker.ts",
+      error_file: "logs/worker-error.log", out_file: "logs/worker-out.log", ...modes("worker") },
+  ],
+};
+```
+
+Three choices in it matter:
+
+- **`interpreter: "node"`** runs the `.ts` entrypoints directly; there is no
+  loader and nothing to compile.
+- **`exec_mode: "fork"`, one instance.** Socket.IO needs sticky sessions or a
+  Redis adapter before a second backend instance is safe, and bootstrap tasks
+  would run once per instance. Scale out after wiring the adapter.
+- **`kill_timeout: 10000`.** On `SIGTERM` Tulipes stops accepting requests,
+  lets in-flight requests and jobs finish, runs each module's cleanup in
+  reverse order and closes MongoDB and Redis. PM2's default would kill it
+  after 1.6 seconds.
+
+Start both processes in production mode, with the secrets in the environment:
+
+```sh
+pnpm pm2:start:production
+```
+
+```txt
+[PM2] App [bookstore] launched (1 instances)
+[PM2] App [bookstore-worker] launched (1 instances)
+```
+
+`pnpm pm2:status`, `pnpm pm2:logs`, `pnpm pm2:restart` and `pnpm pm2:stop`
+are in the generated scripts. The backend's PM2 output log starts with the
+production banner (an excerpt):
+
+```txt
+  ▲ bookstore  production · backend mode
+
+  ➜  Server      http://localhost:3000  ● listening
+  ➜  Models      mongodb://127.0.0.1:27017/bookstore_prod  ● ready  ·  mongoose
+  ➜  Queues      redis (4 queue(s))  ● ready  ·  4 processor(s) registered  ·  bullmq
+  ➜  Sockets     /users, /books, /hello  ● ready  ·  socket.io
+  ➜  Modules     10 (core*, security*, auth*, users, books, hello, settings, config, agent, agents)  ·  * sys tier
+  ➜  Roles       5 (guest, user, editor, admin, sysadmin)
+```
+
+The app's own logs are separate from PM2's: the core module's logger writes
+JSON lines to `logs/app-backend.<date>.log` and `logs/app-worker.<date>.log`,
+with errors copied to `logs/error-<mode>.<date>.log`.
+
+## Put nginx in front
+
+`nginx/<APP_ENV>.conf` are templates. They proxy to the backend's port, pass
+the Socket.IO upgrade headers, set the body-size limit and keep the Certbot
+challenge path open. `scripts/deploy-nginx.ts` renders the template for the
+current `APP_ENV`, writes it to `/etc/nginx/sites-available/<domain>`, links
+it into `sites-enabled`, runs `nginx -t` and reloads. Preview it anywhere:
+
+```sh
+APP_ENV=production pnpm script scripts/deploy-nginx.ts --dry-run
+```
+
+The domain comes from the core module's `publicDomain` **setting** (not an
+environment variable), so set it through the settings console before
+deploying. The port is the one the backend listens on. Then, on the server:
+
+```sh
+sudo -E APP_ENV=production pnpm script scripts/deploy-nginx.ts
+```
+
+The script boots the app in `script` mode like every other script, so
+MongoDB and Redis must be reachable from where you run it. The rendered
+configuration is HTTP-only, with a TLS block to uncomment once certificates
+exist.
+
+<Aside type="caution">
+Once nginx is in front, tell the security module which proxies to trust with
+its `trustProxyCidrs` setting. Until then it ignores forwarded headers, so
+rate limits and logs see nginx's address instead of the client's. Keep
+nginx's `client_max_body_size` at least as large as the `bodyLimit` setting.
+</Aside>
+
+## Before going live
+
+- Run the [production checklist](/tulipes-js/production/checklist/).
+- Read the [security model](/tulipes-js/production/security-model/): what the
+  starter protects, and what remains your decision.
+- Change the seeded admin's password after the first login.
+- Plan upgrades with `tulipes update` and the
+  [upgrading guide](/tulipes-js/production/upgrading/).
+
+## Where we are
+
+The bookstore is complete: a module with a model, validated CRUD, a public
+and searchable catalogue, an editor role, a background job, a live event,
+tests, generated API documents, and a production setup with PM2 and nginx.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Deploying to production" href="/tulipes-js/production/deployment/" description="The full deployment walkthrough." />
+  <LinkCard title="Running with PM2" href="/tulipes-js/production/pm2/" description="Process supervision, logs and restarts." />
+  <LinkCard title="nginx in front of Tulipes" href="/tulipes-js/production/nginx/" description="The templates, TLS and proxy trust." />
+  <LinkCard title="How Tulipes works" href="/tulipes-js/concepts/architecture/" description="Now that you have built an app, the theory behind it." />
+</CardGrid>

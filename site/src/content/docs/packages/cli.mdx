@@ -1,0 +1,165 @@
+---
+title: "@tulipes/cli"
+description: The tulipes command line — scaffold an app, sync generated types, check the environment, inspect routes and roles, generate specs, migrate and update.
+sidebar:
+  order: 2
+---
+
+import { Aside, Tabs, TabItem, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`@tulipes/cli` installs the `tulipes` command. It scaffolds new apps, keeps
+the generated types in step with your modules, validates the environment
+without starting anything, and inspects an app's routes, roles and agent tools
+without a database. It is a separate package so a deployed app installs
+`@tulipes/core` alone, without templates or tooling.
+
+## When you need it
+
+On a developer machine, to create apps with `tulipes init`, and in every app
+as a dev dependency: generated apps list it in `devDependencies`, so
+`pnpm dev`, `pnpm sync` and `pnpm tulipes new module <name>` always run the
+CLI version that matches the app. In CI, `tulipes env:check` and
+`tulipes spec` need no service. In production you do not need it at all.
+
+## Install
+
+Globally, to scaffold:
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add -g @tulipes/cli
+    tulipes init my-api
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install -g @tulipes/cli
+    tulipes init my-api
+    ```
+  </TabItem>
+</Tabs>
+
+Inside an app, as a dev dependency (already there in a generated app):
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add -D @tulipes/cli
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install -D @tulipes/cli
+    ```
+  </TabItem>
+</Tabs>
+
+## How it plugs in
+
+The CLI is not a provider and joins no boot phase of its own. Every command
+that boots or inspects an app does it through **the app's own**
+`@tulipes/core`, resolved from the app's `package.json`. The core bundled with
+the CLI is only a fallback for a directory with no install. This matters
+because two copies of core would not recognise each other's objects.
+
+Commands run against the app in the current directory and read what core
+reads: `package.json` (provider declarations), `config/app.config.ts`,
+`modules/*/package.json` (manifests and `tulipes.env`), and the module files.
+
+Three commands boot the app **in inspection**: `tulipes routes`,
+`tulipes spec` and `tulipes agent manifest`. Inspection builds every router
+with nothing acquired: no `.env`, no secret and no service is needed, settings
+are their defaults, and a declared provider is a stub that throws if a routes
+file uses it while building. See [inspection](/tulipes-js/concepts/inspection/).
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `tulipes init [dir]` | Scaffold an app. `--minimal` or `--preset minimal` (the default: three modules, no MongoDB or Redis) or `--preset production` (the reference app). `--no-queues` and `--no-sockets` leave a provider out of the production preset. |
+| `tulipes dev [entry]` | Run `sync`, then `node --watch` on the entry (default `app.ts`). |
+| `tulipes sync` | Regenerate `types/tulipes.d.ts` and `.env.example`. |
+| `tulipes env:check` | Resolve every module's `tulipes.env` and show where each value comes from, without booting. |
+| `tulipes config:check` | Load every settings namespace from the store and print it. |
+| `tulipes config:import` | Carry `.envs` values that became settings into the store. `--env`, `--from`, `--dry-run`. |
+| `tulipes routes` | List every endpoint with the roles that reach it. `--scope <scope>`. |
+| `tulipes roles` | List every role, its description, who defined it and its grants. `--role <role>`. |
+| `tulipes spec` | Write an OpenAPI document and/or a Postman collection. `--openapi`, `--postman`, `--url`, `--scope`. Needs [`@tulipes/spec`](/tulipes-js/packages/spec/). |
+| `tulipes agent manifest` | Print every tool the app exposes to agents, as JSON. `--out`, `--role`. |
+| `tulipes new module <name>` | Scaffold a module. `--scope`, `--model`/`--no-model`, `--queues`/`--no-queues`, `--sockets`/`--no-sockets`; each defaults to on when the app declares that provider. |
+| `tulipes migrate 0.11` / `0.12` / `0.13` | Rewrite an app to the next line's layout and contracts. `0.12` takes `--scope` (default `web`). |
+| `tulipes update` | Upgrade the global CLI and, inside an app, every `@tulipes/*` range in the root and module manifests. |
+| `tulipes -v` | Print `cli <version> (core <version>)`, plus `app core <version>` when the app's core differs from the bundled one. |
+
+Each command has its own page under the CLI reference, for example
+[`tulipes init`](/tulipes-js/reference/cli/init/),
+[`tulipes sync`](/tulipes-js/reference/cli/sync/) and
+[`tulipes migrate`](/tulipes-js/reference/cli/migrate/).
+
+### A typical loop
+
+```sh
+tulipes init my-api --preset production
+cd my-api && pnpm install
+pnpm tulipes new module billing   # scaffold a module
+pnpm sync                         # types for its env, settings, models and jobs
+pnpm check                        # tulipes env:check
+pnpm dev                          # sync, then node --watch app.ts
+```
+
+`pnpm check` and `pnpm spec` are scripts the reference app defines in its
+`package.json` (`tulipes env:check` and
+`tulipes spec --openapi docs/openapi.json --postman docs/collection.json`).
+
+### What `sync` generates
+
+`tulipes sync` reads your modules and writes `types/tulipes.d.ts`: each
+module's `ctx.config.<module>` from its settings schema joined with its
+environment values, `ctx.models.get("Name")` typed from each model file, and
+`queues.add()` typed from each queue file's `jobs` export. A wrong model
+name, queue name or payload then fails to compile. It also rewrites
+`.env.example` from every `tulipes.env` block. Run it after you change any of
+those files; `tulipes dev` runs it for you.
+
+### `update`
+
+The `@tulipes/*` packages are released together, so `tulipes update` raises
+core, the CLI, the providers, spec and testing in the app root and in every
+module manifest at once. Raising core alone would leave a provider whose peer
+range refuses the new core. Outside an app it upgrades only the global CLI.
+See [upgrading](/tulipes-js/production/upgrading/).
+
+## Configuration
+
+The CLI has no configuration file. It takes its input from the app. A few
+defaults worth knowing:
+
+- `tulipes spec --url` defaults to `https://<publicDomain>` when the `core`
+  module defines a `publicDomain`, otherwise `http://localhost:<server.port>`
+  (`3000` when none is wired).
+- `tulipes dev` defaults to `app.ts`.
+
+## Version and compatibility
+
+This page describes `@tulipes/cli` **0.4.2**. It requires Node.js
+`>=24.0.0 <25`, depends on `@tulipes/core` from the same release, and takes
+`@tulipes/spec` `^0.4.1` as an optional peer. Generated dependency ranges
+follow the core the CLI bundles.
+
+## Failure modes
+
+- On a Node without native TypeScript, `tulipes dev` refuses with
+  `Node <version> cannot run TypeScript natively — Tulipes apps need Node 24 (or 22.18+)`.
+- `tulipes spec` without the generator exits with code 2 and prints
+  `` `tulipes spec` needs the generator package: pnpm add -D @tulipes/spec ``.
+- `tulipes spec` with no output flag exits with code 2: `nothing to write — name at least one output`.
+- `tulipes migrate` without a version prints
+  `Usage: tulipes migrate 0.11 | tulipes migrate 0.12 [--scope <scope>] | tulipes migrate 0.13`.
+- Commands that boot the app report the same `TulipesBootError` the app would.
+
+<CardGrid>
+  <LinkCard title="Quick start" href="/tulipes-js/start/quick-start/" description="Create and run your first app with tulipes init." />
+  <LinkCard title="Inspection" href="/tulipes-js/concepts/inspection/" description="How routes, spec and agent manifest run with no services." />
+  <LinkCard title="@tulipes/spec" href="/tulipes-js/packages/spec/" description="The OpenAPI and Postman generator behind tulipes spec." />
+</CardGrid>

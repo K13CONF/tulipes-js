@@ -1,0 +1,232 @@
+---
+title: Process modes
+description: How one Tulipes codebase boots as a backend, a worker, a script or an MCP server, what each starts, and how one queues file serves both sides.
+sidebar:
+  order: 5
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+A Tulipes app is one codebase that runs as several processes: an HTTP backend,
+a queue worker, one-off scripts and, since 0.13, an MCP server. They are not
+separate apps sharing some files. Every process runs the same boot phases 1 to
+10 against the same modules, then forks at phase 11 to start, or not start, its
+own thing. A script therefore gets exactly the configuration, permissions and
+models the server has, never an approximation of them.
+
+## The idea
+
+```txt
+              phases 1–10, identical in every process
+  ┌──────────────────────────────────────────────────────┐
+  │ env · graph · config · models · settings · i18n ·    │
+  │ ACL · agent · bootstrap · queues · sockets(backend)  │
+  └──────────────────────────────────────────────────────┘
+          │                 │                  │
+   mode: backend      mode: worker       mode: script
+          │                 │                  │
+  Express + routers   queue consumers    nothing started
+  HTTP server         (provider serve)   caller owns it
+  sockets attach      ≥ 1 or refuse      ├─ scripts/*.ts
+  listen                                 └─ mcp.ts (serveMcp)
+```
+
+The mode comes from `boot({ mode })`, else `PROCESS_MODE`, else `"backend"`
+(`resolveMode()` in `packages/core/src/boot/boot.ts`). Anything else aborts
+before phase 1:
+
+```txt
+PROCESS_MODE "web" is invalid — expected one of: backend, worker, script — "web" was renamed to "backend"
+```
+
+A module reads the mode as `ctx.mode` when it must behave differently per
+process. The reference app's logger is the motivating case: it names its log
+file per mode, so backend and worker never rotate the same file.
+
+## Backend
+
+```ts title="app.ts"
+import { boot } from "@tulipes/core/boot";
+
+await boot({ rootDir: import.meta.dirname, mode: "backend" });
+```
+
+After the shared phases, `startBackend()` creates the Express app and sets
+`ctx.app`, runs every routes file in load order, appends the 404 and error
+handlers, scans every route for its `rai()`, creates the HTTP server, lets
+providers attach to it (Socket.IO binds here, before anyone can connect), and
+listens. `pnpm dev` runs this entry through `tulipes dev`, which regenerates
+types first and restarts on change.
+
+Two options change the backend without changing the mode: `listen: false`
+builds and mounts everything but binds no port, and `inspect: true` runs the
+[inspection boot](/tulipes-js/concepts/inspection/) behind `tulipes routes`.
+
+## Worker
+
+```ts title="worker.ts"
+import { boot } from "@tulipes/core/boot";
+
+// Worker mode refuses to start until at least one module registers a
+// queue processor — a consumer with nothing to consume is a
+// misconfigured deployment, not a valid idle state.
+await boot({ rootDir: import.meta.dirname, mode: "worker" });
+```
+
+No Express app, no HTTP server, no routes. At phase 11 core calls `serve()` on
+every acquired provider that has one; `@tulipes/bullmq` turns each registered
+processor into a consuming BullMQ worker and returns how many it started. If
+the total is zero the boot refuses:
+
+```txt
+worker mode started with zero processors — no module registered queue work
+```
+
+Sockets are not acquired in a worker: `@tulipes/socket.io` declares
+`situations: ["backend"]`, so core skips it and the banner shows
+`not used in worker mode`.
+
+## Script
+
+```ts title="scripts/count-greetings.ts"
+import { join } from "node:path";
+
+import { boot } from "@tulipes/core/boot";
+
+const handle = await boot({ rootDir: join(import.meta.dirname, ".."), mode: "script" });
+
+try {
+  const { models, config } = handle.ctx;
+
+  const greetings = await models!.get("Greeting").find().select("name times_used -_id").lean();
+
+  console.log(`${config.app?.name} — ${greetings.length} greeting(s)\n`);
+  console.table(greetings);
+} finally {
+  await handle.shutdown();
+}
+```
+
+Script mode runs every shared phase, bootstrap and queue registration included,
+then starts nothing and prints no banner. The handle is yours. The reference app
+runs scripts with `pnpm script scripts/count-greetings.ts`, which is plain
+`node`.
+
+<Aside type="caution">
+Always `await handle.shutdown()` in a `finally`. The database and Redis
+connections hold the event loop open, so a script that skips it prints its
+output and then never exits.
+</Aside>
+
+Because bootstraps run in scripts too, a seed that a one-off task should not
+repeat checks the mode itself:
+
+```ts title="modules/hello/bootstrap/seed-greetings.bootstrap.ts (excerpt)"
+export default async function seedGreetings({ models, mode }: DatabaseCtx): Promise<void> {
+  if (mode === "script") return; // a one-off script reads; it does not seed
+  // …
+}
+```
+
+See [Scripts](/tulipes-js/guides/scripts/) for patterns.
+
+## The MCP process
+
+```ts title="mcp.ts"
+import { serveMcp } from "@tulipes/mcp";
+
+await serveMcp({ rootDir: import.meta.dirname });
+```
+
+`serveMcp()` (`packages/mcp/src/serve.ts`) is not a fourth mode. It calls
+`boot({ rootDir, mode: "script" })`, reads `config/mcp.config.ts` to learn the
+transport and how to identify the caller, then serves `ctx.agent`: the MCP
+`tools/list` is the action manifest for the caller's role, and `tools/call` is
+`ctx.agent.invoke()`, which runs the same ACL and scope check a route has. On
+stdio, stdout belongs to the protocol, so anything the app logs is diverted to
+stderr. See [MCP](/tulipes-js/guides/mcp/) and
+[@tulipes/mcp](/tulipes-js/packages/mcp/).
+
+## One queues file, both sides
+
+A queue is declared once, in one file, and serves the producer in the backend
+and the consumer in the worker:
+
+```ts title="modules/hello/queues/hello.queues.ts"
+import type { Ctx } from "@tulipes/core/boot";
+import type { JobSchemas, QueueRegistry } from "@tulipes/bullmq";
+import { z } from "zod/v4";
+
+import { moduleLogger } from "@app/core";
+
+export const jobs = {
+  "hello.count-greeting": z.object({ name: z.string().min(1) }),
+} satisfies JobSchemas;
+
+export default function helloQueues(ctx: Ctx, queues: QueueRegistry): void {
+  const { models } = ctx;
+  const log = moduleLogger(ctx, "hello");
+
+  queues.process("hello.count-greeting", async (job) => {
+    const { name } = job.data;
+    await models!.get("Greeting").updateOne({ name }, { $inc: { times_used: 1 } });
+    log.info({ name }, "counted greeting");
+    return { counted: name };
+  });
+}
+```
+
+What happens to it depends on the mode:
+
+| | backend, script | worker |
+|---|---|---|
+| file runs (phase 10) | yes | yes |
+| `jobs` export defines and validates the queue | yes | yes |
+| `ctx.queues.add(…)` produces | yes | yes |
+| `queues.process(…)` handler | registered, never started | started as a BullMQ worker |
+
+The `QueueManager` comment in `packages/bullmq/src/queue-manager.ts` sums it
+up: "backend → queues produce; processors are registered but never started;
+worker → `startWorkers()` turns every registered processor into a consuming
+BullMQ Worker." See [Queues](/tulipes-js/guides/queues/).
+
+## Running them together
+
+In development, two terminals:
+
+```sh
+pnpm dev       # backend
+pnpm worker    # queue consumer
+```
+
+In production, the reference app's `ecosystem.config.cjs` defines one PM2 app
+per process, each with both `APP_ENV` and `PROCESS_MODE` set explicitly in every
+environment block, so a half-applied environment cannot start the wrong process:
+
+```js title="ecosystem.config.cjs (excerpt)"
+const modes = (processMode) => ({
+  env: { APP_ENV: "development", PROCESS_MODE: processMode },
+  env_staging: { APP_ENV: "staging", PROCESS_MODE: processMode },
+  env_production: { APP_ENV: "production", PROCESS_MODE: processMode },
+});
+```
+
+Things to keep in mind when two processes run against the same services:
+
+- **Bootstraps run in both.** Make them idempotent; two concurrent upserts on a
+  unique index can race, and one of them gets a duplicate-key error.
+- **Fork, not cluster.** The ecosystem file runs one instance of each, because
+  Socket.IO needs sticky sessions or an adapter before a second backend is safe,
+  and every instance would run its bootstraps.
+- **Separate log files.** Name anything a process writes by `ctx.mode`.
+- **Settings stay in step.** A settings write in the backend reaches the worker
+  through the store's watch; see [Configuration](/tulipes-js/concepts/configuration/).
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Background jobs" href="/tulipes-js/tutorial/background-jobs/" description="Add a queue and a worker in the tutorial." />
+  <LinkCard title="Scripts" href="/tulipes-js/guides/scripts/" description="One-off tasks against the real app." />
+  <LinkCard title="PM2" href="/tulipes-js/production/pm2/" description="Running backend and worker in production." />
+  <LinkCard title="The boot pipeline" href="/tulipes-js/concepts/boot-pipeline/" description="The shared phases in detail." />
+</CardGrid>

@@ -1,0 +1,190 @@
+---
+title: AI-assisted development
+description: The AGENTS.md, CLAUDE.md and .claude/skills files tulipes init writes, what each skill teaches, and how to work on an app with Claude Code or other agents.
+sidebar:
+  order: 30
+---
+
+import { Aside, Steps, FileTree, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Tulipes is convention-driven and fail-closed: a route without a `rai()`, a grant
+to an unknown role or a `res.json()` outside the envelope either refuses to boot
+or ships something wrong. A coding agent that writes plain Express will fight the
+framework. So every app `tulipes init` creates comes with written instructions
+for agents: one vendor-neutral `AGENTS.md`, a `CLAUDE.md` that points Claude Code
+at it, and fifteen task-scoped skills in `.claude/skills/`. This page explains
+what they contain and how to use them well.
+
+This is about agents working **on** your code. To let an agent **use** your
+running app, see [agents](/tulipes-js/guides/agents/) and
+[MCP](/tulipes-js/guides/mcp/).
+
+## What init writes
+
+<FileTree>
+- my-app/
+  - AGENTS.md the rules, where things go, boot order, commands
+  - CLAUDE.md points Claude Code at AGENTS.md
+  - .claude/
+    - skills/
+      - tulipes-module/SKILL.md
+      - tulipes-endpoint/SKILL.md
+      - …15 skills in all
+</FileTree>
+
+Both presets get the same three, copied from one source in the CLI package
+(`packages/cli/templates/`). The reference app in the repository carries
+identical copies, and CI checks they match.
+
+## AGENTS.md
+
+`AGENTS.md` is the file every coding agent reads first, whatever its vendor. It
+opens with what Tulipes is and a warning: "Writing plain Express here will fight
+the framework. Read the rule that applies before you write code." Then:
+
+- **Preset scope.** Which modules the minimal and production presets contain, so
+  an agent does not apply an auth example to an app without auth.
+- **Fifteen non-negotiable rules**, each pointing at the skill that covers it in
+  depth. Among them: never read `process.env` (environment values are declared
+  in `tulipes.env` and read at `ctx.config.<module>.<name>`); a feature is a
+  module, not a layer; never call `mongoose.model()`; persisted fields are
+  `snake_case`; every response is `res.respond()` and every failure is thrown;
+  every route declares a RAI first in its chain; validate input with a zod schema
+  on the RAI; user-facing strings are i18n keys; `req.auth` is who is calling;
+  secrets never go on the User model; a new module's namespace goes in both the
+  `admin` and `sysadmin` grants; cross-module imports use package names; agent
+  actions are declared apart from routes; tests live in the module and boot
+  through `@tulipes/testing`.
+- **Where things go**: a table from decision ("a value an operator may change at
+  runtime", "a helper used by two modules") to location.
+- **Boot order**, and why `dependsOn` matters.
+- **Commands**: `pnpm dev`, `pnpm worker`, `pnpm mcp`, `pnpm sync`,
+  `pnpm tulipes routes`, `roles`, `agent manifest`, `pnpm test`, `pnpm check`,
+  `pnpm typecheck`, `tulipes new module`, `tulipes update`.
+- **Verifying your work**: "A change is not done until the app boots." Typecheck,
+  start the app, read the startup banner, and read the whole boot report when it
+  fails.
+
+The rules are the same ones this site teaches. When the docs and `AGENTS.md`
+seem to disagree, the code in your app decides.
+
+## CLAUDE.md
+
+Claude Code reads `CLAUDE.md` automatically. The generated one is a bridge: it
+says the project instructions live in `AGENTS.md`, to read it before writing
+code, and that `.claude/skills/` holds task-scoped guides loaded on demand. Keep
+your project-specific instructions in `AGENTS.md` so every agent gets them; put
+only Claude-specific notes in `CLAUDE.md`.
+
+## The skills
+
+A skill is a markdown file with a `name` and a `description` in its frontmatter.
+Claude Code reads the descriptions and loads a skill's body when a task matches
+it, so the detail costs nothing until it is needed. Other agents can read the
+files directly; they are plain markdown, one contract each.
+
+| Skill | Load it when | What it teaches |
+|---|---|---|
+| `tulipes-module` | adding a feature, or deciding where one belongs | the `tulipes` manifest key, tier, priority, `dependsOn`, workspace wiring |
+| `tulipes-endpoint` | adding or changing an endpoint, a controller or middleware | `rai()` on every route, controller classes, the request pipeline, `lazy()` |
+| `tulipes-response` | writing any response | `res.respond`, the envelope, error codes, `req.page`, `meta.action` |
+| `tulipes-spec` | validating input or generating documents | zod schemas on `rai()`, `folder`, `tulipes spec` |
+| `tulipes-list-query` | a list clients search, filter, sort or group | `listQuery(policy)`, the grammar, `toMongoose` and `runQuery` |
+| `tulipes-model` | adding a model, querying from a route or job, seeding | the `ModelDef` contract, the model store, bootstrap tasks |
+| `tulipes-env-variable` | adding any configuration value | environment values versus settings, precedence, what the console shows |
+| `tulipes-config` | adding a runtime-editable setting | `defineConfig`, `onChange`, restart-tagged fields, the console, the audit |
+| `tulipes-settings` | streaming logs, or placing a value | the settings module's log stream, the two stores |
+| `tulipes-i18n` | writing any user-facing string, or time zones | `req.t`, `ctx.t`, namespaces, missing-key files, `req.timezone`, `ctx.time` |
+| `tulipes-permissions` | roles, permissions, public routes, scopes | `module:scope:resource[:extra]`, `module.acl.ts`, wildcards, the guest role |
+| `tulipes-queue` | background work, or a slow handler | the queues contract, producing jobs, the backend and worker split |
+| `tulipes-socket` | realtime features | the sockets contract and namespace ownership |
+| `tulipes-agent-tool` | offering a module to AI agents | `agent/*.agent.ts`, `ctx.agent`, the manifest, the door, `pnpm mcp` |
+| `tulipes-boot-errors` | a failed boot, or something not picked up | each boot phase's messages, with cause and fix |
+
+Each skill follows the same shape: the idea in a paragraph, a working example in
+the app's own idioms, the rules, and the gotchas that produce a boot error or a
+wrong response.
+
+## Working with Claude Code
+
+<Steps>
+
+1. Open the app's root (the directory with `AGENTS.md`) in Claude Code. It reads
+   `CLAUDE.md`, which sends it to `AGENTS.md`.
+
+2. Ask for the change in the app's vocabulary, naming the module and the surface
+   when you know them: "add a `bo` endpoint to the users module that lists
+   soft-deleted users, admin only". The matching skills (`tulipes-endpoint`,
+   `tulipes-permissions`) load on their own.
+
+3. Have it verify the way `AGENTS.md` asks, and check the result yourself:
+
+   ```sh
+   pnpm sync          # after env, settings, model or job-schema changes
+   pnpm typecheck
+   pnpm tulipes routes --scope bo   # the new id, and who reaches it
+   pnpm test
+   pnpm dev           # the banner lists what was added
+   ```
+
+4. Review the diff for the things the boot cannot catch: a grant broader than it
+   needs (`*`, a prefix wildcard), a missing namespace in the `admin` or
+   `sysadmin` grant, an action without `readOnly` that changes nothing (or with
+   it, while it writes), a string that should be an i18n key.
+
+</Steps>
+
+`tulipes routes`, `tulipes roles`, `tulipes spec` and `tulipes agent manifest`
+run without services or secrets, so an agent can run them freely in any
+environment to check its own work against the ACL.
+
+<Aside type="tip">
+When a boot fails, give the agent the whole report. Tulipes collects every
+problem in a phase before stopping (`Boot aborted during "acl" — 3 issue(s):`),
+and the `tulipes-boot-errors` skill maps each message to its fix. Fixing them one
+restart at a time wastes both your time and the agent's.
+</Aside>
+
+## Working with other agents
+
+Any agent that reads `AGENTS.md` gets the rules; many look for it by that name. Skills
+are not loaded automatically outside Claude Code, but `AGENTS.md` names the skill
+for each rule (`→ skill tulipes-endpoint`), and the files are at a predictable
+path: `.claude/skills/<name>/SKILL.md`. Tell the agent to read the named file
+before a task of that kind, or paste it into the conversation.
+
+## Keeping the guides yours
+
+The files are part of your repository. Edit them:
+
+- **Add your own rules** to `AGENTS.md`: naming conventions, the modules that
+  exist and what each owns, deployment specifics.
+- **Write skills for your own contracts.** A billing module with its own rules
+  deserves `.claude/skills/billing/SKILL.md`, with a description that says when to
+  load it.
+- **Keep them true.** A skill that describes code you have changed misleads every
+  agent that loads it.
+
+`tulipes update` and `tulipes migrate` do not rewrite these files. After an
+upgrade, generate a scratch app with the new CLI
+(`tulipes init /tmp/scratch --preset production`) and compare its `AGENTS.md` and
+`.claude/skills/` with yours, taking what changed. The
+[upgrading guide](/tulipes-js/production/upgrading/) lists each release's changes.
+
+## Agents inside the app
+
+Rule 14 of `AGENTS.md` draws the line between agents that write your code and
+agents your app serves: a feature module never calls a model itself. It declares
+actions in `agent/<module>.agent.ts`, and the production preset's `agents` module
+is the one place that runs Claude against them, as the person who asked, with a
+scoped credential. Declaring good actions is the subject of the
+`tulipes-agent-tool` skill and the [agents guide](/tulipes-js/guides/agents/).
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Project structure" href="/tulipes-js/start/project-structure/" description="The layout AGENTS.md describes." />
+  <LinkCard title="Agents" href="/tulipes-js/guides/agents/" description="Offer the app's actions to AI agents." />
+  <LinkCard title="MCP" href="/tulipes-js/guides/mcp/" description="Let Claude Code call those actions." />
+  <LinkCard title="Boot pipeline" href="/tulipes-js/concepts/boot-pipeline/" description="The phases a boot report names." />
+</CardGrid>

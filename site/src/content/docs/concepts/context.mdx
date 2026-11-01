@@ -1,0 +1,218 @@
+---
+title: The context object
+description: Every field of ctx and the boot phase that fills it, how Ctx, RuntimeCtx, BackendCtx and DatabaseCtx differ, and how each kind of module file receives it.
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`ctx` is the one object every module-authored function receives. It is how a
+module reaches its settings, the ACL, the models, the queues, the translator and
+the HTTP app without importing a singleton from anywhere. There is one per
+boot, created in `packages/core/src/boot/boot.ts` and filled phase by phase, so
+what is on it depends on *when* you look. This page lists every field, the moment
+it becomes usable, and the type that tells you which ones you can rely on.
+
+## The idea
+
+Tulipes never asks a module to import global state. A routes file is
+`(ctx) => Router`, a bootstrap is `(ctx) => cleanup`, a queue file is
+`(ctx, queues) => void`. Everything the framework built is handed in. That makes
+modules testable (pass a stub context) and keeps two boots in one process, as a
+test suite does, fully separate.
+
+The catch is time. The context object exists from the end of phase 3, but most
+of its fields are filled later. The TypeScript types encode this: a field that
+can be missing is optional on `Ctx` and required on the narrower types handed to
+code that only runs after it is filled.
+
+## Every field, and when it is there
+
+```txt
+ phase   3   4   5   6   7   8   9  10  11
+ mode    ●───────────────────────────────▶
+ appEnv  ●───────────────────────────────▶
+ modules ●───────────────────────────────▶
+ signal  ●───────────────────────────────▶
+ rai     ●───────────────────────────────▶
+ routes  ●─────────────────────────── filled after scan
+ config  {}  seed  settings+env ──────────▶
+ settings●───────── loaded ───────────────▶
+ t, i18n ●─────────── resources ──────────▶
+ time    ●─────────── settled ────────────▶
+ models          ●───────────────────────▶ (provider)
+ acl                         ●───────────▶
+ agent                       ●───────────▶
+ queues                                  ●▶ (provider)
+ sockets                                 ●▶ (backend)
+ app                                       ● (backend)
+```
+
+| Field | Type | Available from | Notes |
+|---|---|---|---|
+| `mode` | `"backend" \| "worker" \| "script"` | creation | which process this is |
+| `appEnv` | `"development" \| "staging" \| "production" \| "test"` | creation | from `APP_ENV`, never `NODE_ENV` |
+| `modules` | `readonly ModuleManifest[]` | creation | every module in load order |
+| `config` | `GlobalConfig` | phase 4 (seed), phase 6 (modules) | settings live, env values read-only |
+| `settings` | `SettingsApi` | phase 6 | write and describe settings |
+| `signal` | `AbortSignal` | creation | aborts when shutdown begins |
+| `rai` | `(info) => RequestHandler` | creation | declares and gates a route |
+| `routes` | `RouteRegistry` | creation; `all()` filled after the route scan | `mount()`, `setAccessChecker()`, `find(id)` |
+| `t` | `(namespace, locale?) => TFunction` | phase 7 | translator without a request |
+| `i18n` | i18next instance | phase 7 | for anything `t` does not cover |
+| `time` | zone-aware helpers | phase 7 | `ctx.time.zone`, `ctx.time.in(zone, locale)` |
+| `models` | `ModelsCapability` | phase 5 | only with a models provider |
+| `acl` | `Acl` | phase 8 | `can()`, `role()`, `rolesFor()` |
+| `agent` | `AgentRegistry` | phase 8 | every declared agent action |
+| `queues` | `QueuesCapability` | phase 10 | only with a queues provider |
+| `sockets` | `SocketsCapability` | phase 10 | backend only, with a sockets provider |
+| `app` | `Express` | phase 11 | backend only |
+
+A few fields deserve a closer look.
+
+**`config`** starts as `{}`. Phase 4 merges what `config/app.config.ts` returns
+(`api`, `server`, `pagination`, `i18n`…). Phase 6 assigns one namespace per
+module that declares settings, and phase 6b defines each module's environment
+values on the same namespace as read-only getters. The namespace objects are
+then kept live: a settings write replaces the values *in place*, so code that
+holds `ctx.config.hello` sees the change. Read a value where you use it, not
+once at boot. See [Configuration](/tulipes-js/concepts/configuration/).
+
+**`time`** is a getter-backed view. It is built before phase 7 settles the zone,
+yet a module that kept a reference to `ctx.time` still reads the settled zone,
+because `zone` is a getter.
+
+**`models`, `queues`, `sockets`** are empty interfaces in core. The provider
+packages augment them (`@tulipes/mongoose` adds `get()`), and `tulipes sync`
+types the names. Core only knows the slot exists.
+
+**`signal`** aborts at the very start of shutdown, before the HTTP server stops
+accepting. A server-sent-events handler ends its response on it; a poller stops
+its loop. See [The boot pipeline](/tulipes-js/concepts/boot-pipeline/).
+
+## The four context types
+
+`packages/core/src/boot/contracts.ts` defines the context in layers:
+
+```ts title="packages/core/src/boot/contracts.ts (excerpt)"
+/** Runtime infrastructure is optional, even after its initialization phase. */
+export interface RuntimeCtx extends Ctx {
+  acl: Acl;
+  agent: AgentRegistry;
+}
+
+/** Context passed to route factories in the backend branch. */
+export interface BackendCtx extends RuntimeCtx {
+  mode: "backend";
+  app: Express;
+}
+
+/** A bootstrap in a module that owns models may assert the capability is there. */
+export interface DatabaseCtx extends RuntimeCtx {
+  models: ModelsCapability;
+}
+```
+
+| Type | Guarantees | Handed to |
+|---|---|---|
+| `Ctx` | the base: everything optional that a phase fills later | queue and socket files, `onChange`, controllers (by convention) |
+| `RuntimeCtx` | `acl` and `agent` are set | bootstraps, agent action handlers |
+| `BackendCtx` | plus `mode: "backend"` and `app` | routes files |
+| `DatabaseCtx` | plus `models` | a bootstrap that declares it owns models |
+
+`RuntimeCtx` does **not** make `models` or `queues` required. They exist only
+when the app declared a provider, and that is a runtime fact the type system
+cannot see. Two helpers turn it into a checked fact:
+
+```ts title="modules/hello/helpers/greetings.ts"
+import { requireModels, type Ctx } from "@tulipes/core/boot";
+
+export function findGreetings(ctx: Ctx, { skip = 0, limit = 20 } = {}) {
+  const Greeting = requireModels(ctx).get("Greeting");
+  return Promise.all([
+    Greeting.find().select("name message times_used -_id").skip(skip).limit(limit).lean(),
+    Greeting.countDocuments(),
+  ]);
+}
+```
+
+Without a provider, `requireModels()` throws:
+`This module requires a database model store — no "models" provider is declared in package.json ("tulipes.providers.models")`.
+`requireQueues()` does the same for queues.
+
+## How modules receive it
+
+| Where you write | Signature | Context |
+|---|---|---|
+| `routes/*.routes.ts` | `(ctx) => Router \| void` | `BackendCtx` |
+| a controller | `new Controller(ctx)` from the routes file | whatever the routes file passes |
+| `bootstrap/*.bootstrap.ts` | `(ctx) => cleanup \| void` | `RuntimeCtx` |
+| `queues/*.queues.ts` | `(ctx, queues) => void` | `Ctx` (from `@tulipes/bullmq`) |
+| `sockets/*.sockets.ts` | `(ctx, sockets) => void` | `Ctx` (from `@tulipes/socket.io`) |
+| `agent/*.agent.ts` actions | `handler(ctx, input, actor)` | `RuntimeCtx` |
+| `module.config.ts` | `onChange(next, ctx)` | `Ctx` |
+| `config/app.config.ts` | `(env, { appEnv, mode })` | no ctx: it runs before there is config |
+| a script | `const { ctx } = await boot(…)` | the handle's `ctx` |
+
+### Routes and controllers: keep ctx, read late
+
+A routes file runs once, at boot. A handler runs per request. The rule that
+follows is the one the reference app's controllers apply: the constructor
+keeps `ctx`, the handler reads from it.
+
+```ts title="modules/hello/controllers/web/hello.greetings.controllers.ts (excerpt)"
+export class HelloGreetingsController {
+  readonly #ctx: Ctx;
+
+  constructor(ctx: Ctx) {
+    this.#ctx = ctx;
+  }
+
+  use(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const name = String(req.params.name);
+      const greeting = await requireModels(this.#ctx).get("Greeting").findOne({ name }).lean();
+      if (!greeting) throw new HttpError(404, "noSuchGreeting", { vars: { name } });
+
+      await requireQueues(this.#ctx).add("hello.count-greeting", "count", { name });
+      res.respond({ status: 202, data: { name, queued: true } });
+    };
+  }
+}
+```
+
+Reading `ctx.config` in the handler picks up a settings change without a
+restart. Touching `ctx.models` in the handler, not in the constructor, keeps the
+routes file buildable under [inspection](/tulipes-js/concepts/inspection/), where
+`ctx.models` is a stub that throws.
+
+### Inside a request: `req` beats `ctx`
+
+`rai()` binds per-request helpers that are better than their `ctx` equivalents
+inside a handler: `req.t` is bound to the declaring module's namespace and the
+caller's locale, `req.time` to the caller's zone, `req.page` to the clamped
+pagination, and `req.auth` to the caller. Use `ctx.t(namespace, locale)` and
+`ctx.time.in(zone)` only where there is no request: a queue processor, a
+bootstrap, a script.
+
+```ts
+const t = ctx.t("users", recipient.locale);           // a job, no request
+ctx.time.in(user.timezone, user.locale).format(invoice.due_at);
+```
+
+<Aside type="caution">
+`config/app.config.ts` receives `env`, not `ctx`. It runs in phase 4, before
+any module settings exist, and its job is to wire environment values into the
+keys core and the providers read (`server.port`, `mongoose.uri`,
+`bullmq.redisUrl`).
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="The boot pipeline" href="/tulipes-js/concepts/boot-pipeline/" description="The phases that fill each field." />
+  <LinkCard title="Configuration" href="/tulipes-js/concepts/configuration/" description="What ctx.config holds and how it stays live." />
+  <LinkCard title="Routes and controllers" href="/tulipes-js/guides/routes-and-controllers/" description="Writing handlers against ctx." />
+  <LinkCard title="Testing" href="/tulipes-js/guides/testing/" description="Booting a context in a test." />
+</CardGrid>

@@ -1,0 +1,201 @@
+---
+title: "@tulipes/bullmq"
+description: The BullMQ queues provider — one queues file per module for both sides, typed job payloads, cron schedulers, and a worker process that drains cleanly.
+sidebar:
+  order: 4
+---
+
+import { Aside, Tabs, TabItem, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`@tulipes/bullmq` gives a Tulipes app background jobs on Redis through
+BullMQ. A module describes its queues once, in `queues/*.queues.ts`; every
+process registers them, the backend produces into them, and the worker
+process consumes them. Core installs neither BullMQ nor ioredis, so an app
+without background work never pays for them.
+
+## When you need it
+
+When a request should hand off slow or retryable work (emails, counters,
+imports), or when something must run on a schedule. The production preset
+includes it unless you scaffold with `tulipes init --preset production --no-queues`.
+It needs a Redis server.
+
+## Install
+
+`bullmq` (`^6.3.16`) and `ioredis` (`^5`) are this package's own
+dependencies; the app never imports BullMQ directly.
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add @tulipes/bullmq
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install @tulipes/bullmq
+    ```
+  </TabItem>
+</Tabs>
+
+## How it plugs in
+
+### Declare and wire
+
+```json title="package.json"
+{ "tulipes": { "providers": { "queues": "@tulipes/bullmq" } } }
+```
+
+```ts title="config/app.config.ts"
+bullmq: {
+  redisUrl: env.core.redisUrl,
+},
+```
+
+`env.core.redisUrl` is `REDIS_URL`, which the reference app's `core` module
+declares as a required `url`. A `queues/` folder requires the capability
+automatically; a module that only produces into another module's queue
+declares `"tulipes": { "requires": ["queues"] }`.
+
+### Boot phases and processes
+
+| Phase | Backend | Worker | Script |
+|---|---|---|---|
+| 10 queues, sockets | every `queues/*.queues.ts` runs: queues defined, processors registered | same | same |
+| 11 fork | producers only; processors never start | one BullMQ `Worker` per registered processor | nothing starts |
+| shutdown, drain | | workers close, finishing active jobs | |
+| shutdown, dispose | queues and connections close in reverse provider order | same | same |
+
+The provider is acquired after bootstrap, so a queues file sees the full
+context: settings, ACL and models. The worker refuses to start with
+`worker mode started with zero processors — no module registered queue work`
+if nothing registered a processor, because an idle worker is a
+misconfiguration.
+
+During shutdown, `drain()` runs alongside the HTTP drain while producers stay
+usable, so a module's cleanup may still enqueue. If the deadline passes,
+connections are force-disconnected.
+
+## A queues file
+
+One file describes both sides. The `jobs` export declares each queue's
+payload: it defines the queue, validates every `add()`, and is what
+`tulipes sync` types `job.data` and the producer's payload from.
+
+```ts title="modules/hello/queues/hello.queues.ts"
+import type { Ctx } from "@tulipes/core/boot";
+import type { JobSchemas, QueueRegistry } from "@tulipes/bullmq";
+import { z } from "zod/v4";
+
+export const jobs = {
+  "hello.count-greeting": z.object({ name: z.string().min(1) }),
+} satisfies JobSchemas;
+
+export default function helloQueues(ctx: Ctx, queues: QueueRegistry): void {
+  const { models } = ctx;
+
+  queues.process("hello.count-greeting", async (job) => {
+    // Jobs retry: pass ids and re-read state rather than shipping documents.
+    const { name } = job.data;
+    await models!.get("Greeting").updateOne({ name }, { $inc: { times_used: 1 } });
+    return { counted: name };
+  });
+}
+```
+
+`QueueRegistry` has two methods:
+
+- `define(name, options?)` creates a queue with BullMQ `QueueOptions`. A name
+  in `jobs` is defined for you, so call it only for a queue without a schema
+  or with options.
+- `process(name, handler, options?)` registers the processor, with optional
+  BullMQ `WorkerOptions` such as `concurrency`.
+
+Queue names are lowercase kebab-case with at most one `.` namespace:
+`hello.count-greeting`. BullMQ reserves `:` as its Redis separator.
+
+### Producing jobs
+
+```ts title="modules/hello/controllers/web/hello.greetings.controllers.ts"
+await requireQueues(this.#ctx).add("hello.count-greeting", "count", { name });
+```
+
+`add(queue, jobName, data, options?)` validates `data` against the queue's
+schema before enqueueing it, so a bad payload fails where the caller is, not
+in the worker. `options` are BullMQ `JobsOptions` (`attempts`, `backoff`,
+`delay`…).
+
+### Recurring jobs
+
+A recurring job is a BullMQ job scheduler, keyed by an id so calling it on
+every boot updates the schedule rather than adding a second one. A cron
+`pattern` fires in `config.timezone.default` unless it names its own `tz`:
+
+```ts title="a bootstrap file"
+await ctx.queues!.schedule("billing.send-invoice", "nightly",
+  { pattern: "0 2 * * *" },                       // 02:00 in the app's zone
+  { name: "send", data: { invoiceId: "all" } });  // validated by the queue's schema
+
+await ctx.queues!.unschedule("billing.send-invoice", "nightly");
+```
+
+`add()` takes no `repeat` option: BullMQ 6 removed it.
+
+## Configuration
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `config.bullmq.redisUrl` | string | none, required | `redis://[user:pass@]host:port[/db]` |
+| `config.timezone.default` | string | `"UTC"` | Zone for cron patterns without a `tz` (set in `config/app.config.ts`) |
+
+Every queue gets its own ioredis connection and every worker a dedicated
+blocking connection, all with `maxRetriesPerRequest: null` as BullMQ
+requires. They are never shared with the app's own Redis clients (the cache
+or the rate limiter).
+
+## Main exports
+
+| Export | Use |
+|---|---|
+| `QueueRegistry` | The second argument of a queues file: `define`, `process` |
+| `JobSchemas` | `satisfies` type for the `jobs` export |
+| `QueueManager` | What `ctx.queues` is: `add`, `schedule`, `unschedule`, `queue(name)`, `names()`, `processorCount`, `workerCount` |
+| `KnownJobs`, `JobData`, `JobsOf` | Types `tulipes sync` fills in |
+| `BullmqConfig`, `readRedisUrl`, `initQueues` | The pieces the provider is built from |
+| default export, `provider` | The provider object core imports |
+
+`ctx.queues.queue(name)` returns the underlying BullMQ `Queue` for anything
+the facade does not cover. The full list is in the
+[bullmq API reference](/tulipes-js/reference/api/bullmq/).
+
+## Version and compatibility
+
+This page describes `@tulipes/bullmq` **0.3.0**: Node.js `>=24.0.0 <25`,
+peer `@tulipes/core ^0.13.0`, BullMQ 6. 0.3.0 moved from BullMQ 5 to 6:
+`add(…, { repeat })` became `schedule()`, `utc: true` became `tz: "UTC"`,
+and `currentDate` and `nthDayOfWeek` are no longer accepted. See
+[upgrading](/tulipes-js/production/upgrading/).
+
+## Failure modes
+
+| When | Message |
+|---|---|
+| Declared but not wired | `provider "bullmq" is selected but config.bullmq.redisUrl is not set — wire it in config/app.config.ts …` |
+| Bad default export | `<file> must default-export a queues function (ctx, queues) => void` |
+| Invalid name | `queue name "Hello:Count" is invalid — lowercase kebab-case, optional "." namespace` |
+| Defined twice | `queue "hello.count-greeting" is already defined by module "hello"` |
+| Two processors | `queue "…" already has a processor from module "…"` |
+| Processor without a queue | `processor registered for undefined queue "…" — call define() first` (worker) |
+| Unknown queue at runtime | `Queue "…" was never defined by any module (known: …)` |
+| Bad payload | `Job data for queue "hello.count-greeting" is invalid — name: …` |
+| Old repeat option | `queues.add("…", "…") no longer takes a repeat option — use queues.schedule(queue, schedulerId, repeat, job)` |
+
+Redis errors after boot are logged to stderr as
+`[tulipes/bullmq] queue "<name>": <message>` rather than crashing the process;
+BullMQ retries the job.
+
+<CardGrid>
+  <LinkCard title="Background jobs" href="/tulipes-js/tutorial/background-jobs/" description="The tutorial chapter that adds a queue and a worker." />
+  <LinkCard title="Queues guide" href="/tulipes-js/guides/queues/" description="Retries, schedules, idempotency and the worker process." />
+  <LinkCard title="Process modes" href="/tulipes-js/concepts/process-modes/" description="Backend, worker and script from one codebase." />
+</CardGrid>

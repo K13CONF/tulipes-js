@@ -1,0 +1,225 @@
+---
+title: Installation
+description: Install Node 24, pnpm 10 and the tulipes CLI, scaffold an app with the minimal or production preset, set up your editor, and keep it current.
+sidebar:
+  order: 2
+---
+
+import { Aside, Steps, Tabs, TabItem, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Tulipes is two kinds of install: the `tulipes` command line, which you put on
+your PATH once to scaffold apps, and the framework packages each app depends
+on. This page sets up the first, explains what `tulipes init` generates with
+each preset, and shows how to keep both up to date.
+
+## Requirements
+
+| Tool | Version | When |
+|---|---|---|
+| Node.js | 24.x (generated apps declare `"node": ">=24.0.0 <25"`) | always |
+| pnpm | 10 (apps pin `packageManager: "pnpm@10.28.0"`) | always; modules are pnpm workspace packages |
+| MongoDB | 8 is what CI tests | only when the app declares the models provider (the production preset does) |
+| Redis | 7 is what CI tests | only when the app declares the queues provider or uses Redis itself (the production preset does, for queues, its cache and its rate limiter) |
+
+Node 24 runs TypeScript files directly by stripping types, so there is no
+build step and no loader: `node app.ts` is how an app starts. Other Node lines
+and Windows are not claimed as supported.
+
+## Install the CLI
+
+<Steps>
+
+1. Install pnpm, once per machine, if you do not have it:
+
+   ```sh
+   npm install -g pnpm
+   ```
+
+2. Install the CLI globally:
+
+   ```sh
+   npm install -g @tulipes/cli
+   ```
+
+3. Check the version:
+
+   ```sh
+   tulipes -v
+   ```
+
+</Steps>
+
+The global CLI is only needed to scaffold. Every generated app also lists
+`@tulipes/cli` in its own `devDependencies`, so inside an app `pnpm dev`,
+`pnpm sync` and `pnpm tulipes <command>` always run the CLI version that
+matches the app, not whatever is on your PATH. The examples in these docs use
+the app-local form (`pnpm tulipes routes`) for that reason.
+
+## Create an app
+
+`tulipes init` copies a template into a new, empty directory. It refuses a
+directory that already holds anything other than `.git`:
+
+```txt
+refusing to init: /home/me/my-api is not empty
+```
+
+`init` connects to nothing: it writes files and prints the next commands.
+Then install the dependencies inside the new folder.
+
+<Tabs>
+  <TabItem label="Minimal (default)">
+
+```sh
+tulipes init my-api          # same as --minimal or --preset minimal
+cd my-api
+pnpm install
+pnpm dev
+```
+
+  </TabItem>
+  <TabItem label="Production">
+
+```sh
+tulipes init my-api --preset production
+cd my-api
+pnpm install
+pnpm dev                     # needs MongoDB and Redis, see below
+```
+
+  </TabItem>
+</Tabs>
+
+### The minimal preset
+
+A small API that needs no MongoDB, Redis or credentials. It is the right
+start for learning the contracts or for a service with no database.
+
+- `modules/core` (sys tier) declares `PORT` and defines the single `guest` role.
+- `modules/security` (sys tier) disables `x-powered-by`, mounts helmet and
+  `express.json()` with a 100 kB limit.
+- `modules/hello` serves `GET /api/v1/hello` and `GET /health`, both public.
+- `modules/agent` serves the modules' agent actions over HTTP (experimental).
+- `tests/app.test.ts`, `vitest.config.ts`, `tsconfig.json`, `mcp.ts`,
+  `config/app.config.ts`, `config/mcp.config.ts`.
+- `AGENTS.md`, `CLAUDE.md` and `.claude/skills/` for coding agents.
+
+### The production preset
+
+A complete application you own and edit. It is the reference app the
+framework is developed against, copied with your app's name.
+
+- `modules/core` (sys): infrastructure variables (`MONGO_URI`, `REDIS_URL`,
+  `LOG_*`), shared helpers exported as `@app/core`: a cache, a logger, the
+  list-query language and Mongoose base plugins (snake_case timestamps, soft delete).
+- `modules/security` (sys): helmet, fail-closed CORS, request logging, body
+  limits, proxy trust and rate limits.
+- `modules/auth` (sys): JWT access and refresh tokens, sessions, API tokens,
+  the role vocabulary (`guest`, `user`, `admin`, `sysadmin`) and a seeded admin.
+- `modules/users`, `modules/settings`, `modules/config`: accounts, the log
+  stream and the settings console.
+- `modules/hello`: a worked example of every module contract.
+- `modules/agent` and `modules/agents`: the agent door and an agent runner (experimental).
+- `worker.ts`, `mcp.ts`, `scripts/`, `nginx/`, `ecosystem.config.cjs`,
+  `.envs/` and a test suite.
+
+The [project structure](/tulipes-js/start/project-structure/) page tours
+every file.
+
+### Leaving providers out
+
+Two flags compose the production preset without one of its providers:
+
+```sh
+tulipes init my-api --preset production --no-queues
+tulipes init my-api --preset production --no-sockets
+tulipes init my-api --preset production --no-queues --no-sockets
+```
+
+A feature left out takes its files, its provider declaration, its
+dependencies and its scripts with it. With `--no-queues` there is no
+`worker.ts`, no `pnpm worker` script, no `queues/` files and no
+`@tulipes/bullmq`; the `agents` module also goes, since it runs as a queue
+job. With `--no-sockets` the `sockets/` files and `@tulipes/socket.io` go.
+The root `package.json` then declares only what is left:
+
+```json title="package.json"
+{
+  "tulipes": {
+    "providers": {
+      "models": "@tulipes/mongoose",
+      "settings": "@tulipes/mongoose/settings"
+    }
+  }
+}
+```
+
+## Services for the production preset
+
+The generated `.envs/.env.development` expects MongoDB on
+`127.0.0.1:27017` and Redis on `127.0.0.1:6379`. Docker is the quickest way
+to get both:
+
+```sh
+docker run -d --name tulipes-mongo -p 27017:27017 mongo:8
+docker run -d --name tulipes-redis -p 6379:6379 redis:7
+```
+
+Without them, the boot stops at the providers phase and names the address it
+could not reach. The tutorial's [first chapter](/tulipes-js/tutorial/create-the-app/)
+shows the full report.
+
+## Editor setup
+
+There is nothing Tulipes-specific to install in your editor. Three things
+make it work well:
+
+- **Use the workspace TypeScript.** Apps depend on `typescript` 7 and their
+  `tsconfig.json` enables `allowImportingTsExtensions` and
+  `rewriteRelativeImportExtensions`, which is why imports end in `.ts`. Point
+  your editor at the version in `node_modules` rather than a bundled one.
+- **Run `pnpm sync` before you open files.** It writes `types/tulipes.d.ts`;
+  until it exists, `ctx.config.<module>` and `ctx.models.get()` are untyped.
+  `pnpm dev` runs it for you on every start.
+- **Point your coding agent at `AGENTS.md`.** It holds the non-negotiable
+  rules of the app. Claude Code reads `CLAUDE.md`, which points there, and
+  loads the skills in `.claude/skills/` on demand.
+
+## Keep it up to date
+
+```sh
+tulipes update
+```
+
+`update` handles two separate installs. Outside an app it upgrades only the
+global CLI, reinstalling it into the prefix it already lives in (which is
+what makes it work under nvm). Inside an app it also rewrites every
+`@tulipes/*` range in the root `package.json` and in every module's
+`package.json`, to the latest published version of each, then runs the
+install. Its output has this form (versions and files depend on your app):
+
+```txt
+  update package.json: @tulipes/core ^0.13.2, @tulipes/cli ^0.4.2, …
+  update modules/users/package.json: @tulipes/core ^0.13.2, …
+
+app: 0.12.1 → 0.13.2
+
+running pnpm install…
+```
+
+When the jump crosses a minor version it prints a link to `MIGRATING.md`,
+because a 0.x minor may change contracts. Read the
+[upgrading guide](/tulipes-js/production/upgrading/) before you run the app.
+
+<Aside type="caution">
+Upgrade the global CLI and the app together. Updating only one leaves you
+generating code for one framework version while running another.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Quick start" href="/tulipes-js/start/quick-start/" description="Boot the minimal app and make a first change." />
+  <LinkCard title="Project structure" href="/tulipes-js/start/project-structure/" description="Every file in a production app, explained." />
+  <LinkCard title="tulipes init reference" href="/tulipes-js/reference/cli/init/" description="Every option of the command." />
+</CardGrid>

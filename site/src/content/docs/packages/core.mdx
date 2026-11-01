@@ -1,0 +1,284 @@
+---
+title: "@tulipes/core"
+description: The Tulipes runtime package — module discovery, the boot pipeline, settings, ACL, the response envelope and the provider seam, with its subpath exports.
+sidebar:
+  order: 1
+---
+
+import { Aside, Tabs, TabItem, FileTree, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`@tulipes/core` is the runtime every Tulipes app depends on. It finds your
+modules, orders them, validates everything it can at boot, and turns them into
+a running Express 5 server, a queue worker or a one-shot script. It owns no
+infrastructure: databases, queues and sockets come from provider packages you
+select, so an app that needs none installs none.
+
+## What it adds
+
+- **Module discovery and ordering.** Every folder under `modules/` with a
+  `package.json` is a module. Its `tulipes` key gives a tier (`sys` or `app`),
+  a priority and dependencies, and core sorts them into one load order.
+- **The boot pipeline.** Twelve phases, each failing with an aggregate report
+  before the next begins. See [the boot pipeline](/tulipes-js/concepts/boot-pipeline/).
+- **Environment values and settings.** Each module declares its variables in
+  `tulipes.env` and its settings in `module.config.ts`; both land on
+  `ctx.config.<module>`.
+- **RAI ids and the ACL.** Every route declares `ctx.rai({ id, name })`; the id
+  is the permission, and `module.acl.ts` grants it to roles.
+- **One response shape.** `res.respond()`, `HttpError` and `ValidationError`
+  produce the `{ success, data, errors, meta }` envelope.
+- **Translations and time zones.** One i18next namespace per module, and a
+  negotiated zone on every request.
+- **The agent surface.** Actions declared in `agent/*.agent.ts`, gated by the
+  same ACL.
+- **The provider seam.** The contract `@tulipes/mongoose`, `@tulipes/bullmq`
+  and `@tulipes/socket.io` implement.
+
+Core mounts no middleware of its own. Your `sys` modules own the head of the
+request pipeline; core adds only the fail-closed tail, a 404 for anything
+unrouted and a terminal error handler.
+
+## When you need it
+
+Always. Every app and every other `@tulipes/*` package depends on it. The
+command line is a separate package ([`@tulipes/cli`](/tulipes-js/packages/cli/))
+so a deployed app installs the runtime without templates or tooling.
+
+## Install
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add @tulipes/core
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install @tulipes/core
+    ```
+  </TabItem>
+</Tabs>
+
+`tulipes init` already lists it. Core's own dependencies are Express 5,
+zod (`^3.25 || ^4.6.6`), i18next, i18next-fs-backend, dotenv and colorette.
+
+## How it plugs in
+
+Core reads three things from the app root: `package.json` (the provider
+declarations), `config/app.config.ts` (the app-wide config seed) and
+`modules/`. In each module it resolves conventional paths without importing
+anything until the phase that needs them:
+
+<FileTree>
+- modules/hello/
+  - package.json             manifest: tulipes.tier, priority, dependsOn, env, requires
+  - module.config.ts         settings schema (phase 4, loaded in phase 6)
+  - module.acl.ts            grants (phase 8)
+  - agent/hello.agent.ts     agent actions (phase 8)
+  - bootstrap/seed-greetings.bootstrap.ts   phase 9, every mode
+  - routes/web/hello.greetings.routes.ts    backend only, phase 11
+  - controllers/web/hello.greetings.controllers.ts
+  - i18n/en.json             translations (phase 7)
+  - models/ queues/ sockets/ read by providers, not by core
+</FileTree>
+
+A module's manifest is validated strictly, so a typo such as `dependson` stops
+the boot instead of being ignored:
+
+```json title="modules/hello/package.json"
+{
+  "name": "@app/hello",
+  "tulipes": {
+    "tier": "app",
+    "priority": 100,
+    "dependsOn": ["auth", "core"]
+  },
+  "dependencies": { "@app/auth": "workspace:*", "@app/core": "workspace:*" }
+}
+```
+
+`tier` defaults to `app` and `priority` to `100` (lower loads earlier).
+`dependsOn` is also derived from the module's `@app/*` dependencies, since a
+module that imports another must load after it; write it by hand only to order
+modules without an import. `requires` lists provider capabilities (`models`,
+`queues`, `sockets`) a module uses without owning files that imply them.
+
+## Configuration
+
+Core itself reads only a few keys of `ctx.config`, all set by
+`config/app.config.ts`:
+
+| Key | Default | What core does with it |
+|---|---|---|
+| `server.port` | `3000` | The backend's listening port. `boot({ port })` wins over it. Must be an integer from 0 to 65535. |
+| `api.prefix` | `""` | Every router a routes file returns is mounted under it. |
+| `pagination.defaultLimit` / `maxLimit` | `20` / `100` | Bounds `req.page` applies to `?per_page`. |
+| `i18n.defaultLocale` / `supportedLocales` | `"en"` / `[defaultLocale]` | Locales served; `defaultLocale` must be in the list. |
+| `timezone.default` / `supported` / `applyToProcess` | `"UTC"` / any zone / `true` once a `timezone` block exists | The app's zone, the zones a request may ask for, and whether `process.env.TZ` follows. |
+
+The reference app's seed shows all of them:
+
+```ts title="config/app.config.ts"
+const appConfig = ((env) => ({
+  app: { name: "tulipes-example" },
+  api: { prefix: "/api/v1" },
+  server: { port: env.core.port },
+  i18n: { defaultLocale: "en", supportedLocales: ["en", "fr"] },
+  timezone: { default: "UTC" },
+  pagination: { defaultLimit: 20, maxLimit: 100, maxTimeMs: 5_000 },
+  // mongoose: … and bullmq: … are read by the providers
+})) satisfies AppConfigFn;
+
+export default appConfig;
+```
+
+Two process-level variables are read directly by core: `APP_ENV`
+(`development`, `staging`, `production` or `test`; default `development`),
+which picks `.envs/.env.<APP_ENV>`, and `PROCESS_MODE` (`backend`, `worker`
+or `script`; default `backend`). Everything else is declared by a module.
+The full lists are in [configuration](/tulipes-js/reference/topics/configuration/)
+and [environment variables](/tulipes-js/reference/topics/environment-variables/).
+
+## Main exports
+
+Core is split into subpaths so each import says what it is for. The root
+`@tulipes/core` re-exports all of them.
+
+### `@tulipes/core/boot`
+
+`boot(options)` runs the pipeline and returns a handle with `ctx`, `app`,
+`server`, `providers` and `shutdown()`. An entry file is one call:
+
+```ts title="app.ts"
+import { boot } from "@tulipes/core/boot";
+
+await boot({ rootDir: import.meta.dirname, mode: "backend" });
+```
+
+`worker.ts` is the same line with `mode: "worker"`.
+
+Useful options: `mode`, `appEnv`, `port` (a test passes `0`),
+`handleSignals: false`, `listen: false`, `inspect: true` (build routes with
+nothing acquired, which is what `tulipes routes` and `tulipes spec` do) and
+`shutdownTimeoutMs` (default `10000`, the whole graceful deadline).
+
+The same subpath carries the types every module file is written against:
+`Ctx`, `BackendCtx` (routes files), `RuntimeCtx` and `DatabaseCtx`
+(bootstraps), `AppConfigFn`, and the provider contract (`Provider`,
+`AcquiredResource`). `requireModels(ctx)` and `requireQueues(ctx)` return the
+capability or throw when the app declares no provider for it:
+
+```ts title="modules/hello/controllers/web/hello.greetings.controllers.ts"
+import type { RequestHandler } from "express";
+import { requireModels, requireQueues, type Ctx } from "@tulipes/core/boot";
+import { HttpError } from "@tulipes/core/http";
+
+export class HelloGreetingsController {
+  readonly #ctx: Ctx;
+  constructor(ctx: Ctx) { this.#ctx = ctx; }
+
+  use(): RequestHandler {
+    return async (req, res) => {
+      const name = String(req.params.name);
+      const greeting = await requireModels(this.#ctx).get("Greeting").findOne({ name }).lean();
+      if (!greeting) throw new HttpError(404, "noSuchGreeting", { vars: { name } });
+      await requireQueues(this.#ctx).add("hello.count-greeting", "count", { name });
+      res.respond({ status: 202, data: { name, queued: true } });
+    };
+  }
+}
+```
+
+### `@tulipes/core/http`
+
+`HttpError(status, key, options)` and `ValidationError(issues)` are the two
+errors a handler throws. The key is an i18n key in the module's namespace;
+`options` takes `field`, `code`, `defaultMessage`, `vars` and `details`.
+`notFoundHandler` and `errorHandler` are the tail core mounts. The subpath
+also exports the envelope types, `parsePage`, `RouteRegistry` and the `Auth`,
+`AuthUser` and `AuthSession` interfaces an auth module augments. See
+[responses and errors](/tulipes-js/concepts/responses-and-errors/).
+
+A routes file returns a plain Router with paths relative to `api.prefix`:
+
+```ts title="modules/hello/routes/web/hello.greetings.routes.ts"
+import { Router } from "express";
+import type { BackendCtx } from "@tulipes/core/boot";
+
+import { HelloGreetingsController } from "../../controllers/web/hello.greetings.controllers.ts";
+
+export default function greetingsRoutes(ctx: BackendCtx): Router {
+  const { rai } = ctx;
+  const router = Router();
+  const greetings = new HelloGreetingsController(ctx);
+
+  router.get("/greetings", rai({
+    id: "hello:web:greetings",
+    name: "List greetings",
+  }), greetings.list());
+
+  return router;
+}
+```
+
+### Other subpaths
+
+| Subpath | What you import from it |
+|---|---|
+| `@tulipes/core/config` | `defineConfig` for `module.config.ts`; the `GlobalConfig` and `EnvValues` interfaces |
+| `@tulipes/core/acl` | `AclBuilder` (the `module.acl.ts` argument), `Acl` |
+| `@tulipes/core/agent` | `defineAgent`, `action`, `AgentRegistry` |
+| `@tulipes/core/i18n` | `I18n`, `resolveLocale`, the `TFunction` type |
+| `@tulipes/core/time` | `Timezones`, `formatDate`, `startOfDay`, `zonedTimeToUtc` and the `req.timezone`/`req.time` typings |
+| `@tulipes/core/errors` | `BootReport`, `TulipesBootError` |
+| `@tulipes/core/modules` | `discoverModules`, `sortModules`, the manifest types (for tooling) |
+
+`@tulipes/core/db`, `/queues` and `/sockets` remain only as migration
+markers: the Mongoose, BullMQ and Socket.IO code moved to the provider
+packages in 0.10. Declaring `"models": "@tulipes/core/db"` produces a boot
+error naming `@tulipes/mongoose` as the fix.
+
+The generated signatures are in the
+[core API reference](/tulipes-js/reference/api/core/).
+
+## Version and compatibility
+
+This page describes `@tulipes/core` **0.13.2**, on Node.js `>=24.0.0 <25`.
+0.13 is the current stable line: a breaking change waits for 0.14. Provider
+packages declare a peer range on core (`^0.13.0` for every package except
+`@tulipes/socket.io`, which accepts `^0.11.0 || ^0.12.0 || ^0.13.0`). Core
+runs your TypeScript files natively through Node's type stripping, so there
+is no loader in production. See [upgrading](/tulipes-js/production/upgrading/).
+
+## Failure modes
+
+Every boot failure is a `TulipesBootError` listing every issue of the phase
+that failed:
+
+```txt
+TulipesBootError: Boot aborted during "environment" — 3 issue(s):
+  ✖ [core]  required variable "MONGO_URI" has no value
+  ✖ [users] variable "USERS_MAX_SESSIONS": "abc" is not a number
+  ✖ [users] required variable "USERS_ADMIN_EMAIL" has no value
+```
+
+Some messages you will meet:
+
+- `PROCESS_MODE "web" is invalid — expected one of: backend, worker, script — "web" was renamed to "backend"`
+- `config.server.port must be a whole number between 0 and 65535, got "abc"`
+- `worker mode started with zero processors — no module registered queue work`
+- `requires capability "models" (has models/ files) but the app's package.json declares no provider for it`
+  (phase `providers`, before any module file is imported)
+- A route mounted without a `rai()` refuses the boot in phase `routes`.
+
+At runtime, `requireModels(ctx)` without a declared provider throws
+`This module requires a database model store — no "models" provider is declared in package.json ("tulipes.providers.models")`.
+Unexpected errors in a handler become an anonymous `500`; the real message is
+shown only when `APP_ENV` is `development`.
+
+<CardGrid>
+  <LinkCard title="The boot pipeline" href="/tulipes-js/concepts/boot-pipeline/" description="Every phase in order and what each one refuses." />
+  <LinkCard title="Modules" href="/tulipes-js/concepts/modules/" description="Tiers, priority, dependencies and the conventional files." />
+  <LinkCard title="Providers" href="/tulipes-js/concepts/providers/" description="How core acquires, serves, drains and disposes infrastructure." />
+  <LinkCard title="@tulipes/cli" href="/tulipes-js/packages/cli/" description="The command line that scaffolds and inspects the app." />
+</CardGrid>

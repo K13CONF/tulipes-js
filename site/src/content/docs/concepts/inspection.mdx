@@ -1,0 +1,196 @@
+---
+title: Inspection boots
+description: How tulipes routes, spec, roles and agent manifest boot the app with nothing acquired, what is stubbed, and the rule of building routers from ctx with lazy().
+sidebar:
+  order: 9
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`tulipes routes` lists every endpoint with the roles that reach it, and
+`tulipes spec` writes OpenAPI and Postman documents, without a `.env`, a secret,
+a database or Redis. They do it by running the real boot in **inspection**: the
+same loaders and the same route scan as a serving process, with nothing
+acquired. What the tools describe is therefore exactly what the app mounts. The
+price is one rule for routes files, which this page explains.
+
+## The idea
+
+Generating documents from a separate description of the API would let the two
+drift. Booting the full app to read its routes would need every service and
+secret. Inspection takes the middle path: run every phase that only *declares*
+things (modules, config schemas, translations, ACL, agent actions, routers),
+and replace everything that *acquires* things with a stand-in that refuses to be
+used.
+
+```txt
+                       serving boot          inspection boot
+ 1  environment        resolved, validated   lenient: nothing required,
+                                             invalid → absent
+ 3b providers          declarations checked  declarations checked
+ 4  declarations       ✔                     ✔
+ 5  models, settings   acquired              stubs; nothing imported
+ 6  settings           the store             each schema's defaults (memory)
+ 6b env values         getters → values      getters → throw
+ 7  translations, time ✔ (process TZ set)    ✔ (process TZ untouched)
+ 8  ACL, agent         ✔                     ✔
+ 9  bootstrap          runs                  skipped
+ 10 queues, sockets    acquired              skipped (stubs from 5)
+ 11 backend            routes, scan, listen  routes, scan; no attach, no listen
+ 12 banner             printed               not printed
+```
+
+## Who runs it
+
+Programmatically, inspection is one option on `boot()`:
+
+```ts
+import { boot } from "@tulipes/core/boot";
+
+const handle = await boot({ rootDir, mode: "backend", inspect: true, handleSignals: false });
+handle.ctx.routes.all();   // every declared endpoint: id, method, path, module
+handle.ctx.acl.rolesFor("hello:web:greetings");
+await handle.shutdown();
+```
+
+It requires backend mode (`inspection requires backend mode` otherwise). The
+CLI wraps exactly this call in `inspectApp()` (`packages/cli/src/inspection.ts`),
+used by `tulipes routes`, `tulipes spec`, `tulipes roles` and
+`tulipes agent manifest`. The reference app's tests use it too, comparing the
+inspection's documents with the running app's.
+
+## What is stubbed, exactly
+
+**Environment values.** `resolveEnv()` runs with `lenient: true`: a required
+variable that is missing is not an error, and an invalid value is simply absent.
+The `.envs` file is still read, so `config/app.config.ts` wires real values
+where they exist; it receives `undefined` for the rest. In phase 6b each value's
+getter is replaced by one that throws:
+
+```txt
+config.auth.jwtAccessSecret is an environment value, not available during inspection — read it inside a handler or a bootstrap, not while building routes
+```
+
+**Providers.** Nothing is resolved or imported, so an uninstalled provider
+package is not an inspection error. Each *declared* capability other than
+`settings` becomes a `Proxy` (`inspectionStub()` in
+`packages/core/src/boot/providers.ts`) whose every property access throws:
+
+```txt
+ctx.models is not available during inspection — use it inside a handler or a bootstrap, not while building routes
+```
+
+`requireModels(ctx)` still returns the stub, because the app did declare the
+provider; only *using* it is the mistake. An undeclared capability stays
+`undefined`, as in a serving boot. The stub is not a thenable, so awaiting it by
+accident does not hang.
+
+**Settings.** A `MemorySettingsStore` labelled `defaults (inspection)`:
+every namespace reads as never written, so `ctx.config.<module>` holds each
+schema's defaults.
+
+**Checks that still run.** Module discovery and the graph, provider
+requirements (`requires`, and `models/`, `queues/`, `sockets/` folders),
+`module.config.ts` declarations, translations, the ACL, agent declarations, and
+the full route scan. A route without `rai()` fails inspection exactly as it
+fails a serving boot, which makes `tulipes routes` a cheap CI gate.
+
+## The rule: build from ctx, use infrastructure in handlers
+
+A routes file runs once while the app is built; its handlers run per request.
+Under inspection the first happens and the second never does. So:
+
+- **Build the router from the context.** `rai`, `routes`, the controllers'
+  constructors, schemas: all fine.
+- **Use infrastructure in handlers.** `ctx.models`, `ctx.queues`, and every
+  environment value are read when a request arrives.
+
+```ts title="Wrong: reads a model while building" del={4}
+export default function greetingsRoutes(ctx: BackendCtx): Router {
+  const router = Router();
+  const { rai } = ctx;
+  const Greeting = ctx.models!.get("Greeting");   // throws under inspection
+  router.get("/greetings", rai({ id: "hello:web:greetings" }), async (_req, res) => {
+    res.respond({ data: await Greeting.find().lean() });
+  });
+  return router;
+}
+```
+
+```ts title="Right: the controller keeps ctx, the handler reads it" ins={4}
+list(): RequestHandler {
+  return async (req: Request, res: Response) => {
+    const { per_page, skip } = req.page;
+    const [greetings, total_items] = await findGreetings(this.#ctx, { skip, limit: per_page });
+    res.respond({ data: greetings, meta: { total_items } });
+  };
+}
+```
+
+The failure names the module and the cause, so the fix is obvious:
+
+```txt
+TulipesBootError: Boot aborted during "routes" — 1 issue(s):
+  ✖ [hello] routes function threw: ctx.models is not available during inspection — use it inside a handler or a bootstrap, not while building routes
+```
+
+This is the right outcome rather than a limitation: a routes file that needs a
+database to *build* has coupled the shape of the API to a service.
+
+## Global middleware that needs a value: `lazy()`
+
+Global middleware is mounted while a sys module's routes file runs, which is
+building time. When it needs an environment value or opens a client, build it on
+its first request instead. The reference app's core module ships a three-line
+helper for this:
+
+```ts title="modules/core/helpers/lazy.ts"
+import type { RequestHandler } from "express";
+
+export function lazy(build: () => RequestHandler): RequestHandler {
+  let handler: RequestHandler | undefined;
+  return (req, res, next) => (handler ??= build())(req, res, next);
+}
+```
+
+It is how the auth module configures passport, which reads the signing keys:
+
+```ts title="modules/auth/routes/web.auth.routes.ts (excerpt)"
+import { lazy } from "@app/core";
+
+export default function authRoutes(ctx: BackendCtx): void {
+  const { app } = ctx;
+
+  app.use(lazy(() => {
+    configurePassport(ctx);
+    return passport.initialize();
+  }));
+  app.use(lazy(() => authenticate(ctx)));
+  // …
+}
+```
+
+Under inspection no request ever arrives, so `build` never runs and neither the
+secret nor Redis is touched.
+
+<Aside type="note">
+`lazy()` is application code exported from `@app/core` in the reference app and
+the production preset, not part of `@tulipes/core`. Copy it into your own sys
+module if your app does not have it.
+</Aside>
+
+## Custom access checkers
+
+A checker installed with `ctx.routes.setAccessChecker()` decides at request
+time, which inspection cannot see. Routes behind one are reported as having a
+dynamic policy: `tulipes routes` and the generated documents make no static
+role or public-access claim for them.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="OpenAPI and Postman" href="/tulipes-js/guides/openapi-and-postman/" description="Generate documents from the inspection." />
+  <LinkCard title="API docs in the tutorial" href="/tulipes-js/tutorial/api-docs/" description="Run tulipes spec on the bookstore." />
+  <LinkCard title="@tulipes/spec" href="/tulipes-js/packages/spec/" description="The spec generator package." />
+  <LinkCard title="The context" href="/tulipes-js/concepts/context/" description="Which fields are stubs, and when." />
+</CardGrid>

@@ -1,0 +1,317 @@
+---
+title: Security middleware
+description: The security module's helmet, fail-closed CORS, request logs, body limit, Redis rate limits and proxy trust, why core mounts none of it, and how to tune each.
+sidebar:
+  order: 23
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Core mounts no middleware. It guarantees only the fail-closed tail of the
+pipeline: a 404 envelope for anything unrouted and a terminal error handler. The
+head of the pipeline, security headers, CORS, request logs, the body parser,
+rate limits and proxy trust, belongs to your app, in a sys-tier module you can
+read and change. Both presets scaffold it as `modules/security`. This page walks
+through what it mounts, the settings that tune each piece, and how to change it.
+
+## Why core mounts nothing
+
+A framework that installs helmet and CORS for you makes choices you cannot see
+and cannot easily undo: which origins, which headers, which body limit, whether
+`X-Forwarded-For` is trusted. Each of those is deployment policy. Tulipes keeps
+them in generated application code, with the reasoning written next to each
+line, and lets the module order put them first:
+
+- The security module is `tier: "sys"`, `priority: 10`. Sys modules load before
+  app modules and lower priority first, so its routes file runs after the core
+  module's (priority 0) and before auth's (20).
+- What a sys module mounts on `ctx.app` in its routes file runs on every request
+  of every later module. That is the global middleware slot.
+
+```txt
+request
+  -> core       X-Request-Id
+  -> security   trust proxy, helmet, CORS, pino-http,
+                rate limits (/auth, /config, /settings), express.json
+  -> auth       passport, req.auth
+  -> feature routes (rai() first)
+  -> core tail  404 ROUTE_NOT_FOUND, error handler
+```
+
+## The routes file
+
+```ts title="modules/security/routes/security.routes.ts"
+export default function securityRoutes(ctx: BackendCtx): void {
+  const { app, config } = ctx;
+  const prefix = String(config.api?.prefix ?? "");
+  const security = () => config.security!;
+
+  app.set("trust proxy", trustedProxies(security().trustProxyCidrs));
+  app.use((req, res, next) => helmet(helmetOptions(security()))(req, res, next));
+  app.use((req, res, next) => cors(corsOptions(security()))(req, res, next));
+  app.use(lazy(() => pinoHttp({
+    logger: logger(ctx),
+    customLogLevel: (_req, res, err) =>
+      err || res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
+    genReqId: (_req, res) => String(res.getHeader("X-Request-Id") ?? ""),
+    serializers: {
+      req: (req: { method: string; url: string }) => ({ method: req.method, url: req.url }),
+      res: (res: { statusCode: number }) => ({ status: res.statusCode }),
+    },
+  })));
+  app.use(`${prefix}/auth`, (req, res, next) => configuredRateLimits(ctx).auth(req, res, next));
+  app.use([`${prefix}/config`, `${prefix}/settings`], (req, res, next) => configuredRateLimits(ctx).config(req, res, next));
+  app.use((req, res, next) => express.json({ limit: security().bodyLimit })(req, res, next));
+}
+```
+
+Three patterns repeat in it:
+
+- **Settings are read live.** Helmet, CORS and the body parser are rebuilt from
+  `ctx.config.security` on each request. That is cheap, and a value written
+  through the console applies on the next request, on every replica.
+- **What needs a client is built on first use.** `lazy()` from `@app/core`
+  builds the request logger on its first request, because the logger reads the
+  core module's environment values, which an
+  [inspection boot](/tulipes-js/concepts/inspection/) refuses. The rate limiter
+  opens its Redis client on first use too.
+- **The order is the security.** Rate limits run before `express.json`, so a
+  flood of credential POSTs is refused before any body is parsed, and before
+  passport runs.
+
+The minimal preset's security module is three lines: `app.disable("x-powered-by")`,
+default `helmet()` and `express.json({ limit: "100kb" })`, with no settings, CORS,
+logging or rate limits. Everything below describes the production preset; the
+minimal one grows into it by copying from the reference app.
+
+## The settings
+
+Everything here is a setting, not an environment variable: none of it is secret
+and none of it is needed before the settings store answers. Operators change it
+through `PATCH /config/security`, and the schema refuses a value the middleware
+could not be built from, so a bad write never lands.
+
+```ts title="modules/security/module.config.ts (abridged)"
+export default defineConfig({
+  schema: z.object({
+    passwordRounds: z.number().int().min(4).max(31).default(12),
+    bodyLimit: z.string().regex(/^\d+(\.\d+)?\s*(b|kb|mb|gb)?$/i).default("1mb"),
+    trustProxyCidrs: z.string().default("").refine(/* parses */),
+    corsOrigins: z.string().default(""),
+    corsCredentials: z.boolean().default(false),
+    hstsMaxAge: z.number().int().min(0).default(15_552_000),
+    rateLimits: z.object({
+      namespace: z.string().regex(/^[a-zA-Z0-9:_-]{1,100}$/).default("tulipes"),
+      windowMs: z.number().int().min(1).max(2_147_483_647).default(60_000),
+      auth: z.number().int().min(1).max(2_147_483_647).default(20),
+      session: z.number().int().min(1).max(2_147_483_647).default(120),
+      config: z.number().int().min(1).max(2_147_483_647).default(60),
+    }).default({ namespace: "tulipes", windowMs: 60_000, auth: 20, session: 120, config: 60 }),
+  }).refine(/* corsOrigins "*" cannot be combined with corsCredentials */),
+
+  onChange(next, ctx) {
+    ctx.app?.set("trust proxy", trustedProxies(next.trustProxyCidrs));
+    rebuildRateLimits(ctx, next.rateLimits);
+  },
+});
+```
+
+| Setting | Default | Used by |
+|---|---|---|
+| `passwordRounds` | `12` | the auth module's bcrypt cost for new hashes |
+| `bodyLimit` | `"1mb"` | `express.json({ limit })` |
+| `trustProxyCidrs` | `""` | Express `trust proxy` |
+| `corsOrigins` | `""` | the `cors` package |
+| `corsCredentials` | `false` | `Access-Control-Allow-Credentials` |
+| `hstsMaxAge` | `15552000` (180 days) | helmet's `Strict-Transport-Security`; `0` disables it |
+| `rateLimits.*` | see above | the Redis fixed-window limiter |
+
+`onChange` runs in every replica when the namespace is written, and rebuilds the
+two pieces that hold state: the proxy policy (an Express app setting) and the
+limiter (a Redis client). See [settings](/tulipes-js/guides/settings/) for how
+writes reach every process.
+
+## Security headers: helmet
+
+`helmetOptions()` in `modules/security/helpers/hardening.ts` tunes helmet for an
+API that serves JSON and nothing else:
+
+```ts title="modules/security/helpers/hardening.ts"
+return {
+  // An API serves no active content: deny every resource type outright,
+  // which defuses any HTML-ish response a bug might produce.
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: { "default-src": ["'none'"], "frame-ancestors": ["'none'"] },
+  },
+  hsts: maxAge > 0 ? { maxAge, includeSubDomains: true } : false,
+  // Helmet defaults to SAMEORIGIN; an API is never framed at all.
+  frameguard: { action: "deny" },
+  originAgentCluster: false,
+  crossOriginEmbedderPolicy: false,
+};
+```
+
+Browsers honour HSTS only over HTTPS, so it is inert in local development.
+Setting `hstsMaxAge` to `0` turns the header off deliberately. If your app also
+serves HTML (an admin page, API docs), loosen `contentSecurityPolicy` for those
+routes in that module's own router rather than for the whole app.
+
+## CORS, fail-closed
+
+CORS decides which browser origins may **read** responses. It does not reject
+requests and it does not authenticate anything.
+
+| `corsOrigins` | Effect |
+|---|---|
+| `""` (default) | no cross-origin response access: same-origin only |
+| `"https://console.example.com,https://app.example.com"` | exactly these origins, scheme and port included |
+| `"*"` | any origin; reserve it for intentionally public APIs |
+
+`corsCredentials: true` only emits `Access-Control-Allow-Credentials`. It does
+not read cookies or add CSRF checks, and the starter's auth never reads cookies
+at all (see [bearer tokens, not cookies](/tulipes-js/guides/authentication/#bearer-tokens-not-cookies)).
+A browser sending an explicit `Authorization` header does not need it. The schema
+refuses `"*"` with credentials, because browsers reject that combination:
+
+```txt
+corsOrigins "*" cannot be combined with corsCredentials — list the origins explicitly
+```
+
+Remember that a disallowed origin can still send some requests, and command-line
+clients ignore CORS entirely. The ACL is what protects an endpoint.
+
+## Request logging: pino-http
+
+Every request is logged through the app's logger (`logger(ctx)` from
+`@app/core`), at `info` for success, `warn` for 4xx and `error` for 5xx or a
+thrown error. The serializers keep only the method, the URL and the status: no
+headers, so no `Authorization` value ever reaches a log file. The request id is
+the `X-Request-Id` header the core module set, so a log line and a client's
+response can be matched. See [logging](/tulipes-js/guides/logging/) for where the
+lines go.
+
+## The body-size limit
+
+`express.json({ limit: bodyLimit })` is the only body parser the app mounts. A
+body over the limit answers 413 with the envelope, and a non-JSON content type is
+not parsed (the auth routes, for one, do not accept form bodies). Keep nginx's
+`client_max_body_size` at least as large as `bodyLimit`, or the proxy refuses
+first; the committed [nginx templates](/tulipes-js/production/nginx/) set
+`client_max_body_size 1m`, matching the default.
+
+A module that needs a different parser for one route (a webhook that verifies a
+raw body, an upload) mounts it on its own router, before the handler.
+
+## Rate limiting
+
+Fixed-window counters in Redis, atomic through one Lua script, shared by every
+replica that uses the same namespace and environment:
+
+| Policy | Applies to | Default per client per window |
+|---|---|---|
+| `session` | every request under `<prefix>/auth` | 120 |
+| `auth` | `POST` to `/auth/login`, `/auth/register`, `/auth/password` combined | 20 |
+| `config` | every request under `<prefix>/config` and `<prefix>/settings` | 60 |
+
+The window is `rateLimits.windowMs` (60 seconds). Keys are
+`tulipes:rate:<namespace>:<APP_ENV>:<policy>:<sha256 of the client address>`; IPv4
+mapped addresses become IPv4 and IPv6 addresses are grouped by /56.
+
+Over the limit:
+
+```txt
+HTTP/1.1 429 Too Many Requests
+Retry-After: 37
+```
+
+```json
+{ "success": false, "data": null, "errors": [{ "field": null, "message": "Too many requests; try again later", "code": "TOO_MANY_REQUESTS" }], "meta": {} }
+```
+
+Rejected requests do not extend the window. If Redis is unreachable or slow
+(one-second connect and command bounds), the limiter **fails closed** with 503
+`RATE_LIMIT_UNAVAILABLE` ("Request limits are unavailable; try again later")
+rather than letting traffic through unmetered. The limiter's connection belongs
+to the security module: `bootstrap/rate-limit.bootstrap.ts` returns its close as
+the bootstrap cleanup, so shutdown releases it.
+
+Limits to know: clients behind one NAT share a quota, fixed windows allow a burst
+at the boundary, exhausting the auth quota also delays logout, and IP quotas are
+not account lockout. The S08f section of the
+[security model](/tulipes-js/production/security-model/) lists them.
+
+### Limiting another route
+
+The limiter is a plain function of options. To protect another path, build one
+with `createRateLimits()` and mount its `config` handler, or add a policy to the
+helper. A minimal sketch in the security routes file:
+
+```ts title="modules/security/routes/security.routes.ts" ins={1}
+app.use(`${prefix}/exports`, (req, res, next) => configuredRateLimits(ctx).config(req, res, next));
+```
+
+This shares the `config` quota. A separate quota means adding a setting to
+`rateLimits` and a `limit("exports", …)` line in `createRateLimits()` in
+`helpers/rate-limit.ts`.
+
+## Proxy trust and client IPs
+
+`req.ip` is what sessions record, what the settings audit stores and what the
+rate limiter counts by. It is only the client's address when Express knows which
+peers are trusted proxies.
+
+| `trustProxyCidrs` | `req.ip` is |
+|---|---|
+| `""` (default) | the socket peer; `X-Forwarded-For`, `-Host` and `-Proto` are ignored |
+| `"127.0.0.1/32"` | for a request from 127.0.0.1, the nearest untrusted address in `X-Forwarded-For` |
+
+`trustedProxies()` in `helpers/proxy.ts` accepts only explicit IPv4 or IPv6
+addresses and CIDRs with a nonzero prefix length. Booleans, hop counts, named
+aliases such as `loopback`, empty entries and invalid addresses are refused:
+
+```txt
+TRUST_PROXY_CIDRS must be empty or a comma-separated list of IP addresses/CIDRs with nonzero prefix lengths
+```
+
+The committed nginx templates assume one ingress proxy on the same host. They
+overwrite `X-Forwarded-For` with `$remote_addr`, so for that topology set
+`trustProxyCidrs` to `127.0.0.1/32` and keep the backend port unreachable from
+outside: a client that reaches the port directly from loopback gains the trust.
+Behind more hops (a cloud load balancer in front of nginx), list every real proxy
+peer and make sure each one builds the header correctly. S08e in the
+[security model](/tulipes-js/production/security-model/) records the policy and
+the ingress evidence.
+
+<Aside type="danger">
+Trusting a broad network (`0.0.0.0/0`, a whole VPC) lets any client in it choose
+its own `req.ip`, which defeats the rate limits and poisons session and audit
+records.
+</Aside>
+
+## Customizing
+
+The module is yours. Common changes:
+
+- **Add a middleware for every request.** Mount it in this routes file, at the
+  position the order needs. A middleware that reads an environment value or opens
+  a client goes through `lazy()`.
+- **Add a middleware for one feature.** Put it on that module's own `Router`, not
+  here.
+- **Make a value tunable.** Add a field to `module.config.ts` with a default and a
+  `.describe()`, read it through `ctx.config.security` in the middleware, and run
+  `pnpm sync` so it is typed.
+- **Replace a package.** Swap `helmet` or `cors` in `package.json` and the
+  helpers; nothing else in the app depends on them.
+
+Never move this into `app.ts`: the entrypoint stays three lines, and global
+middleware belongs to a sys-tier module, where the load order places it.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Authentication" href="/tulipes-js/guides/authentication/" description="The auth module that runs right after this one." />
+  <LinkCard title="nginx" href="/tulipes-js/production/nginx/" description="The ingress templates these settings are written for." />
+  <LinkCard title="Production checklist" href="/tulipes-js/production/checklist/" description="Proxy trust, CORS and limits before going live." />
+  <LinkCard title="Settings" href="/tulipes-js/guides/settings/" description="How a settings write reaches every replica." />
+</CardGrid>

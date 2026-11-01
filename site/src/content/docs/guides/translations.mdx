@@ -1,0 +1,300 @@
+---
+title: Translations
+description: Ship each module's strings in i18n locale files, translate with req.t and ctx.t, negotiate the locale per request and track missing keys before release.
+sidebar:
+  order: 6
+---
+
+import { Aside, LinkCard, CardGrid, Steps, FileTree } from "@astrojs/starlight/components";
+
+Every string a user reads is a key, and every module owns its keys. A
+module's `i18n/<locale>.json` files form one namespace, and `req.t` inside
+that module's endpoints is already bound to it, because `rai()` recorded
+which module declared the route. The locale is negotiated per request, gaps
+fall back to the default locale, and outside production the framework writes
+a to-do list of what each translator still has to do. Translation is built
+into core (with i18next); there is nothing to install.
+
+## Files and namespaces
+
+<FileTree>
+- modules/
+  - users/
+    - i18n/
+      - en.json the default locale, must be complete
+      - fr.json gaps fall back to en.json
+      - fr.missing.json generated outside production, git-ignored
+</FileTree>
+
+```json title="modules/users/i18n/en.json (excerpt)"
+{
+  "created": "User {{email}} created",
+  "notFound": "No such user",
+  "emailInvalid": "Must be a valid email address",
+  "list": {
+    "count_one": "{{count}} user",
+    "count_other": "{{count}} users"
+  },
+  "welcome": {
+    "subject": "Welcome, {{email}}"
+  }
+}
+```
+
+```json title="modules/users/i18n/fr.json (excerpt)"
+{
+  "created": "Utilisateur {{email}} créé",
+  "notFound": "Utilisateur introuvable",
+  "emailInvalid": "Doit être une adresse email valide",
+  "list": {
+    "count_one": "{{count}} utilisateur",
+    "count_other": "{{count}} utilisateurs"
+  },
+  "welcome": {
+    "subject": "Bienvenue, {{email}}"
+  }
+}
+```
+
+The namespace is the module's short name (`users` for `@app/users`). A module
+with no `i18n/` folder simply has nothing to say.
+
+## Choosing the locales
+
+The languages are app policy, set once in `config/app.config.ts`:
+
+```ts title="config/app.config.ts"
+i18n: {
+  defaultLocale: "en",
+  supportedLocales: ["en", "fr"],
+},
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `defaultLocale` | `"en"` | served when nothing better is negotiated, and the fallback for every gap |
+| `supportedLocales` | `[defaultLocale]` | every locale the app ships; a request never resolves outside it |
+
+An app with no `i18n` block gets a working single-locale runtime, so `req.t`
+is never undefined and a second language later is a config change.
+
+## In an endpoint: `req.t`
+
+```ts title="modules/hello/controllers/web/hello.controllers.ts"
+secret(): RequestHandler {
+  return (req: Request, res: Response): void => {
+    // req.t is bound to this module's namespace by rai(), so the key
+    // resolves in modules/hello/i18n/<locale>.json. Try ?lang=fr.
+    res.respond({ data: { secret: req.t("secret"), locale: req.locale } });
+  };
+}
+```
+
+`rai()` binds three members on every declared route:
+
+| Member | Is |
+|---|---|
+| `req.t(key, vars?)` | an i18next `TFunction` fixed to the negotiated locale and the declaring module |
+| `req.locale` | the negotiated locale, for a payload or a job |
+| `req.hasTranslation(key)` | whether the key exists in that module and locale (or the default locale) |
+
+### Interpolation
+
+Values go in `{{name}}` placeholders:
+
+```ts
+req.t("created", { email });   // "User ada@example.com created"
+```
+
+Interpolated values are **not** HTML-escaped, because they land in JSON
+bodies and log lines, not HTML. Escape them yourself if you render HTML.
+
+<Aside type="caution">
+Never concatenate a translated string with a variable
+(`req.t("welcome") + name`). Word order differs between languages. Put the
+variable in the key: `"Welcome, {{name}}"`.
+</Aside>
+
+### Plurals
+
+Pass `count` and i18next picks the plural form the language defines, from
+suffixed keys:
+
+```json
+{ "list": { "count_one": "{{count}} user", "count_other": "{{count}} users" } }
+```
+
+```ts
+req.t("list.count", { count: 1 });   // "1 user"
+req.t("list.count", { count: 12 });  // "12 users"
+```
+
+English and French need `_one` and `_other`; other languages have more
+categories (`_few`, `_many`…), and each locale file lists the ones its
+language uses.
+
+### Nesting and other modules
+
+A dot in the key reads a nested object: `req.t("welcome.subject", { email })`.
+To read another module's string, prefix its namespace:
+`req.t("auth:invalid")`. Use that sparingly; a string two modules need usually
+belongs to whichever owns the concept.
+
+## Errors are translated for you
+
+`HttpError` and `ValidationError` messages are keys. The terminal error
+handler translates them in the declaring module's namespace and derives the
+error code from the key:
+
+```ts title="modules/hello/controllers/web/hello.greetings.controllers.ts"
+if (!greeting) throw new HttpError(404, "noSuchGreeting", { vars: { name } });
+```
+
+```json title="modules/hello/i18n/fr.json"
+{ "noSuchGreeting": "Aucune salutation nommée « {{name}} »" }
+```
+
+answers, for `?lang=fr`:
+
+```json
+{ "success": false, "data": null,
+  "errors": [{ "field": null, "message": "Aucune salutation nommée « hello »", "code": "NO_SUCH_GREETING" }],
+  "meta": {} }
+```
+
+`vars` feeds the placeholders. A message that is not a key is sent as written,
+and `defaultMessage` gives English to fall back on while marking the message as
+a key. The framework's own refusals work that way: an app that adds
+`"forbidden"` or `"unauthenticated"` to a module's i18n file translates the
+401 and 403 of that module's routes. Zod messages on `rai()` schemas follow
+the same rule; see [validation](/tulipes-js/guides/validation/#error-messages-as-i18n-keys).
+
+## How a locale is negotiated
+
+```txt
+1  ?lang=fr            explicit override; survives a shared link,
+                       testable with curl
+2  Accept-Language     q-values honored, most preferred first
+3  defaultLocale       from config.i18n
+```
+
+Every candidate is narrowed to `supportedLocales`:
+
+- An unsupported `?lang=de` falls through to the header, rather than serving
+  raw keys.
+- A region the app does not ship is served by its base language: `fr-CA`
+  resolves to `fr`. An exact match wins, so an app that ships both `fr` and
+  `fr-CA` serves `fr-CA` precisely.
+- Matching ignores case. `*` and entries with `q=0` are skipped.
+
+With `en` and `fr` shipped, `Accept-Language: fr-CA;q=0.9, de;q=1` resolves
+to `fr` (German is preferred but not shipped), and `?lang=de` resolves to `en`.
+
+## Outside a request: `ctx.t`
+
+A queue processor, a script or a bootstrap task has no request to negotiate
+from. It names both the namespace and the locale:
+
+```ts title="modules/users/queues/users.queues.ts"
+queues.process("users.welcome", async (job) => {
+  // No request here to negotiate a locale from, so the one the caller
+  // was using travelled with the job.
+  const t = ctx.t("users", job.data.locale);
+
+  log.info({ email: job.data.email, subject: t("welcome.subject", { email: job.data.email }) },
+    "sending welcome email");
+  return { sent: true };
+});
+```
+
+So the locale has to travel with the work. The users back office puts it in
+the job payload when it enqueues:
+
+```ts title="modules/users/controllers/bo.users.controllers.ts"
+await this.#ctx.queues!.add("users.welcome", "welcome", {
+  email,
+  locale: req.locale,
+});
+```
+
+`ctx.t(namespace)` without a locale uses `defaultLocale`. For anything else
+(formatters, adding resources at runtime) `ctx.i18n` is the i18next instance
+itself; it exists from the first moment of boot and is never replaced.
+
+## Missing translations
+
+Only the default locale has to be complete. A key `fr.json` lacks is answered
+from `en.json`, so a feature can ship before its translations do. To make the
+gaps visible, every non-production boot writes, for each module and each
+non-default locale, `i18n/<locale>.missing.json`. Had `fr.json` lacked the
+`deleted` key, the users module would get:
+
+```json title="modules/users/i18n/fr.missing.json"
+{
+  "deleted": "User {{email}} deleted"
+}
+```
+
+- The value is the default-locale text, which is what a translator needs.
+- The file is rewritten on every boot, and deleted once the locale has no
+  gaps.
+- A key used in code but missing from **every** locale is appended to the
+  current locale's `.missing.json` when it is first hit.
+- Production never writes: the filesystem may be read-only, and several
+  instances would race over one file.
+
+Git-ignore the generated files:
+
+```txt title=".gitignore"
+**/modules/*/i18n/*.missing.json
+```
+
+## Adding a locale
+
+<Steps>
+1. Add it to `supportedLocales` in `config/app.config.ts`.
+2. Boot in development. Every module with an `i18n/` folder now has
+   `<locale>.missing.json` listing all its strings, with the default text.
+3. Translate into `<locale>.json`. The missing file disappears on the next
+   boot once the gaps are closed.
+</Steps>
+
+A locale file for a language not in `supportedLocales` is ignored: it is
+never parsed or served.
+
+## Boot errors
+
+Translations load in boot phase 7, after settings and before the ACL. Two
+failures that i18next would swallow, serving raw keys with nothing in the log,
+abort the boot instead:
+
+```txt
+TulipesBootError: Boot aborted during "i18n" — 2 issue(s):
+  ✖ [billing] i18n/ exists but has no en.json — the default locale is what every other locale falls back to
+  ✖ [users] i18n/fr.json is not valid JSON: …
+```
+
+The settings themselves are checked too:
+
+| Message | Fix |
+|---|---|
+| `config.i18n.defaultLocale "de" is not in supportedLocales (en, fr)` | add it, or pick a shipped locale |
+| `config.i18n.supportedLocales is empty` | list at least the default |
+
+## Common mistakes
+
+| Symptom | Cause |
+|---|---|
+| a response shows the raw key | the key is missing from the declaring module's default-locale file, or you wrote it in another module's file |
+| always English despite `Accept-Language` | the locale is not in `supportedLocales` |
+| a job's email is in the wrong language | the locale did not travel with the job; pass `req.locale` in the payload |
+| `.missing.json` files in a commit | add the ignore rule above |
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Time zones" href="/tulipes-js/guides/time-zones/" description="Negotiated per request, like the locale." />
+  <LinkCard title="Validation" href="/tulipes-js/guides/validation/" description="Zod messages as translation keys." />
+  <LinkCard title="Responses and errors" href="/tulipes-js/concepts/responses-and-errors/" description="How a thrown key becomes a message and a code." />
+  <LinkCard title="Queues" href="/tulipes-js/guides/queues/" description="Carry the locale with the job." />
+</CardGrid>

@@ -1,0 +1,143 @@
+---
+title: Announce new books in real time
+description: Claim a /books Socket.IO namespace in the books module, emit a book.created event from the create handler, and watch it arrive in a small Node client.
+sidebar:
+  order: 7
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+The worker announces new books in the background; clients that are online
+should hear about them immediately. In this chapter the books module claims
+a Socket.IO namespace, the create handler emits an event into it, and a tiny
+Node client listens.
+
+## The idea
+
+A module claims a **namespace** in a `sockets/*.sockets.ts` file. Exactly
+one module may claim each name; a second claim is a boot error. The sockets
+provider (`@tulipes/socket.io`) runs in the backend process only, and core
+attaches the Socket.IO server to the HTTP server after the routes are mounted
+and just before it listens, so no client can reach a namespace that is not
+wired yet.
+
+```txt
+ client ──ws──► backend :3000 ──► namespace /books (books module)
+                     ▲
+ POST /books ──► controller ──► ctx.sockets.of("/books").emit(...)
+```
+
+The worker has no sockets (its banner says `not used in worker mode`), so the
+event is emitted from the backend, where the request is handled.
+
+## Claim the namespace
+
+Replace the scaffolded `sockets/books.sockets.ts`:
+
+```ts title="modules/books/sockets/books.sockets.ts"
+import type { Ctx } from "@tulipes/core/boot";
+import type { SocketRegistry } from "@tulipes/socket.io";
+
+export default function booksSockets(_ctx: Ctx, sockets: SocketRegistry): void {
+  sockets.namespace("/books", (nsp) => {
+    nsp.on("connection", (socket) => {
+      socket.emit("ready", { online: nsp.sockets.size });
+    });
+  });
+}
+```
+
+`sockets.namespace(name, setup)` claims `/books` and hands you the Socket.IO
+namespace to configure. Names are `/` or `/kebab-case`. Everything inside is
+plain Socket.IO.
+
+## Emit from the controller
+
+```ts title="modules/books/controllers/bo.books.controllers.ts" del={1} ins={2,8-9}
+      const { isbn } = req.body;
+      const { title, author, isbn } = req.body;
+      const book = await Book.create(req.body);
+
+      // The slow part runs in the worker; the response does not wait for it.
+      await requireQueues(this.#ctx).add("books.added", "announce", { isbn });
+      // Everyone connected to /books hears about it now.
+      this.#ctx.sockets!.of("/books").emit("book.created", { title, author, isbn });
+
+      res.respond({ data: book });
+```
+
+`ctx.sockets` exists in the backend when the app declares the sockets
+provider. `of()` throws for a namespace nobody claimed, so a typo fails
+loudly on the first request instead of emitting into nothing.
+
+<Aside type="note">
+The payload is the three fields a client needs to show a notice, taken from
+the validated body. Send identifiers and display fields, not whole documents.
+</Aside>
+
+## Listen
+
+Restart the backend. The banner lists the namespace:
+
+```txt
+  ➜  Sockets     /users, /books, /hello  ● ready  ·  socket.io
+```
+
+Clients connect with any Socket.IO 4 client. A quick one in Node, outside
+the app:
+
+```sh
+mkdir listener && cd listener
+npm init -y
+npm install socket.io-client@4
+```
+
+```js title="listener/listen.mjs"
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:3000/books");
+socket.on("ready", (message) => console.log("ready", message));
+socket.on("book.created", (message) => console.log("book.created", message));
+```
+
+```sh
+node listen.mjs
+```
+
+In another terminal, add a book as an editor. The listener prints:
+
+```txt
+ready { online: 1 }
+book.created {
+  title: 'The Dispossessed',
+  author: 'Ursula K. Le Guin',
+  isbn: '9780061054884'
+}
+```
+
+and the worker, if it is running, logs its announcement as before. The HTTP
+response, the socket event and the job are three independent consequences of
+one request.
+
+## Before you scale out
+
+The PM2 configuration the preset generates runs one backend instance in fork
+mode, on purpose. Socket.IO needs sticky sessions or a Redis adapter before a
+second instance is safe, because a client connected to one instance would
+not hear events emitted by another. The nginx templates already pass the
+`Upgrade` and `Connection` headers; without them every connection silently
+falls back to HTTP polling. Both are covered in the
+[production section](/tulipes-js/production/nginx/).
+
+## Where we are
+
+Every new book now produces a `201` response, a queued announcement and a
+live `book.created` event for connected clients.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Chapter 8: test the bookstore" href="/tulipes-js/tutorial/testing/" description="Boot the app in tests and sign in as each role." />
+  <LinkCard title="Sockets and realtime" href="/tulipes-js/guides/sockets/" description="Namespaces, authentication and emitting." />
+  <LinkCard title="@tulipes/socket.io" href="/tulipes-js/packages/socket-io/" description="The sockets provider and its lifecycle." />
+</CardGrid>

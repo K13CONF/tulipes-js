@@ -1,0 +1,273 @@
+---
+title: Control who may do what
+description: Read RAI ids as permissions, grant them in module.acl.ts, add an editor role, sign in through the auth module, and check access as guest, user and editor.
+sidebar:
+  order: 5
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+So far the catalogue is public and the back office belongs to admins. A real
+bookstore has staff who manage books but should not manage user accounts.
+In this chapter we add an `editor` role, grant it the back office, discover
+a gap in who may browse, and check every role against every endpoint.
+
+## How access is decided
+
+Every endpoint declares a RAI id, and the id **is** the permission:
+
+```txt
+books : bo : create
+  │      │     └── resource (and an optional fourth "extra" segment)
+  │      └──────── scope: the surface it serves (web, bo, …)
+  └─────────────── module: the one that declared the route
+```
+
+Each segment is `[a-z][a-z0-9-]*`. A **grant** gives a role one id, a prefix
+ending in `:*` (which covers everything under it, the bare id included), or
+`*`. On every request `rai()` asks the ACL whether the caller's role holds
+the id. The answer is never "yes by default":
+
+| Caller | Grant missing | Status |
+|---|---|---|
+| anonymous (role `guest`) | yes | `401 UNAUTHENTICATED` |
+| signed in, any role | yes | `403 FORBIDDEN` |
+
+Roles are defined once, by the module that assigns them; in the production
+preset that is the auth module. Grants are attached by each module to its own
+ids, in its `module.acl.ts`. `pnpm tulipes roles` prints the result:
+
+```sh
+pnpm tulipes roles --role admin
+```
+
+```txt
+admin     Runs the back office  (auth)
+  level=2
+  agent:*             granted by agent
+  agents:*            granted by auth
+  auth:*              granted by auth
+  books:*             granted by auth
+  config:bo:describe  granted by config
+  config:bo:read      granted by config
+  hello:*             granted by auth
+  users:*             granted by auth
+```
+
+## Define the editor role
+
+Roles live in `modules/auth/module.acl.ts`. Add `editor` between `user` and
+`admin`, and give it the same self-service grants a signed-in user has, so
+an editor can see their own account, change their password and sign out:
+
+```ts title="modules/auth/module.acl.ts" ins={4,10-18}
+  acl
+    .defineRole("guest", { description: "Any request without a valid token", level: 0 })
+    .defineRole("user", { description: "A signed-in account", level: 1 })
+    .defineRole("editor", { description: "Manages the book catalogue", level: 1 })
+    .defineRole("admin", { description: "Runs the back office", level: 2 })
+    .defineRole("sysadmin", { description: "Administers the deployment and its settings", level: 3 });
+
+  // …the guest and user grants, unchanged…
+
+  // An editor signs in like a user and manages their own account.
+  acl.allow(
+    "editor",
+    "auth:web:logout",
+    "auth:web:me",
+    "auth:web:password",
+    "auth:web:sessions:*",
+    "auth:web:tokens:*",
+  );
+```
+
+`level` is an extra the auth module declares on `RoleMeta`; it is for
+display and ordering. Roles do not inherit from each other, and the ACL
+decides access from grants alone.
+
+## Grant the catalogue
+
+Now the books module grants its own ids:
+
+```ts title="modules/books/module.acl.ts"
+import type { AclBuilder } from "@tulipes/core/acl";
+
+export default function booksAcl(acl: AclBuilder): void {
+  acl.allow("guest", "books:web:*");
+  acl.allow("editor", "books:bo:*");
+}
+```
+
+## Sign in as different people
+
+Restart the app. Register an ordinary account through the auth module (the
+users module's `signupMode` setting is `open` by default):
+
+```sh
+curl -s -X POST http://localhost:3000/api/v1/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"email":"ada@example.com","password":"correct-horse-battery"}'
+```
+
+```json
+{"success":true,"data":{"user":{"id":"6ae763e65537f5e94a0a5c2f","email":"ada@example.com","role":"user"},"access_token":"eyJhbGciOi…","refresh_token":"eyJhbGciOi…","expires_in":"15m"},"errors":[],"meta":{}}
+```
+
+Sign in and ask who you are:
+
+```sh
+ADA=$(curl -s -X POST http://localhost:3000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"ada@example.com","password":"correct-horse-battery"}' \
+  | node -p 'JSON.parse(require("fs").readFileSync(0)).data.access_token')
+
+curl -s http://localhost:3000/api/v1/auth/me -H "authorization: Bearer $ADA"
+```
+
+```json
+{"success":true,"data":{"is_authenticated":true,"locale":"en","user":{"id":"6ae763e65537f5e94a0a5c2f","email":"ada@example.com","role":"user"},"session":{"sid":"a78a0741-b65a-49e6-ab64-63f1089281eb","ip":"::1","user_agent":"curl/8.7.1","started_at":"2026-11-01T16:08:07.193Z","last_seen_at":"2026-11-01T16:08:07.193Z","expires_at":"2026-12-01T16:08:07.000Z","access_expires_at":"2026-11-01T16:23:07.000Z"}},"errors":[],"meta":{}}
+```
+
+The auth module resolved the bearer token into `req.auth` before any feature
+route ran. A request with no valid token is not rejected; it becomes the
+guest caller, which is what makes "public" an ordinary grant.
+
+Ada tries to add a book:
+
+```sh
+curl -s -X POST http://localhost:3000/api/v1/books \
+  -H "authorization: Bearer $ADA" -H 'content-type: application/json' \
+  -d '{"title":"Dawn","author":"Octavia E. Butler","isbn":"9780446603775","price":10}'
+```
+
+```json
+{"success":false,"data":null,"errors":[{"field":null,"message":"role \"user\" may not books:bo:create","code":"FORBIDDEN"}],"meta":{}}
+```
+
+A `403`, with the role and the id it lacks. Now browse the catalogue as Ada:
+
+```sh
+curl -s http://localhost:3000/api/v1/books -H "authorization: Bearer $ADA"
+```
+
+```json
+{"success":false,"data":null,"errors":[{"field":null,"message":"role \"user\" may not books:web:list","code":"FORBIDDEN"}],"meta":{}}
+```
+
+Signing in made the catalogue unreachable. That is the rule working as
+written: roles do not inherit, and once Ada is identified she is a `user`,
+not a `guest`. Everyone who may browse must be named. `tulipes routes` had
+shown it already:
+
+```txt
+GET     books:web:list           /api/v1/books                          books     admin, guest, sysadmin
+```
+
+Fix the grants so every role that should browse is listed, and let an
+editor reach the whole module:
+
+```ts title="modules/books/module.acl.ts"
+import type { AclBuilder } from "@tulipes/core/acl";
+
+export default function booksAcl(acl: AclBuilder): void {
+  // Roles do not inherit: everyone who may browse is named.
+  acl.allow("guest", "books:web:*");
+  acl.allow("user", "books:web:*");
+  // An editor runs the catalogue: the web surface and the back office.
+  acl.allow("editor", "books:*");
+}
+```
+
+```sh
+pnpm tulipes routes --scope web
+```
+
+```txt
+GET     books:web:detail         /api/v1/books/:isbn                  books   admin, editor, guest, sysadmin, user
+GET     books:web:list           /api/v1/books                        books   admin, editor, guest, sysadmin, user
+```
+
+## Promote Ada to editor
+
+The starter has no endpoint for changing a role, which is a decision for
+your app. For now, set it in MongoDB directly:
+
+```sh
+docker exec bookstore-mongo mongosh --quiet bookstore \
+  --eval 'db.users.updateOne({ email: "ada@example.com" }, { $set: { role: "editor" } })'
+```
+
+Ada's existing token still answers `403` for `books:bo:create`: her session
+was resolved with the role she had. **Sign in again** and the new session
+carries `editor`:
+
+```json
+{"success":true,"data":{"title":"Dawn","author":"Octavia E. Butler","isbn":"9780446603775","price":10,"stock":0,"is_deleted":false,"deleted_at":null,"deleted_by":null,"created_at":"2026-11-01T16:08:58.015Z","updated_at":"2026-11-01T16:08:58.015Z"},"errors":[],"meta":{}}
+```
+
+The editor still cannot reach the users back office:
+
+```json
+{"success":false,"data":null,"errors":[{"field":null,"message":"role \"editor\" may not users:bo:list","code":"FORBIDDEN"}],"meta":{}}
+```
+
+```sh
+pnpm tulipes roles --role editor
+```
+
+```txt
+1 role(s)
+
+editor  Manages the book catalogue  (auth)
+  level=1
+  auth:web:logout      granted by auth
+  auth:web:me          granted by auth
+  auth:web:password    granted by auth
+  auth:web:sessions:*  granted by auth
+  auth:web:tokens:*    granted by auth
+  books:*              granted by books
+```
+
+## Mistakes the boot refuses
+
+Grants are checked when the ACL loads, in boot phase 8, and two mistakes
+stop the app. Granting a role nobody defined:
+
+```txt
+TulipesBootError: Boot aborted during "acl" — 1 issue(s):
+  ✖ [books] allow() on unknown role "editor" — roles must be defined first (defineRole)
+```
+
+Granting the same role the same id from two modules, for example adding
+`acl.allow("admin", "books:*")` to the books module while the auth module
+already grants it:
+
+```txt
+TulipesBootError: Boot aborted during "acl" — 1 issue(s):
+  ✖ [books] "admin" already granted "books:*" by module "auth" — duplicate grant
+```
+
+Each grant has exactly one owner, so `tulipes roles` can always say who
+gave a role its access.
+
+<Aside type="caution">
+Never grant `*` to `admin` or `sysadmin` in the production preset. A
+wildcard reaches `config:bo:write` and `settings:*`, which would turn the
+sysadmin boundary into a label. Add each feature namespace explicitly, as we
+did with `books:*`.
+</Aside>
+
+## Where we are
+
+Guests and users browse, editors manage the catalogue, admins and sysadmins
+manage everything they are explicitly granted, and the CLI can show who
+reaches what without starting the server.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Chapter 6: background jobs" href="/tulipes-js/tutorial/background-jobs/" description="Announce each new book from a worker process." />
+  <LinkCard title="RAI ids and the ACL" href="/tulipes-js/concepts/rai-and-acl/" description="The id grammar, grants and custom access checkers." />
+  <LinkCard title="Roles and permissions" href="/tulipes-js/guides/roles-and-permissions/" description="Role extras, describing roles, access checkers." />
+  <LinkCard title="Authentication" href="/tulipes-js/guides/authentication/" description="Tokens, sessions, refresh and logout." />
+</CardGrid>

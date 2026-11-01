@@ -1,0 +1,236 @@
+---
+title: Error codes
+description: Every HTTP error code that Tulipes core, @tulipes/mcp and the reference app return, with status, cause and owner module, plus the boot error format.
+sidebar:
+  order: 3
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Every failure reaches the client in the same envelope, built by one error handler,
+with a stable machine-readable `code` and a translated `message`. This page lists
+every code the framework and the reference app produce, and explains how a code is
+derived so you can predict the ones your own modules will return. The model behind
+it is in [responses and errors](/tulipes-js/concepts/responses-and-errors/).
+
+## The failure envelope
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [{ "field": "email", "message": "Must be a valid email address", "code": "INVALID_FORMAT" }],
+  "meta": {}
+}
+```
+
+`field` is the offending input, or `null`. `message` is already translated into the
+request's locale. `code` is never translated.
+
+## How a code is chosen
+
+For `throw new HttpError(status, message, options)`, in this order:
+
+1. `options.code`, when given.
+2. Derived from the key, when `message` is an i18n key the route's module
+   translates, or when `options.defaultMessage` is given:
+   `emailTaken` becomes `EMAIL_TAKEN`, `session.notFound` becomes `SESSION_NOT_FOUND`.
+3. Otherwise the status's well-known code from the table below, or `HTTP_<status>`.
+
+| Status | Code |
+|---|---|
+| 400 | `BAD_REQUEST` |
+| 401 | `UNAUTHENTICATED` |
+| 403 | `FORBIDDEN` |
+| 404 | `NOT_FOUND` |
+| 409 | `CONFLICT` |
+| 413 | `PAYLOAD_TOO_LARGE` |
+| 422 | `VALIDATION_FAILED` |
+| 429 | `TOO_MANY_REQUESTS` |
+| 500 | `INTERNAL_ERROR` |
+
+<Aside type="caution">
+A key with no translation in the route's module and no `defaultMessage` falls to
+rule 3: `throw new HttpError(404, "noSuchThing")` returns code `NOT_FOUND` and the
+message `noSuchThing` until the module's `i18n/en.json` defines `noSuchThing`. Add the
+translation, or pass `defaultMessage`, to get `NO_SUCH_THING`.
+</Aside>
+
+`ValidationError` is always status 422 and carries one entry per issue, each
+resolved the same way. Schema validation in `rai({ params, query, body })` is
+different: each issue's `code` is zod's issue code in upper case, not the key.
+`z.email("emailInvalid")` returns `INVALID_FORMAT` with the translated
+`emailInvalid` message. Common ones are `INVALID_TYPE`, `INVALID_FORMAT`,
+`TOO_SMALL`, `TOO_BIG`, `INVALID_VALUE` and `CUSTOM` (a `refine` or a
+list-query policy refusal). The `field` is the dotted path inside the segment
+(`filter.0.0`), or the segment name (`body`) for a failure of the whole segment.
+See [validation and errors](/tulipes-js/guides/validation/).
+
+## Core (`@tulipes/core`)
+
+| Status | Code | When |
+|---|---|---|
+| 401 | `UNAUTHENTICATED` | A guest calls a route whose RAI its role is not granted. Message `authentication required`. |
+| 403 | `FORBIDDEN` | A signed-in role is not granted the RAI. Message `role "<role>" may not <permission>`. |
+| 403 | `OUT_OF_SCOPE` | The role is granted, but the credential's scopes do not cover the permission (API tokens). |
+| 404 | `ROUTE_NOT_FOUND` | No router claimed the request. Message `no route for <METHOD> <path>`. |
+| 404 | `NO_SUCH_TOOL` | The agent registry has no tool of that name. |
+| 422 | zod issue codes | `rai({ params, query, body })` validation, or a tool's `input` schema. All segments are checked before answering. |
+| 400 | `BAD_REQUEST` | A 4xx raised by Express middleware, such as malformed JSON from the body parser. Its message is passed through. |
+| 413 | `PAYLOAD_TOO_LARGE` | The body is over the parser's limit (`security.bodyLimit` in the reference app). |
+| 4xx | well-known code or `HTTP_<status>` | Any other error carrying a 4xx `status` or `statusCode`. |
+| 500 | `INTERNAL_ERROR` | Anything else. The message is `internal server error`, except in `development` and `test` where it is `internal: <message>`. The error is logged as `[http] unhandled error:`. |
+
+The guards are in [RAI and ACL](/tulipes-js/concepts/rai-and-acl/): 401 means
+"sign in and this may work", 403 means it will not.
+
+## `@tulipes/mcp` HTTP transport
+
+The Streamable HTTP listener answers outside the envelope, with a JSON-RPC error
+body (`{"jsonrpc":"2.0","error":{"code":-32000,"message":…},"id":null}`):
+
+| Status | Message | When |
+|---|---|---|
+| 404 | `not found — the MCP endpoint is /mcp` | Any other path. |
+| 405 | `method not allowed — POST JSON-RPC to this endpoint` | Not a POST. |
+| 403 | `this endpoint only answers requests addressed to its own loopback address` | On a loopback bind, a `Host` header that is not the listener's (DNS rebinding). |
+| 413 | `the body is larger than <maxBodyBytes> bytes` | Over `transport.http.maxBodyBytes`. |
+| 400 | `the body is not JSON` | Unparseable body. |
+| 500 | `internal error` | Anything else. |
+
+## Reference app
+
+Paths assume the reference app's `api.prefix` of `/api/v1`. The `users` routes are
+mounted at `/users`, outside the prefix, on purpose.
+
+### `auth`
+
+| Status | Code | When |
+|---|---|---|
+| 422 | `EMAIL_REQUIRED`, `PASSWORD_TOO_SHORT` | `POST /api/v1/auth/register` without an email, or a password under 8 characters; both reported at once. |
+| 403 | `REGISTRATION_CLOSED` | Register while `users.signupMode` is not `open`. |
+| 422 | `EMAIL_UNAVAILABLE` | Register with an email that already has an account; deliberately the same shape as any validation failure. |
+| 401 | `INVALID_CREDENTIALS` | Wrong email or password on `POST /api/v1/auth/login`. Also returned when a password change committed while the login was in flight, and by `POST /api/v1/auth/password` when the caller has no session credential version. |
+| 422 | `REFRESH_REQUIRED` | `POST /api/v1/auth/refresh` without `refresh_token`. |
+| 401 | `REFRESH_INVALID` | The refresh token does not verify. |
+| 401 | `ACCOUNT_GONE` | The refresh token's user no longer exists. |
+| 401 | `REFRESH_USED` | The refresh token was already used or revoked. |
+| 503 | `REFRESH_UNAVAILABLE` | The refresh rotation could not be acknowledged by the store. |
+| 404 | `NO_SUCH_SESSION` | `DELETE /api/v1/auth/sessions/:sid` for a session that is not yours. |
+| 422 | `PASSWORD_TOO_SHORT` | New password under 8 characters on `POST /api/v1/auth/password`. |
+| 403 | `TOKEN_NEEDS_SESSION` | `POST /api/v1/auth/tokens` called with an API token instead of a session. |
+| 404 | `NO_SUCH_TOKEN` | `DELETE /api/v1/auth/tokens/:token_id` for an unknown token. |
+
+Schema failures on these routes (`emailInvalid`, `passwordRequired`,
+`tokenNameRequired`, `tokenNameTooLong`, `scopeInvalid`, `tooManyScopes`,
+`expiryInvalid`) carry zod's codes, as explained above. See
+[authentication](/tulipes-js/guides/authentication/) and
+[API tokens and scopes](/tulipes-js/guides/api-tokens-and-scopes/).
+
+### `security`
+
+| Status | Code | When |
+|---|---|---|
+| 429 | `TOO_MANY_REQUESTS` | A rate-limit quota (`security.rateLimits`) is spent. A `Retry-After` header gives the seconds to wait. |
+| 503 | `RATE_LIMIT_UNAVAILABLE` | Redis cannot answer the limiter. Requests fail closed instead of going unlimited. |
+
+### `users`
+
+| Status | Code | When |
+|---|---|---|
+| 404 | `NOT_FOUND` | `DELETE /users/:email` for an unknown user (message `No such user`), and the `GET /users/missing` demo. |
+| 422 | `EMAIL_REQUIRED` | `POST /users` without an email. |
+| 422 | zod codes | The `GET /users/directory` [list query](/tulipes-js/reference/topics/list-query-grammar/) breaks the grammar or the policy, for example `"password_hash" is not filterable` on field `filter.0.0`. |
+| 500 | `INTERNAL_ERROR` | `GET /users/boom`, a demo of an unhandled error. |
+
+### `config` (the console)
+
+| Status | Code | When |
+|---|---|---|
+| 404 | `NO_SUCH_MODULE` | `GET /api/v1/config/:module` for an unknown module, or `PATCH` for one that declares no settings. |
+| 409 | `STALE_VERSION` | `PATCH` with a `version` older than the store's; `details.current` holds the current one. |
+| 422 | `VALIDATION_FAILED` or zod codes | `PATCH` values the module's schema refuses, one entry per issue. |
+| 401 | `UNAUTHENTICATED` | A write with no user to record in the audit trail. |
+| 503 | `AUDIT_UNAVAILABLE` | The audit record could not be acknowledged; the change was not applied. |
+
+See [settings](/tulipes-js/guides/settings/).
+
+### `settings` (log streams)
+
+`GET /api/v1/settings/logs/stream` serves Server-Sent Events over the log files.
+
+| Status | Code | When |
+|---|---|---|
+| 409 | `FILE_LOGGING_DISABLED` | `LOG_FILE` is off, so there is nothing to stream. |
+| 409 | `LOG_FILE_UNSAFE` | A log file is not a regular, unlinked file in a real directory. |
+| 503 | `LOG_UNAVAILABLE` | The log files cannot be read. |
+| 503 | `LOG_STREAMS_DRAINING` | The process is shutting down. |
+| 429 | `TOO_MANY_LOG_STREAMS` | Too many streams are already open. |
+| 401 | `UNAUTHENTICATED` | The stream's authorization expired or was missing (message `unauthorized`). |
+| 403 | `FORBIDDEN` | The periodic re-check found the caller no longer allowed. |
+| 503 | `STREAM_AUTHORIZATION_UNAVAILABLE` | The re-check could not be completed in time. |
+
+Once the stream has started, a failure ends the stream instead of sending an
+envelope. See [logging](/tulipes-js/guides/logging/).
+
+### `agents` (agent runs)
+
+| Status | Code | When |
+|---|---|---|
+| 503 | `AGENT_UNCONFIGURED` | `POST /api/v1/agents/runs` while `ANTHROPIC_API_KEY` is unset. |
+| 401 | `UNAUTHENTICATED` | A run action without a signed-in user. |
+| 404 | `NO_SUCH_RUN` | The `run_id` is unknown or not yours. |
+| 409 | `RUN_ENDED` | Acting on a run that has already ended. |
+| 409 | `RUN_NOT_WAITING` | Approving a run that is not waiting for approval. |
+| 422 | `DECISIONS_INCOMPLETE` | The approval does not answer every waiting call, or answers others; `details` lists `missing` and `unknown`. |
+
+Schema failures (`goalRequired`, `goalTooLong`, `contextTooLong`,
+`decisionsRequired`, `decisionInvalid`, `noSuchCall`) carry zod's codes. See
+[agents](/tulipes-js/guides/agents/).
+
+### `agent` (the agent door)
+
+`POST /api/v1/agent/tools/:name` returns core's `NO_SUCH_TOOL` (404), the RAI
+codes above, and 422 for input the tool's schema refuses, including
+`invalidToolName` on the `:name` parameter.
+
+### `hello` (the demo module)
+
+| Status | Code | When |
+|---|---|---|
+| 404 | `NO_SUCH_GREETING` | A greeting name that does not exist. |
+| 404 | `NOT_FOUND` | `GET /api/v1/hello/demo/missing`, which throws a finished string (`nothing here`) rather than a key. |
+
+## Boot errors
+
+A boot never stops at the first problem. Each phase collects every issue, then throws
+one `TulipesBootError` with the phase, the list and, where it applies, the module:
+
+```txt
+Boot aborted during "environment" — 2 issue(s):
+  ✖ [auth] required variable "JWT_ACCESS_SECRET" has no value (Signing key for short-lived access tokens)
+  ✖ [auth] required variable "JWT_REFRESH_SECRET" has no value (Signing key for refresh tokens; separate from the access key so leaking one cannot mint the other)
+```
+
+`error.phase` is the phase name and `error.issues` is the list of
+`{ scope, module?, message }`. The phases, in boot order, are `environment`,
+`module graph`, `providers`, `config`, `settings`, `i18n`, `timezone`, `acl`,
+`agent`, `bootstrap`, `workers` and `routes`; the issue scopes are `env`, `modules`,
+`config`, `i18n`, `timezone`, `acl`, `routes`, `agent`, `providers` and `boot`. A
+route with no RAI is refused in the `routes` phase rather than served to anyone.
+The phases themselves are described in the [boot pipeline](/tulipes-js/concepts/boot-pipeline/).
+
+Two errors are thrown outside a report, as plain `Error`s:
+
+```txt
+PROCESS_MODE "web" is invalid — expected one of: backend, worker, script — "web" was renamed to "backend"
+config.server.port must be a whole number between 0 and 65535, got "abc"
+```
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Validation" href="/tulipes-js/guides/validation/" description="Schemas on rai(), field issues and translated messages." />
+  <LinkCard title="Translations" href="/tulipes-js/guides/translations/" description="Where error keys are translated, and the missing-key file." />
+  <LinkCard title="Responses and errors" href="/tulipes-js/concepts/responses-and-errors/" description="The envelope and the single error handler." />
+</CardGrid>

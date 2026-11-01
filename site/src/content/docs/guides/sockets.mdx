@@ -1,0 +1,270 @@
+---
+title: Sockets and realtime
+description: Claim a Socket.IO namespace with @tulipes/socket.io, authenticate connections, emit from routes, and handle workers, several processes and shutdown.
+sidebar:
+  order: 25
+---
+
+import { Aside, Steps, Tabs, TabItem, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Some things a client should hear about without asking: a job finished, a
+counter moved, someone else came online. `@tulipes/socket.io` runs one Socket.IO
+server in the backend process, attached to the same HTTP server as the API, and
+lets each module claim a namespace in a `sockets/*.sockets.ts` file. The
+framework's contribution is small and strict: one owner per namespace, no
+emitting into a namespace nobody claimed, and a clean attach and shutdown. What
+happens inside a namespace is plain Socket.IO, written by you.
+
+## Install and select the provider
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add @tulipes/socket.io
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install @tulipes/socket.io
+    ```
+  </TabItem>
+</Tabs>
+
+```json title="package.json"
+{
+  "tulipes": {
+    "providers": {
+      "sockets": "@tulipes/socket.io"
+    }
+  }
+}
+```
+
+The production preset has both; `tulipes init --preset production --no-sockets`
+leaves them out. A module with a `sockets/` file adds `@tulipes/socket.io` to its
+own dependencies. The provider needs no configuration: it shares the backend's
+port.
+
+## Claim a namespace
+
+```ts title="modules/hello/sockets/hello.sockets.ts"
+import type { Ctx } from "@tulipes/core/boot";
+import type { SocketRegistry } from "@tulipes/socket.io";
+
+/**
+ * Backend mode only. A namespace is claimed by exactly one module; emit
+ * from anywhere with `ctx.sockets!.of("/hello")`.
+ *
+ * Try it: wscat -c ws://localhost:3000/hello
+ */
+export default function helloSockets({ config }: Ctx, sockets: SocketRegistry): void {
+  sockets.namespace("/hello", (nsp) => {
+    nsp.on("connection", (socket) => {
+      socket.emit("greeting", {
+        message: config.hello?.greeting,
+        online: nsp.sockets.size,
+      });
+
+      socket.on("ping", (ack: (reply: string) => void) => ack("pong"));
+    });
+  });
+}
+```
+
+The default export is `(ctx, sockets) => void | Promise<void>`. `sockets` is the
+module-scoped `SocketRegistry`, with one method:
+
+**`namespace(name, setup)`** claims `name` for this module and calls `setup` with
+the live Socket.IO `Namespace`. Inside `setup`, everything is Socket.IO's own API:
+`nsp.use()` for middleware, `nsp.on("connection")`, rooms, acknowledgements.
+
+- A name is `/` or `/kebab-case`: `/hello`, `/order-updates`.
+- A namespace has one owner. A second module claiming it stops the boot, naming
+  the first.
+
+A client connects to the backend's URL plus the namespace:
+
+```ts title="client.ts"
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:3000/hello", { transports: ["websocket"] });
+socket.on("greeting", (payload) => console.log(payload));
+socket.emit("ping", (reply: string) => console.log(reply)); // "pong"
+```
+
+## When socket files run
+
+Socket.IO needs the HTTP server, which only the backend has. The provider
+declares itself backend-only:
+
+| Process | Socket files | `ctx.sockets` |
+|---|---|---|
+| backend | run during provider acquisition, on an unattached server | the `SocketManager` |
+| worker, script | not imported | `undefined` |
+| inspection (`tulipes routes`, `spec`) | not imported | a stub that throws when used |
+
+In the backend, namespaces are claimed in boot phase 8 on a server that is not
+yet listening. Core attaches the HTTP server after routes mount and right before
+`listen()`, so no client can reach a namespace that is not wired yet. Read
+config inside handlers, as the example does, rather than copying values while
+`setup` runs: settings change live.
+
+## Authenticate a connection
+
+The HTTP pipeline does not run for a socket connection: no security middleware,
+no `req.auth`, no `rai()`, no ACL. A namespace that needs a signed-in user checks
+the credential itself, in namespace middleware. With the production preset, the
+auth module's `identifyCredential()` resolves an access token or an API token the
+way a request's bearer is resolved, with the role from the user:
+
+```ts title="modules/orders/sockets/orders.sockets.ts"
+import type { Ctx } from "@tulipes/core/boot";
+import type { SocketRegistry } from "@tulipes/socket.io";
+import { identifyCredential } from "@app/auth";
+
+export default function ordersSockets(ctx: Ctx, sockets: SocketRegistry): void {
+  sockets.namespace("/orders", (nsp) => {
+    // Runs once per connection, before "connection".
+    nsp.use(async (socket, next) => {
+      const token = socket.handshake.auth?.token as string | undefined;
+      const actor = await identifyCredential(ctx, token).catch(() => null);
+      if (!actor || !ctx.acl!.can(actor.role, "orders:web:live")) {
+        return next(new Error("unauthorized"));
+      }
+      socket.data.userId = String((actor.user as { _id: unknown })._id);
+      next();
+    });
+
+    nsp.on("connection", (socket) => {
+      // One room per user, so a route can address them.
+      socket.join(`user:${socket.data.userId}`);
+    });
+  });
+}
+```
+
+The client sends the token in the handshake, not in the URL:
+
+```ts
+const socket = io("https://api.example.com/orders", { auth: { token: accessToken } });
+socket.on("connect_error", (error) => console.log(error.message)); // "unauthorized"
+```
+
+Points to keep in mind:
+
+- **`orders:web:live` is a permission like any other.** Grant it in
+  `module.acl.ts` (`acl.allow("user", "orders:web:live")`) even though no route
+  declares it, so `tulipes roles` shows who holds it. `ctx.acl.can()` ignores
+  credential scopes; check `scopesCover(actor.scopes, "orders:web:live")` from
+  `@tulipes/core/acl` too if API tokens may connect.
+- **The check runs once, at connect.** A connection opened before a logout or a
+  role change stays open. For long-lived connections that must lose access
+  promptly, re-check periodically and call `socket.disconnect(true)`.
+- **Never authenticate from the query string.** URLs reach logs and history.
+
+## Emit from a route
+
+`ctx.sockets.of(name)` returns the claimed `Namespace`, so a controller can emit
+after it changes something:
+
+```ts title="modules/orders/controllers/web.orders.controllers.ts"
+ship(): RequestHandler {
+  return async (req: Request, res: Response) => {
+    const order = await shipOrder(this.#ctx, String(req.params.id));
+    this.#ctx.sockets!.of("/orders").to(`user:${order.user}`).emit("order:shipped", { id: order.id });
+    res.respond({ data: order });
+  };
+}
+```
+
+`of()` throws for a namespace no module claimed, instead of silently creating it
+the way Socket.IO's raw `io.of()` would:
+
+```txt
+Socket namespace "/order" was never claimed by any module (known: /hello, /users)
+```
+
+A module that emits into another module's namespace and has no `sockets/` file of
+its own declares `"tulipes": { "requires": ["sockets"] }` in its `package.json`,
+so the requirement is checked at boot. `ctx.sockets.io` is the underlying
+Socket.IO `Server`, an escape hatch; `namespaces()` lists the claimed names.
+
+## Emit from a job
+
+`ctx.sockets` is `undefined` in the worker, because the worker has no HTTP server
+and no connected clients. A processor cannot emit directly. Two ways to bridge
+the gap:
+
+- **Let the backend report the result.** The client polls a status endpoint, or
+  the backend emits when it next reads the finished job. The agents module works
+  this way: runs are followed with `GET /agents/runs/:run_id`.
+- **Publish through Redis.** The worker publishes a message; a bootstrap in the
+  backend subscribes and emits to the namespace. Socket.IO's
+  `@socket.io/redis-emitter` package implements this pattern against the Redis
+  adapter. Tulipes does not ship or test either; they are yours to add.
+
+<Aside type="caution">
+Guard any emit in code that runs in both processes:
+`ctx.sockets?.of("/orders").emit(…)`. With `!` a bootstrap or helper shared with
+the worker throws there.
+</Aside>
+
+## More than one backend process
+
+Each backend process has its own Socket.IO server, so an emit reaches only the
+clients connected to that process. The generated PM2 file runs one backend
+instance in fork mode for exactly this reason:
+
+```js title="ecosystem.config.cjs"
+// Fork, not cluster: Socket.IO needs sticky sessions or the Redis
+// adapter before a second instance is safe, and bootstrap tasks would
+// run once per instance. Scale out only after wiring the adapter.
+exec_mode: "fork",
+instances: 1,
+```
+
+To run several backends you need what Socket.IO itself requires: sticky sessions
+at the load balancer (unless clients use only the websocket transport) and an
+adapter that relays emits between processes, such as `@socket.io/redis-adapter`
+set on the server (`ctx.sockets.io.adapter(…)`). The provider creates the server
+with Socket.IO's defaults and configures no adapter; wiring one is application
+code, and it is not covered by the framework's tests.
+
+## Shutdown
+
+The socket server closes in the drain phase, concurrently with the HTTP server:
+clients are disconnected and the listener is released before the bootstrap
+cleanups and the database close. A handler doing long work on a socket should
+watch `ctx.signal`. Socket handlers run outside the request pipeline, so a thrown
+error is not turned into an envelope: catch failures and emit an error event the
+client understands.
+
+## Errors
+
+```txt
+Boot aborted during "providers" — 2 issue(s):
+  ✖ [orders] namespace "/Orders" is invalid — expected "/" or "/kebab-case-name"
+  ✖ [orders] namespace "/hello" is already claimed by module "hello"
+```
+
+| Message | Cause |
+|---|---|
+| `requires capability "sockets" (has sockets/ files) but the app's package.json declares no provider for it` | a `sockets/` file without the root declaration |
+| `… must default-export a sockets function (ctx, sockets) => void` | a file whose default export is not a function |
+| `sockets function threw: …` | an exception inside the file or its `setup` |
+| `provider "…" failed to attach to the HTTP server: …` | attach failed; the boot stops and cleans up |
+
+## Testing
+
+`@tulipes/testing` boots the backend on a free port, so a test can connect a real
+client to `app.base + "/hello"` with `socket.io-client`. See
+[testing sockets](/tulipes-js/guides/testing/#testing-sockets).
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Tutorial: realtime" href="/tulipes-js/tutorial/realtime/" description="Push updates to bookstore clients." />
+  <LinkCard title="Queues" href="/tulipes-js/guides/queues/" description="The background work you will want to report on." />
+  <LinkCard title="The socket.io package" href="/tulipes-js/packages/socket-io/" description="What the provider adds and how it is wired." />
+  <LinkCard title="Authentication" href="/tulipes-js/guides/authentication/" description="identifyCredential and the identity cache." />
+</CardGrid>

@@ -1,0 +1,174 @@
+---
+title: Generate the API documents
+description: Turn the bookstore's route declarations into an OpenAPI 3.1 document and a Postman collection with tulipes spec, offline, for one scope or the whole app.
+sidebar:
+  order: 9
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Every route in the bookstore already declares an id, a name, the module that
+owns it, the roles that reach it and the zod schemas of its input and output.
+That is everything an API document needs. In this chapter `tulipes spec`
+turns it into an OpenAPI 3.1 document and a Postman collection, without
+starting a server or touching a database.
+
+## Generate
+
+The production preset already has `@tulipes/spec` as a dev dependency and a
+script for it:
+
+```sh
+pnpm spec
+```
+
+```txt
+  wrote docs/openapi.json
+  wrote docs/collection.json
+
+44 endpoint(s) across 11 folder(s): agent, auth, books, config, hello, runs, runs (back office), sessions, settings, tokens, users
+```
+
+The script is `tulipes spec --openapi docs/openapi.json --postman docs/collection.json`.
+Each flag is optional: pass only the document you want.
+
+## What ends up in it
+
+Our create endpoint, from the declaration in
+`modules/books/routes/bo.books.routes.ts`, becomes this operation (shortened):
+
+```json title="docs/openapi.json"
+"post": {
+  "operationId": "books:bo:create",
+  "tags": ["books"],
+  "summary": "Add a book",
+  "x-tulipes-permission": "books:bo:create",
+  "x-tulipes-scope": "bo",
+  "x-tulipes-roles": ["admin", "editor", "sysadmin"],
+  "x-tulipes-authorization": "acl",
+  "requestBody": {
+    "required": true,
+    "content": { "application/json": { "schema": {
+      "type": "object",
+      "properties": {
+        "isbn": { "type": "string", "pattern": "^\\d{10}(\\d{3})?$" },
+        "title": { "type": "string", "minLength": 1 },
+        "author": { "type": "string", "minLength": 1 },
+        "price": { "type": "number", "minimum": 0 },
+        "stock": { "default": 0, "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "published_at": { "type": "string", "format": "date", "pattern": "…" }
+      },
+      "required": ["isbn", "title", "author", "price"]
+    } } }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "responses": { "201": { "description": "Success", "…": "the envelope with data described by returns" } }
+}
+```
+
+Each part has a source you already wrote:
+
+| In the document | Comes from |
+|---|---|
+| `operationId`, `x-tulipes-permission` | the RAI id |
+| `summary`, `description` | `name` and `description` on `rai()` |
+| `tags` (OpenAPI), folder (Postman) | the declaring module, or `folder` on `rai()` |
+| `x-tulipes-scope` | the id's scope segment |
+| `x-tulipes-roles` | the ACL: every role that holds the id |
+| `requestBody`, parameters | the `body`, `params` and `query` schemas |
+| the `201` response | `status: 201` on `rai()`, with `returns` as `data` |
+
+The list endpoint documents its list-query policy as parameter
+descriptions, so a client reads exactly what it may send:
+
+```json
+{
+  "name": "filter",
+  "in": "query",
+  "required": false,
+  "schema": {
+    "description": "JSON: [[field, operator, value], [\"or\" | \"and\", …conditions], …]. Filterable: author (string: = in); price (number: > >= < <=); published_at (date: >= <)",
+    "type": "string",
+    "maxLength": 2048
+  }
+}
+```
+
+Because one declaration both validates the request and describes it, the
+document cannot claim a shape the endpoint rejects.
+
+## The Postman collection
+
+`docs/collection.json` has one folder per module, with `{{baseUrl}}` and
+path variables ready to fill in:
+
+```txt
+books
+  Add a book            POST    {{baseUrl}}/api/v1/books
+  Browse the catalogue  GET     {{baseUrl}}/api/v1/books
+  Change a book         PATCH   {{baseUrl}}/api/v1/books/{{isbn}}
+  Withdraw a book       DELETE  {{baseUrl}}/api/v1/books/{{isbn}}
+  Read one book         GET     {{baseUrl}}/api/v1/books/{{isbn}}
+```
+
+Import it into Postman and run **auth / Log in** first: a test script on that
+request stores the returned access and refresh tokens in collection
+variables, and every other request is authenticated with them.
+
+## One surface at a time
+
+A partner integrating with the catalogue does not need the back office.
+`--scope` limits a document to one surface:
+
+```sh
+pnpm tulipes spec --scope web --openapi docs/openapi.web.json
+```
+
+```txt
+30 endpoint(s) in scope "web" across 8 folder(s): agent, auth, books, hello, runs, sessions, tokens, users
+```
+
+## The server URL
+
+Documents name `http://localhost:3000` as the server by default. Point them
+at a deployment with `--url`:
+
+```sh
+pnpm tulipes spec --openapi docs/openapi.json --url https://api.bookstore.example
+```
+
+## It runs offline
+
+`tulipes spec`, like `tulipes routes`, runs an **inspection boot**: every
+routes file is built exactly as the server builds it, with nothing acquired.
+No MongoDB, no Redis, no secrets. This works with every service address
+pointing nowhere:
+
+```sh
+MONGO_URI=mongodb://127.0.0.1:1/x REDIS_URL=redis://127.0.0.1:1 pnpm spec
+```
+
+That is why you can run it in CI, and why routes files must build their
+router from the context and read models, settings and environment values
+only inside handlers. A routes file that reads an environment value while
+building fails inspection with its path and the reason.
+
+<Aside type="tip">
+Commit the generated documents and regenerate them in CI. A diff in
+`docs/openapi.json` in a pull request is a readable summary of what changed
+in the API.
+</Aside>
+
+## Where we are
+
+The bookstore's API is documented from its own declarations, for the whole
+app or one surface, ready for Postman and any OpenAPI tool.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Chapter 10: ship the bookstore" href="/tulipes-js/tutorial/deploy/" description="Production environment, PM2 and nginx." />
+  <LinkCard title="OpenAPI and Postman" href="/tulipes-js/guides/openapi-and-postman/" description="Folders, extensions and every option." />
+  <LinkCard title="@tulipes/spec" href="/tulipes-js/packages/spec/" description="The generator and its programmatic API." />
+  <LinkCard title="Inspection boots" href="/tulipes-js/concepts/inspection/" description="What runs, and what does not, when nothing is acquired." />
+</CardGrid>

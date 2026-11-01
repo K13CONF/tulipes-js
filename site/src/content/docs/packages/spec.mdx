@@ -1,0 +1,191 @@
+---
+title: "@tulipes/spec"
+description: Generate an OpenAPI 3.1 document and a Postman collection from the routes a Tulipes app declares, through inspection, with no database or secrets.
+sidebar:
+  order: 7
+---
+
+import { Aside, Tabs, TabItem, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`@tulipes/spec` turns an app's declared routes into an **OpenAPI 3.1
+document** and a **Postman v2.1 collection**. The source is the route
+registry of a booted app, not parsed source code, so the document describes
+exactly what is mounted. Request and response shapes come from the same zod
+schemas that validate requests at runtime, so the document cannot describe a
+shape the endpoint would reject.
+
+## When you need it
+
+When you publish API documentation, hand a collection to a frontend or QA
+team, or want a reviewable diff of every API change. It is a dev dependency:
+production never loads it. It is separate so an app that never generates a
+spec never installs it.
+
+## Install
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add -D @tulipes/spec
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install -D @tulipes/spec
+    ```
+  </TabItem>
+</Tabs>
+
+## How it plugs in
+
+It is not a boot provider. `tulipes spec` loads it **from the app** and boots
+the app in inspection: every router is built, nothing is acquired, settings
+are their defaults and no `.env`, secret or service is needed. Bootstrap and
+listening are skipped. That makes it safe in CI and next to a running server.
+
+```sh
+pnpm tulipes spec --openapi docs/openapi.json --postman docs/collection.json
+```
+
+```txt
+  wrote docs/openapi.json
+  wrote docs/collection.json
+
+21 endpoint(s) across 4 folder(s): auth, hello, sessions, users
+```
+
+The reference app's `pnpm spec` script runs exactly that command. Commit the
+output: an unexpected change in the document usually means an unexpected
+change to the API.
+
+## Where the content comes from
+
+Everything except the request shapes is already declared on the route:
+
+| In the document | Comes from |
+|---|---|
+| path, method | the mounted Express route |
+| `operationId`, `x-tulipes-permission` | the RAI id |
+| summary, description | `rai({ name, description })` |
+| tag / Postman folder | `rai({ folder })`, defaulting to the declaring module |
+| `x-tulipes-roles` | the ACL: which roles hold that permission |
+| `x-tulipes-scope` | the id's second segment: `users:bo:list` serves `bo` |
+| `x-tulipes-authorization` | `acl`, or `dynamic` under a custom access checker |
+| success status | `rai({ status })`, default 200; 204 has no body |
+| schemas | `rai({ params, query, body, returns })` |
+
+```ts title="modules/auth/schemas/auth.schemas.ts"
+import { z } from "zod/v4";
+
+export const credentials = z.object({
+  email: z.email("emailInvalid"),
+  password: z.string("passwordRequired").min(1, "passwordRequired"),
+});
+
+export const tokenPair = z.object({
+  access_token: z.string(),
+  refresh_token: z.string(),
+  expires_in: z.string(),
+});
+```
+
+```ts title="modules/auth/routes/web.auth.routes.ts"
+router.post("/login", rai({
+  id: "auth:web:login",
+  name: "Log in",
+  description: "Exchange email and password for a token pair",
+  body: credentials,     // validated, and described as the request body
+  returns: tokenPair,    // described as the response data
+}), auth.login());
+```
+
+<Aside type="caution">
+Use `zod/v4`. The generator calls `z.toJSONSchema`, which understands only
+zod 4 schemas. A schema it cannot describe still documents the endpoint, but
+without a shape, and `tulipes spec` lists each one under
+`N schema(s) could not be described`.
+</Aside>
+
+**Models are not a source.** Nothing comes from a Mongoose schema or a
+database connection; `returns` is the only description of a response body.
+That is what lets the generator run with no provider acquired.
+
+### What the Postman collection adds
+
+Postman can import OpenAPI, but a native collection carries more: one folder
+per `folder`, `{{baseUrl}}`, `{{accessToken}}` and `{{refreshToken}}`
+variables with bearer auth inherited by every request, `noauth` on public
+routes, a script on the login request (`auth:web:login` by default) that
+captures the token pair, and example bodies built from the schemas.
+
+## Configuration
+
+| Flag | Meaning |
+|---|---|
+| `--openapi <file>` | Write an OpenAPI 3.1 document |
+| `--postman <file>` | Write a Postman v2.1 collection |
+| `--url <base>` | Server URL in both documents. Default: `https://<publicDomain>` when the `core` module defines `publicDomain`, else `http://localhost:<server.port>` |
+| `--scope <scope>` | Describe only one client surface (`bo`, `web`, `mobile`…) |
+
+Name at least one output. One document per surface is what a mobile or back
+office team actually imports:
+
+```sh
+pnpm tulipes spec --openapi docs/mobile.json --scope mobile
+pnpm tulipes spec --postman docs/backoffice.json --scope bo
+```
+
+## Programmatic use
+
+The CLI is a thin wrapper over three exports:
+
+```ts title="scripts/write-spec.ts"
+import { writeFileSync } from "node:fs";
+import { boot } from "@tulipes/core/boot";
+import { extract, toOpenApi, toPostman } from "@tulipes/spec";
+
+const handle = await boot({ rootDir: process.cwd(), mode: "backend", inspect: true, handleSignals: false });
+try {
+  const source = extract(handle.ctx, { scope: "web" });
+  const { document, warnings } = await toOpenApi(source, { servers: ["https://api.example.com"] });
+  writeFileSync("openapi.json", JSON.stringify(document, null, 2));
+  for (const warning of warnings) console.warn(warning);
+} finally {
+  await handle.shutdown();
+}
+```
+
+- `extract(ctx, { scope? })` reads routes, folders, roles and scopes into a
+  `SpecSource`.
+- `toOpenApi(source, { servers?, title?, version? })` and
+  `toPostman(source, { baseUrl?, name?, loginRouteId? })` both resolve to
+  `{ document, warnings }`.
+- `toJsonSchema`, `exampleFor`, `toOpenApiPath`, `toPostmanPath` and
+  `pathParams` are the helpers they use.
+
+See the [spec API reference](/tulipes-js/reference/api/spec/).
+
+## Version and compatibility
+
+This page describes `@tulipes/spec` **0.4.3**: Node.js `>=24.0.0 <25`, peers
+`@tulipes/core ^0.13.0` and, optionally, `zod ^3.25 || ^4`. Both are peers so
+the package never pins a second copy of either. `@tulipes/cli` 0.4.2 accepts
+`@tulipes/spec ^0.4.1`.
+
+## Failure modes
+
+- Without the package: `` `tulipes spec` needs the generator package: pnpm add -D @tulipes/spec `` (exit code 2).
+- No output flag: `nothing to write — name at least one output` (exit code 2).
+- No routes, or none in the scope: `no routes declared — nothing to describe`
+  or `no routes in scope "mobile" — nothing to describe`.
+- A routes file that uses `ctx.models` while building the router throws
+  `ctx.models is not available during inspection — use it inside a handler or a bootstrap, not while building routes`.
+- Routes under a custom access checker produce the warning
+  `<id>: custom access checker; authorization cannot be described statically`,
+  and their Postman requests do not inherit the collection's bearer token.
+
+<CardGrid>
+  <LinkCard title="OpenAPI and Postman" href="/tulipes-js/guides/openapi-and-postman/" description="Schemas on routes, scopes and publishing the documents." />
+  <LinkCard title="API docs chapter" href="/tulipes-js/tutorial/api-docs/" description="Generating the bookstore's documents in the tutorial." />
+  <LinkCard title="Inspection" href="/tulipes-js/concepts/inspection/" description="What an inspection boot builds and skips." />
+</CardGrid>

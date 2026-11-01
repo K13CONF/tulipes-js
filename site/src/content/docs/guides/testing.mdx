@@ -1,0 +1,405 @@
+---
+title: Testing an app
+description: Test a Tulipes app with @tulipes/testing and vitest, from useTestApp and signed-in roles to settings overrides, real services, queues, sockets and inspection.
+sidebar:
+  order: 29
+---
+
+import { Aside, Steps, Tabs, TabItem, FileTree, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+A Tulipes test boots the real app once per file, on a free port, and talks to it
+over HTTP. That exercises what unit tests of a handler miss: the module order,
+the ACL, `rai()` validation, the envelope, the auth module and the database.
+`@tulipes/testing` makes that a one-liner: it boots the app in a vitest hook,
+decodes the envelope for you and signs in as any role. Both presets come with it
+installed, a `vitest.config.ts` and example tests.
+
+## Where tests live
+
+<FileTree>
+- vitest.config.ts
+- tests/
+  - support.ts the environment and settings every test boots with
+  - app.test.ts what belongs to no module
+- modules/
+  - hello/
+    - tests/
+      - hello.test.ts
+  - auth/
+    - tests/
+      - auth.test.ts
+</FileTree>
+
+A module's tests live in `modules/<name>/tests/` and test that module through
+the booted app. They never reach into another module's files.
+
+```ts title="vitest.config.ts"
+import { defineConfig } from "vitest/config";
+
+// Node strips types natively, so the app's own files import without a loader.
+// Every file boots the app once (@tulipes/testing) against one database, so
+// files run one after another.
+export default defineConfig({ test: { include: ["tests/**/*.test.ts", "modules/*/tests/**/*.test.ts"], fileParallelism: false } });
+```
+
+Keep `fileParallelism: false` while test files share one database: two files
+booting at once would race on the same rows. Run the suite with `pnpm test`
+(`vitest run`).
+
+## A first test
+
+```ts title="modules/hello/tests/hello.test.ts"
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, expect, test } from "vitest";
+import { useTestApp } from "@tulipes/testing";
+
+const rootDir = fileURLToPath(new URL("../../../", import.meta.url));
+const app = useTestApp({ rootDir }, { beforeAll, afterAll });
+
+test("greets", async () => {
+  const { status, data } = await app.get<{ message: string }>(app.api("/hello"));
+
+  expect(status).toBe(200);
+  expect(data?.message).toMatch(/^Hello/);
+});
+
+test("the secret needs a role", async () => {
+  expect((await app.get(app.api("/hello/secret"))).status).toBe(401);
+
+  const user = await app.as("user");
+  expect((await app.get(app.api("/hello/secret"), { as: user })).status).toBe(200);
+});
+```
+
+`rootDir` is the app root, the directory with `modules/` and `config/`. In the
+production preset the boot also needs services and secrets; see
+[services](#services-for-integration-tests) below.
+
+## useTestApp and bootTestApp
+
+```ts
+useTestApp(options, { beforeAll, afterAll }, timeoutMs = 30_000): TestApp
+bootTestApp(options): Promise<TestApp>
+```
+
+`useTestApp` boots in `beforeAll` (with a 30-second timeout by default) and
+shuts down in `afterAll`. It returns a proxy: reading any member before the boot
+throws `the test app is not booted yet (reading … outside a test or before
+beforeAll ran)`. The hooks are any pair with vitest's shape, so another runner
+works too.
+
+`bootTestApp` does the same without hooks: you call `await app.shutdown()`
+yourself.
+
+Every boot uses `mode: "backend"`, `port: 0` (a free port, whatever the app wires
+into `config.server.port`) and no signal handlers.
+
+### Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `rootDir` | required | the app root |
+| `appEnv` | `"test"` | which `.envs/.env.<appEnv>` and settings the boot reads |
+| `env` | none | variables set on `process.env` for the boot, by their env names, restored on shutdown |
+| `settings` | none | per namespace, written through `ctx.settings.set()` right after the boot |
+| `authPath` | `"/auth"` | where the auth module is mounted, under the API prefix |
+| `boot` | none | anything else `boot()` takes, except `rootDir`, `appEnv`, `mode`, `inspect` and `port` |
+
+### Settings overrides
+
+`settings` writes values the way an operator does, so a test reads exactly what
+production would after a console write:
+
+```ts
+const app = useTestApp({
+  rootDir,
+  settings: {
+    hello: { greeting: "Hi" },
+    users: { signupMode: "closed" },
+  },
+}, { beforeAll, afterAll });
+
+test("registration can be closed", async () => {
+  const { status, errors } = await app.post(app.api("/auth/register"), {
+    email: "x@example.test",
+    password: "long enough password",
+  });
+
+  expect(status).toBe(403);
+  expect(errors[0]?.code).toBe("REGISTRATION_CLOSED");
+});
+```
+
+Values go through the namespace's schema like any settings write, so an invalid
+override makes the boot helper throw rather than run tests against a value the
+app would never accept.
+
+## The TestApp
+
+| Member | What it is |
+|---|---|
+| `handle` | the `BootHandle` |
+| `ctx` | `handle.ctx`: models, config, queues, the ACL |
+| `base` | `http://127.0.0.1:<port>` |
+| `prefix` | `config.api.prefix`, or `""` |
+| `api(path)` | `base + prefix + path`: `app.api("/hello")` is `http://127.0.0.1:…/api/v1/hello` |
+| `request(method, path, options?)` | one request, envelope decoded |
+| `get`, `delete` | `(path, options?)` |
+| `post`, `patch` | `(path, body?, options?)` |
+| `register(credentials?)` | a fresh signed-in account through `/auth/register` |
+| `login(email, password)` | a token pair through `/auth/login` |
+| `as(role)` | an account holding `role`, signed in |
+| `shutdown()` | stop the app and restore `process.env` |
+
+`path` is absolute on the app (`/api/v1/users`, or what `app.api()` returns) or a
+full URL. Request options:
+
+| Option | Meaning |
+|---|---|
+| `body` | encoded as JSON (a string is sent as is); sets `content-type` |
+| `token` | a bearer token |
+| `as` | an account from `register()`, `login()` or `as()`; wins over `token` |
+| `headers` | extra headers |
+| `query` | appended to the URL |
+
+Every response is a `TestResponse<T>`:
+
+```ts
+const response = await app.get<{ id: string }[]>(app.api("/users"), { as: admin, query: { per_page: 2 } });
+
+response.status;   // 200
+response.data;     // T | null, from the envelope
+response.errors;   // the envelope's errors
+response.body;     // the whole envelope, meta included
+response.headers;  // fetch Headers
+response.raw;      // the fetch Response, already read
+```
+
+A body that is not JSON becomes a synthetic failed envelope whose error code is
+`HTTP_<status>`, so an assertion on `status` reads the same either way.
+
+### Signing in as a role
+
+`as(role)` registers an account, and for anything but `user` promotes it through
+the app's `User` model and signs in again, so the new session resolves to the
+promoted role:
+
+```ts
+const admin = await app.as("admin");
+expect((await app.get(app.api("/config"), { as: admin })).status).toBe(200);
+```
+
+It needs the production preset's auth module (or one with the same `/register`
+and `/login` contract at `authPath`) and a `User` model with a `role` field. A
+failed registration throws with the envelope's errors, for example
+`register failed (403): Registration is closed (REGISTRATION_CLOSED)`.
+
+## Services for integration tests
+
+The production preset's boot needs MongoDB, Redis and the auth module's secrets.
+`tests/support.ts` provides them, and refuses to run against anything but
+dedicated test services:
+
+```ts title="tests/support.ts"
+export function testEnv(): Record<string, string> {
+  if (!process.env.TEST_MONGO_URI || !process.env.TEST_REDIS_URL) {
+    throw new Error("Tests require dedicated TEST_MONGO_URI and TEST_REDIS_URL services");
+  }
+  return {
+    MONGO_URI: process.env.TEST_MONGO_URI,
+    REDIS_URL: process.env.TEST_REDIS_URL,
+    JWT_ACCESS_SECRET: randomBytes(32).toString("hex"),
+    JWT_REFRESH_SECRET: randomBytes(32).toString("hex"),
+    AUTH_ADMIN_EMAIL: "test-admin@example.test",
+    AUTH_ADMIN_PASSWORD: randomBytes(32).toString("hex"),
+    LOG_LEVEL: "fatal",
+    LOG_FILE: "false",
+    LOG_CONSOLE: "false",
+  };
+}
+
+export function testSettings(): Record<string, Record<string, unknown>> {
+  return {
+    security: {
+      trustProxyCidrs: "127.0.0.1/32,::1/128",
+      corsOrigins: "https://console.example.test",
+      corsCredentials: false,
+      rateLimits: { namespace: "test-" + randomBytes(12).toString("hex"), windowMs: 60_000, auth: 200, session: 1000, config: 200 },
+    },
+    hello: { greeting: "Hello" },
+  };
+}
+```
+
+Every module test boots with both:
+
+```ts title="modules/users/tests/users.test.ts"
+const rootDir = fileURLToPath(new URL("../../../", import.meta.url));
+const app = useTestApp({ rootDir, env: testEnv(), settings: testSettings() }, { beforeAll, afterAll });
+```
+
+A per-run rate-limit namespace keeps one run's counters from throttling the next,
+and the higher quotas leave room for tests that sign in many times.
+
+<Steps>
+
+1. Start disposable services. Never point these at application data: the suite
+   writes users, sessions and settings.
+
+   ```sh
+   docker run -d --name test-mongo -p 27017:27017 mongo:8
+   docker run -d --name test-redis -p 6379:6379 redis:7
+   ```
+
+2. Run the suite with both URLs:
+
+   ```sh
+   TEST_MONGO_URI=mongodb://127.0.0.1:27017/myapp_tests \
+   TEST_REDIS_URL=redis://127.0.0.1:6379/3 pnpm test
+   ```
+
+</Steps>
+
+Tests that seed rows should tag them (a random suffix in an email, say) and
+filter on the tag, so other files' rows never change a count. The users tests do
+exactly that.
+
+The minimal preset declares no services, so its tests boot with
+`useTestApp({ rootDir })` and nothing else.
+
+## Testing queues
+
+The test app is a backend boot: it produces jobs but runs no consumer. Test the
+two halves separately.
+
+**That a route enqueues.** Spy on the producer:
+
+```ts
+import { vi } from "vitest";
+
+test("using a greeting queues a count", async () => {
+  const user = await app.as("user");
+  const add = vi.spyOn(app.ctx.queues!, "add");
+  try {
+    const response = await app.post(app.api("/greetings/world/use"), undefined, { as: user });
+
+    expect(response.status).toBe(202);
+    expect(add).toHaveBeenCalledWith("hello.count-greeting", "count", { name: "world" });
+  } finally {
+    add.mockRestore();
+  }
+});
+```
+
+**What the processor does.** Put the work in a helper the processor calls, and
+test the helper with `app.ctx`. The agents module works this way: its tests call
+`composeLoop(ctx).run(runId)` directly, exactly what the `agents.run` processor
+does, with only the model scripted.
+
+**The whole round trip.** When you need a real consumer, boot a worker of the
+same app inside the test, after `useTestApp` has set the environment, and shut it
+down in `finally`:
+
+```ts
+import { boot } from "@tulipes/core/boot";
+
+test("the worker counts a use", async () => {
+  const worker = await boot({ rootDir, mode: "worker", handleSignals: false });
+  try {
+    // enqueue through the API, then poll the database until the count moves
+  } finally {
+    await worker.shutdown();
+  }
+});
+```
+
+A worker boot runs bootstraps and connects to the same services, and refuses to
+start when no module registers a processor.
+
+## Testing sockets
+
+The test app listens on a real port, so a real client can connect. Add
+`socket.io-client` as a dev dependency (the generated apps do not include it):
+
+```ts
+import { io } from "socket.io-client";
+
+test("the hello namespace greets on connect", async () => {
+  const socket = io(app.base + "/hello", { transports: ["websocket"], reconnection: false });
+  try {
+    const greeting = await new Promise((resolve, reject) => {
+      socket.once("greeting", resolve);
+      socket.once("connect_error", reject);
+    });
+
+    expect(greeting).toMatchObject({ message: "Hello" });
+  } finally {
+    socket.disconnect();
+  }
+});
+```
+
+Always disconnect in `finally`: an open socket keeps the shutdown waiting.
+
+## Inspection-based tests
+
+An [inspection boot](/tulipes-js/concepts/inspection/) builds every router and the
+ACL with no service touched. Use it for assertions about the app's shape that do
+not need data. The generated `tests/app.test.ts` proves an inspection describes
+the same API as the running app:
+
+```ts title="tests/app.test.ts"
+test("an inspection boot describes the same routes and schemas as the running app", async () => {
+  const inspection = await boot({ rootDir, mode: "backend", inspect: true, handleSignals: false });
+
+  try {
+    const inspected = { ...extract(inspection.ctx), app: { name: "parity" } };
+    const runtime = { ...extract(app.handle.ctx), app: { name: "parity" } };
+
+    expect(await toOpenApi(inspected)).toEqual(await toOpenApi(runtime));
+    expect(await toPostman(inspected)).toEqual(await toPostman(runtime));
+  } finally {
+    await inspection.shutdown();
+  }
+});
+```
+
+If a routes file reads an environment value or a model while building, this test
+fails with the file's path, which is the point: routing must not depend on a
+service.
+
+The same boot answers permission questions without any request:
+
+```ts
+test("the back office is not public", async () => {
+  const inspection = await boot({ rootDir, mode: "backend", inspect: true, handleSignals: false });
+  try {
+    for (const route of inspection.ctx.routes.all()) {
+      if (route.info.id.split(":")[1] === "bo") {
+        expect(inspection.ctx.acl!.rolesFor(route.info.id)).not.toContain("guest");
+      }
+    }
+  } finally {
+    await inspection.shutdown();
+  }
+});
+```
+
+## Common mistakes
+
+- **Booting per test.** Each boot connects to every service; boot once per file.
+- **Running files in parallel against one database.** Keep
+  `fileParallelism: false`.
+- **Forgetting `app.api()`.** `app.get("/hello")` asks for `/hello`, not
+  `/api/v1/hello`, and gets a 404 `ROUTE_NOT_FOUND`.
+- **Reading `app` at module scope.** It is not booted until `beforeAll` runs.
+- **Pointing `TEST_MONGO_URI` at real data.** The suite writes to it.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Tutorial: testing" href="/tulipes-js/tutorial/testing/" description="Write the bookstore's tests." />
+  <LinkCard title="The testing package" href="/tulipes-js/packages/testing/" description="Install and exports." />
+  <LinkCard title="Inspection" href="/tulipes-js/concepts/inspection/" description="What an inspection boot builds and skips." />
+  <LinkCard title="OpenAPI and Postman" href="/tulipes-js/guides/openapi-and-postman/" description="The documents the parity test compares." />
+</CardGrid>

@@ -1,0 +1,158 @@
+---
+title: Environment variables reference
+description: Every environment variable the reference app, its modules, the providers and the test suite read, with type, default, whether it is required and who owns it.
+sidebar:
+  order: 2
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Values that differ per deployment, and every secret, are environment variables.
+A module declares the ones it owns under `tulipes.env` in its `package.json`;
+boot phase 1 resolves them and refuses to start when a required one is missing.
+A few process-level variables (`APP_ENV`, `PROCESS_MODE`, the MCP and test
+variables) are read directly instead. This page lists both. For the workflow, see
+[environment variables](/tulipes-js/guides/environment-variables/).
+
+## How a value is resolved
+
+```txt
+process.env  >  .envs/.env.<APP_ENV>  >  the declaration's default
+```
+
+A value injected by the container always wins over the file, and the file is
+optional. A declared variable is read as `ctx.config.<module>.<name>`: `PORT`,
+declared by `core` as `port`, is `ctx.config.core.port`.
+
+| Declared type | Accepted values | Coerced to |
+|---|---|---|
+| `string` | any text | `string` |
+| `number` | anything `Number()` parses | `number` |
+| `boolean` | `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off` | `boolean` |
+| `enum` | one of the declared `enum` list | `string` |
+| `url` | a valid URL | `string` |
+| `secret` | any text, never printed or serialised | `string` |
+
+A declaration cannot be both `required` and have a `default`. One variable has one
+owner module; a second declaration aborts the boot.
+
+## Process variables
+
+Read by core or the tooling directly, not declared in any `tulipes.env`.
+
+| Variable | Type | Default | Required | Read by | Purpose |
+|---|---|---|---|---|---|
+| `APP_ENV` | `development`, `staging`, `production`, `test` | `development` | no | core boot, `tulipes config import` | Which `.envs/.env.<APP_ENV>` and `config/settings.<APP_ENV>.json` are read, and whether error envelopes reveal internals (only in `development` and `test`). Any other value aborts the boot. |
+| `PROCESS_MODE` | `backend`, `worker`, `script` | `backend` | no | core boot | Which [process mode](/tulipes-js/concepts/process-modes/) runs. `boot({ mode })` wins. `"web"` is refused with a hint that it was renamed to `backend`. |
+| `NODE_ENV` | string | mirrored from `APP_ENV` | no | third-party libraries | Set only when absent: `development` or `test` as is, every other `APP_ENV` becomes `production`. Tulipes itself never reads it. |
+| `TZ` | IANA zone | the process's own | no | Node.js | Overwritten with `config.timezone.default` unless `applyToProcess: false`, and restored at shutdown. |
+
+<Aside type="caution">
+Use `APP_ENV`, not `NODE_ENV`, to choose a deployment. Libraries treat `NODE_ENV`
+as an optimisation flag; Tulipes keeps its own axis.
+</Aside>
+
+## Reference app variables
+
+Declared in `example/modules/<module>/package.json` under `tulipes.env`. A
+generated production app declares the same ones. `example/package.json` itself
+declares none.
+
+### `core` module
+
+| Variable | Config name | Type | Default | Required | Purpose |
+|---|---|---|---|---|---|
+| `PORT` | `core.port` | number | `3000` | no | HTTP port of the backend process, wired to `server.port`. |
+| `MONGO_URI` | `core.mongodbUri` | url | none | no | Full MongoDB connection string. When set it wins over the parts below; the only way to name a replica set, an Atlas `mongodb+srv://` cluster or driver options. |
+| `MONGO_HOST` | `core.mongodbHost` | url | `mongodb://localhost:27017` | no | Host as a URI without credentials or database. |
+| `MONGO_USERNAME` | `core.mongodbUsername` | string | `""` | no | Username; empty for an unauthenticated server. |
+| `MONGO_PASSWORD` | `core.mongodbPassword` | secret | `""` | no | Password. |
+| `MONGO_DBNAME` | `core.mongodbDbName` | string | `tulipes_example` | no | Database name. |
+| `REDIS_URL` | `core.redisUrl` | url | none | **yes** | Redis for queues, the cache and rate limits; wired to `bullmq.redisUrl`. |
+| `LOG_LEVEL` | `core.logLevel` | enum: `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` | no | Lowest level that reaches any destination. |
+| `LOG_CONSOLE` | `core.logConsole` | boolean | `true` | no | Pretty logs on stdout; turn off where a collector reads files only. |
+| `LOG_FILE` | `core.logFile` | boolean | `true` | no | JSON-line log files under `LOG_DIR`. Off, the log stream endpoint answers 409 `FILE_LOGGING_DISABLED`. |
+| `LOG_DIR` | `core.logDir` | string | `logs` | no | Log directory, relative to the app root or absolute. |
+
+### `auth` module
+
+| Variable | Config name | Type | Default | Required | Purpose |
+|---|---|---|---|---|---|
+| `JWT_ACCESS_SECRET` | `auth.jwtAccessSecret` | secret | none | **yes** | Signing key for short-lived access tokens. |
+| `JWT_REFRESH_SECRET` | `auth.jwtRefreshSecret` | secret | none | **yes** | Signing key for refresh tokens, separate so leaking one cannot mint the other. |
+| `AUTH_ADMIN_EMAIL` | `auth.adminEmail` | string | none | **yes** | Email of the admin account seeded on first boot. |
+| `AUTH_ADMIN_PASSWORD` | `auth.adminPassword` | secret | none | **yes** | Password of the seeded admin; change it after the first login. |
+
+### `agents` module
+
+| Variable | Config name | Type | Default | Required | Purpose |
+|---|---|---|---|---|---|
+| `ANTHROPIC_API_KEY` | `agents.anthropicApiKey` | secret | none | no | Claude API key for agent runs. Unset, the app boots and serves MCP as usual, and starting a run answers 503 `AGENT_UNCONFIGURED`. |
+| `ANTHROPIC_BASE_URL` | `agents.anthropicBaseUrl` | url | none | no | Another endpoint for the Claude API, such as a proxy or gateway. |
+
+No other module of the reference app (`agent`, `config`, `hello`, `security`,
+`settings`, `users`) declares a variable. Their tunables are
+[settings](/tulipes-js/reference/topics/configuration/#module-settings-moduleconfigts),
+not environment values.
+
+## Provider variables
+
+The providers declare no variables of their own. `@tulipes/mongoose` reads
+`config.mongoose` and `@tulipes/bullmq` reads `config.bullmq.redisUrl`; the app
+wires those from the variables above in `config/app.config.ts`.
+`@tulipes/socket.io` reads neither.
+
+## MCP variables
+
+| Variable | Type | Default | Read by | Purpose |
+|---|---|---|---|---|
+| `TULIPES_MCP_TOKEN` | string | none (guest) | `serveMcp()` in `@tulipes/mcp`, the app's `pnpm mcp` | Credential for the stdio transport, used when no `--token` is passed. Resolved by `config/mcp.config.ts`'s `identify`. |
+| `TULIPES_URL` | url | `http://localhost:3000/api/v1/agent` | the `tulipes-mcp` bridge binary | The app's agent door, when `--url` is not passed. |
+| `TULIPES_TOKEN` | string | none (guest) | the `tulipes-mcp` bridge binary | Bearer token sent to the agent door, when `--token` is not passed. |
+| `MCP_ROLE` | string | none | `developmentIdentity()` | Role for a local MCP caller. The variable name is the function's argument; `MCP_ROLE` is the default. Refused when `APP_ENV` is `production` or `staging`. The reference app does not use it. |
+
+## Test variables
+
+| Variable | Type | Default | Required | Purpose |
+|---|---|---|---|---|
+| `TEST_MONGO_URI` | url | none | **yes** for integration tests | Dedicated MongoDB for the suite. Becomes `MONGO_URI` inside test boots. |
+| `TEST_REDIS_URL` | url | none | **yes** for integration tests | Dedicated Redis for the suite. Becomes `REDIS_URL` inside test boots. |
+
+The reference app's `tests/support.ts` throws
+`Tests require dedicated TEST_MONGO_URI and TEST_REDIS_URL services` when either is
+missing, and supplies random JWT secrets, a test admin, `LOG_LEVEL=fatal` and
+`LOG_FILE=false` itself. In the framework repository, integration tests skip
+without them and CI refuses a run that skipped.
+
+```sh
+TEST_MONGO_URI=mongodb://127.0.0.1:27017/tulipes_tests \
+TEST_REDIS_URL=redis://127.0.0.1:6379/3 pnpm test
+```
+
+See the [testing guide](/tulipes-js/guides/testing/).
+
+## Boot errors
+
+Environment problems are reported together in the `environment` phase, each
+prefixed with the owning module:
+
+```txt
+Boot aborted during "environment" — 2 issue(s):
+  ✖ [auth] required variable "JWT_ACCESS_SECRET" has no value (Signing key for short-lived access tokens)
+  ✖ [core] variable "PORT": "abc" is not a number
+```
+
+Other messages from the same phase: `variable "X" is already declared by module
+"y" — one owner per variable`, `"maybe" is not a boolean (use true/false, 1/0,
+yes/no, on/off)`, `"x" is not one of: fatal, error, …`, `"x" is not a valid URL`,
+and `APP_ENV "prod" is invalid — expected one of: development, staging, production, test`.
+`tulipes env check` runs the same resolution without booting; see
+[the CLI reference](/tulipes-js/reference/cli/env-check/).
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Environment variables guide" href="/tulipes-js/guides/environment-variables/" description="Declare a variable, generate .env.example and type it with tulipes sync." />
+  <LinkCard title="Configuration keys" href="/tulipes-js/reference/topics/configuration/" description="Where the values are wired and what reads them." />
+  <LinkCard title="Deployment" href="/tulipes-js/production/deployment/" description="APP_ENV, .envs and secrets in production." />
+</CardGrid>

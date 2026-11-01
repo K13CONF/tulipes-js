@@ -1,0 +1,315 @@
+---
+title: OpenAPI and Postman
+description: Generate an OpenAPI 3.1 document and a Postman collection with tulipes spec, learn what each field comes from, split by scope, and keep them current in CI.
+sidebar:
+  order: 28
+---
+
+import { Aside, Steps, Tabs, TabItem, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Every route in a Tulipes app already declares its id, its name, its description,
+the module that owns it and, through the ACL, the roles that may call it. Add zod
+schemas to the same `rai()` and the framework validates requests with them. At
+that point the API documentation is a by-product: `@tulipes/spec` reads the
+booted app's route registry and writes an OpenAPI 3.1 document and a Postman
+collection that cannot describe a route that is not mounted, or a body the route
+would reject.
+
+## Install
+
+The generator is a separate dev dependency, so an app that never documents
+itself never installs it. Both presets include it.
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add -D @tulipes/spec
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install -D @tulipes/spec
+    ```
+  </TabItem>
+</Tabs>
+
+Without it, `tulipes spec` exits with code 2:
+
+```txt
+`tulipes spec` needs the generator package:
+
+  pnpm add -D @tulipes/spec
+
+It is separate so an app that never generates a spec never installs it.
+```
+
+The CLI loads the copy installed in the app, so a globally installed `tulipes`
+works.
+
+## Generate
+
+```sh
+pnpm tulipes spec --openapi docs/openapi.json --postman docs/collection.json
+```
+
+```txt
+  wrote docs/openapi.json
+  wrote docs/collection.json
+
+39 endpoint(s) across 10 folder(s): agent, auth, config, hello, runs, runs (back office), sessions, settings, tokens, users
+```
+
+That is the reference app's output. It has this as a script, `pnpm spec`. The command runs an
+[inspection boot](/tulipes-js/concepts/inspection/): every router is built, no
+service is connected, no secret or `.env` is read and nothing listens. It runs on
+a laptop with nothing started and in a CI job with no services.
+
+### Every flag
+
+| Flag | Meaning |
+|---|---|
+| `--openapi <file>` | write an OpenAPI 3.1 document |
+| `--postman <file>` | write a Postman v2.1 collection |
+| `--url <base>` | the server URL both documents advertise |
+| `--scope <scope>` | describe only the routes whose RAI id has this scope |
+
+Name at least one output; with neither, the command prints examples and exits
+with code 2. Directories are created as needed. Each flag takes a value and may
+appear once. `--scope` must be a valid segment (`[a-z][a-z0-9-]*`). The 0.10 flags
+`--offline` and `--runtime` are refused: inspection is the only mode.
+
+**`--url`** defaults to what the app itself would be reachable at: `https://` plus
+the core module's `publicDomain` value when it is set to something other than
+`localhost`, otherwise `http://localhost:<port>` with the port wired into
+`config.server.port` (3000 when none is). In the reference app `publicDomain` is
+a setting, and an inspection boot reads settings as their schema defaults
+(`"localhost"`), not from the store, so the default is effectively
+`http://localhost:3000` there. Set `--url` for a deployment-specific document:
+
+```sh
+pnpm tulipes spec --openapi docs/openapi.json --url https://api.example.com
+```
+
+## What goes into the document
+
+| In the document | Comes from |
+|---|---|
+| path and method | the mounted Express route, `:param` written as `{param}` |
+| `operationId`, `summary`, `description` | `rai({ id, name, description })` |
+| tag (OpenAPI) and folder (Postman) | `rai({ folder })`, defaulting to the declaring module |
+| `x-tulipes-permission` | the RAI id |
+| `x-tulipes-scope` | the id's second segment |
+| `x-tulipes-roles` on an operation | `ctx.acl.rolesFor(id)`: every role that reaches it |
+| `security` | `[]` (optional) when `guest` reaches it, bearer otherwise |
+| request parameters and body | `rai({ params, query, body })` |
+| success response | the envelope, with `data` from `rai({ returns })` |
+| success status | `rai({ status })`, default 200; 204 has no body |
+| 422 response | present when the route declares `params`, `query` or `body` |
+| 401 and 403 responses | present when the route is not public |
+| document `x-tulipes-roles` | every role, with its description and extras |
+| document `x-tulipes-scopes` | every scope among the described routes |
+| `info.title`, `info.version` | `config.app.name`, `config.app.version` (or `0.0.0`) |
+
+A route with schemas, from the reference app:
+
+```ts title="modules/auth/routes/web.auth.routes.ts"
+router.post("/login", rai({
+    id: "auth:web:login",
+    name: "Log in",
+    description: "Exchange email and password for a token pair",
+    body: credentials,
+    returns: tokenPair,
+  }), auth.login());
+```
+
+```ts title="modules/auth/schemas/auth.schemas.ts"
+export const credentials = z.object({
+  email: z.email("emailInvalid"),
+  password: z.string("passwordRequired").min(1, "passwordRequired"),
+});
+
+export const tokenPair = z.object({
+  access_token: z.string(),
+  refresh_token: z.string(),
+  expires_in: z.string(),
+});
+```
+
+An operation as generated (abridged):
+
+```json title="docs/openapi.json"
+{
+  "operationId": "config:bo:read",
+  "tags": ["config"],
+  "summary": "Describe the app",
+  "x-tulipes-permission": "config:bo:read",
+  "x-tulipes-scope": "bo",
+  "x-tulipes-roles": ["admin", "sysadmin"],
+  "x-tulipes-authorization": "acl",
+  "security": [{ "bearerAuth": [] }],
+  "responses": {
+    "200": { "description": "Success", "content": { "application/json": { "schema": {
+      "allOf": [
+        { "$ref": "#/components/schemas/Envelope" },
+        { "type": "object", "properties": { "success": { "const": true }, "data": {} } }
+      ] } } } },
+    "401": { "description": "Authentication required" },
+    "403": { "description": "Authenticated, but not permitted" }
+  }
+}
+```
+
+Every response is the [envelope](/tulipes-js/concepts/responses-and-errors/),
+described once in `components.schemas.Envelope`, with an `ApiError` of
+`{ field, message, code }`. Only `data` varies per operation. The security scheme
+is `bearerAuth`, HTTP bearer.
+
+### Schemas must be zod 4
+
+The generator calls `z.toJSONSchema`, which understands only zod 4 schemas.
+Import from `zod/v4`. A schema it cannot describe still documents the endpoint,
+without a shape, and the command lists it:
+
+```txt
+1 schema(s) could not be described:
+  ! users:bo:create body: <the converter's error message>
+```
+
+**Models are not a source.** Nothing is derived from a Mongoose schema or a
+database. The `returns` schema is the only description of a response body, which
+is what lets the command run with no provider installed. `returns` is never
+validated at runtime; a handler is trusted with its own output.
+
+## The Postman collection
+
+Postman can import the OpenAPI document, but the native collection carries more:
+
+- one folder per `folder`, in the app's own grouping,
+- collection variables `{{baseUrl}}`, `{{accessToken}}` and `{{refreshToken}}`,
+  with bearer auth inherited by every request,
+- `noauth` on public routes, so they are exercised as the public reaches them,
+- a test script on the login request (`auth:web:login` when the app declares it)
+  that stores the returned pair in `accessToken` and `refreshToken`: sign in once
+  and the rest of the collection is authenticated,
+- example bodies built from the schemas.
+
+Import the file in Postman, set `baseUrl` if `--url` was not right, run "Log in",
+then anything else.
+
+## One document per surface
+
+A RAI id's scope names the surface it serves: `web`, `bo`, `mobile`. A mobile
+team wants the mobile API, not the back office:
+
+```sh
+pnpm tulipes spec --openapi docs/mobile.json --scope mobile
+pnpm tulipes spec --postman docs/backoffice.json --scope bo
+```
+
+A scope with no routes prints `no routes in scope "x" — nothing to describe` and
+writes nothing. The scope filter is about documentation only: the ACL does not
+interpret scopes, and filtering a document hides nothing from a caller.
+
+## Custom access checkers
+
+With `ctx.routes.setAccessChecker()` installed, the roles behind an endpoint are
+decided at request time, so the generator makes no claim: operations carry
+`x-tulipes-authorization: "dynamic"` and no `security` requirement, Postman
+requests are not given the collection's bearer token, and each such route adds a
+warning (`custom access checker; authorization cannot be described statically`).
+Configure authorization for those requests by hand.
+
+## Programmatic use
+
+The CLI is a thin wrapper over three exports:
+
+```ts title="scripts/write-spec.ts"
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { boot } from "@tulipes/core/boot";
+import { extract, toOpenApi, toPostman } from "@tulipes/spec";
+
+const rootDir = join(import.meta.dirname, "..");
+const handle = await boot({ rootDir, mode: "backend", inspect: true, handleSignals: false });
+try {
+  const source = extract(handle.ctx, { scope: "web" });
+  const { document, warnings } = await toOpenApi(source, {
+    servers: ["https://api.example.com"],
+    title: "Example API",
+    version: "1.4.0",
+  });
+  writeFileSync("docs/web.json", JSON.stringify(document, null, 2) + "\n");
+  for (const warning of warnings) console.warn(warning);
+
+  const postman = await toPostman(source, { baseUrl: "https://api.example.com", name: "Example API" });
+  writeFileSync("docs/web.collection.json", JSON.stringify(postman.document, null, 2) + "\n");
+} finally {
+  await handle.shutdown();
+}
+```
+
+- **`extract(ctx, { scope? })`** returns a `SpecSource`: the app's name and
+  version, the routes (each with its id, scope, method, path, module, folder,
+  schemas, `roles` and `public`), the folders, the scopes and the roles. It reads
+  `ctx.routes`, `ctx.acl` and `ctx.config`, so it works on an inspection boot or a
+  running one.
+- **`toOpenApi(source, { servers?, title?, version? })`** and
+  **`toPostman(source, { baseUrl?, name?, loginRouteId? })`** both resolve to
+  `{ document, warnings }`. `loginRouteId` names the request whose response is
+  captured into the token variables.
+
+The reference app's own test uses this to prove that an inspection boot and a
+running app produce identical documents:
+
+```ts title="tests/app.test.ts"
+test("an inspection boot describes the same routes and schemas as the running app", async () => {
+  const inspection = await boot({ rootDir, mode: "backend", inspect: true, handleSignals: false });
+
+  try {
+    const inspected = { ...extract(inspection.ctx), app: { name: "parity" } };
+    const runtime = { ...extract(app.handle.ctx), app: { name: "parity" } };
+
+    expect(await toOpenApi(inspected)).toEqual(await toOpenApi(runtime));
+    expect(await toPostman(inspected)).toEqual(await toPostman(runtime));
+  } finally {
+    await inspection.shutdown();
+  }
+});
+```
+
+## Keeping the documents current
+
+Commit what the command writes. A generated document is an artifact a reviewer
+can diff, and an unexpected change in it usually means an unexpected change to the
+API. Because generation needs no services, a CI step can regenerate and fail when
+the committed files are stale:
+
+```yaml title=".github/workflows/ci.yml (a step)"
+- name: API documents are current
+  run: |
+    pnpm spec
+    git diff --exit-code docs/openapi.json docs/collection.json
+```
+
+Do the same for the agent manifest (`pnpm manifest`). The generated apps do not
+ship this step; add it to your own pipeline.
+
+## Common mistakes
+
+- **`from "zod"` instead of `from "zod/v4"`.** The route validates, the document
+  has no shape, and the command warns.
+- **Reading an environment value while building a router.** Inspection refuses
+  it, naming the file; read it inside the handler or build the middleware with
+  `lazy()`.
+- **Expecting response validation.** `returns` documents; it does not check.
+- **A route reached by nobody.** Its `x-tulipes-roles` is empty. Check with
+  [`tulipes routes`](/tulipes-js/reference/cli/routes/).
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Validation" href="/tulipes-js/guides/validation/" description="Write the schemas the documents are built from." />
+  <LinkCard title="Tutorial: API docs" href="/tulipes-js/tutorial/api-docs/" description="Generate the bookstore's documents." />
+  <LinkCard title="tulipes spec" href="/tulipes-js/reference/cli/spec/" description="The command reference." />
+  <LinkCard title="The spec package" href="/tulipes-js/packages/spec/" description="Install and exports." />
+</CardGrid>
