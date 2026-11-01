@@ -166,7 +166,13 @@ export interface RunStore {
   /** Checkpoint A: the turn, what it asked for, its usage — before any tool runs. */
   appendTurn(runId: string, turn: ModelTurn, pending: PendingCall[], elapsedMs: number): Promise<Run>;
   awaitApproval(runId: string, elapsedMs: number): Promise<Run>;
-  beginExecution(runId: string): Promise<Run>;
+  /**
+   * Claim the pending calls for execution. Null when another job already
+   * holds the claim — a redelivery racing a live worker — so this one must
+   * not run them. `takeover` claims regardless: the resume after a crash,
+   * which re-runs only read-only calls.
+   */
+  beginExecution(runId: string, options?: { takeover?: boolean }): Promise<Run | null>;
   /** Checkpoint B: one user message answering every pending call; clears pending and decisions. */
   appendResults(runId: string, results: Anthropic.Beta.BetaToolResultBlockParam[], elapsedMs: number): Promise<Run>;
   /** A mid-conversation operator message (`role: "system"`). */

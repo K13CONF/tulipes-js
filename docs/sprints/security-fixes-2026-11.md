@@ -155,6 +155,10 @@ notes warn.
   `resume()`.
 - Test with the memory store: two concurrent `run(runId)` calls execute one
   write. MIGRATING step.
+- As built: the claim covers tool execution, where the duplicate effect is.
+  `resume()` takes no lease yet, so two racing jobs can still both ask the
+  model for a turn (duplicate cost and transcript, no duplicate write). Moved
+  to the backlog.
 
 ## Hardening notes
 

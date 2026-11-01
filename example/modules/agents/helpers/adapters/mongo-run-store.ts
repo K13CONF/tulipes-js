@@ -85,8 +85,16 @@ export class MongoRunStore implements RunStore {
     return this.#write(runId, { $set: { status: "waiting_approval", elapsed_ms: elapsedMs } }, { live: true });
   }
 
-  beginExecution(runId: string): Promise<Run> {
-    return this.#write(runId, { $set: { executing: true } }, { live: true });
+  async beginExecution(runId: string, { takeover = false } = {}): Promise<Run | null> {
+    if (takeover) return this.#write(runId, { $set: { executing: true } }, { live: true });
+    // Atomic: of two jobs on one run, exactly one flips executing.
+    const doc = await this.#runs()
+      .findOneAndUpdate({ _id: runId, status: { $nin: ENDED }, executing: { $ne: true } }, { $set: { executing: true } }, { new: true })
+      .lean<RunDocument>();
+    if (doc) return toRun(doc);
+    const current = await this.load(runId);
+    if (!current) throw new Error(`agents: no run ${runId}`);
+    return current.executing && !ENDED.includes(current.status) ? null : current;
   }
 
   appendResults(runId: string, results: Anthropic.Beta.BetaToolResultBlockParam[], elapsedMs: number): Promise<Run> {

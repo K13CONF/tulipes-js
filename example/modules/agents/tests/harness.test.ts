@@ -221,6 +221,24 @@ describe("resume", () => {
     expect(run.status).toBe("succeeded");
   });
 
+  test("two jobs on one run — a redelivery racing a live worker — run an approved write once", async () => {
+    const write = toolUse("hello_bo_greetings_reset", { confirm: true });
+    const tools = new FakeTools([{ name: "hello_bo_greetings_reset", readOnly: false, handler: () => ok({ reset: 1 }) }]);
+    const model = new ScriptedModel([turn([finish("done")])]);
+    const { loop, store } = compose({ model, tools });
+    store.patch("r1", (run) => {
+      run.status = "waiting_approval";
+      run.transcript.push({ role: "assistant", content: [write] });
+      run.pending = [{ id: write.id, name: write.name, input: write.input }];
+      run.decisions = { [write.id]: "allow" };
+      run.turns = 1;
+    });
+
+    await Promise.all([loop.run("r1"), loop.run("r1")]);
+
+    expect(tools.calls.map((call) => call.name)).toEqual(["hello_bo_greetings_reset"]);
+  });
+
   test("a run already ended is returned as it is", async () => {
     const model = new ScriptedModel([]);
     const { loop, store } = compose({ model });

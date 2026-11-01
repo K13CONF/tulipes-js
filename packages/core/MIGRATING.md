@@ -116,6 +116,16 @@ fixes from the same audit arrive with the upgrade and need nothing here.
    fails. Check the stored value first (`GET /config/core`): a value that is
    not a hostname now fails validation at boot.
 
+9. **One job runs a run's tools.** If BullMQ redelivered a stalled agent job
+   while the first worker was still running it, both could execute the same
+   approved write. `beginExecution` in
+   `modules/agents/helpers/adapters/mongo-run-store.ts` is now an atomic claim
+   (`executing: { $ne: true }` in the filter) that returns `null` when another
+   job holds it; the run loop stops that job, and a resume after a crash
+   claims with `{ takeover: true }`. Copy the store method, the `RunStore`
+   signature in `helpers/harness/contracts.ts` and the two lines around
+   `beginExecution` in `helpers/harness/run-loop.ts`.
+
 ---
 
 ## Unreleased — grants outside a module's own ids

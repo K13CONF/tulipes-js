@@ -7,6 +7,7 @@ import type { Auth } from "@tulipes/core/http";
 import { useTestApp } from "@tulipes/testing";
 
 import { testEnv, testSettings } from "../../../tests/support.ts";
+import { MongoRunStore } from "../helpers/adapters/mongo-run-store.ts";
 import { composeLoop } from "../helpers/compose.ts";
 import type { TranscriptMessage } from "../helpers/harness/contracts.ts";
 import { startRun } from "../helpers/runs.ts";
@@ -225,4 +226,13 @@ test("over HTTP: the input is validated, and a guest is refused", async () => {
   expect(blank.errors[0]).toMatchObject({ field: "goal" });
   expect((await app.get(app.api("/agents/runs/not-an-id"), { as: user })).status).toBe(422);
   expect((await app.post(app.api("/agents/runs"), { goal: "x" })).status).toBe(401);
+});
+
+test("the Mongo store hands the execution claim to one job; a takeover after a crash still claims", async () => {
+  const store = new MongoRunStore(ctx(), { retentionDays: 1 });
+  const started = await startRun(ctx(), await caller("user"), { goal: "Claim it." });
+
+  expect(await store.beginExecution(started.id)).toMatchObject({ executing: true });
+  expect(await store.beginExecution(started.id)).toBeNull();
+  expect(await store.beginExecution(started.id, { takeover: true })).toMatchObject({ executing: true });
 });

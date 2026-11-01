@@ -89,7 +89,9 @@ export class MemoryRunStore implements RunStore {
     });
   }
 
-  async beginExecution(runId: string): Promise<Run> {
+  async beginExecution(runId: string, { takeover = false } = {}): Promise<Run | null> {
+    const current = this.#runs.get(runId);
+    if (current && current.executing && !takeover && !TERMINAL.has(current.status)) return null;
     return this.#update(runId, (run) => { if (!TERMINAL.has(run.status)) run.executing = true; });
   }
 
