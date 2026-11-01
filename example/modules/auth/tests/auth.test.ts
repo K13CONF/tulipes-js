@@ -1048,7 +1048,7 @@ test("an API token is issued once, reaches what its role grants and its scopes c
 
   // In scope and granted to the role: reached. Granted but out of scope: refused as such.
   expect((await get("/api/v1/hello/secret", secret)).status).toBe(200);
-  const outside = await get("/users", secret);
+  const outside = await get("/api/v1/auth/me", secret);
   expect(outside.status).toBe(403);
   expect(await outside.json()).toMatchObject({ errors: [{ code: "OUT_OF_SCOPE" }] });
 
@@ -1069,7 +1069,7 @@ test("an API token is issued once, reaches what its role grants and its scopes c
 test("an API token cannot issue tokens, rejects bad scopes, expires, and dies with a password change", async () => {
   const user = await account();
   const { secret } = (await issue(user.access_token, { name: "unscoped" })).body.data!;
-  expect((await get("/users", secret)).status).toBe(200);
+  expect((await get("/api/v1/auth/me", secret)).status).toBe(200);
 
   const minted = await issue(secret, { name: "successor" });
   expect(minted).toMatchObject({ status: 403, body: { errors: [{ code: "TOKEN_NEEDS_SESSION" }] } });
@@ -1078,15 +1078,15 @@ test("an API token cannot issue tokens, rejects bad scopes, expires, and dies wi
 
   const expiring = (await issue(user.access_token, { name: "short", expires_in_days: 1 })).body.data!;
   await app.handle.ctx.models!.get("ApiToken").updateOne({ token_id: expiring.token_id }, { expires_at: new Date(Date.now() - 1000) });
-  expect((await get("/users", expiring.secret)).status).toBe(401);
+  expect((await get("/api/v1/auth/me", expiring.secret)).status).toBe(401);
 
   // A forged secret for a real token id is not a caller.
   const forged = secret.replace(/[a-f0-9]{64}$/, "0".repeat(64));
-  expect((await get("/users", forged)).status).toBe(401);
+  expect((await get("/api/v1/auth/me", forged)).status).toBe(401);
 
   const changed = await post("/api/v1/auth/password", { password: randomBytes(24).toString("hex") }, user.access_token);
   expect(changed.status).toBe(200);
-  expect((await get("/users", secret)).status).toBe(401);
+  expect((await get("/api/v1/auth/me", secret)).status).toBe(401);
   const replacement = tokens.parse(await changed.json()).data.access_token;
   expect(await (await get("/api/v1/auth/tokens", replacement)).json()).toMatchObject({ data: [] });
 });

@@ -33,6 +33,18 @@ fixes from the same audit arrive with the upgrade and need nothing here.
    mistake elsewhere is logged instead of ending the process. Apply the check
    anyway: the boundary only stops the crash, and the client still gets no reply.
 
+2. **The account list is back office only.** `modules/users/module.acl.ts`
+   granted `user` the `users:web:list` permission, so anyone who signed up could
+   page through every account's email and role. Drop it from the `user` grant:
+
+   ```ts
+   acl.allow("user", "users:web:ping");
+   ```
+
+   admin and sysadmin keep it through `users:*`. A test that used `GET /users`
+   as a route any signed-in caller reaches needs another one, such as
+   `GET /api/v1/auth/me`. Run `pnpm spec` to refresh `docs/openapi.json`.
+
 ---
 
 ## Unreleased — grants outside a module's own ids

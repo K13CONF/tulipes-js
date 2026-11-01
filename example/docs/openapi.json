@@ -4832,8 +4832,7 @@
         "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
-          "sysadmin",
-          "user"
+          "sysadmin"
         ],
         "x-tulipes-authorization": "acl",
         "parameters": [

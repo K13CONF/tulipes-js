@@ -56,6 +56,12 @@ test("the core bootstrap sets the app-wide query time limit from config.paginati
   expect(listQueryDefaults().maxTimeMS).toBe(app.ctx.config.pagination!.maxTimeMs);
 });
 
+test("a signed-in user cannot list accounts; the back office can", async () => {
+  const user = await app.register();
+  expect((await app.get("/users", { as: user })).status).toBe(403);
+  expect((await app.get("/users", { as: admin })).status).toBe(200);
+});
+
 test("only the back office may browse", async () => {
   const user = await app.register();
   expect((await app.get("/users/directory", { as: user })).status).toBe(403);
