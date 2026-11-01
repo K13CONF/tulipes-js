@@ -1,0 +1,201 @@
+---
+title: Logging
+description: Log with the reference app's pino logger, a pretty console plus rotating JSON-line files per process mode and an errors-only copy, and log every request.
+sidebar:
+  order: 11
+---
+
+import { Aside, LinkCard, CardGrid, FileTree } from "@astrojs/starlight/components";
+
+The production preset's core module ships the app's logger: one
+[pino](https://getpino.io) instance per process, writing to two places at
+once. The console gets coloured, human-readable lines for whoever is watching
+a terminal; files get one JSON object per line for grep, jq or a log
+collector. Files are named after the process mode, because the backend and
+the worker run at the same time and two processes rotating one file would
+lose lines. It is application code in `modules/core/helpers/logger/`, exported
+from `@app/core`.
+
+## Using it
+
+Anything you would `console.log` goes through `moduleLogger`:
+
+```ts title="modules/users/queues/users.queues.ts"
+import { moduleLogger } from "@app/core";
+
+export default function usersQueues(ctx: Ctx, queues: QueueRegistry): void {
+  const log = moduleLogger(ctx, "users");
+
+  queues.process("users.welcome", async (job) => {
+    const t = ctx.t("users", job.data.locale);
+    log.info({ email: job.data.email, subject: t("welcome.subject", { email: job.data.email }) },
+      "sending welcome email");
+    return { sent: true };
+  });
+}
+```
+
+`moduleLogger(ctx, name)` is a pino child logger tagged with the module, so a
+line's origin shows in both destinations: `[users] sending welcome email` on
+the console, and `"module":"users"` in the file. `logger(ctx)` is the untagged
+root, for code that belongs to no module.
+
+The pino API applies: `log.debug()`, `log.info()`, `log.warn()`,
+`log.error()`, `log.fatal()`, with an object of fields first and the message
+second. Log an error as `log.error({ err }, "import failed")` so pino
+serializes its stack.
+
+Both functions take any value with `config` and `mode`, so a handler, a job,
+a bootstrap or a script can call them. The first call builds the instance;
+later calls return it.
+
+## Configuration
+
+Destinations are environment values of the core module, because the logger
+must exist before the settings store answers:
+
+| Variable | Config | Type | Default | Effect |
+|---|---|---|---|---|
+| `LOG_LEVEL` | `config.core.logLevel` | `fatal` `error` `warn` `info` `debug` `trace` | `info` | lowest level that reaches any destination |
+| `LOG_CONSOLE` | `config.core.logConsole` | boolean | `true` | pretty lines on stdout; turn off where a collector reads files only |
+| `LOG_FILE` | `config.core.logFile` | boolean | `true` | JSON-line files under `LOG_DIR` |
+| `LOG_DIR` | `config.core.logDir` | string | `logs` | directory for the files, created when missing |
+
+`LOG_DIR` is joined as given, so a relative path resolves against the
+process's working directory: the app root when you start through the
+`package.json` scripts or PM2's `cwd`.
+
+The file naming and rotation never needed to differ per deployment, so they
+are constants, `LOG_FILES`:
+
+```ts title="modules/core/helpers/logger/index.ts"
+export const LOG_FILES = Object.freeze({
+  /** Base name of the all-levels file; the process mode and date are appended. */
+  basename: "app",
+  /** Base name of the errors-only file. */
+  errorBasename: "error",
+  /** Rotate on this schedule: "daily", "hourly", or milliseconds. */
+  rotationFrequency: "daily",
+  /** Also rotate once a file reaches this size. */
+  rotationSize: "20m",
+  /** How many rotated files to keep per destination, besides the current one. */
+  retentionFiles: 14,
+});
+```
+
+## Console compared with files
+
+| | Console | Files |
+|---|---|---|
+| transport | `pino-pretty` | `pino-roll` |
+| format | coloured, `HH:MM:ss.l` in the process zone, `[module] message` | one JSON object per line, every field kept |
+| for | a human at a terminal | `grep`, `jq`, Loki, CloudWatch, the log stream |
+| switch | `LOG_CONSOLE` | `LOG_FILE` |
+
+A real line from the reference app's worker file:
+
+```json title="logs/app-worker.2026-10-31.1.log"
+{"level":30,"time":"2026-10-31T12:16:56.887+00:00","mode":"worker","module":"hello","name":"world","msg":"counted greeting"}
+```
+
+`level` is pino's number (30 is `info`, 50 is `error`). The logger's `base` is
+`{ mode }`, which replaces pino's default `pid` and `hostname` fields.
+
+Every line carries `mode`, and its `time` is written in the process zone with
+its offset, so a file reads in the app's local time and still parses as an
+exact instant. Core moves the process onto `config.timezone.default` before
+bootstrap creates the logger (see [time zones](/tulipes-js/guides/time-zones/)).
+
+With both destinations off, `logger()` still returns a working pino instance,
+writing JSON to stdout, so no call site needs a null check.
+
+## Files, rotation and the process mode
+
+<FileTree>
+- logs/
+  - app-backend.2026-10-31.1.log every level, backend process
+  - error-backend.2026-10-31.1.log errors only, backend process
+  - app-worker.2026-10-31.1.log
+  - error-worker.2026-10-31.1.log
+  - app-script.2026-10-31.1.log
+</FileTree>
+
+- **Per process mode.** `app-<mode>` and `error-<mode>`, where the mode is
+  `backend`, `worker` or `script`. Separate files remove the rotation race
+  entirely.
+- **Rotation** happens daily or at 20 MB, whichever comes first. The date is
+  part of the name, and the trailing number counts files within a day.
+- **Retention** keeps 14 rotated files per destination besides the current
+  one.
+- **The errors-only file** is a second copy of every `error` and `fatal`
+  line. Everything in it is also in the main file; the point is a small file
+  to open first when something breaks.
+
+<Aside type="caution">
+Two replicas of the same mode on one host, sharing one `LOG_DIR`, would share
+a file again. Give each replica its own `LOG_DIR`, or turn files off and let a
+collector read stdout.
+</Aside>
+
+## Request logging
+
+The security module logs every request with `pino-http`, through the same
+logger, so request lines land in the same files:
+
+```ts title="modules/security/routes/security.routes.ts"
+app.use(lazy(() => pinoHttp({
+  logger: logger(ctx),
+  customLogLevel: (_req, res, err) =>
+    err || res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
+  genReqId: (_req, res) => String(res.getHeader("X-Request-Id") ?? ""),
+  serializers: {
+    req: (req: { method: string; url: string }) => ({ method: req.method, url: req.url }),
+    res: (res: { statusCode: number }) => ({ status: res.statusCode }),
+  },
+})));
+```
+
+| Choice | Why |
+|---|---|
+| `lazy(...)` | the logger reads environment values, which inspection refuses while a router is built; this builds it on the first request |
+| `customLogLevel` | a 5xx is an error (so it reaches the errors-only file), a 4xx a warning, the rest info |
+| `genReqId` | reuses the `X-Request-Id` the core module set earlier in the pipeline, so a client-reported id finds its line |
+| `serializers` | only the method, URL and status: no headers, so no `Authorization` value in a log |
+
+The core module, which loads first, sets the header:
+
+```ts title="modules/core/routes/core.routes.ts"
+res.setHeader("X-Request-Id", randomUUID());
+```
+
+## Reading the logs live
+
+The `settings` module streams the files over Server-Sent Events at
+`GET /api/v1/settings/logs/stream?process=worker&level=warn&tail=200`, for
+`sysadmin` only. It reads `LOG_DIR` with the names from `LOG_FILES`, and
+refuses when `LOG_FILE` is off. See [settings](/tulipes-js/guides/settings/#the-settings-module-the-log-stream).
+
+## What does not go through the logger
+
+Core itself never depends on the app's logger. Its few messages use the
+console directly: the development warning for a route that answered without
+`res.respond()`, the `[http] unhandled error:` line for a 500, and shutdown
+notices. Under PM2 those land in PM2's own stdout and stderr logs. See
+[PM2](/tulipes-js/production/pm2/).
+
+## Common mistakes
+
+- **`console.log` in a module.** It bypasses levels, files and the module tag.
+  Use `moduleLogger(ctx, "<module>")`.
+- **Building the logger while a routes file runs.** It reads environment
+  values, so `tulipes routes` fails. Build it inside a handler or with `lazy()`.
+- **Logging a whole request or document.** Log the fields you need; a token or
+  a password hash in a log file is a leak.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Security middleware" href="/tulipes-js/guides/security-middleware/" description="The rest of the security module's pipeline." />
+  <LinkCard title="Process modes" href="/tulipes-js/concepts/process-modes/" description="Backend, worker and script, and why files are per mode." />
+  <LinkCard title="PM2" href="/tulipes-js/production/pm2/" description="Run both processes and collect their output." />
+</CardGrid>

@@ -1,0 +1,257 @@
+---
+title: Configuration layers
+description: "The three configuration layers of a Tulipes app: environment values, live settings and the app config seed, how each resolves, and APP_ENV versus NODE_ENV."
+sidebar:
+  order: 8
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+A Tulipes app has three places a value can come from, and each answers a
+different question. **Environment values** are what a deployment must supply
+before anything else can start: a connection string, a port, a secret.
+**Settings** are what an operator may change while the app runs: a limit, a
+mode, a toggle. **The app config** is app-wide policy that belongs to no single
+module, and the wiring of the environment to what core and the providers read.
+All three end up on one object, `ctx.config`, so code reads them the same way.
+
+## The three layers at a glance
+
+```txt
+ process.env ─┐
+ .envs/.env.<APP_ENV> ─┼─▶ phase 1  environment values
+ tulipes.env default ─┘     (package.json of each module)
+                               │
+                               ├──▶ env ──▶ config/app.config.ts ─▶ phase 4
+                               │            api, server.port,        seed
+                               │            mongoose.*, pagination…    │
+                               │                                       ▼
+ settings store ───────────▶ phase 6  module.config.ts schemas ─▶ ctx.config
+ (file or Mongo)                                                       ▲
+                               └──▶ phase 6b read-only getters ────────┘
+                                    ctx.config.<module>.<name>
+```
+
+| | Environment values | Settings | App config |
+|---|---|---|---|
+| declared in | module `package.json` `tulipes.env` | `module.config.ts` | `config/app.config.ts` |
+| value comes from | process, env file, default | the settings store | the function's return |
+| read as | `ctx.config.<module>.<name>` | `ctx.config.<module>.<field>` | `ctx.config.<key>` |
+| changes at runtime | never | yes, live | no |
+| visible to listings | no (non-enumerable) | yes | yes |
+| secrets | yes, type `secret` | refused | never directly |
+
+## Environment values
+
+A module declares its environment contract in plain JSON, so tooling can read it
+without running code. Each entry is keyed by the camelCase **config name** it is
+read under, and `key` names the **variable** the deployment sets:
+
+```json title="modules/core/package.json (excerpt)"
+{
+  "tulipes": {
+    "env": {
+      "port": {
+        "key": "PORT", "type": "number", "group": "http",
+        "description": "HTTP port the backend process listens on", "default": 3000
+      },
+      "redisUrl": {
+        "key": "REDIS_URL", "type": "url", "group": "redis", "required": true,
+        "description": "Redis connection string (queues, cache, rate limits)"
+      }
+    }
+  }
+}
+```
+
+Types are `string`, `number`, `boolean`, `enum` (with an `enum` list), `url`
+and `secret`. `required` and `default` are mutually exclusive. The full rules
+are in [Environment variables](/tulipes-js/guides/environment-variables/) and
+the [environment variables reference](/tulipes-js/reference/topics/environment-variables/).
+
+### Resolution
+
+`resolveEnv()` in `packages/core/src/env/resolve.ts` gives every declared
+variable one value, highest precedence first:
+
+```txt
+ process.env  >  .envs/.env.<APP_ENV>  >  the declaration's default
+```
+
+A container-injected value always wins, and the file's values are never written
+into `process.env`. The file is optional: a production container typically
+injects everything. Each raw value is coerced to its type (`"1"`, `"yes"`,
+`"on"` are true; a `url` may be a comma-separated replica-set host list), and
+every problem is reported at once:
+
+```txt
+TulipesBootError: Boot aborted during "environment" — 2 issue(s):
+  ✖ [auth] required variable "JWT_ACCESS_SECRET" has no value (Signing key for short-lived access tokens)
+  ✖ [core] variable "LOG_LEVEL": "loud" is not one of: fatal, error, warn, info, debug, trace
+```
+
+Each variable has exactly one owner. A second module declaring the same key is
+refused: `variable "PORT" is already declared by module "core" — one owner per
+variable`. Shared infrastructure variables belong to the sys `core` module.
+
+### Read-only and non-enumerable
+
+In phase 6b, `bindEnvValues()` (`packages/core/src/env/bind.ts`) defines each
+value on its module's namespace as a getter that is **read-only** and
+**non-enumerable**:
+
+```ts
+ctx.config.core.port;               // 3000
+ctx.config.auth.jwtAccessSecret;    // the secret, where it is used
+
+Object.keys(ctx.config.auth);       // settings only
+JSON.stringify(ctx.config.auth);    // settings only
+ctx.config.core.port = 1;           // throws a TypeError: the property has only a getter
+```
+
+Read-only because a deployment value is not something code changes. Invisible
+to spreads, `JSON.stringify` and `Object.keys` because that is what keeps a
+secret out of a response body and out of the settings file: the settings store
+serializes the namespace and never sees them. `pnpm check` (`tulipes env:check`)
+is where an operator sees them, with secrets shown as `•••`.
+
+A name used both as an environment value and as a settings field is refused:
+`config.users.maxSessions is both a setting (module.config.ts) and an environment value (package.json tulipes.env) — rename one`.
+
+<Aside type="tip">
+Keep the environment small. A value belongs there only if the process needs it
+before the database answers, or it is a secret. Everything else is a setting,
+which an operator can change without a deployment.
+</Aside>
+
+## Settings
+
+A module's settings are declared with a zod schema and stored outside the code:
+
+```ts title="modules/users/module.config.ts"
+import { defineConfig } from "@tulipes/core/config";
+import { z } from "zod/v4";
+
+export default defineConfig({
+  schema: z.object({
+    maxSessions: z.number().int().positive().default(5)
+      .describe("Max concurrent sessions per user; the oldest is evicted past it"),
+    signupMode: z.enum(["open", "invite", "closed"]).default("open")
+      .describe("Who can register: open to anyone, invite only, or nobody"),
+  }),
+});
+```
+
+`defineConfig({ schema, onChange? })` is the file's only export. Phase 4 checks
+the declaration: every field needs a default (an operator is never asked for a
+value the process needs to boot), and a field marked `.meta({ secret: true })`
+is refused, because secrets are environment values. A field the process cannot
+apply live is tagged `.meta({ restart: true })`: a write persists, applies on
+the next boot, and reports `requires_restart`.
+
+### Loading and live updates
+
+`Settings.load()` (`packages/core/src/config/settings.ts`) runs in phase 6:
+
+```txt
+ for each declared namespace
+   stored = store.load(name)
+   parsed = schema.safeParse(stored?.values ?? {})   ✖ → boot issue
+   never written? → store.save(defaults, version 0 → 1)
+   ctx.config[name] = { ...parsed }
+ then store.watch(…)  → other processes' writes
+```
+
+After boot, a value changes in two ways. `ctx.settings.set(namespace, patch,
+actor)` validates the patch over the stored values, saves it with optimistic
+versioning (a stale version throws `SettingsConflictError`), and applies it.
+And the store's `watch()` reports a newer version written by another process or
+replica, which is validated and applied the same way. Applying means assigning
+**into the existing namespace object**, so every holder of `ctx.config.users`
+sees the new value, and the environment getters defined on that object survive.
+
+Then the module's `onChange(next, ctx)` runs, in every process that holds the
+app. It is for rebuilding what was built from a value:
+
+```ts title="modules/security/module.config.ts (excerpt)"
+onChange(next, ctx) {
+  ctx.app?.set("trust proxy", trustedProxies(next.trustProxyCidrs));
+  rebuildRateLimits(ctx, next.rateLimits);
+},
+```
+
+### The file store and the Mongo store
+
+| | core's `FileSettingsStore` | `@tulipes/mongoose/settings` |
+|---|---|---|
+| selected by | declaring no settings provider | `"settings": "@tulipes/mongoose/settings"` |
+| where | `config/settings.<APP_ENV>.json`, one key per module | the `settings` collection |
+| writes | atomic rename of a temporary file | versioned documents |
+| watch | `fs.watch` on the directory plus a 2 s poll | change stream on a replica set, else polling |
+| fits | the minimal preset, local development | replicas, the production preset |
+
+Under inspection the store is a `MemorySettingsStore` holding each schema's
+defaults, so `tulipes routes` never reads a file or a database. See
+[Settings](/tulipes-js/guides/settings/).
+
+## The app config
+
+`config/app.config.ts` default-exports a function of the environment values and
+the process, and its result seeds `ctx.config` in phase 4, before any module
+settings exist:
+
+```ts title="config/app.config.ts (excerpt)"
+import type { AppConfigFn } from "@tulipes/core/boot";
+
+const appConfig = ((env) => ({
+  app: { name: "tulipes-example" },
+  api: { prefix: "/api/v1" },
+  server: { port: env.core.port },
+  mongoose: env.core.mongodbUri
+    ? { uri: env.core.mongodbUri }
+    : { uri: env.core.mongodbHost, user: env.core.mongodbUsername,
+        pass: env.core.mongodbPassword, dbName: env.core.mongodbDbName },
+  bullmq: { redisUrl: env.core.redisUrl },
+  i18n: { defaultLocale: "en", supportedLocales: ["en", "fr"] },
+  timezone: { default: "UTC" },
+  pagination: { defaultLimit: 20, maxLimit: 100, maxTimeMs: 5_000 },
+})) satisfies AppConfigFn;
+
+export default appConfig;
+```
+
+It has two jobs. It holds policy shared by several modules (`api.prefix`,
+`pagination`, `i18n`, `timezone`), and it is the one place the environment is
+wired to the fixed keys core and the providers read: core listens on
+`config.server.port`, `@tulipes/mongoose` connects with `config.mongoose`,
+`@tulipes/bullmq` with `config.bullmq.redisUrl`. A module never needs this
+wiring for its own values.
+
+A key named after a module is refused, because phase 6 would overwrite it:
+`app.config returns "users", which is the config namespace of module "users" — app-level keys may not be named after a module`.
+The file is optional; under inspection a missing or invalid value in `env` is
+`undefined`, so it must only wire values, never require them. See
+[Configuration reference](/tulipes-js/reference/topics/configuration/).
+
+## `APP_ENV` and `NODE_ENV`
+
+`APP_ENV` (`development`, `staging`, `production` or `test`, default
+`development`) is the deployment axis. It selects `.envs/.env.<APP_ENV>` and
+`config/settings.<APP_ENV>.json`, decides whether a 500 reveals its message,
+whether missing translations are recorded, and whether the raw-response warning
+is armed. Code reads it as `ctx.appEnv`.
+
+It is deliberately not `NODE_ENV`, which bundlers and libraries overload as an
+optimization flag. Tulipes only mirrors a sane value for third-party code: when
+`NODE_ENV` is unset, `development` and `test` set it to themselves, and every
+other `APP_ENV` sets `production` (`mirrorNodeEnv()` in
+`packages/core/src/boot/app-env.ts`).
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Environment variables" href="/tulipes-js/guides/environment-variables/" description="Declaring, typing and checking a variable." />
+  <LinkCard title="Settings" href="/tulipes-js/guides/settings/" description="Schemas, restart fields and the console." />
+  <LinkCard title="Configuration reference" href="/tulipes-js/reference/topics/configuration/" description="Every app config key." />
+  <LinkCard title="Deployment" href="/tulipes-js/production/deployment/" description="Supplying values in production." />
+</CardGrid>

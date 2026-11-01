@@ -1,0 +1,222 @@
+---
+title: Scripts
+description: Write one-off tasks such as backfills, exports and admin chores that boot the real app in script mode, use its models and config, and always shut down cleanly.
+sidebar:
+  order: 12
+---
+
+import { Aside, LinkCard, CardGrid, Steps } from "@astrojs/starlight/components";
+
+A backfill, an export or an admin chore should run against exactly the
+configuration the server has, not an approximation of it. Tulipes gives it
+that with **script mode**: the same boot as the backend and the worker
+(environment, modules, settings, translations, ACL, models, bootstrap, queue
+producers), then it starts nothing and hands you the context. Your script
+does its work and shuts the app down.
+
+## The shape of a script
+
+Scripts live in `scripts/` at the app root, outside any module:
+
+```ts title="scripts/count-greetings.ts"
+import { join } from "node:path";
+
+import { boot } from "@tulipes/core/boot";
+
+const handle = await boot({ rootDir: join(import.meta.dirname, ".."), mode: "script" });
+
+try {
+  const { models, config } = handle.ctx;
+
+  const greetings = await models!.get("Greeting").find().select("name times_used -_id").lean();
+
+  console.log(`${config.app?.name} — ${greetings.length} greeting(s)\n`);
+  console.table(greetings);
+} finally {
+  await handle.shutdown();
+}
+```
+
+Run it with the app's `script` command, which is plain `node`: Node 24 runs
+TypeScript natively.
+
+```sh
+pnpm script scripts/count-greetings.ts
+APP_ENV=production pnpm script scripts/count-greetings.ts
+```
+
+`APP_ENV` picks the `.envs` file and the settings file, as for any process.
+
+## What `boot({ mode: "script" })` gives you
+
+| Phase | In script mode |
+|---|---|
+| environment, module graph, declarations | yes, the same validation and the same aggregate errors |
+| models and settings providers | connected |
+| settings, translations, time zones, ACL, agent surface | loaded |
+| bootstrap | runs, in every mode |
+| queues | producers registered, so `queues.add()` enqueues; nothing consumes |
+| HTTP server, routes, sockets, worker consumers | not started |
+| startup banner | not printed |
+
+The returned handle is the same `BootHandle` the other modes return:
+`handle.ctx` is the full runtime context (`models`, `queues`, `config`,
+`settings`, `acl`, `t`, `time`, `appEnv`, `mode`), and `handle.shutdown()`
+closes everything. See [process modes](/tulipes-js/concepts/process-modes/).
+
+## Always shut down
+
+The database and Redis connections hold the event loop open. A script that
+skips `shutdown()` prints its output and then hangs forever. The
+`try`/`finally` above is the one part of every script to copy:
+
+```ts
+const handle = await boot({ rootDir, mode: "script" });
+try {
+  await work(handle.ctx);
+} finally {
+  await handle.shutdown();
+}
+```
+
+`shutdown()` runs the same sequence as a server's: `ctx.signal` aborts,
+providers drain, bootstrap cleanups run in reverse order (the cache closes
+its Redis client, for instance), then providers close, all under a 10-second
+deadline. Calling it twice returns the same operation.
+
+To fail the run, set `process.exitCode` rather than calling `process.exit()`
+inside the `try`, which would skip the `finally`:
+
+```ts
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
+} finally {
+  await handle.shutdown();
+}
+```
+
+A boot failure needs no handling: `boot()` throws its `TulipesBootError`
+report, after closing whatever it had opened, and Node exits non-zero.
+
+## A backfill, step by step
+
+<Steps>
+1. Create `scripts/backfill-greeting-messages.ts`.
+2. Boot in script mode, read flags from `process.argv`, and make the default a
+   dry run.
+3. Do the work in batches through `ctx.models`.
+4. Shut down in `finally`.
+</Steps>
+
+```ts title="scripts/backfill-greeting-messages.ts"
+import { join } from "node:path";
+
+import { boot } from "@tulipes/core/boot";
+
+const write = process.argv.slice(2).includes("--write");
+const handle = await boot({ rootDir: join(import.meta.dirname, ".."), mode: "script" });
+
+try {
+  const Greeting = handle.ctx.models!.get("Greeting");
+  const missing = { message: { $in: [null, ""] } };
+
+  const count = await Greeting.countDocuments(missing);
+  console.log(`${count} greeting(s) without a message${write ? "" : " (dry run, pass --write)"}`);
+
+  if (write) {
+    const { modifiedCount } = await Greeting.updateMany(missing, { $set: { message: "Hello!" } });
+    console.log(`backfilled ${modifiedCount}`);
+  }
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
+} finally {
+  await handle.shutdown();
+}
+```
+
+```sh
+pnpm script scripts/backfill-greeting-messages.ts           # dry run
+pnpm script scripts/backfill-greeting-messages.ts --write
+```
+
+The reference app's scripts import only `@tulipes/core`, which the root
+`package.json` depends on. Anything a module logs through `moduleLogger`
+during a script run goes to `logs/app-script.<date>.<n>.log`, separate from
+the backend's and the worker's files (see [logging](/tulipes-js/guides/logging/)).
+
+The reference app's `scripts/deploy-nginx.ts` is a larger example of the same
+shape: it reads `--dry-run` and `--force` flags, takes the domain from the
+`core.publicDomain` setting and the port from `config.server.port`, renders
+`nginx/<APP_ENV>.conf`, and reloads nginx. See [nginx](/tulipes-js/production/nginx/).
+
+## Everything a handler has
+
+Because the context is the real one, a script uses the same APIs as a route:
+
+```ts
+const { models, queues, settings, t, time } = handle.ctx;
+
+await queues!.add("users.welcome", "welcome", { email, locale: "fr" });   // validated by the job schema
+await settings.set("users", { maxSessions: 10 }, { id: "script", label: "scripts/raise-limits.ts" });
+const subject = t("users", "fr")("welcome.subject", { email });
+const since = time.startOfDay();
+```
+
+A job enqueued from a script is processed by the running worker. A settings
+write lands in every running process, through the store's watch.
+
+## Bootstrap runs in scripts too
+
+Bootstrap tasks run in every mode, so seeds and index builds also run when a
+script boots. A task that should not write from a maintenance script checks
+the mode, as the hello module's seed does:
+
+```ts title="modules/hello/bootstrap/seed-greetings.bootstrap.ts"
+export default async function seedGreetings({ models, mode }: DatabaseCtx): Promise<void> {
+  if (mode === "script") return; // a one-off script reads; it does not seed
+  // …
+}
+```
+
+The base Mongoose plugins are registered from the core module's
+`module.config.ts`, which every mode loads, so a script never reads rows the
+API considers soft-deleted.
+
+## Options worth knowing
+
+`boot()` takes the same options in every mode. For scripts:
+
+| Option | Default | Use |
+|---|---|---|
+| `rootDir` | required | the app root: `join(import.meta.dirname, "..")` from `scripts/` |
+| `mode` | `PROCESS_MODE`, then `"backend"` | always pass `"script"` |
+| `appEnv` | `APP_ENV`, then `"development"` | force a deployment from code |
+| `handleSignals` | `true` | Ctrl-C runs `shutdown()` and exits; pass `false` to manage signals yourself |
+| `shutdownTimeoutMs` | `10000` | the whole cleanup deadline |
+
+## Common mistakes
+
+| Symptom | Cause |
+|---|---|
+| the script prints its result, then never exits | no `await handle.shutdown()` |
+| `Boot aborted during "environment"` | the script needs the same variables as the server; check with `pnpm check` |
+| a seed ran from a maintenance script | guard the bootstrap with `ctx.mode` |
+| `PROCESS_MODE "web" is invalid` | `web` was renamed `backend`; pass `mode: "script"` explicitly |
+| logic copied from a controller | move it to the module's `helpers/` and call it from both |
+
+<Aside type="tip">
+`tulipes config:check` is itself a script-mode boot: it loads every settings
+namespace and prints it. Read `packages/cli/src/config-check.ts` for another
+small example of a script that boots, reads and shuts down.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Process modes" href="/tulipes-js/concepts/process-modes/" description="Backend, worker and script share one boot." />
+  <LinkCard title="Models" href="/tulipes-js/guides/models/" description="What a script reads and writes." />
+  <LinkCard title="Deployment" href="/tulipes-js/production/deployment/" description="Run scripts on a server." />
+  <LinkCard title="Testing" href="/tulipes-js/guides/testing/" description="Boot the app in tests instead." />
+</CardGrid>

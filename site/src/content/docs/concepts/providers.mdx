@@ -1,0 +1,261 @@
+---
+title: The provider contract
+description: How Tulipes core boots without a database driver. Declaring providers, module requires, how acquire, attach, serve, drain and dispose fit the boot phases.
+sidebar:
+  order: 10
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`@tulipes/core` contains no database driver, no queue client and no socket
+server. Infrastructure arrives through **providers**: packages that implement a
+small interface and are selected by one line in the app's `package.json`. An
+app that needs MongoDB, BullMQ and Socket.IO declares three providers; an app
+that needs none declares nothing and installs none of them. This page explains
+the declaration, how core checks it, where each provider plugs into the boot,
+and how its resources are torn down. The seam is one file,
+`packages/core/src/boot/providers.ts`.
+
+## Declaring providers
+
+The app, never a module, selects providers, keyed by capability:
+
+```json title="package.json"
+{
+  "name": "@tulipes-example/app",
+  "tulipes": {
+    "providers": {
+      "models": "@tulipes/mongoose",
+      "settings": "@tulipes/mongoose/settings",
+      "queues": "@tulipes/bullmq",
+      "sockets": "@tulipes/socket.io"
+    }
+  }
+}
+```
+
+| Capability | Lands on | Official provider |
+|---|---|---|
+| `models` | `ctx.models` | `@tulipes/mongoose` |
+| `settings` | wrapped by core behind `ctx.settings` and `ctx.config` | `@tulipes/mongoose/settings`; default: core's file store |
+| `queues` | `ctx.queues` | `@tulipes/bullmq` |
+| `sockets` | `ctx.sockets` (backend only) | `@tulipes/socket.io` |
+
+The declaration is **static** JSON on purpose: `tulipes sync`, `env:check` and
+the inspection boot learn the selection without importing app code. It is
+**capability-keyed**, so "one provider per capability" is true by construction.
+And it is the **only** selector: installing `@tulipes/mongoose`, or leaving a
+`MONGO_URI` in the environment, selects nothing.
+
+The value is a module specifier resolved from the app's own `package.json`
+(never from wherever core is installed), so a published package or a path the
+app can resolve both work. The `providers` object is strict: an unknown
+capability is a boot error, while other keys under `tulipes` are left alone.
+
+## Module requirements
+
+A module states what it consumes, and the boot checks it against the app's
+declarations before any module file is imported (`checkRequirements()`):
+
+```txt
+ effective requirements of a module
+   = tulipes.requires                     explicit
+   + "models"  if it has models/*.model.ts
+   + "queues"  if it has queues/*.queues.ts
+   + "sockets" if it has sockets/*.sockets.ts
+```
+
+A module that only *uses* a capability it does not own files for, say one that
+reads `ctx.models` but defines no model, says so:
+
+```json title="modules/reports/package.json (excerpt)"
+{ "tulipes": { "requires": ["models"] } }
+```
+
+`requires` accepts only `models`, `queues` and `sockets`; a misspelling is a
+manifest error, not a silently unmet requirement. `settings` is never required,
+because core always has a store. An unmet requirement aborts the boot under
+`"providers"`:
+
+```txt
+TulipesBootError: Boot aborted during "providers" — 1 issue(s):
+  ✖ [hello] requires capability "queues" (has queues/ files) but the app's package.json declares no provider for it — add "tulipes": { "providers": { "queues": "<package>" } }
+```
+
+At run time, code inside a module confirms a capability with `requireModels(ctx)`
+or `requireQueues(ctx)` from `@tulipes/core/boot`, which throw a message naming
+the missing declaration.
+
+## Where providers plug into the boot
+
+```txt
+ 3b  read tulipes.providers, check requirements      (nothing imported)
+ 5   acquire models, then settings     ── ctx has only the app seed
+       @tulipes/mongoose: connect, compile models/*.model.ts
+ 6   core loads settings from the store a settings provider returned
+ 9   bootstrap (core, not providers)
+ 10  acquire queues, then sockets      ── ctx is complete
+       @tulipes/bullmq:    run queues/*.queues.ts
+       @tulipes/socket.io: run sockets/*.sockets.ts (backend only)
+ 11  backend: attach(server) before listen
+     worker:  serve() → number of consumers; 0 → refuse
+ ──
+ shutdown: drain() ‖ HTTP close → bootstrap cleanups (reverse)
+           → dispose() (reverse acquisition; forceDispose on failure)
+```
+
+Models and settings are acquired early because settings may live in the
+database and everything after phase 6 reads `ctx.config`. They therefore see
+`ctx.config` with only the app seed, which is exactly what they need:
+`config.mongoose`. Queues and sockets are acquired after bootstrap, so a queue
+file can read settings, translations, the ACL and whatever a bootstrap set up.
+
+Each acquisition imports the provider, checks its shape, and calls `acquire()`:
+
+| Problem | Boot issue |
+|---|---|
+| package not installed | `provider "@tulipes/bullmq" for capability "queues" cannot be resolved from <root> — install it` |
+| wrong default export | `… must default-export a provider { contract, capability, name, acquire }` |
+| other contract version | `… implements provider contract 1; this core supports 2 — upgrade one of them` |
+| declared under another capability | `… provides capability "models" but is declared for "queues"` |
+| connection key not wired | `provider "bullmq" is selected but config.bullmq.redisUrl is not set — wire it in config/app.config.ts …` |
+| threw instead of reporting | `provider "<name>" threw during acquisition: …` |
+
+## The contract
+
+A provider default-exports this object:
+
+```ts title="packages/core/src/boot/providers.ts (excerpt)"
+export interface Provider<Capability extends ProviderCapability = ProviderCapability> {
+  contract: 2;
+  capability: Capability;
+  /** Short name for the banner and diagnostics, e.g. "mongoose". */
+  name: string;
+  situations?: readonly ProviderSituation[];   // default: all
+  acquire(
+    ctx: ProviderContext,
+    report: BootReport,
+    own: (resource: AcquiredResource) => void,
+  ): Promise<ProvidedValues[Capability] | undefined>;
+}
+```
+
+`ProviderContext` carries the live `ctx` (read it; core assigns the capability
+slot), the `situation`, the app's `rootDir`, and `files`: every module's
+discovered conventional files in load order, from which the provider decides
+what to import.
+
+`acquire()` reports failures through `report` and returns `undefined`; it never
+needs to throw. Returning `undefined` without reporting anything is itself an
+issue. The returned value lands on `ctx` (except for settings, which core wraps).
+
+### `own()`: ownership before awaiting
+
+The one rule a provider must not break: call `own()` synchronously right after
+creating a resource, **before** awaiting anything that can fail or hang. Core
+then disposes that resource on every path, including a boot that fails in a
+later phase. `@tulipes/mongoose` registers the connection before awaiting it:
+
+```ts title="packages/mongoose/src/provider.ts"
+export const provider: Provider<"models"> = {
+  contract: 2,
+  capability: "models",
+  name: "mongoose",
+  async acquire({ ctx, files }, report, own) {
+    const connection = await initDatabase(files, ctx, report, {
+      // Registered before the connection is awaited: a database that never
+      // answers is still closed by core's failed-boot cleanup.
+      onConnection: (connection) => own({
+        dispose: () => connection.close(),
+        forceDispose: () => connection.destroy(true),
+        status: () => ({
+          label: `mongodb://${connection.host}:${connection.port}/${connection.name}`,
+          ready: connection.readyState === 1,
+        }),
+      }),
+    });
+    return connection ? ctx.models : undefined;
+  },
+};
+```
+
+`own()` takes one resource per acquisition; a second call is reported as a
+provider bug.
+
+### The resource and its hooks
+
+| Hook | Called | Purpose |
+|---|---|---|
+| `status()` | banner, any time | label, ready flag, detail; never credentials |
+| `attach(server)` | backend, before `listen()`, never under inspection | bind a transport to the HTTP server |
+| `serve(report)` | worker, after every acquisition | start consuming; return the consumer count |
+| `drain()` | shutdown step 1, with the HTTP drain | stop consuming while models and producers stay usable |
+| `dispose()` | shutdown, reverse acquisition order | close connections |
+| `forceDispose()` | when `dispose()` fails or misses the deadline | driver-specific hard close |
+
+`@tulipes/socket.io` shows `situations`, `attach` and `drain` together. It
+declares `["backend"]`, so core skips it (not fails it) in worker and script
+processes and under inspection, and the banner says
+`not used in worker mode`:
+
+```ts title="packages/socket.io/src/provider.ts"
+export const provider: Provider<"sockets"> = {
+  contract: 2,
+  capability: "sockets",
+  name: "socket.io",
+  situations: ["backend"],
+  async acquire({ ctx, files }, report, own) {
+    const manager = await initSockets(files, ctx, report, (created) => own({
+      attach: (server) => created.attach(server),
+      drain: () => created.close(),
+      dispose: () => undefined,
+      status: () => ({
+        label: created.namespaces().join(", ") || "no namespaces claimed",
+        ready: true,
+      }),
+    }));
+    return manager;
+  },
+};
+```
+
+`@tulipes/bullmq` uses `serve` to start one BullMQ worker per registered
+processor in worker mode, and `drain` to close those workers (finishing active
+jobs) while producers stay usable until `dispose`.
+
+## Typing a capability
+
+`ModelsCapability`, `QueuesCapability` and `SocketsCapability` are empty
+interfaces in `packages/core/src/boot/contracts.ts`. A provider package augments
+them, so an app that installs `@tulipes/mongoose` sees `ctx.models.get()` and a
+core-only app sees nothing to call. `tulipes sync` then narrows the names
+(`KnownModels`, `KnownJobs`) from the app's own files. Selection stays a runtime
+fact, which is why `ctx.models` remains optional and `requireModels()` exists.
+
+## An app with no providers
+
+The minimal preset declares no providers and has no `models/`, `queues/` or
+`sockets/` folders. Its boot skips phases 5 and 10 entirely, keeps settings in
+`config/settings.<APP_ENV>.json`, and the banner lists models, queues and
+sockets as `no provider declared`. Its install carries only core's runtime dependencies:
+Express 5, zod, i18next with its filesystem backend, dotenv and colorette. The
+core README measures that at 75 packages and 7.6 MB, against 151 packages and
+53 MB in 0.9, when every driver came with the framework. The repository's
+`scripts/artifacts.mjs verify` fails the build if core ever gains a dependency
+that such an app would install.
+
+<Aside type="note">
+`@tulipes/core/db`, `@tulipes/core/queues` and `@tulipes/core/sockets` still
+exist, as migration stubs. Declaring one as a provider produces one boot error
+naming the package that replaced it, for example
+`"@tulipes/core/db" no longer contains the Mongoose provider — install @tulipes/mongoose, …`.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="@tulipes/mongoose" href="/tulipes-js/packages/mongoose/" description="The models and settings providers." />
+  <LinkCard title="@tulipes/bullmq" href="/tulipes-js/packages/bullmq/" description="The queues provider." />
+  <LinkCard title="@tulipes/socket.io" href="/tulipes-js/packages/socket-io/" description="The sockets provider." />
+  <LinkCard title="The boot pipeline" href="/tulipes-js/concepts/boot-pipeline/" description="The phases around each acquisition." />
+</CardGrid>

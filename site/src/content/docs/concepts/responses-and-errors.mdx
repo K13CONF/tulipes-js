@@ -1,0 +1,265 @@
+---
+title: Responses and errors
+description: The one response envelope, res.respond and pagination meta, HttpError and ValidationError, how i18n keys become codes, and what leaks outside development.
+sidebar:
+  order: 7
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Every Tulipes endpoint answers with the same JSON shape, success or failure, so
+a client writes its unwrapping once and branches on a stable code instead of
+parsing prose. Handlers write only the happy path with `res.respond()`; every
+failure is *thrown* and turned into the same envelope by one terminal handler.
+This page shows the envelope, how it is built, how an error message becomes a
+translated message and a code, and what the error handler hides outside
+development.
+
+## The envelope
+
+```ts title="packages/core/src/http/envelope.ts (excerpt)"
+export interface Envelope<T = unknown> {
+  success: boolean;
+  data: T | null;
+  errors: ApiError[];
+  meta: ResponseMeta;
+}
+
+export interface ApiError {
+  field: string | null;   // the offending input, or null
+  message: string;        // already translated, in the caller's locale
+  code: string;           // stable, never translated: "NOT_FOUND"
+}
+```
+
+`data` is `null` on failure and `errors` is empty on success: never both
+populated, never both empty.
+
+```json
+{ "success": true, "data": { "message": "Hello, world!" }, "errors": [], "meta": {} }
+```
+
+```json
+{ "success": false, "data": null, "meta": {},
+  "errors": [{ "field": null, "message": "No greeting named \"nobody\"", "code": "NO_SUCH_GREETING" }] }
+```
+
+## The path of a response
+
+```txt
+ rai() binds res.respond and req.page for this request
+   │
+ handler ── res.respond({ data, meta, status? }) ──▶ 2xx envelope
+   │
+   └─ throw ──────────────┐
+                          ▼
+ no route matched ─▶ notFoundHandler ─▶ HttpError 404 ROUTE_NOT_FOUND
+                          │
+                          ▼
+                     errorHandler (terminal, last layer)
+                      ├ ValidationError → 422, one entry per issue
+                      ├ HttpError       → its status, one entry
+                      ├ other error with a 4xx status → passed through
+                      └ anything else   → 500 INTERNAL_ERROR
+```
+
+Both handlers are appended by the backend branch after every module router
+(`startBackend()` in `packages/core/src/boot/boot.ts`), so nothing escapes
+unrouted or unhandled. Express 5 forwards rejected async handlers to the error
+middleware, so `throw` inside an `async` handler is the whole error-handling
+story.
+
+## `res.respond()`
+
+`res.respond` is not a patch of `res.json`: it is a new method that `rai()`
+binds per request (`bindRespond()` in `packages/core/src/http/respond.ts`).
+Express's `res.json`, `res.send` and `res.status` behave exactly as they always
+did.
+
+```ts
+res.respond({ data: user });
+res.respond({ data: user, status: 201 });
+res.respond({ data: users, meta: { total_items: total } });
+res.respond({ data: null, meta: { action: "complete_profile" } });
+```
+
+The status is, in order: the `status` you pass; else the route's declared
+`rai({ status })`; else 200, or 400 when you passed `errors`. A route that
+queues work declares `status: 202` once on its RAI, and generated documents
+describe it.
+
+In development, a JSON response that bypassed `res.respond` logs a warning
+naming the route, the first time it is hit:
+
+```txt
+[tulipes] hello:web:greet GET /api/v1/hello answered without res.respond — body is not enveloped
+```
+
+Nothing is intercepted; the raw body still ships. 204, 304, non-JSON and 1xx or
+3xx responses are not flagged, so streams and file downloads are fine.
+
+## Pagination meta
+
+`req.page` is parsed from `?page` and `?per_page` and clamped by
+`config.pagination` (`defaultLimit`, default 20; `maxLimit`, default 100). A
+value that is not a positive integer falls back to the default instead of
+failing the request. `skip` is computed for you.
+
+Pagination is opt-in per response. Passing `total_items` is what marks a
+response as a page; `buildMeta()` then fills the rest:
+
+```ts title="modules/hello/controllers/web/hello.greetings.controllers.ts (excerpt)"
+const { per_page, skip } = req.page;
+const [greetings, total_items] = await findGreetings(this.#ctx, { skip, limit: per_page });
+
+res.respond({ data: greetings, meta: { total_items } });
+```
+
+```json title="GET /api/v1/greetings?page=2&per_page=10"
+{ "meta": { "page": 2, "per_page": 10, "total_pages": 5, "total_items": 50 } }
+```
+
+A single record's `meta` stays `{}`. `meta.action` tells the client what to do
+next; augment `MetaActions` in `@tulipes/core/http` and the allowed values
+become a closed set checked at every call site. See
+[Pagination and list queries](/tulipes-js/guides/pagination-and-list-queries/).
+
+## Throwing errors
+
+### `HttpError`
+
+```ts
+import { HttpError } from "@tulipes/core/http";
+
+throw new HttpError(404, "noSuchGreeting", { vars: { name } });
+throw new HttpError(409, "emailTaken", { field: "email" });
+```
+
+`new HttpError(status, message, options)`, where `options` may carry:
+
+| Option | Effect |
+|---|---|
+| `field` | the `field` of the error entry |
+| `code` | overrides the derived code |
+| `defaultMessage` | English fallback; declares that `message` is a key |
+| `vars` | interpolation values for the key (`{{name}}`) |
+| `details` | kept on the error object for your own logging; **not** sent in the envelope |
+
+### `ValidationError`
+
+Several field errors in one response, status 422:
+
+```ts
+import { ValidationError } from "@tulipes/core/http";
+
+throw new ValidationError([
+  { field: "email", message: "emailTaken" },
+  { field: "age", message: "mustBeAdult" },
+]);
+```
+
+`rai()` throws one itself when a route's `params`, `query` or `body` schema
+rejects the request. All three segments are checked first, so a request wrong
+in two places says so once. Each zod issue becomes an entry whose `field` is
+the joined path (or the segment name for a whole-segment failure), whose
+`message` is zod's message, and whose `code` is zod's issue code in upper case
+(`invalid_format` becomes `INVALID_FORMAT`). See
+[Validation](/tulipes-js/guides/validation/).
+
+## How a message becomes a translation and a code
+
+The terminal handler resolves each message in the namespace of the module that
+declared the route, because `rai()` bound `req.t` to it. The logic is
+`resolve()` in `packages/core/src/http/error-handler.ts`:
+
+```txt
+ message  ──▶  req.hasTranslation(message)?
+                 │yes                       │no
+                 ▼                          ▼
+     message = req.t(message, vars)   message = defaultMessage ?? message
+     code    = error.code             code    = error.code
+               ?? codeFromKey(message)          ?? (defaultMessage ? codeFromKey(message)
+                                                    : STATUS_CODES[status] ?? HTTP_<status>)
+```
+
+`codeFromKey()` turns `noSuchGreeting` into `NO_SUCH_GREETING` and
+`session.notFound` into `SESSION_NOT_FOUND`. So:
+
+| You throw | Message sent | Code |
+|---|---|---|
+| `new HttpError(404, "noSuchGreeting", { vars: { name } })` | `No greeting named "x"` (from `hello/i18n/en.json`) | `NO_SUCH_GREETING` |
+| `new HttpError(404, "nothing here")` | `nothing here` | `NOT_FOUND` |
+| `new HttpError(404, req.t("noSuchGreeting"))` | the translated text | `NOT_FOUND` |
+| `new HttpError(403, "forbidden", { defaultMessage: "…" })` | the default, until a locale defines `forbidden` | `FORBIDDEN` |
+
+Prefer the bare key: the code survives, and the locale is the caller's (`?lang=fr`
+or `Accept-Language`). The key is checked *before* translating, so a finished
+English sentence is never recorded as a missing key.
+
+The well-known status codes, used when nothing more specific applies:
+
+| Status | Code |
+|---|---|
+| 400 | `BAD_REQUEST` |
+| 401 | `UNAUTHENTICATED` |
+| 403 | `FORBIDDEN` |
+| 404 | `NOT_FOUND` |
+| 409 | `CONFLICT` |
+| 413 | `PAYLOAD_TOO_LARGE` |
+| 422 | `VALIDATION_FAILED` |
+| 429 | `TOO_MANY_REQUESTS` |
+| 500 | `INTERNAL_ERROR` |
+| other | `HTTP_<status>` |
+
+The full list of codes an app can see is in
+[Error codes](/tulipes-js/reference/topics/error-codes/).
+
+## The terminal handlers
+
+**`notFoundHandler()`** answers anything no router claimed:
+
+```json
+{ "success": false, "data": null, "meta": {},
+  "errors": [{ "field": null, "message": "no route for GET /api/v1/nope", "code": "ROUTE_NOT_FOUND" }] }
+```
+
+No `rai()` ran, so there is no module namespace and the message is used as
+written. The same is true of an error thrown in global middleware before any
+route matched.
+
+**`errorHandler(appEnv)`** is the single place a failure envelope is built:
+
+- `ValidationError` and `HttpError` are rendered as above.
+- Any other error carrying a numeric `status` or `statusCode` between 400 and
+  499 (body-parser's 413 for an oversized body, 400 for malformed JSON) keeps
+  that status; its message describes the request, so it is passed through.
+- Everything else is a bug: it is logged as `[http] unhandled error:` with the
+  error, and answered 500 `INTERNAL_ERROR`.
+
+## What leaks, and what does not
+
+| | development, test | staging, production |
+|---|---|---|
+| 500 message | `internal: <the error's message>` | `internal server error` |
+| stack trace in the response | never | never |
+| `HttpError` `details` | never sent | never sent |
+| 4xx from other middleware | message passed through | message passed through |
+| raw-response warning | logged in development only | not armed |
+
+The choice is made by `APP_ENV`, not `NODE_ENV`. A staging deployment set to
+`APP_ENV=staging` hides internals exactly like production.
+
+<Aside type="caution">
+Only the 500 message changes between environments. The message of an
+`HttpError` you throw is always sent, in every environment, so never put
+internal state in one.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Validation and errors" href="/tulipes-js/tutorial/validation-and-errors/" description="Throw and validate in the tutorial app." />
+  <LinkCard title="Translations" href="/tulipes-js/guides/translations/" description="Module namespaces, locales and missing keys." />
+  <LinkCard title="Error codes" href="/tulipes-js/reference/topics/error-codes/" description="Every code a client may branch on." />
+  <LinkCard title="RAI and the ACL" href="/tulipes-js/concepts/rai-and-acl/" description="Where 401, 403 and OUT_OF_SCOPE come from." />
+</CardGrid>

@@ -1,0 +1,675 @@
+---
+title: Authentication
+description: How the production preset's auth module signs users in, rotates refresh tokens, tracks devices and fills req.auth, and how to change or replace it.
+sidebar:
+  order: 20
+---
+
+import { Aside, Steps, FileTree, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Every request a Tulipes app handles carries `req.auth`: who is calling, and the
+session behind the call. Core reads that one field and decides access from it,
+but core never fills it. Filling it is the job of an auth module, and the
+production preset (`tulipes init --preset production`) scaffolds a complete one
+in `modules/auth`: email and password sign-in, short-lived access tokens,
+rotating refresh tokens with theft detection, one session row per device, and a
+Redis cache that makes a warm request cost one read. The module is your code.
+You edit it, and you can replace it entirely.
+
+<Aside type="note">
+The minimal preset has no auth module. Every request there is a guest, and
+public endpoints are simply the ones granted to `guest`. Everything on this page
+assumes the production preset.
+</Aside>
+
+## The contract with core
+
+Core declares the shape of a caller in `@tulipes/core/http`:
+
+```ts title="packages/core/src/http/index.ts (abridged)"
+export interface Auth {
+  isAuthenticated: boolean;      // true once an auth module identified the caller
+  user: AuthUser | null;         // null for a guest
+  session: AuthSession | null;   // null when there is none (a guest, an API token)
+  scopes?: readonly string[];    // a credential's scopes; absent = the role's full grant
+  credentialId?: string;         // an API token's id, never its secret
+}
+
+export interface AuthUser {}
+export interface AuthSession {}
+```
+
+`AuthUser` and `AuthSession` are empty on purpose. Core reads exactly one thing
+off the user, `role`, for the ACL check; the app says what the rest is. The
+auth module fills both interfaces through declaration merging, which is what
+makes `req.auth.user.email` and `req.auth.session.last_seen_at` typed in every
+handler:
+
+```ts title="modules/auth/helpers/auth.ts"
+declare module "@tulipes/core/http" {
+  interface AuthUser extends UserDoc {}
+
+  interface AuthSession extends SessionDoc {
+    // This request's ACCESS token, attached to the session row rather
+    // than stored on it: the row outlives any single token.
+    access_jti: string;
+    access_issued_at: Date;
+    access_expires_at: Date;
+  }
+}
+```
+
+`UserDoc` and `SessionDoc` are hydrated Mongoose documents
+(`modules/auth/helpers/documents.ts`), not lean objects. A handler can call
+instance methods on `req.auth.user`, and it can also save it, so treat it as a
+write handle.
+
+The guest value is `ANONYMOUS` from `@tulipes/core/http`:
+`{ isAuthenticated: false, user: null, session: null }`. Inside a declared
+route `req.auth` is never undefined: `rai()` replaces a missing or shared
+guest value with a fresh copy for that request before the access check. The
+role it checks is `req.auth.user.role`, or `guest` when there is no user. See
+[RAI and the ACL](/tulipes-js/concepts/rai-and-acl/) for the decision itself.
+
+## What the module contains
+
+<FileTree>
+- modules/auth/
+  - package.json signing keys and seeded admin, as environment values
+  - module.config.ts token lifetimes and the cache TTL, as settings
+  - module.acl.ts the role vocabulary and auth's own grants
+  - bootstrap/
+    - credentials.bootstrap.ts refuses placeholder secrets in staging and production
+    - seed-admin.bootstrap.ts creates the first admin
+  - controllers/web.auth.controllers.ts
+  - helpers/
+    - auth.ts the declaration merging, `auth()`, `currentUser()`, `GUEST`
+    - passport.ts the local and JWT strategies, `authenticate(ctx)`
+    - tokens.ts minting, rotation, sessions, revocation
+    - passwords.ts bcrypt and credential versions
+    - session-cache.ts the Redis identity cache
+    - api-tokens.ts API tokens
+    - access-check.ts re-checking authority for long-lived work
+  - lib/index.ts what other modules may import as `@app/auth`
+  - models/ Credential, Session, RevokedToken, ApiToken
+  - routes/web.auth.routes.ts
+  - schemas/auth.schemas.ts
+</FileTree>
+
+The module is `tier: "sys"` with `priority: 20`, so it loads after the sys
+`core` (0) and `security` (10) modules and before every feature module. Its
+routes file mounts two global middlewares on `ctx.app` before its own router,
+and because sys modules' routes run first, every feature route sees a resolved
+`req.auth`:
+
+```ts title="modules/auth/routes/web.auth.routes.ts"
+// Passport reads the signing keys when it is configured, so it is
+// configured on the first request, after which every request is identified
+// before any feature route runs.
+app.use(lazy(() => {
+  configurePassport(ctx);
+  return passport.initialize();
+}));
+app.use(lazy(() => authenticate(ctx)));
+```
+
+`lazy()` from `@app/core` builds a middleware on its first request. That matters
+because `tulipes routes` and `tulipes spec` build every router in an
+[inspection boot](/tulipes-js/concepts/inspection/) where environment values,
+such as the signing keys, are not readable.
+
+`authenticate(ctx)` never rejects a request. A missing, malformed, expired or
+revoked token turns the caller into a guest, and the ACL decides from there.
+This is what makes a public endpoint an ordinary grant to `guest` rather than a
+second mechanism.
+
+## The endpoints
+
+All of them are under `<api prefix>/auth`, which is `/api/v1/auth` in the
+reference app:
+
+| Method and path | RAI id | Granted to | Does |
+|---|---|---|---|
+| `POST /register` | `auth:web:register` | guest | create an account, sign it in (201) |
+| `POST /login` | `auth:web:login` | guest | exchange email and password for a token pair |
+| `POST /refresh` | `auth:web:refresh` | guest | rotate a refresh token for a new pair |
+| `POST /logout` | `auth:web:logout` | user | end this session now |
+| `GET /me` | `auth:web:me` | user | the caller and the session behind the request |
+| `GET /sessions` | `auth:web:sessions` | user | every device this account is signed in on |
+| `DELETE /sessions/:sid` | `auth:web:sessions:end` | user | sign one device out |
+| `POST /password` | `auth:web:password` | user | change the password, end every other session |
+| `POST /tokens`, `GET /tokens`, `DELETE /tokens/:token_id` | `auth:web:tokens:*` | user | API tokens, see [API tokens and scopes](/tulipes-js/guides/api-tokens-and-scopes/) |
+
+`admin` and `sysadmin` hold `auth:*`, so they reach all of them.
+
+<Aside type="caution">
+Login, register and refresh are granted to `guest`, not to `user`. A request to
+them that carries a valid `user` access token resolves to the `user` role, which
+holds no `auth:web:login`, and is refused with 403 `FORBIDDEN`. Send these three
+without an `Authorization` header.
+</Aside>
+
+## Sign-up
+
+`POST /api/v1/auth/register` takes `{ email, password }`, validated by the
+`registration` schema (a valid email, a password of at least 8 characters):
+
+```sh
+curl -X POST http://localhost:3000/api/v1/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"email":"ada@example.com","password":"correct horse battery"}'
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": { "id": "6720…", "email": "ada@example.com", "role": "user" },
+    "access_token": "eyJhbGciOi…",
+    "refresh_token": "eyJhbGciOi…",
+    "expires_in": "15m"
+  },
+  "errors": [],
+  "meta": {}
+}
+```
+
+The controller lowercases the email, creates the `User` with role `user`,
+writes the password into a separate `Credential` row with `setPassword()`, and
+opens a session with `startSession()`. Registration is gated by the users
+module's `signupMode` setting (`open`, `invite` or `closed`, default `open`);
+anything but `open` answers 403 `REGISTRATION_CLOSED`, with a message naming the
+mode (`Registration is closed`). An address that already has an account answers 422
+`EMAIL_UNAVAILABLE` on the `email` field, deliberately the same shape as any
+other validation failure, so registration cannot be used to find out which
+addresses have accounts.
+
+## Sign-in
+
+`POST /api/v1/auth/login` runs passport-local. It looks the user up by
+lowercased email, reads the `Credential` with `.select("+password_hash")`
+(the hash is `select: false`), and compares with bcrypt:
+
+```sh
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"ada@example.com","password":"correct horse battery"}'
+```
+
+The answer has the same shape as registration's, with status 200. An unknown
+email and a wrong password produce the same refusal, so a caller cannot tell
+them apart:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [{ "field": null, "message": "Invalid email or password", "code": "INVALID_CREDENTIALS" }],
+  "meta": {}
+}
+```
+
+The message is the i18n key `invalidCredentials`, translated from
+`modules/auth/i18n/<locale>.json`; the code is derived from the key. See
+[responses and errors](/tulipes-js/concepts/responses-and-errors/).
+
+## Tokens, sessions and the request pipeline
+
+A sign-in produces two JWTs and one database row:
+
+```txt
+            POST /login
+                 |
+                 v
+   +---------------------------+     Session row (one per device)
+   | access token   typ=access |     sid, user, credential_version,
+   |   sub, sid, jti, 15m      |---> refresh_jti (current only),
+   | refresh token  typ=refresh|     ip, user_agent, last_seen_at,
+   |   sub, sid, jti, 30d      |     expires_at (TTL index)
+   +---------------------------+
+```
+
+- **Both tokens carry the session's `sid`.** That is how an access token finds
+  its own session row after the refresh token's `jti` has rotated.
+- **Neither token carries a role.** On every request the JWT strategy reloads
+  the user, so a demotion or a ban takes effect on the next request instead of
+  when the token expires.
+- **The two tokens are signed with different keys**, `JWT_ACCESS_SECRET` and
+  `JWT_REFRESH_SECRET`, so leaking one cannot mint the other.
+
+On each request with a Bearer access token, `identifyClaims()` in
+`helpers/passport.ts` resolves the caller. On a cold path that is three reads:
+the `RevokedToken` blacklist, the `Session` (owned by the token's subject, the
+current credential version, not expired), then the `User`. The result is
+`{ isAuthenticated: true, user, session }`, with the token's `jti`, issue time
+and expiry attached to the session as `access_jti`, `access_issued_at` and
+`access_expires_at`. `GET /auth/me` shows what came back:
+
+```json
+{
+  "is_authenticated": true,
+  "locale": "en",
+  "user": { "id": "6720…", "email": "ada@example.com", "role": "user" },
+  "session": {
+    "sid": "3b0c…", "ip": "127.0.0.1", "user_agent": "curl/8.7.1",
+    "started_at": "…", "last_seen_at": "…", "expires_at": "…",
+    "access_expires_at": "…"
+  }
+}
+```
+
+`last_seen_at` is written at most once every `sessionTouchSeconds` (60 by
+default): a write per request would cost more than the field is worth.
+
+### Token settings
+
+Token policy is a setting, not an environment variable: none of it is secret and
+an operator changes it through the console without a restart.
+
+```ts title="modules/auth/module.config.ts"
+export default defineConfig({
+  schema: z.object({
+    accessTtl: z.string().min(1).default("15m"),
+    refreshTtl: z.string().min(1).default("30d"),
+    sessionTouchSeconds: z.number().int().positive().default(60),
+    cacheTtlSeconds: z.number().int().min(0).max(3600).default(60),
+  }),
+});
+```
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `accessTtl` | `15m` | access token lifetime, an ms/jsonwebtoken duration. Keep it short |
+| `refreshTtl` | `30d` | refresh token lifetime, also the TTL of its session row |
+| `sessionTouchSeconds` | `60` | seconds between two writes of a session's `last_seen_at` |
+| `cacheTtlSeconds` | `60` | seconds a resolved identity stays cached; `0` disables the cache; never longer than `accessTtl` |
+
+Both lifetimes are read when a token is signed, never cached. The secrets and
+the seeded admin are the module's environment values, declared in its
+`package.json` under `tulipes.env` and read as `ctx.config.auth.jwtAccessSecret`
+and the like:
+
+| Variable | Config name | Use |
+|---|---|---|
+| `JWT_ACCESS_SECRET` | `jwtAccessSecret` | signs access tokens |
+| `JWT_REFRESH_SECRET` | `jwtRefreshSecret` | signs refresh tokens |
+| `AUTH_ADMIN_EMAIL` | `adminEmail` | the admin seeded on first boot |
+| `AUTH_ADMIN_PASSWORD` | `adminPassword` | that admin's first password |
+
+`bootstrap/credentials.bootstrap.ts` runs in staging and production and refuses
+blank or development values, and identical signing keys:
+
+```txt
+Unsafe production credentials: configure JWT_ACCESS_SECRET, JWT_ACCESS_SECRET / JWT_REFRESH_SECRET (use distinct keys)
+```
+
+`bootstrap/seed-admin.bootstrap.ts` creates the admin user and sets its password
+only when it has no credential yet, so a rotated admin password is not reset on
+the next boot. It does nothing in `script` mode. See
+[environment variables](/tulipes-js/guides/environment-variables/) and
+[settings](/tulipes-js/guides/settings/) for the two configuration layers.
+
+## Refresh rotation
+
+`POST /api/v1/auth/refresh` takes the refresh token in a JSON body, never from a
+cookie:
+
+```sh
+curl -X POST http://localhost:3000/api/v1/auth/refresh \
+  -H 'content-type: application/json' \
+  -d '{"refresh_token":"eyJhbGciOi…"}'
+```
+
+```json
+{
+  "success": true,
+  "data": { "access_token": "…", "refresh_token": "…", "expires_in": "15m" },
+  "errors": [],
+  "meta": {}
+}
+```
+
+Each refresh consumes the token presented and returns a new pair in the same
+family (the same `sid`). The session row keeps only the current `refresh_jti`.
+
+### Reuse detection
+
+`rotateSession()` in `helpers/tokens.ts` makes one atomic `findOneAndUpdate` on
+the session, scoped to the owner, the current credential version and a live
+expiry:
+
+- If the presented `jti` is the current one, it is rotated: a new
+  `refresh_jti`, a new expiry, `last_seen_at` set.
+- If it is a valid, unexpired but **superseded** token, the row's `expires_at`
+  is set to the Unix epoch. The whole family is dead: every access token and
+  refresh token of that device stops working, and other devices are untouched.
+
+Both outcomes are decided in one document write, so a replay cannot race a
+rotation. The replay answers 401:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [{ "field": "refresh_token", "message": "That refresh token has already been used or revoked", "code": "REFRESH_USED" }],
+  "meta": {}
+}
+```
+
+This is the S08k policy in the [security model](/tulipes-js/production/security-model/):
+theft containment over transparent retries. Two consequences for clients:
+
+- **Serialize refreshes per session**, including across browser tabs that share
+  tokens. Two concurrent refreshes with the same token produce one success and
+  one rejection, and the rejection expires the family, so the "successful" pair
+  stops working too.
+- **After any refresh failure, sign in again.** There is no grace window. If
+  MongoDB does not acknowledge the write, the endpoint answers 503
+  `REFRESH_UNAVAILABLE` ("The refresh operation could not be acknowledged; sign
+  in again") and returns no pair, because a missing acknowledgment does not
+  prove nothing changed.
+
+Other refresh failures: no `refresh_token` is 422 `REFRESH_REQUIRED`; a token
+with a bad signature, the wrong type or a malformed claim is 401
+`REFRESH_INVALID`; a deleted user is 401 `ACCOUNT_GONE`. An expired ancestor or a
+forged token cannot revoke a live family: the claims are verified before any
+write.
+
+## Logout and revocation
+
+`POST /api/v1/auth/logout` with the access token ends both halves of the
+session:
+
+```ts title="modules/auth/controllers/web.auth.controllers.ts"
+// Deleting the row kills the refresh half: no session, no rotation,
+// and the next request carrying this access token resolves to guest.
+if (session) await endSession(this.#ctx, session.sid);
+
+// Blacklisting the access token is what makes logout take effect
+// now, rather than whenever the token would have expired.
+const access = this.#accessClaims(req);
+if (access) await revokeAccess(this.#ctx, access);
+```
+
+The blacklist is the `RevokedToken` model, one row per revoked `jti` with a TTL
+index set to the token's own expiry, so it never grows past what one access
+lifetime allows. That is the argument for keeping `accessTtl` short.
+
+Every way an authority can disappear, and what removes it:
+
+| Event | What happens |
+|---|---|
+| logout | session row deleted, access `jti` blacklisted, cache entry deleted |
+| refresh reuse | session family expired in place, cache entry deleted |
+| `DELETE /sessions/:sid` | that session row deleted, cache entry deleted |
+| password change | new credential version; every session and API token of the old version stops resolving |
+| role change or deletion | your code calls `forgetUser(ctx, userId)` so cached identities are dropped |
+
+Requests already authorized are not cancelled by any of these; the next request
+is refused.
+
+## Sessions and devices
+
+Each sign-in creates a new `sid`, so each device has its own session.
+`GET /api/v1/auth/sessions` lists the live ones, newest first:
+
+```json
+{
+  "success": true,
+  "data": [
+    { "sid": "3b0c…", "current": true, "ip": "127.0.0.1", "user_agent": "curl/8.7.1", "started_at": "…", "last_seen_at": "…" },
+    { "sid": "9e41…", "current": false, "ip": "10.0.0.7", "user_agent": "Mozilla/5.0 …", "started_at": "…", "last_seen_at": "…" }
+  ],
+  "errors": [],
+  "meta": { "total_items": 2 }
+}
+```
+
+`DELETE /api/v1/auth/sessions/9e41…` signs that device out. The `sid` must be a
+UUID and must belong to the caller; anything else answers 404 `NO_SUCH_SESSION`,
+so ending another account's session is never one guessed request away.
+
+The `ip` comes from `req.ip`, which is only the client's address when proxy
+trust is configured for your ingress. See
+[security middleware](/tulipes-js/guides/security-middleware/#proxy-trust-and-client-ips).
+
+## Passwords and the Credential model
+
+Secrets never live on the `User` document:
+
+```ts title="modules/auth/models/credential.model.ts"
+const credentialSchema = new Schema(
+  {
+    user: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true, index: true },
+    version: { type: String, required: true },
+    password_hash: { type: String, required: true, select: false },
+  },
+  baseSchemaOptions,
+);
+```
+
+A route that serializes a user cannot leak a hash, because the hash is not in
+that document, and even a query on `Credential` must ask for it by name.
+
+Hashing is bcryptjs (pure JavaScript, no native build), with the cost factor
+from the security module's `passwordRounds` setting (default 12). The helpers
+are exported from `@app/auth`:
+
+```ts
+import { hashPassword, setPassword, verifyPassword } from "@app/auth";
+
+const hash = await hashPassword(ctx, "a new password");
+const ok = await verifyPassword("a new password", hash);
+
+// Replace a user's password and invalidate everything issued under the old one.
+const version = await setPassword(ctx, userId, "a new password");
+```
+
+`setPassword(ctx, userId, plain, expectedVersion?)` writes the hash and a fresh
+random `version` in one atomic update. Sessions and API tokens record the
+version they were issued under, and every authentication checks it against the
+current credential, so after a password change nothing from before resolves.
+`POST /auth/password` passes the caller's session version as `expectedVersion`,
+so a delayed request cannot overwrite a newer password, and answers with a fresh
+token pair so the device that made the change stays signed in:
+
+```json
+{
+  "message": "Password changed — every other session was signed out",
+  "changed": true,
+  "sessions_revoked": true,
+  "access_token": "…", "refresh_token": "…", "expires_in": "15m"
+}
+```
+
+A password shorter than 8 characters answers 422 `PASSWORD_TOO_SHORT` on the
+`password` field. A trusted reset flow you write yourself can omit
+`expectedVersion` to set the password unconditionally.
+
+## The Redis identity cache
+
+A resolved identity is kept in the app cache (`appCache(ctx)` from `@app/core`,
+Redis in production and shared by every replica) under `auth:session:<sid>`, for
+`cacheTtlSeconds`, bounded by `accessTtl`. A hit is one Redis read instead of the
+three MongoDB reads of the cold path; the reference tests assert that a warm
+`GET /auth/me` performs no model read at all.
+
+Every path that revokes deletes the entry before it answers, so a revoked
+session is refused on the very next request on any replica. The cache is best
+effort: a Redis outage is a miss, never an error, and the database path decides.
+The TTL bounds the only window a deletion could be lost in: a Redis outage at the
+moment of the revocation.
+
+When your code changes something a cached identity carries, forget it:
+
+```ts title="modules/users/controllers/bo.users.controllers.ts"
+import { forgetUser } from "@app/auth";
+
+// The account leaves every query, so its sessions resolve to nobody on
+// the cold path; the cached identities would not know, so they go too.
+await forgetUser(this.#ctx, String(user._id));
+await (user as unknown as { softDelete(): Promise<unknown> }).softDelete();
+```
+
+`forgetUser()` reads the user's session and token ids from the rows that exist
+now, so call it **before** deleting those rows. `forgetSession(ctx, sid)` and
+`forgetToken(ctx, tokenId)` forget one entry.
+
+<Aside type="caution">
+Writing `role` on a user without calling `forgetUser()` leaves the old role in
+the cache for up to `cacheTtlSeconds`. Any code that promotes, demotes or deletes
+a user must call it.
+</Aside>
+
+## Bearer tokens, not cookies
+
+The starter's transport contract is deliberate:
+
+| Operation | Credential source |
+|---|---|
+| protected routes | `Authorization: Bearer <access_token>` |
+| login and registration | email and password in a JSON body |
+| refresh | `refresh_token` in a JSON body |
+| logout, password change, ending a session | the access-token header |
+
+The JWT extractor is `ExtractJwt.fromAuthHeaderAsBearerToken()` only. Cookies and
+URL parameters never authenticate, and no auth response sets a cookie. A browser
+client keeps the access token in memory and sends it explicitly:
+
+```ts
+const response = await fetch(`${apiBase}/api/v1/auth/me`, {
+  credentials: "omit",
+  headers: { Authorization: `Bearer ${accessToken}` },
+});
+```
+
+Because the browser never attaches a credential on its own, there is no CSRF
+surface to defend. The security module's CORS setting decides which origins may
+read responses; it does not authenticate anything.
+
+If you move tokens into cookies, that is an application change with its own
+obligations: CSRF validation on every state-changing route (login, refresh,
+logout and password change included), exact-origin checks, `Secure`,
+`HttpOnly` and an explicit `SameSite` policy, removing the refresh token from
+response bodies, and tests for each. `docs/browser-auth.md` in a generated app
+lists them in full, and S08j in the
+[security model](/tulipes-js/production/security-model/) records the decision.
+
+## Helpers for other modules
+
+`modules/auth/lib/index.ts` is what other modules import as `@app/auth`
+(declare `@app/auth` in the module's `package.json` dependencies):
+
+```ts title="modules/auth/lib/index.ts"
+export { auth, currentUser, GUEST, type Auth } from "../helpers/auth.ts";
+export { hashPassword, setPassword, verifyPassword } from "../helpers/passwords.ts";
+export { endAllSessions, endSession, listSessions } from "../helpers/tokens.ts";
+export { identifyApiToken, isApiToken, isTokenLive, issueToken, listTokens, revokeToken } from "../helpers/api-tokens.ts";
+export { forgetSession, forgetToken, forgetUser } from "../helpers/session-cache.ts";
+export { createAccessCheck } from "../helpers/access-check.ts";
+export { identifyCredential } from "../helpers/passport.ts";
+```
+
+- **`auth(req)`** returns `req.auth`, or a fresh guest value when nothing has set
+  it. Inside a declared route you can read `req.auth` directly; `auth()` is for
+  middleware in another sys module that runs before any `rai()`.
+- **`currentUser(req)`** is `auth(req).user ?? undefined`: the signed-in user,
+  or `undefined` for a guest.
+- **`GUEST`** is core's `ANONYMOUS` value. Compare with it, but never mutate it:
+  assign `{ ...GUEST }` instead.
+- **`endAllSessions(ctx, userId)`** forgets the user's cached identities and
+  deletes all their session rows. On its own it does not stop a sign-in that is
+  in flight; `setPassword()` is the stronger tool after a compromise.
+- **`identifyCredential(ctx, bearer)`** resolves an access token or an API token
+  outside a request, to the `ToolActor` an MCP process acts as. See
+  [MCP](/tulipes-js/guides/mcp/).
+- **`createAccessCheck(ctx, auth, permission)`** captures the identity behind a
+  request and returns `(signal) => Promise<boolean>` that reloads the session,
+  the blacklist and the user's current role each time it runs. The settings
+  module's log stream calls it every second to end a stream whose authority
+  disappeared.
+
+```ts
+import { currentUser } from "@app/auth";
+
+router.get("/profile", rai({ id: "profile:web:read", name: "My profile" }), (req, res) => {
+  const user = currentUser(req);
+  res.respond({ data: user ? { email: user.email } : null });
+});
+```
+
+## Replacing the auth method
+
+Nothing outside the auth module depends on JWT, passport or MongoDB sessions.
+The framework's only expectation is that `req.auth` is set before feature routes
+run, with `user.role` holding a role the ACL defines. To use something else (an
+external identity provider, server sessions, mTLS):
+
+<Steps>
+
+1. Keep the role vocabulary. The roles in `modules/auth/module.acl.ts`
+   (`guest`, `user`, `admin`, `sysadmin`) and the grants other modules attach to
+   them do not depend on how a caller is identified. Move `module.acl.ts` to your
+   new module if you delete this one.
+
+2. Mount one middleware in a sys-tier module's routes file that sets
+   `req.auth` and never throws for an unknown caller:
+
+   ```ts title="modules/identity/routes/identity.routes.ts"
+   import type { BackendCtx } from "@tulipes/core/boot";
+   import { ANONYMOUS } from "@tulipes/core/http";
+   import { lazy } from "@app/core";
+
+   export default function identityRoutes(ctx: BackendCtx): void {
+     ctx.app.use(lazy(() => async (req, _res, next) => {
+       const user = await resolveFromYourProvider(ctx, req); // your code
+       req.auth = user
+         ? { isAuthenticated: true, user, session: null }
+         : { ...ANONYMOUS };
+       next();
+     }));
+   }
+   ```
+
+3. Augment `AuthUser` (and `AuthSession` if you have one) in
+   `@tulipes/core/http` with your shapes, including `role: string`.
+
+4. If roles do not live on the user at all, replace the whole decision with
+   `ctx.routes.setAccessChecker()`; see
+   [roles and permissions](/tulipes-js/guides/roles-and-permissions/#custom-access-checkers).
+
+5. Update `config/mcp.config.ts`, which identifies MCP callers through
+   `identifyCredential` from this module, and `@tulipes/testing`'s `app.as()`,
+   which signs in through `/auth/register` and `/auth/login`
+   (its `authPath` option changes the mount).
+
+</Steps>
+
+<Aside type="tip">
+Because the auth module is generated code, fixes to it ship as migration steps
+in `packages/core/MIGRATING.md`, not as library updates. Read the release notes
+when you [upgrade](/tulipes-js/production/upgrading/).
+</Aside>
+
+## Common mistakes
+
+- **Reading the `Authorization` header yourself.** Use `req.auth`. Re-parsing the
+  token skips the session, blacklist and credential-version checks.
+- **Trusting a claim from the token.** The token carries no role on purpose.
+- **Putting a secret on the User model.** Use `Credential` or a model of its own,
+  with `select: false`.
+- **Changing a role without `forgetUser()`.** The old role survives in the cache
+  for up to `cacheTtlSeconds`.
+- **Retrying a failed refresh.** A rejected or unacknowledged refresh means sign
+  in again.
+- **Leaving placeholder secrets.** A staging or production boot refuses them,
+  naming each variable.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="API tokens and scopes" href="/tulipes-js/guides/api-tokens-and-scopes/" description="Long-lived, revocable credentials for scripts and agents." />
+  <LinkCard title="Roles and permissions" href="/tulipes-js/guides/roles-and-permissions/" description="Define roles and grant RAI ids in module.acl.ts." />
+  <LinkCard title="Security middleware" href="/tulipes-js/guides/security-middleware/" description="Helmet, CORS, rate limits and proxy trust." />
+  <LinkCard title="Production security model" href="/tulipes-js/production/security-model/" description="The decisions behind sessions, refresh and revocation." />
+</CardGrid>

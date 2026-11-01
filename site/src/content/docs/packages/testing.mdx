@@ -1,0 +1,171 @@
+---
+title: "@tulipes/testing"
+description: Boot a Tulipes app once per test file on a free port, call its endpoints with the envelope decoded, and sign in as any role, with any test runner.
+sidebar:
+  order: 8
+---
+
+import { Aside, Tabs, TabItem, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`@tulipes/testing` runs your real app in a test: the full boot, real routes,
+real middleware, real services. It boots once per test file on a free port,
+gives you request helpers that decode the response envelope, and signs in as
+a role through the app's own auth module. It takes the runner's file hooks,
+so it works with vitest or any runner with `beforeAll` and `afterAll`, and it
+depends on nothing but core.
+
+## When you need it
+
+For integration tests of modules: an endpoint's status and envelope, its ACL,
+its validation errors, what it writes to the database. Pure helpers can be
+tested without it.
+
+## Install
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add -D @tulipes/testing vitest
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install -D @tulipes/testing vitest
+    ```
+  </TabItem>
+</Tabs>
+
+## How it plugs in
+
+It is not a provider. `bootTestApp()` calls core's `boot()` with
+`mode: "backend"`, `appEnv: "test"` (by default), `port: 0` and
+`handleSignals: false`, so every phase runs exactly as in production and the
+providers the app declares connect to real services. Variables passed in
+`env` are set on `process.env` for the boot and restored on shutdown.
+
+Because every file boots against the same database, run files one after
+another:
+
+```ts title="vitest.config.ts"
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    include: ["tests/**/*.test.ts", "modules/*/tests/**/*.test.ts"],
+    fileParallelism: false,
+  },
+});
+```
+
+A module's tests live in `modules/<name>/tests/`.
+
+## A test file
+
+```ts title="modules/hello/tests/hello.test.ts"
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, expect, test } from "vitest";
+import { useTestApp } from "@tulipes/testing";
+
+import { testEnv, testSettings } from "../../../tests/support.ts";
+
+const rootDir = fileURLToPath(new URL("../../../", import.meta.url));
+const app = useTestApp({ rootDir, env: testEnv(), settings: testSettings() }, { beforeAll, afterAll });
+
+test("hello responds through the declared public endpoint", async () => {
+  const { status, body } = await app.get(app.api("/hello"));
+  expect(status).toBe(200);
+  expect(body).toMatchObject({ success: true, errors: [] });
+});
+
+test("the secret needs a role", async () => {
+  // hello:web:secret is granted to "user" in module.acl.ts; a guest gets 401
+  expect((await app.get(app.api("/hello/secret"))).status).toBe(401);
+  const user = await app.as("user");
+  expect((await app.get(app.api("/hello/secret"), { as: user })).status).toBe(200);
+});
+```
+
+The reference app's `tests/support.ts` builds `env` from two dedicated
+services, so a suite never writes to a development database:
+
+```ts title="tests/support.ts"
+export function testEnv(): Record<string, string> {
+  if (!process.env.TEST_MONGO_URI || !process.env.TEST_REDIS_URL) {
+    throw new Error("Tests require dedicated TEST_MONGO_URI and TEST_REDIS_URL services");
+  }
+  return {
+    MONGO_URI: process.env.TEST_MONGO_URI,
+    REDIS_URL: process.env.TEST_REDIS_URL,
+    JWT_ACCESS_SECRET: randomBytes(32).toString("hex"),
+    // … the other secrets, and LOG_LEVEL: "fatal", LOG_FILE: "false", LOG_CONSOLE: "false"
+  };
+}
+```
+
+## Configuration
+
+`useTestApp(options, hooks)` and `bootTestApp(options)` take:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `rootDir` | required | The app root |
+| `appEnv` | `"test"` | Which `.envs/.env.<appEnv>` and settings file the boot reads |
+| `env` | none | Variables, by their env names, set for the boot and restored after |
+| `settings` | none | Per namespace, written through `ctx.settings.set()` right after the boot, as an operator would |
+| `authPath` | `"/auth"` | The auth module's mount, relative to the API prefix |
+| `boot` | none | Any other `boot()` option except `rootDir`, `appEnv`, `mode`, `inspect` and `port` |
+
+## Main exports
+
+- `useTestApp(options, { beforeAll, afterAll })` boots in `beforeAll` and
+  shuts down in `afterAll`. Every member delegates to the booted app; using
+  one before `beforeAll` ran throws with the reason.
+- `bootTestApp(options)` does the same without hooks; call `shutdown()`
+  yourself.
+
+The `TestApp` they give you:
+
+| Member | What it does |
+|---|---|
+| `request(method, path, { body, as, token, headers, query })` | One request. `path` is absolute on the app, or a full URL |
+| `get`, `post`, `patch`, `delete` | Shorthands; `post` and `patch` take the body second |
+| `api("/x")` | `base` + `config.api.prefix` + `/x` |
+| `register(credentials?)` | A fresh account through `POST <prefix>/auth/register`, signed in |
+| `login(email, password)` | `POST <prefix>/auth/login` |
+| `as(role)` | Register, promote through the `User` model, sign in again |
+| `base`, `prefix`, `ctx`, `handle` | The listener URL, the API prefix, the boot context and handle |
+| `shutdown()` | Shut the app down and restore `process.env` |
+
+Every request resolves to `{ status, headers, body, data, errors, raw }`,
+with the envelope decoded and `data` typed by the generic:
+`app.get<{ message: string }>(…)`. A non-JSON answer becomes a synthetic
+failed envelope with code `HTTP_<status>`, so asserting on `status` reads the
+same either way. `raw` is the fetch `Response`, for streams.
+
+`register`, `login` and `as` assume the production preset's auth module. See
+the [testing API reference](/tulipes-js/reference/api/testing/).
+
+## Version and compatibility
+
+This page describes `@tulipes/testing` **0.1.4**: Node.js `>=24.0.0 <25`,
+peer `@tulipes/core ^0.13.0`.
+
+## Failure modes
+
+- A boot failure rejects `beforeAll` with the app's `TulipesBootError`.
+- `the test app is not booted yet (reading get outside a test or before beforeAll ran)`
+- `the app booted without an HTTP listener` when `boot.listen` is `false`.
+- `register failed (422): …` or `login failed (401): …` with the envelope.
+- `as("admin") needs the app's models to promote the account` in an app without a models provider.
+
+<Aside type="note">
+Integration tests that need `TEST_MONGO_URI` and `TEST_REDIS_URL` should not
+be counted as passing when they were skipped. Run them with both services
+before claiming a suite is green.
+</Aside>
+
+<CardGrid>
+  <LinkCard title="Testing guide" href="/tulipes-js/guides/testing/" description="Structuring module tests, fixtures and services." />
+  <LinkCard title="Testing chapter" href="/tulipes-js/tutorial/testing/" description="Writing the bookstore's first tests." />
+  <LinkCard title="Environment variables" href="/tulipes-js/reference/topics/environment-variables/" description="Every variable, including TEST_MONGO_URI and TEST_REDIS_URL." />
+</CardGrid>

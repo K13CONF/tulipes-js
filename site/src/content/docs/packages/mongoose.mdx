@@ -1,0 +1,242 @@
+---
+title: "@tulipes/mongoose"
+description: The Mongoose models provider and MongoDB settings store — one connection per boot, models compiled from every module, versioned settings with history.
+sidebar:
+  order: 3
+---
+
+import { Aside, Tabs, TabItem, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`@tulipes/mongoose` gives a Tulipes app a MongoDB database. It opens one
+connection per boot, compiles every module's `models/*.model.ts` on it and
+puts the result on `ctx.models`. The same package can also keep the app's
+settings in MongoDB, versioned and propagated to every replica. Core does not
+install or import Mongoose, so an app without a database never pays for one.
+
+## When you need it
+
+When any module has a `models/` folder, or reads models another module owns.
+The production preset declares it; the minimal preset does not. Choose the
+settings store as well when you run more than one process or replica and want
+an operator's settings change to reach all of them without a restart.
+
+## Install
+
+`mongoose` is a **peer dependency**: the app's schemas and the provider must
+share one Mongoose instance, or `instanceof Schema` checks and the app's
+global plugins stop applying. Install both:
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add @tulipes/mongoose mongoose@^8
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install @tulipes/mongoose mongoose@^8
+    ```
+  </TabItem>
+</Tabs>
+
+## How it plugs in
+
+### Declare the provider
+
+Installing the package selects nothing. The app's root `package.json`
+selects it, one line per capability:
+
+```json title="package.json"
+{
+  "tulipes": {
+    "providers": {
+      "models": "@tulipes/mongoose",
+      "settings": "@tulipes/mongoose/settings"
+    }
+  }
+}
+```
+
+A module with a `models/` folder requires the `models` capability
+automatically. A module that only reads someone else's models says so in its
+own manifest, so the requirement is checked before any code is imported:
+
+```json title="modules/reports/package.json"
+{ "name": "@app/reports", "tulipes": { "requires": ["models"] } }
+```
+
+### Wire the connection
+
+The provider reads `config.mongoose`, which `config/app.config.ts` sets from
+the variables the `core` module declares. A full URI wins (it is the only way
+to name a replica set, an Atlas `mongodb+srv://` cluster or driver options);
+otherwise the parts go to the driver separately, so nothing is URL-encoded by
+hand:
+
+```ts title="config/app.config.ts"
+mongoose: env.core.mongodbUri
+  ? { uri: env.core.mongodbUri }
+  : {
+      uri: env.core.mongodbHost,
+      user: env.core.mongodbUsername,
+      pass: env.core.mongodbPassword,
+      dbName: env.core.mongodbDbName,
+    },
+```
+
+### Boot phases
+
+| Phase | What happens |
+|---|---|
+| 3b providers | Requirements checked against the declaration, before any import |
+| 5 models, settings | Connect with `serverSelectionTimeoutMS: 5000`, then import every `models/*.model.ts` in module load order and compile it on the boot's connection. The settings store is acquired right after. |
+| 6 settings | Core reads every namespace from the store, seeding it on first boot |
+| 9 bootstrap | Core runs `bootstrap/*.bootstrap.ts`, which may use `ctx.models` |
+| shutdown | The connection closes last, in reverse provider order, under core's deadline; `destroy(true)` if it misses it |
+
+Ownership of the connection is registered with core *before* the connection
+is awaited, so a database that never answers is still closed by the failed
+boot's cleanup.
+
+## A model file
+
+A model file is a declaration: export `{ name, schema }` and never call
+`mongoose.model()` yourself.
+
+```ts title="modules/hello/models/greeting.model.ts"
+import { Schema } from "mongoose";
+import type { ModelDef } from "@tulipes/mongoose";
+
+import { baseSchemaOptions } from "@app/core";
+
+const greetingSchema = new Schema(
+  {
+    name: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    message: { type: String, required: true },
+    times_used: { type: Number, default: 0, min: 0 },
+  },
+  baseSchemaOptions,
+);
+
+export default { name: "Greeting", schema: greetingSchema } satisfies ModelDef;
+```
+
+`ModelDef` also takes an optional `collection` to override Mongoose's
+collection naming. Persisted fields are `snake_case` (`times_used`,
+`created_at`); camelCase is for TypeScript only. See
+[models](/tulipes-js/guides/models/).
+
+Read a model anywhere the context reaches, typically inside a handler:
+
+```ts
+import { requireModels } from "@tulipes/core/boot";
+
+const Greeting = requireModels(ctx).get("Greeting");
+const rows = await Greeting.find().lean();
+```
+
+After `tulipes sync`, `get("Greeting")` is typed from the schema in the model
+file, and a misspelt name does not compile. A name sync has not seen falls
+back to `get<T>(name)`, which you type yourself.
+
+A bootstrap file seeds rows or builds indexes. It runs in every process mode,
+so make it idempotent:
+
+```ts title="modules/hello/bootstrap/seed-greetings.bootstrap.ts"
+import type { DatabaseCtx } from "@tulipes/core/boot";
+
+export default async function seedGreetings({ models, mode }: DatabaseCtx): Promise<void> {
+  if (mode === "script") return; // a one-off script reads; it does not seed
+  await models.get("Greeting").updateOne(
+    { name: "world" },
+    { $setOnInsert: { name: "world", message: "Hello, world!" } },
+    { upsert: true },
+  );
+}
+```
+
+The reference app also catches a duplicate-key error (`11000`) there, since
+the backend and the worker start together and race on the unique index.
+
+## Configuration
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `config.mongoose.uri` | string | none, required | `mongodb://host:port[/db]` or `mongodb+srv://…` |
+| `config.mongoose.user` | string | none | Username handed to the driver |
+| `config.mongoose.pass` | string | none | Password handed to the driver |
+| `config.mongoose.dbName` | string | none | Overrides the database named in the URI |
+
+An empty string counts as absent, which is how an optional part with
+`default: ""` arrives. In the reference app these come from `MONGO_URI`, or
+`MONGO_HOST` (default `mongodb://localhost:27017`), `MONGO_USERNAME`,
+`MONGO_PASSWORD` and `MONGO_DBNAME` (default `tulipes_example`), all declared
+by `modules/core/package.json`. See
+[environment variables](/tulipes-js/reference/topics/environment-variables/).
+
+## The settings store
+
+Select `"settings": "@tulipes/mongoose/settings"` and every namespace a
+`module.config.ts` declares becomes one document in the `settings` collection:
+
+```json
+{ "_id": "hello", "values": { "greeting": "Hello" }, "version": 3, "updated_at": "…", "updated_by": "…" }
+```
+
+- It is seeded from the schema's defaults on first boot.
+- A write through `ctx.settings.set()` is a `findOneAndUpdate` on
+  `{ _id, version }`: a stale version is refused, so two operators cannot
+  overwrite each other. The replaced document goes to `settings_history`.
+- Other processes learn of a change through a change stream when MongoDB is a
+  replica set, and by polling every 2 seconds otherwise. Core validates every
+  incoming document against the module's schema before applying it.
+- It shares the models provider's connection when both are this package, and
+  opens its own from `config.mongoose` when the app has no models.
+
+Without the declaration, core keeps settings in
+`config/settings.<APP_ENV>.json`. See [settings](/tulipes-js/guides/settings/).
+
+## Main exports
+
+| Export | Use |
+|---|---|
+| `ModelDef` | The type of a model file's default export |
+| `ModelStore` | What `ctx.models` is: `get`, `has`, `ownerOf`, `names`, `connection` |
+| `KnownModels`, `ModelOf`, `DefinedModel` | Types `tulipes sync` fills in |
+| `MongoSettingsStore` | The settings store class, with `collection`, `historyCollection` and `pollIntervalMs` options |
+| `readConnectionConfig`, `initDatabase` | The pieces the provider is built from |
+| default export, `provider`, `settingsProvider` | The provider objects core imports |
+
+`ctx.models.connection` is the boot's own Mongoose `Connection`, for scripts
+and tests that need the driver. Global plugins (`mongoose.plugin(...)`) stay
+application code and apply because the app and the provider share the
+instance; see [Mongoose plugins](/tulipes-js/guides/mongoose-plugins/).
+Signatures are in the [mongoose API reference](/tulipes-js/reference/api/mongoose/).
+
+## Version and compatibility
+
+This page describes `@tulipes/mongoose` **0.2.4**: Node.js `>=24.0.0 <25`,
+peers `@tulipes/core ^0.13.0` and `mongoose ^8`. It implements provider
+contract 2. `ModelDef` moved here from `@tulipes/core/db` in 0.10.
+
+## Failure modes
+
+| When | Message |
+|---|---|
+| Declared but not wired | `provider "mongoose" is selected but config.mongoose.uri is not set — wire it in config/app.config.ts …` |
+| Database unreachable after 5 s | `database connection failed (config.mongoose.uri): <driver message>` |
+| Bad model file | `<file> must default-export { name, schema } (a ModelDef)` |
+| Same name twice | `model "User" is already registered by module "users"` |
+| Unknown name at runtime | `Model "Usr" was never registered by any module (known: …)` (thrown at the call site) |
+| `models/` folder, no declaration | `requires capability "models" (has models/ files) but the app's package.json declares no provider for it` |
+| Settings store unreachable | `settings database connection failed (config.mongoose.uri): …` |
+
+Model registration errors are aggregated, so every bad model file is reported
+in one boot.
+
+<CardGrid>
+  <LinkCard title="Data and models" href="/tulipes-js/tutorial/data-and-models/" description="The tutorial chapter that adds the first model." />
+  <LinkCard title="Models guide" href="/tulipes-js/guides/models/" description="Schemas, queries, typing and bootstrap tasks." />
+  <LinkCard title="Settings" href="/tulipes-js/guides/settings/" description="Declaring, reading and writing live settings." />
+  <LinkCard title="Providers" href="/tulipes-js/concepts/providers/" description="The contract every provider implements." />
+</CardGrid>

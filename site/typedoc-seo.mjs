@@ -59,11 +59,12 @@ export function load(app) {
     const from = importPathOf(model, pkg);
     const lead = isModule ? `Module ${from}` : `${ReflectionKind.singularString(model.kind)} ${model.name} from ${from}`;
     // The import path keeps generic names (provider, default, Envelope) unique across packages.
-    const qualified = isModule ? from : `${model.name} · ${from}`;
+    const qualified = isModule ? `${from} API` : `${model.name} · ${from}`; // "API" keeps it apart from the package guide page
     const title = qualified.length <= 50 ? qualified : model.name.slice(0, 50);
     const end = event.contents.indexOf("\n---\n", 4);
     const kept = event.contents.slice(4, end).split("\n").filter(line => !/^(title|description):/.test(line));
-    const fields = [...kept, `title: ${JSON.stringify(title)}`, `description: ${JSON.stringify(describe(lead, summaryOf(model)))}`];
+    // Out of search: readers find guides first; the generated pages stay reachable from the sidebar.
+    const fields = [...kept, `title: ${JSON.stringify(title)}`, `description: ${JSON.stringify(describe(lead, summaryOf(model)))}`, "pagefind: false"];
     event.contents = `---\n${fields.join("\n")}${event.contents.slice(end)}`;
   }, -100);
 }

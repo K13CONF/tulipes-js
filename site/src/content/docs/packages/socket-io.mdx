@@ -1,0 +1,141 @@
+---
+title: "@tulipes/socket.io"
+description: The Socket.IO sockets provider — one server on the backend's HTTP listener, one namespace per module, attached before listen and closed during the drain.
+sidebar:
+  order: 5
+---
+
+import { Aside, Tabs, TabItem, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`@tulipes/socket.io` gives a Tulipes backend realtime connections. It runs one
+Socket.IO server on the same HTTP server as the API; each module claims its
+own namespace in `sockets/*.sockets.ts`, and any code in the backend can emit
+into a claimed namespace. Core does not install Socket.IO, so an app without
+realtime features never pays for it.
+
+## When you need it
+
+When clients need pushed updates: a dashboard, notifications, presence. The
+production preset includes it unless you scaffold with
+`tulipes init --preset production --no-sockets`. It needs no extra service;
+behind several replicas, see the note on scaling below.
+
+## Install
+
+`socket.io` (`^4`) is this package's own dependency.
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add @tulipes/socket.io
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install @tulipes/socket.io
+    ```
+  </TabItem>
+</Tabs>
+
+## How it plugs in
+
+```json title="package.json"
+{ "tulipes": { "providers": { "sockets": "@tulipes/socket.io" } } }
+```
+
+There is nothing to wire in `config/app.config.ts`. A `sockets/` folder
+requires the capability automatically; a module that only emits into another
+module's namespace declares `"tulipes": { "requires": ["sockets"] }`.
+
+The provider declares `situations: ["backend"]`. In a worker, a script or an
+inspection boot it is reported as not used and no socket file is imported.
+
+| Phase | What happens |
+|---|---|
+| 10 queues, sockets | An unattached Socket.IO server is created; every `sockets/*.sockets.ts` claims its namespaces |
+| 11 backend | Routes mount, then the server attaches to the HTTP server, **then** `listen()`: no client can reach a namespace that is not wired yet |
+| shutdown, drain | The Socket.IO server closes alongside the HTTP drain, disconnecting clients |
+
+## A sockets file
+
+```ts title="modules/hello/sockets/hello.sockets.ts"
+import type { Ctx } from "@tulipes/core/boot";
+import type { SocketRegistry } from "@tulipes/socket.io";
+
+export default function helloSockets({ config }: Ctx, sockets: SocketRegistry): void {
+  sockets.namespace("/hello", (nsp) => {
+    nsp.on("connection", (socket) => {
+      socket.emit("greeting", {
+        message: config.hello?.greeting,
+        online: nsp.sockets.size,
+      });
+
+      socket.on("ping", (ack: (reply: string) => void) => ack("pong"));
+    });
+  });
+}
+```
+
+`sockets.namespace(name, setup)` claims the namespace and hands `setup` the
+live Socket.IO `Namespace`; add middleware (`nsp.use(...)`) and connection
+handlers there. Names are `/` or `/kebab-case`, and each is claimed by exactly
+one module.
+
+Emit from anywhere in the backend:
+
+```ts
+ctx.sockets!.of("/hello").emit("greeting", { message: "Hi" });
+```
+
+`of()` throws for a namespace nobody claimed, so a typo never broadcasts to
+nobody. `ctx.sockets.io` is the raw `Server` for anything else, and
+`namespaces()` lists the claimed names. `ctx.sockets` is undefined in the
+worker and in scripts; to push from a job, have the backend do the emit.
+
+## Configuration
+
+The provider takes no configuration keys and no environment variables. The
+Socket.IO server is created with its defaults (path `/socket.io`). Behind a
+reverse proxy, forward WebSocket upgrades on that path; see
+[nginx](/tulipes-js/production/nginx/).
+
+<Aside type="caution">
+The provider configures no Socket.IO adapter, so each backend process
+broadcasts only to its own clients. Behind several replicas, a client
+connected to one process does not receive another process's emits.
+</Aside>
+
+## Main exports
+
+| Export | Use |
+|---|---|
+| `SocketRegistry` | The second argument of a sockets file: `namespace(name, setup)` |
+| `SocketManager` | What `ctx.sockets` is: `of(name)`, `namespaces()`, `io` |
+| `SocketsFn`, `initSockets` | The file contract and loader |
+| default export, `provider` | The provider object core imports |
+
+See the [socket.io API reference](/tulipes-js/reference/api/socket-io/).
+
+## Version and compatibility
+
+This page describes `@tulipes/socket.io` **0.1.6**: Node.js `>=24.0.0 <25`,
+peer `@tulipes/core ^0.11.0 || ^0.12.0 || ^0.13.0`, Socket.IO 4. It
+implements provider contract 2.
+
+## Failure modes
+
+| When | Message |
+|---|---|
+| Bad default export | `<file> must default-export a sockets function (ctx, sockets) => void` |
+| The function throws | `sockets function threw: <message>` |
+| Invalid name | `namespace "/Hello" is invalid — expected "/" or "/kebab-case-name"` |
+| Claimed twice | `namespace "/hello" is already claimed by module "hello"` |
+| Attach fails | `provider "socket.io" failed to attach to the HTTP server: <message>` |
+| Unclaimed at runtime | `Socket namespace "/helo" was never claimed by any module (known: /hello, …)` |
+| `sockets/` folder, no declaration | `requires capability "sockets" (has sockets/ files) but the app's package.json declares no provider for it` |
+
+<CardGrid>
+  <LinkCard title="Realtime" href="/tulipes-js/tutorial/realtime/" description="The tutorial chapter that adds a namespace." />
+  <LinkCard title="Sockets guide" href="/tulipes-js/guides/sockets/" description="Namespaces, authentication and emitting from handlers." />
+  <LinkCard title="nginx" href="/tulipes-js/production/nginx/" description="Proxying WebSocket upgrades in production." />
+</CardGrid>

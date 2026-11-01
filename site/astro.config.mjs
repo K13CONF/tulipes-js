@@ -15,12 +15,14 @@ const apiDocs = apiPackages.map(({ dir, name, tsconfig, entryPoints }) => {
     plugin: plugin({
       entryPoints,
       tsconfig,
-      output: `reference/api/${dir}`,
+      output: `reference/api/${dir.replace(".", "-")}`, // a dot in a folder breaks Starlight slugs
       sidebar: { label: name, collapsed: true },
       typeDoc: {
         name,
         plugin: [fileURLToPath(new URL("./typedoc-seo.mjs", import.meta.url))],
         excludeExternals: true,
+        // "index" keeps each module's overview page: starlight-typedoc deletes nested README.md pages.
+        entryFileName: "index",
         gitRemote: "origin",
       },
     }),
@@ -47,11 +49,26 @@ export default defineConfig({
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/K13CONF/tulipes-js" }],
       editLink: { baseUrl: "https://github.com/K13CONF/tulipes-js/edit/master/site/" },
       lastUpdated: true,
+      expressiveCode: { themes: ["github-dark-default", "github-light-default"], styleOverrides: { borderRadius: "0.75rem" } },
+      tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 3 },
       plugins: apiDocs.map(doc => doc.plugin),
+      customCss: ["./src/styles/theme.css"],
+      // The learning path, in reading order. Pages order themselves with `sidebar.order`.
       sidebar: [
-        { label: "Home", link: "/" },
-        { label: "CLI reference", collapsed: true, items: [{ autogenerate: { directory: "reference/cli" } }] },
-        { label: "API reference", items: apiDocs.map(doc => doc.sidebar) },
+        { label: "Start here", items: [{ autogenerate: { directory: "start" } }] },
+        { label: "Tutorial: a bookstore API", items: [{ autogenerate: { directory: "tutorial" } }] },
+        { label: "How Tulipes works", items: [{ autogenerate: { directory: "concepts" } }] },
+        { label: "Guides", items: [{ autogenerate: { directory: "guides" } }] },
+        { label: "Packages", items: [{ autogenerate: { directory: "packages" } }] },
+        { label: "Production", items: [{ autogenerate: { directory: "production" } }] },
+        {
+          label: "Reference",
+          items: [
+            { autogenerate: { directory: "reference/topics" } },
+            { label: "CLI commands", collapsed: true, items: [{ autogenerate: { directory: "reference/cli" } }] },
+            { label: "TypeScript API (generated)", collapsed: true, items: apiDocs.map(doc => doc.sidebar) },
+          ],
+        },
       ],
       head: [
         // robots.txt at a github.io subpath is never read, so the sitemap is advertised here.

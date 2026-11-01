@@ -1,0 +1,239 @@
+---
+title: Architecture overview
+description: The big picture of a Tulipes app. The core and app split, modules, the provider seam, three processes, a request's path and the types tulipes sync writes.
+sidebar:
+  order: 1
+---
+
+import { Aside, LinkCard, CardGrid, FileTree } from "@astrojs/starlight/components";
+
+A Tulipes app is an Express 5 application that you never wire by hand. You write
+**modules**, one folder per feature, and the framework discovers them, orders them,
+validates them and assembles a running process from them. This page is the map:
+what lives where, which part owns which job, and how one HTTP request travels
+through the result. Every other page in this section zooms in on one box of the
+diagram below.
+
+## The overview diagram
+
+```txt
+ your app (example/)                   the framework (@tulipes/*)
+ ─────────────────────                 ──────────────────────────
+ app.ts / worker.ts / mcp.ts  ──boot──▶ @tulipes/core
+ package.json                           │ 1 environment
+   tulipes.providers ─────────────┐     │ 2 module graph
+ config/app.config.ts             │     │ 3 exploration
+ modules/                         │     │ 4 declarations
+   core/      (sys)               │     │ 5 models, settings ◀─┐
+   security/  (sys)               │     │ 6 settings           │
+   auth/      (sys)               │     │ 7 translations, time │
+   hello/     (app)               │     │ 8 ACL, agent         │
+   users/     (app)               │     │ 9 bootstrap          │
+                                  │     │10 queues, sockets ◀──┤
+                                  │     │11 fork               │
+                                  │     │12 banner             │
+                                  │     └──────────────────────┘
+                                  │          provider seam
+                                  └──▶ @tulipes/mongoose  (models, settings)
+                                       @tulipes/bullmq    (queues)
+                                       @tulipes/socket.io (sockets)
+```
+
+The left column is code you own and edit. The right column is code you install.
+The arrow between them is a single call, `boot()`, plus one static line in your
+`package.json` that tells core which infrastructure packages to use.
+
+## Core and app
+
+`@tulipes/core` is a runtime, not a scaffold. It owns the boot pipeline
+(`packages/core/src/boot/boot.ts`), the module graph, the configuration layers,
+the ACL, the `rai()` gate, the response envelope and the terminal error handler.
+It deliberately owns nothing else.
+
+- **No middleware.** Core mounts no body parser, no CORS, no logger. The comment
+  on `startBackend` in `boot.ts` puts it plainly: "what runs on every request is
+  the app's decision, expressed as sys modules within the developer's reach." It
+  guarantees only the fail-closed tail: a 404 for anything unrouted and one
+  terminal error handler.
+- **No infrastructure.** No database driver, no queue client, no socket server.
+  Those come from providers (see below).
+- **No business logic.** Authentication, users, the settings console, the cache
+  and the logger are application code that `tulipes init --preset production`
+  generates for you to edit. They live in `example/modules/` in this repository.
+
+The application is everything under your project root: entry files, `config/`,
+`modules/`, `.envs/` and the generated `types/`.
+
+<FileTree>
+- app.ts the backend entry, three lines
+- worker.ts the queue consumer entry
+- mcp.ts the MCP server entry
+- package.json tulipes.providers selects infrastructure
+- config/
+  - app.config.ts app-wide config seed
+- .envs/ .env.development, .env.production, ...
+- modules/
+  - core/ sys tier, priority 0
+  - security/ sys tier, priority 10
+  - auth/ sys tier, priority 20
+  - hello/ app tier
+- scripts/ one-off tasks booted in script mode
+- types/
+  - tulipes.d.ts written by tulipes sync
+</FileTree>
+
+## Modules
+
+A module is a workspace package under `modules/`: a folder with a `package.json`,
+a handful of conventional files and folders, and its own namespace in config,
+translations and permissions. Core finds every module by reading
+`modules/*/package.json` (`packages/core/src/modules/discovery.ts`), orders them
+by tier, priority and dependencies (`graph.ts`), then resolves each conventional
+path without importing anything (`explorer.ts`). Each later boot phase imports
+only the files it needs: phase 4 imports `module.config.ts`, phase 8 imports
+`module.acl.ts`, the backend branch imports `routes/`.
+
+Two tiers exist. `sys` modules load before every `app` module, which is what
+makes them the place for global middleware: the reference app's `core` module
+sets a request id on `ctx.app`, `security` mounts helmet, CORS and request
+logging, and `auth` resolves `req.auth`, all before any feature router.
+
+Read [Modules](/tulipes-js/concepts/modules/) for every file and every manifest key.
+
+## The provider seam
+
+Core boots without owning a driver because infrastructure arrives through a
+narrow interface in `packages/core/src/boot/providers.ts`. The app declares one
+provider per capability in its root `package.json`:
+
+```json title="package.json"
+{
+  "tulipes": {
+    "providers": {
+      "models": "@tulipes/mongoose",
+      "settings": "@tulipes/mongoose/settings",
+      "queues": "@tulipes/bullmq",
+      "sockets": "@tulipes/socket.io"
+    }
+  }
+}
+```
+
+There are four capabilities, acquired in this order: `models`, `settings`,
+`queues`, `sockets`. A provider default-exports an object with
+`{ contract: 2, capability, name, acquire }`, and core calls `acquire()` at a
+fixed point in the pipeline: models and settings in phase 5, queues and sockets
+in phase 10. The value it returns lands on `ctx.models`, `ctx.queues` or
+`ctx.sockets`; a settings provider hands back a store that core wraps.
+
+Installing a package selects nothing, and neither does a leftover `MONGO_URI`:
+only the declaration does. An app that declares nothing, such as the minimal
+preset, installs no driver at all. See [Providers](/tulipes-js/concepts/providers/).
+
+## Three processes, one codebase
+
+The same modules boot as three different processes. The mode decides what
+happens at phase 11, after every shared phase has run:
+
+| Mode | Entry | What starts |
+|---|---|---|
+| `backend` | `app.ts` | Express, every module router, the HTTP server, socket transports |
+| `worker` | `worker.ts` | a consumer for every queue processor; refuses to start with zero |
+| `script` | `scripts/*.ts`, `mcp.ts` | nothing; the caller owns the process and calls `shutdown()` |
+
+Because every mode runs the same phases 1 to 10, a maintenance script or a queue
+processor sees exactly the configuration, permissions and models that a request
+handler sees. [Process modes](/tulipes-js/concepts/process-modes/) covers each in depth.
+
+## A request's path through the app
+
+This is the backend branch as `startBackend()` in `boot.ts` builds it. Module
+routers mount in load order, so the sys modules' global middleware runs first.
+
+```txt
+ HTTP request
+     │
+     ▼
+ [core]     ctx.app.use(...)     request id          ┐ sys modules:
+ [security] ctx.app.use(...)     helmet, CORS, body  │ global middleware
+ [auth]     ctx.app.use(...)     sets req.auth       ┘ (routes files)
+     │
+     ▼
+ module router under config.api.prefix (/api/v1)
+     │
+     ▼
+ rai({ id: "hello:web:greetings" })   first handler of every route
+     ├─ binds req.t, req.locale, req.time, req.page, res.respond
+     ├─ req.auth missing? → guest
+     ├─ ACL: can(role, id)?          no → 401 / 403
+     ├─ credential scopes cover id?  no → 403 OUT_OF_SCOPE
+     └─ validate params, query, body no → 422
+     │
+     ▼
+ controller handler → res.respond({ data, meta })  → 200 envelope
+     │ throws HttpError / anything
+     ▼
+ notFoundHandler (no route matched)  → 404 ROUTE_NOT_FOUND
+ errorHandler (terminal)             → failure envelope
+```
+
+Two guarantees are checked at boot, not at request time. After every router is
+mounted, the route scan (`packages/core/src/http/route-scan.ts`) walks Express's
+stack and refuses to boot if any route lacks `rai()` as its first handler. And
+the 404 and error handlers are always the last two layers, so nothing escapes
+unrouted or unhandled. [RAI and the ACL](/tulipes-js/concepts/rai-and-acl/) and
+[Responses and errors](/tulipes-js/concepts/responses-and-errors/) follow the two halves of this path.
+
+## The context object
+
+Every function a module writes receives `ctx`, built once per boot in `boot.ts`
+and filled phase by phase: `ctx.config` after phase 6, `ctx.acl` after phase 8,
+`ctx.models` after phase 5 when a models provider is declared, `ctx.app` in the
+backend branch only. [The context](/tulipes-js/concepts/context/) lists every field and
+the moment it appears.
+
+## Generated types
+
+`tulipes sync` reads the same declarations the boot reads, without booting, and
+writes `types/tulipes.d.ts`. It augments interfaces that core and the providers
+leave empty on purpose:
+
+| Interface | Augmented from | What it types |
+|---|---|---|
+| `EnvValues` (`@tulipes/core/config`) | each module's `tulipes.env` | `env.core.port` in `app.config.ts` |
+| `GlobalConfig` (`@tulipes/core/config`) | each `module.config.ts` schema plus env values | `ctx.config.hello.greeting` |
+| `KnownModels` (`@tulipes/mongoose`) | each `models/*.model.ts` | `ctx.models.get("Greeting")` |
+| `KnownJobs` (`@tulipes/bullmq`) | each queue file's `jobs` export | `queues.add("hello.count-greeting", …)` |
+
+```ts title="types/tulipes.d.ts (excerpt)"
+// AUTO-GENERATED by `tulipes sync` — do not edit.
+
+declare module "@tulipes/core/config" {
+  interface EnvValues {
+    "core": {
+      /** PORT — HTTP port the backend process listens on */
+      readonly port: number;
+      // …
+    };
+  }
+}
+```
+
+A wrong model name or queue payload therefore fails to compile. The file goes
+stale when you change a declaration and forget to rerun `pnpm sync`; `tulipes dev`
+regenerates it before starting.
+
+<Aside type="note">
+The boot itself never reads `types/tulipes.d.ts`. Types describe the
+declarations; the declarations are what the boot validates. A stale type file
+can lie to the compiler, but it cannot change what boots.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Modules" href="/tulipes-js/concepts/modules/" description="Every conventional file, the manifest key and load order." />
+  <LinkCard title="The boot pipeline" href="/tulipes-js/concepts/boot-pipeline/" description="All twelve phases, their reports and shutdown." />
+  <LinkCard title="Project structure" href="/tulipes-js/start/project-structure/" description="A guided tour of a generated app." />
+  <LinkCard title="Your first module" href="/tulipes-js/tutorial/first-module/" description="Build one in the tutorial." />
+</CardGrid>

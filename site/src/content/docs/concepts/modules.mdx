@@ -1,0 +1,286 @@
+---
+title: Modules and load order
+description: What a Tulipes module is, every conventional file and when the boot loads it, the tulipes manifest key, load order, cross-module imports and graph errors.
+sidebar:
+  order: 2
+---
+
+import { Aside, LinkCard, CardGrid, FileTree } from "@astrojs/starlight/components";
+
+A module is one feature in one folder: its routes, models, settings,
+permissions, translations, jobs and tests, together. Delete the folder and the
+feature is gone, with nothing left registered elsewhere. This page explains how
+the boot finds modules, which files it reads from them and when, how it decides
+the order they load in, and what it refuses.
+
+## The idea
+
+Every module is a **workspace package** under `modules/`, with its own
+`package.json`. Being a real package does two jobs at once. The package manager
+enforces that a module only imports what it declares, and the manifest gives
+the framework a place to read ordering and environment metadata without
+executing any code.
+
+Nothing is registered by hand. The boot knows a module's files by convention:
+a file named `*.routes.ts` under `routes/` is a routes file, a file named
+`*.model.ts` under `models/` is a model, and so on. A folder that is absent is
+a feature the module does not use, never an error.
+
+## Anatomy of a module
+
+This is `example/modules/hello`, the reference app's module that uses every
+contract.
+
+<FileTree>
+- modules/hello/
+  - package.json name, tulipes key, dependencies
+  - module.config.ts defineConfig, this module's settings
+  - module.acl.ts grants on hello:* permissions
+  - routes/
+    - web/
+      - hello.routes.ts
+      - hello.greetings.routes.ts
+  - controllers/
+    - web/
+      - hello.controllers.ts
+      - hello.greetings.controllers.ts
+  - helpers/
+    - greetings.ts shared by a route and an agent action
+  - models/
+    - greeting.model.ts
+  - bootstrap/
+    - seed-greetings.bootstrap.ts
+  - queues/
+    - hello.queues.ts
+  - sockets/
+    - hello.sockets.ts
+  - agent/
+    - hello.agent.ts
+  - i18n/
+    - en.json
+    - fr.json
+  - tests/
+    - hello.test.ts
+</FileTree>
+
+### Every conventional file, and when it is loaded
+
+The explorer (`packages/core/src/modules/explorer.ts`) resolves these paths in
+phase 3 and imports nothing. Each file is imported later, by the phase that
+needs it, so a broken routes file cannot hide an environment problem.
+
+| File | Default export | Loaded by | Phase | Modes |
+|---|---|---|---|---|
+| `package.json` | (JSON) | discovery, env resolution, graph | 1, 2 | all, inspection |
+| `module.config.ts` | `defineConfig({ schema })` | `declareConfig` | 4 | all, inspection |
+| `models/*.model.ts` | `{ name, schema }` | the models provider | 5 | all except inspection |
+| `i18n/<locale>.json` | (JSON) | `I18n.load` | 7 | all, inspection |
+| `module.acl.ts` | `(acl) => void` | `loadAcl` | 8 | all, inspection |
+| `agent/*.agent.ts` (one) | `defineAgent({ … })` | `loadAgents` | 8 | all, inspection |
+| `bootstrap/*.bootstrap.ts` | `(ctx) => cleanup \| void` | `runBootstrap` | 9 | all except inspection |
+| `queues/*.queues.ts` | `(ctx, queues) => void` | the queues provider | 10 | all except inspection |
+| `sockets/*.sockets.ts` | `(ctx, sockets) => void` | the sockets provider | 10 | backend only |
+| `routes/**/*.routes.ts` | `(ctx) => Router \| void` | `loadRoutes` | 11 | backend, inspection |
+
+Only `routes/` is read recursively, so one scope with several files gets a
+folder (`routes/web/hello.greetings.routes.ts`). Every other collection is flat.
+Within a module, files load in sorted path order; across modules, in load order.
+
+The source extension follows the app, not core: when the modules contain `.ts`
+files the conventions resolve to `.ts`, and a compiled deployment resolves `.js`.
+
+### Folders the boot never reads
+
+`controllers/`, `schemas/`, `helpers/`, `lib/` and `tests/` are conventions for
+people. The boot does not scan them. A routes file imports its controller, a
+controller imports its helpers, and the wiring stays explicit:
+
+```ts title="modules/hello/routes/web/hello.greetings.routes.ts"
+import { Router } from "express";
+import type { BackendCtx } from "@tulipes/core/boot";
+
+import { HelloGreetingsController } from "../../controllers/web/hello.greetings.controllers.ts";
+
+export default function greetingsRoutes(ctx: BackendCtx): Router {
+  const { rai } = ctx;
+  const router = Router();
+  const greetings = new HelloGreetingsController(ctx);
+
+  router.get("/greetings", rai({
+      id: "hello:web:greetings",
+      name: "List greetings",
+      description: "Reads the seeded rows, clamped by the shared bounds",
+    }), greetings.list());
+
+  router.post("/greetings/:name/use", rai({
+      id: "hello:web:greetings:use",
+      status: 202,
+      name: "Use a greeting",
+      description: "Queues a job that counts the use",
+    }), greetings.use());
+
+  return router;
+}
+```
+
+The returned router is mounted under `config.api.prefix`, so its paths are
+relative (`/greetings`, served as `/api/v1/greetings` in the reference app).
+
+### The module root
+
+A module's root holds `package.json`, `module.config.ts` and `module.acl.ts`.
+Markdown files and dotfiles are ignored; any other file at the root is refused
+at boot, with a hint saying where it belongs (`discovery.ts`, `checkRoot`):
+
+```txt
+Boot aborted during "module graph" — 1 issue(s):
+  ✖ [billing] index.ts does not belong at the module root — its public exports live in lib/index.ts, pointed at by package.json "exports"
+```
+
+## The manifest: the `tulipes` key
+
+A module's ordering and environment contract live under `tulipes` in its
+`package.json`. The key is optional: a module without one is `app` tier,
+priority 100, with no dependencies.
+
+```json title="modules/hello/package.json"
+{
+  "name": "@app/hello",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "tulipes": {
+    "tier": "app",
+    "priority": 100,
+    "dependsOn": ["auth", "core"]
+  },
+  "dependencies": {
+    "@app/auth": "workspace:*",
+    "@app/core": "workspace:*",
+    "@tulipes/core": "workspace:*"
+  }
+}
+```
+
+The schema is `tulipesManifestSchema` in `packages/core/src/modules/manifest.ts`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `tier` | `"app"` | `"sys"` loads before every `"app"` module |
+| `priority` | `100` | integer; lower loads earlier within a tier |
+| `dependsOn` | `[]` | short names of modules that must load first |
+| `env` | `{}` | environment values; see [Configuration](/tulipes-js/concepts/configuration/) |
+| `requires` | `[]` | `"models"`, `"queues"` or `"sockets"`; see [Providers](/tulipes-js/concepts/providers/) |
+
+The schema is strict, so a typo such as `dependson` aborts the boot instead of
+silently loading the module with default ordering.
+
+### Names
+
+A module's **short name** is the last segment of its package name:
+`@app/user-profiles` is `user-profiles`. The short name is what `dependsOn`
+references, the key of its config namespace (`ctx.config.hello`), its i18n
+namespace and, by convention, the first segment of its RAI ids
+(`hello:web:greet`). Two packages with the same last segment (`@a/users` and
+`@b/users`) are refused, because `dependsOn: ["users"]` would be ambiguous.
+
+### `dependsOn` is derived from dependencies
+
+You rarely write `dependsOn` by hand. `derivedDependsOn()` adds every dependency
+that shares the module's own package scope: `@app/hello` depending on
+`@app/core` and `@app/auth` gets `core` and `auth`. A module imports from what
+it depends on, so those load first. Keep an explicit entry only to order a
+module after another it does not import.
+
+## Load order
+
+`sortModules()` in `packages/core/src/modules/graph.ts` applies three keys:
+
+```txt
+ 1 tier       sys before app
+ 2 priority   lower first, inside a tier
+ 3 dependsOn  topological sort (Kahn), ties broken by
+              (tier, priority, name)
+```
+
+The topological sort always picks the next ready module in
+`(tier, priority, name)` order, so the output is deterministic and the tiers
+stay grouped: a sys module may never depend on an app module, so every sys
+module leaves the ready set before the first app module is picked.
+
+The reference app loads in this order:
+
+```txt
+ sys  core (0) → security (10) → auth (20)
+ app  users (10) → hello (100) → settings (900) → config (910)
+      → agent (950) → agents (960)
+```
+
+Load order is the order of every phase that walks modules: settings are
+declared, ACL files run, bootstraps run, queue files run and routers mount in
+this sequence. That is why roles are defined in `auth`'s `module.acl.ts` (sys)
+and every app module can grant on them, and why `core`'s routes file mounting
+on `ctx.app` runs before every feature router. Shutdown cleanups run in the
+reverse order.
+
+## Cross-module imports
+
+A module imports another by **package name**, never by a relative path that
+climbs out of its folder. The provider of the import publishes it from
+`lib/index.ts`, which its `package.json` points at:
+
+```json title="modules/core/package.json (excerpt)"
+{
+  "name": "@app/core",
+  "exports": { ".": "./lib/index.ts" }
+}
+```
+
+```ts title="modules/hello/models/greeting.model.ts"
+// Cross-module import by package name, never a relative path out
+// of the module — the dependency is declared in package.json.
+import { baseSchemaOptions } from "@app/core";
+```
+
+The import, the `dependencies` entry and the load order then agree by
+construction: the dependency appears in `package.json`, `dependsOn` is derived
+from it, and the imported module has already run its phases by the time the
+importer runs its own.
+
+## What fails, and when
+
+Every check below runs before any module file is imported. Problems are
+collected and the boot throws once per phase with all of them (see
+[The boot pipeline](/tulipes-js/concepts/boot-pipeline/)).
+
+| Mistake | Message (from `discovery.ts` and `graph.ts`) |
+|---|---|
+| folder without `package.json` | `package.json missing or invalid: …` |
+| no `name` | `package.json has no "name" — modules must be workspace packages` |
+| unknown or misspelled key | `package.json "tulipes" key: <path> — <zod message>` |
+| duplicate short name | `short name "users" is claimed by both "@a/users" and "@b/users"` |
+| unknown dependency | `dependsOn "billing" — no such module exists` |
+| sys depends on app | `sys module cannot depend on app module "hello" — sys loads first by definition` |
+| cycle | `dependency cycle: auth → users → auth` |
+
+A cycle looks like this when the boot refuses it:
+
+```txt
+TulipesBootError: Boot aborted during "module graph" — 1 issue(s):
+  ✖ dependency cycle: auth → users → auth
+```
+
+<Aside type="caution">
+An unknown dependency or a sys-on-app edge skips the sort altogether: an order
+built on broken edges would be meaningless. Fix those first; a cycle can only be
+reported once every edge points at a real module.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="The boot pipeline" href="/tulipes-js/concepts/boot-pipeline/" description="When each of these files is imported, phase by phase." />
+  <LinkCard title="Your first module" href="/tulipes-js/tutorial/first-module/" description="Create one with tulipes new module." />
+  <LinkCard title="Routes and controllers" href="/tulipes-js/guides/routes-and-controllers/" description="Writing the routes and controllers folders." />
+  <LinkCard title="Project structure" href="/tulipes-js/start/project-structure/" description="The rest of the app around modules/." />
+</CardGrid>

@@ -1,0 +1,208 @@
+---
+title: Time zones
+description: Store instants as UTC and read them in the right zone with config.timezone, per-request negotiation, the req.time and ctx.time helpers and local cron.
+sidebar:
+  order: 7
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Tulipes stores and returns every instant as UTC: a `Date` in a response is
+still `"2026-10-13T14:00:00.000Z"`. A time zone is how an instant is *read*:
+what "today" means for a report, the wall-clock time in an email, when a
+nightly job fires. The app names its zone once, each request negotiates its
+own the way it negotiates a locale, and helpers already bound to that zone
+are on `req.time` and `ctx.time`.
+
+## Naming the app's zone
+
+```ts title="config/app.config.ts"
+timezone: {
+  default: "Africa/Casablanca",
+  supported: ["Africa/Casablanca", "Europe/Paris"],  // optional; omit to accept any IANA zone
+  applyToProcess: true,                              // the default once a zone is named
+},
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `default` | `"UTC"` | the app's zone: the fallback for a request, the zone of code with no request, and of cron patterns |
+| `supported` | any IANA zone | the zones a request may ask for; anything else falls through to the default |
+| `applyToProcess` | `true` when the block exists | move the process onto `default` (`process.env.TZ`) |
+
+The reference app names `"UTC"`. An app with no `timezone` block reads
+instants in UTC and never touches the process zone.
+
+Zone names are IANA names, matched case-insensitively and stored in their
+canonical spelling (`europe/paris` becomes `Europe/Paris`).
+
+## Per request: `?tz` and `X-Timezone`
+
+`rai()` negotiates a zone for every declared route:
+
+```txt
+1  ?tz=Europe/Paris
+2  X-Timezone: Europe/Paris
+3  config.timezone.default
+```
+
+An unknown zone, or one outside `supported`, falls through to the next
+candidate. It is never an error, so a client with a stale zone list still
+gets an answer.
+
+```sh
+curl 'http://localhost:3000/api/v1/reports/today?tz=Europe/Paris'
+curl -H 'X-Timezone: America/New_York' http://localhost:3000/api/v1/reports/today
+```
+
+The handler reads the result as `req.timezone` (a string) and uses the
+helpers on `req.time`, bound to that zone and to `req.locale`.
+
+## The helpers
+
+`req.time`, `ctx.time` and `ctx.time.in(zone, locale)` all have the same
+methods:
+
+| Method | Returns |
+|---|---|
+| `zone` | the zone the helpers read in |
+| `startOfDay(date?)` | the UTC `Date` at which that calendar day starts in the zone (today by default) |
+| `toISO(date)` | the same instant as ISO 8601 with the zone's offset: `2026-10-13T16:00:00.000+02:00` |
+| `format(date, options?)` | the date formatted for a reader, `Intl.DateTimeFormat` options plus `locale` |
+| `fromWallClock({ year, month, day, hour?, minute?, second?, millisecond? })` | the UTC instant of a wall-clock time in the zone |
+| `offsetMinutes(date?)` | minutes east of UTC at that date: 120 for Paris in summer, 60 in winter |
+
+A worked example, for a caller in Paris on 13 October 2026:
+
+```ts
+const since = req.time.startOfDay();               // 2026-10-12T22:00:00.000Z, Paris midnight
+const orders = await Order.find({ created_at: { $gte: since } }).lean();
+
+res.respond({
+  data: {
+    orders,                                        // dates stay UTC: "…Z"
+    timezone: req.timezone,                        // "Europe/Paris"
+    as_of: req.time.toISO(new Date()),             // "2026-10-13T16:00:00.000+02:00"
+  },
+});
+```
+
+`format()` without style options prints the date and time at medium and short
+length, in the request's locale:
+
+```ts
+req.time.format(order.created_at);                          // en: "Oct 13, 2026, 4:00 PM"  fr: "13 oct. 2026, 16:00"
+req.time.format(order.created_at, { dateStyle: "full" });   // style options replace the default
+req.time.format(order.created_at, { locale: "fr" });        // another locale
+```
+
+Daylight saving is handled where it bites: `fromWallClock` resolves a time
+skipped by a spring-forward jump forward, and a repeated autumn time to its
+first occurrence.
+
+<Aside type="caution">
+Never convert dates in a response body. Return UTC and let the client format
+it, or add a separate field like `as_of` from `toISO()`. And never build
+"today" with `new Date().setHours(0)`, or read `getHours()`: both use the
+process zone, which is the app's, not the caller's.
+</Aside>
+
+## Without a request: `ctx.time`
+
+A queue processor, a script or a bootstrap has no request to negotiate from.
+`ctx.time` reads in the app's zone, with the default locale:
+
+```ts
+const today = ctx.time.startOfDay();
+ctx.time.zone;    // config.timezone.default
+```
+
+To read an instant as a particular user would, pass their zone and locale:
+
+```ts
+const t = ctx.t("billing", user.locale);
+const due = ctx.time.in(user.timezone, user.locale).format(invoice.due_at);
+await sendMail(t("invoice.due", { due }));
+```
+
+`ctx.time.in()` with an unknown or missing zone silently uses the app's zone,
+so validate a zone you store (with `isValidTimezone`) when a user sets it.
+
+## `@tulipes/core/time`
+
+The same helpers are exported as plain functions that take the zone as an
+argument, for code with no context at all:
+
+```ts
+import { startOfDay, toZonedISO, formatDate, zonedTimeToUtc, offsetMinutes, isValidTimezone, canonicalTimezone, zonedTime } from "@tulipes/core/time";
+
+startOfDay(new Date(), "Europe/Paris");
+toZonedISO(Date.now(), "Africa/Casablanca");
+formatDate(date, "Europe/Paris", { locale: "fr", dateStyle: "long" });
+zonedTimeToUtc({ year: 2026, month: 10, day: 13, hour: 9 }, "Africa/Casablanca");
+canonicalTimezone("europe/paris");   // "Europe/Paris"; undefined for an unknown zone
+const paris = zonedTime("Europe/Paris", "fr");   // the ZonedTime object req.time is
+```
+
+The reference app's logger uses `toZonedISO` to write every log line's time in
+the process zone with its offset.
+
+## The process zone
+
+Naming a zone moves the process onto it for the life of the boot: core sets
+`process.env.TZ` in boot phase 7, after translations and before bootstrap. So
+`Date#getHours()`, log timestamps and the logger's daily file rotation agree
+with the app. Shutdown gives the process back the zone it had.
+
+Set `applyToProcess: false` to keep the server's zone, for instance when other
+code in the process depends on it. Inspection (`tulipes routes`, `tulipes
+spec`) never changes the process zone.
+
+## Cron jobs fire in the app's zone
+
+With `@tulipes/bullmq`, a recurring job is created with
+`ctx.queues.schedule(queue, schedulerId, repeat, job)`, and a cron `pattern`
+without its own `tz` fires in `config.timezone.default`:
+
+```ts
+import { requireQueues } from "@tulipes/core/boot";
+
+await requireQueues(ctx).schedule("billing.send-invoice", "nightly",
+  { pattern: "0 2 * * *" },                       // 02:00 in the app's zone
+  { name: "send", data: { invoiceId: "all" } });
+
+await requireQueues(ctx).schedule("billing.send-invoice", "paris-nightly",
+  { pattern: "0 2 * * *", tz: "Europe/Paris" },   // its own zone wins
+  { name: "send", data: { invoiceId: "paris" } });
+```
+
+The scheduler id makes the call safe to repeat on every boot. An `every`
+interval has no wall clock, so it is left alone. See
+[queues](/tulipes-js/guides/queues/).
+
+## Boot errors
+
+The block is checked in the `timezone` phase:
+
+```txt
+TulipesBootError: Boot aborted during "timezone" — 1 issue(s):
+  ✖ config.timezone.default "Europe/Pariss" is not a time zone this runtime knows (an IANA name such as "Europe/Paris")
+```
+
+| Message | Fix |
+|---|---|
+| `config.timezone.default must be an IANA zone name such as "Europe/Paris"` | a string, not another type |
+| `config.timezone.supported names "X", which is not a time zone this runtime knows` | fix the entry |
+| `config.timezone.supported must be an array of IANA zone names` | an array of strings |
+| `config.timezone.supported is empty` | list zones, or remove the key |
+| `config.timezone.default "UTC" is not in supported (Europe/Paris)` | add the default to the list |
+| `config.timezone.applyToProcess must be true or false` | a boolean |
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Translations" href="/tulipes-js/guides/translations/" description="The locale is negotiated the same way." />
+  <LinkCard title="Queues" href="/tulipes-js/guides/queues/" description="Schedule recurring jobs." />
+  <LinkCard title="Logging" href="/tulipes-js/guides/logging/" description="Log timestamps and rotation follow the process zone." />
+  <LinkCard title="Configuration reference" href="/tulipes-js/reference/topics/configuration/" description="Every config/app.config.ts key." />
+</CardGrid>

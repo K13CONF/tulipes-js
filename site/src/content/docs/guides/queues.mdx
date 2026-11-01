@@ -1,0 +1,444 @@
+---
+title: Queues and background jobs
+description: Define queues with @tulipes/bullmq, validate job data, enqueue from routes, run the worker, and configure retries, cron schedules, concurrency and shutdown.
+sidebar:
+  order: 24
+---
+
+import { Aside, Steps, Tabs, TabItem, FileTree, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Anything slow or retryable, an email, a webhook, an export, a model call, does
+not belong in the request that asked for it. `@tulipes/bullmq` gives every module
+a `queues/*.queues.ts` file that declares its queues, their job schemas and their
+processors in one place. The same file runs in every process: the backend
+produces jobs, and a second process, the **worker**, consumes them. This page
+covers the whole lifecycle, from the declaration to retries, cron schedules and
+a clean shutdown.
+
+## Install and select the provider
+
+Core installs no queue driver. An app opts in with the provider package and one
+line in its root `package.json`. The production preset already has both;
+`tulipes init --preset production --no-queues` leaves them out.
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add @tulipes/bullmq
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install @tulipes/bullmq
+    ```
+  </TabItem>
+</Tabs>
+
+```json title="package.json"
+{
+  "tulipes": {
+    "providers": {
+      "queues": "@tulipes/bullmq"
+    }
+  }
+}
+```
+
+The provider reads its Redis URL from `config.bullmq.redisUrl`, which the app
+wires in `config/app.config.ts` from a variable a sys module declares:
+
+```ts title="config/app.config.ts"
+/** How @tulipes/bullmq reaches Redis. */
+bullmq: {
+  redisUrl: env.core.redisUrl,
+},
+```
+
+In the reference app `REDIS_URL` is declared by the sys `core` module, in its
+`package.json` under `tulipes.env`, as `redisUrl`. Each module with a `queues/`
+file also lists `@tulipes/bullmq` in its own dependencies. See
+[the bullmq package page](/tulipes-js/packages/bullmq/) for the wiring and
+[providers](/tulipes-js/concepts/providers/) for how capabilities are declared.
+
+## A queue file
+
+<FileTree>
+- modules/hello/
+  - queues/
+    - hello.queues.ts
+  - controllers/web/hello.greetings.controllers.ts produces into it
+</FileTree>
+
+```ts title="modules/hello/queues/hello.queues.ts"
+import type { Ctx } from "@tulipes/core/boot";
+import type { JobSchemas, QueueRegistry } from "@tulipes/bullmq";
+import { z } from "zod/v4";
+
+import { moduleLogger } from "@app/core";
+
+/**
+ * The job data each queue accepts. This export is the declaration: it
+ * defines the queue, validates every `queues.add()` payload, and
+ * `pnpm sync` types `job.data` here and the payload at the producer from
+ * it — a wrong queue name or shape no longer compiles.
+ */
+export const jobs = {
+  "hello.count-greeting": z.object({ name: z.string().min(1) }),
+} satisfies JobSchemas;
+
+export default function helloQueues(ctx: Ctx, queues: QueueRegistry): void {
+  const { models } = ctx;
+  // The same logger the backend uses. In the worker process it writes
+  // to app-worker.log, so the two processes never share a file.
+  const log = moduleLogger(ctx, "hello");
+
+  queues.process("hello.count-greeting", async (job) => {
+    // Jobs retry, so processors must be idempotent-safe. Pass ids in
+    // job.data and re-read state here rather than shipping documents.
+    const { name } = job.data;
+    await models!.get("Greeting").updateOne({ name }, { $inc: { times_used: 1 } });
+    log.info({ name }, "counted greeting");
+    return { counted: name };
+  });
+}
+```
+
+A queue file has two exports:
+
+- **`jobs`** (optional, recommended): queue name to zod schema. Each entry
+  defines the queue with default options, validates every payload given to
+  `add()` and `schedule()`, and is what `pnpm sync` reads to type both sides.
+- **the default export**, `(ctx, queues) => void | Promise<void>`. It receives the
+  module-scoped `QueueRegistry` with two methods.
+
+### queues.define(name, options?)
+
+Defines a queue. You need it only for a queue with no `jobs` entry, or to pass
+BullMQ `QueueOptions` such as `defaultJobOptions` or a `prefix`:
+
+```ts
+export const jobs = {
+  "billing.send-invoice": z.object({ invoiceId: z.string() }),
+} satisfies JobSchemas;
+
+export default function billingQueues(ctx: Ctx, queues: QueueRegistry): void {
+  queues.define("billing.send-invoice", {
+    defaultJobOptions: { attempts: 5, backoff: { type: "exponential", delay: 10_000 } },
+  });
+  queues.process("billing.send-invoice", async (job) => { /* … */ });
+}
+```
+
+A queue defined with `define()` and no `jobs` entry accepts any payload, untyped.
+
+### queues.process(name, handler, options?)
+
+Registers the processor, a BullMQ `Processor` that receives the `Job` and returns
+its result. The third argument is BullMQ `WorkerOptions`, for example
+`{ concurrency: 5 }`. Each queue has at most one processor, from one module.
+
+### Names
+
+Queue names are lowercase kebab-case with an optional `.` namespace:
+`users.welcome`, `hello.count-greeting`. BullMQ reserves `:` as its Redis key
+separator, so `users:welcome` is refused. Names are global: prefix them with the
+module's name.
+
+## Enqueue from a route
+
+`ctx.queues` is the producer in every process. Reach it with `requireQueues(ctx)`
+from `@tulipes/core/boot` inside the handler, which throws a clear error when the
+app declares no queues provider:
+
+```ts title="modules/hello/controllers/web/hello.greetings.controllers.ts"
+import { requireModels, requireQueues, type Ctx } from "@tulipes/core/boot";
+import { HttpError } from "@tulipes/core/http";
+
+use(): RequestHandler {
+  return async (req: Request, res: Response) => {
+    const name = String(req.params.name);
+    const greeting = await requireModels(this.#ctx).get("Greeting").findOne({ name }).lean();
+    if (!greeting) throw new HttpError(404, "noSuchGreeting", { vars: { name } });
+
+    // Slow or retryable work belongs in a job, not in the request. Run
+    // `pnpm worker` in another terminal to see it processed.
+    await requireQueues(this.#ctx).add("hello.count-greeting", "count", { name });
+    res.respond({ status: 202, data: { name, queued: true } });
+  };
+}
+```
+
+`add(queueName, jobName, data, options?)`:
+
+- **`queueName`** must be defined by some module.
+- **`jobName`** is BullMQ's job name, a label you can filter on.
+- **`data`** is validated by the queue's schema first: defaults applied, a bad
+  payload refused here, where the caller is, rather than in the worker.
+- **`options`** is BullMQ `JobsOptions`: `attempts`, `backoff`, `delay`, `jobId`,
+  `priority`, `removeOnComplete`, `removeOnFail` and the rest. There is no
+  `repeat`: recurring work is `schedule()`.
+
+Answer 202 from a route that enqueues: the work has been accepted, not done.
+
+### The worker has no request
+
+A processor runs with no request to read a locale, a time zone or a user from.
+Whatever it needs travels in the job. The users module passes the caller's locale
+and binds translations explicitly:
+
+```ts title="modules/users/controllers/bo.users.controllers.ts"
+await this.#ctx.queues!.add("users.welcome", "welcome", {
+  email,
+  locale: req.locale,
+});
+```
+
+```ts title="modules/users/queues/users.queues.ts"
+queues.process("users.welcome", async (job) => {
+  // `ctx.t` binds this module's namespace explicitly — the part `req.t`
+  // normally does for free.
+  const t = ctx.t("users", job.data.locale);
+  log.info({ email: job.data.email, subject: t("welcome.subject", { email: job.data.email }) },
+    "sending welcome email");
+  return { sent: true };
+});
+```
+
+See [translations](/tulipes-js/guides/translations/) and
+[time zones](/tulipes-js/guides/time-zones/).
+
+## Typed jobs
+
+Run `pnpm sync` after adding or changing a `jobs` export. It writes
+`types/tulipes.d.ts`, which augments `KnownJobs` in `@tulipes/bullmq` with one
+entry per declared queue. From then on:
+
+- `job.data` in the processor is the schema's output type,
+- the payload of `queues.add("hello.count-greeting", …)` is checked at the call
+  site,
+- a misspelled queue name that some file declares does not compile.
+
+A name `sync` has not seen (a dynamic name, or a queue with no `jobs` entry) is
+typed `any`, so stale generated types fail open. Run `sync` before
+`pnpm typecheck`.
+
+## The worker process
+
+<Steps>
+
+1. The worker entrypoint boots the same app in `worker` mode:
+
+   ```ts title="worker.ts"
+   import { boot } from "@tulipes/core/boot";
+
+   // Worker mode refuses to start until at least one module registers a
+   // queue processor — a consumer with nothing to consume is a
+   // misconfigured deployment, not a valid idle state.
+   await boot({ rootDir: import.meta.dirname, mode: "worker" });
+   ```
+
+2. Start it beside the backend:
+
+   ```sh
+   pnpm dev      # terminal 1: the backend
+   pnpm worker   # terminal 2: node worker.ts
+   ```
+
+3. Enqueue something and watch the worker log it:
+
+   ```sh
+   curl -X POST http://localhost:3000/api/v1/greetings/hello/use \
+     -H "authorization: Bearer $ACCESS_TOKEN"
+   ```
+
+</Steps>
+
+Both processes run the full boot pipeline: modules, settings, models, the ACL,
+bootstraps. So `ctx.models` and `ctx.config` are available inside a processor,
+and a setting changed in the console reaches the worker too. The difference is
+what each starts:
+
+| Mode | Queue files | Producers | Consumers |
+|---|---|---|---|
+| backend | run | yes | registered, never started |
+| worker | run | yes | one BullMQ `Worker` per processor |
+| script | run | yes | none |
+| inspection (`tulipes routes`, `spec`) | not acquired | none | none |
+
+Without a running worker, jobs wait in Redis. That is correct behavior, not a
+bug. In production the PM2 file in the generated app starts both processes; see
+[PM2](/tulipes-js/production/pm2/) and
+[process modes](/tulipes-js/concepts/process-modes/).
+
+## Retries and backoff
+
+A processor that throws fails the job, and BullMQ retries it according to the
+job's options. Two places to set them:
+
+```ts title="modules/agents/helpers/runs.ts"
+await requireQueues(ctx).add("agents.run", "run", { run_id: runId }, {
+  jobId: `${runId}-${segment}`,
+  attempts: 3,
+  backoff: { type: "exponential", delay: 5_000 },
+  removeOnComplete: true,
+  removeOnFail: 1_000,
+});
+```
+
+That is per job. For every job of a queue, pass `defaultJobOptions` to
+`queues.define()` as shown above.
+
+Rules for a processor that will be retried:
+
+- **Make it idempotent.** The same job can run twice after a crash, a stalled
+  lock or a worker restart.
+- **Pass identifiers, not documents.** Re-read the current state inside the
+  processor.
+- **Let it throw.** Swallowing an error marks the job completed.
+- **Use `jobId` to deduplicate.** The agents module derives it from the run and
+  its segment, so a retried request enqueues one job, not two.
+- **Handle the last attempt.** `job.attemptsMade` and `job.opts.attempts` tell a
+  processor it is on its final try; the agents processor marks its run `failed`
+  there so nothing is left `running` for nobody.
+
+## Recurring jobs and time zones
+
+Recurring work is a BullMQ job scheduler, created with `schedule()` and keyed by
+an id, so calling it on every boot updates the schedule instead of duplicating
+it. A bootstrap is the natural place:
+
+```ts title="modules/billing/bootstrap/schedules.bootstrap.ts"
+import { requireQueues, type RuntimeCtx } from "@tulipes/core/boot";
+
+export default async function schedules(ctx: RuntimeCtx): Promise<void> {
+  const queues = requireQueues(ctx);
+
+  // 02:00 every day, in the app's zone (config.timezone.default).
+  await queues.schedule("billing.send-invoice", "nightly",
+    { pattern: "0 2 * * *" },
+    { name: "send", data: { invoiceId: "all" } });
+
+  // 09:00 Paris time, whatever the app's zone is.
+  await queues.schedule("billing.send-invoice", "paris-morning",
+    { pattern: "0 9 * * *", tz: "Europe/Paris" },
+    { name: "send", data: { invoiceId: "all" } });
+
+  // Every 15 minutes: an interval has no wall clock, so no zone applies.
+  await queues.schedule("billing.send-invoice", "sweep",
+    { every: 15 * 60_000 },
+    { name: "sweep", data: { invoiceId: "pending" } });
+}
+```
+
+`schedule(queueName, schedulerId, repeat, job)`:
+
+| Argument | Meaning |
+|---|---|
+| `queueName` | a defined queue |
+| `schedulerId` | the key; the same id updates the existing schedule |
+| `repeat` | BullMQ `RepeatOptions`: `pattern` (cron) or `every` (ms), `tz`, `limit`, `startDate`, `endDate` |
+| `job` | `{ name, data, options? }`; `data` is validated by the queue's schema, `options` cannot set `repeat` or `jobId` |
+
+A cron `pattern` without a `tz` fires in the app's `config.timezone.default`, not
+the server's. The zone is read when `schedule()` is called. Stop a schedule with
+`unschedule(queueName, schedulerId)`, which resolves to whether it existed.
+
+<Aside type="tip">
+Bootstraps run in every non-inspection mode, so both the backend and the worker
+upsert the schedule. That is harmless: the key makes it one schedule. Return
+early on `ctx.mode === "script"` if one-off scripts should not touch schedules.
+</Aside>
+
+## Concurrency
+
+By default a BullMQ worker processes one job at a time. Raise it per queue:
+
+```ts
+queues.process("billing.render-pdf", renderPdf, { concurrency: 4 });
+```
+
+Concurrency runs jobs in parallel in one Node process; it helps I/O-bound work
+and does nothing for CPU-bound work. To spread CPU, run more worker processes.
+Several workers consuming the same queues are safe: BullMQ hands each job to one
+of them.
+
+## Shutdown and draining
+
+On SIGTERM or SIGINT core stops new work first and closes resources last:
+
+```txt
+1. ctx.signal aborts
+2. drain, concurrently: the HTTP server closes, the socket server
+   closes, queue workers close (active jobs finish, none start)
+3. the cleanups bootstraps returned run, in reverse   - producers
+   still work here
+4. providers are disposed in reverse: queues and their
+   connections, then the database
+5. past the shared deadline (10 seconds by default): forced
+   disconnect
+```
+
+Producers stay usable through step 3, so a bootstrap cleanup may still enqueue.
+A long processor should watch `ctx.signal` and return at a safe point; the
+agents processor passes it to its run loop. Give the supervisor enough time: the
+generated PM2 file sets `kill_timeout: 10000` because PM2's default 1.6 seconds
+would cut a drain short.
+
+## Redis connections
+
+The provider opens one ioredis connection per queue and one blocking connection
+per worker, with `maxRetriesPerRequest: null` as BullMQ requires. They are never
+shared with the app's own Redis clients (the cache and the rate limiter keep
+theirs), so closing the provider cannot break them. A Redis that is down at boot
+does not block readiness: producers connect lazily, and the first `add()` fails.
+
+## Errors and what they mean
+
+Every queue-file problem is collected and reported at once:
+
+```txt
+Boot aborted during "providers" — 2 issue(s):
+  ✖ [billing] queue name "billing:send" is invalid — lowercase kebab-case, optional "." namespace
+  ✖ [billing] queue "users.welcome" is already defined by module "users"
+```
+
+| Message | Cause |
+|---|---|
+| `requires capability "queues" (has queues/ files) but the app's package.json declares no provider for it` | a `queues/` file without the root declaration |
+| `provider "bullmq" is selected but config.bullmq.redisUrl is not set — wire it in config/app.config.ts …` | the declaration without the wiring |
+| `queue "x" already has a processor from module "y"` | two processors for one queue |
+| `queue "x" already has a job schema from module "y"` | two `jobs` entries for one queue |
+| `processor registered for undefined queue "x" — call define() first` | `process()` with no `jobs` entry or `define()` (worker boot) |
+| `worker mode started with zero processors — no module registered queue work` | a worker with nothing to consume |
+
+At runtime, from `add()`:
+
+```txt
+Queue "billing.send" was never defined by any module (known: hello.count-greeting, users.welcome, agents.run)
+Job data for queue "hello.count-greeting" is invalid — name: …
+queues.add("billing.send-invoice", "send") no longer takes a repeat option — use queues.schedule(queue, schedulerId, repeat, job)
+```
+
+From a route these are ordinary errors, so the client sees a 500 envelope with no
+detail and the message goes to the log. Validate request input with the route's
+own schema so a bad job payload never comes from a client.
+
+A module that produces into another module's queue but has no `queues/` file of
+its own declares `"tulipes": { "requires": ["queues"] }` in its `package.json`,
+so the requirement is checked.
+
+## Testing
+
+`@tulipes/testing` boots the backend, so a test can call the endpoint and assert
+the job was enqueued, or call the processor's logic directly through a helper.
+The [testing guide](/tulipes-js/guides/testing/#testing-queues) shows both, and a
+worker boot.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Tutorial: background jobs" href="/tulipes-js/tutorial/background-jobs/" description="Add a queue to the bookstore, step by step." />
+  <LinkCard title="Sockets" href="/tulipes-js/guides/sockets/" description="Tell clients when the job is done." />
+  <LinkCard title="Process modes" href="/tulipes-js/concepts/process-modes/" description="What backend, worker and script each start." />
+  <LinkCard title="PM2" href="/tulipes-js/production/pm2/" description="Run the backend and the worker in production." />
+</CardGrid>

@@ -1,0 +1,368 @@
+---
+title: API tokens and scopes
+description: Issue, list and revoke named API tokens, limit a credential to scopes that narrow its role, and read OUT_OF_SCOPE refusals over HTTP and MCP.
+sidebar:
+  order: 21
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+An access token lives fifteen minutes and carries the user's whole role. That is
+right for a browser, and wrong for a script, a CI job or an AI agent: they need a
+credential that lasts, that can be revoked by name, and that reaches less than
+the person who issued it. The production preset's auth module provides one: the
+**API token**, named, optionally expiring, hashed at rest, and limited to
+**scopes**. Scopes live in core, so a scoped credential is narrowed the same way
+on an HTTP route and on an [MCP](/tulipes-js/guides/mcp/) tool call.
+
+<Aside type="note">
+Two things are called "scope" in Tulipes. A RAI id's second segment
+(`users:bo:list` has scope `bo`) names the surface an endpoint serves. A
+**credential scope** is a grant pattern a credential is limited to. They meet
+naturally (`users:web:*` covers one RAI scope of one module), but this page is
+about the second kind.
+</Aside>
+
+## Issue a token
+
+Only a signed-in session can issue a token: `POST /api/v1/auth/tokens` with an
+access token from [sign-in](/tulipes-js/guides/authentication/#sign-in).
+
+```sh
+curl -X POST http://localhost:3000/api/v1/auth/tokens \
+  -H "authorization: Bearer $ACCESS_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"name":"claude-code laptop","scopes":["hello:web:*"],"expires_in_days":30}'
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "token_id": "3f9c0a1b2c3d4e5f",
+    "name": "claude-code laptop",
+    "scopes": ["hello:web:*"],
+    "expires_at": "2026-12-01T10:00:00.000Z",
+    "created_at": "2026-11-01T10:00:00.000Z",
+    "secret": "tulipes-example_3f9c0a1b2c3d4e5f_9b1e…"
+  },
+  "errors": [],
+  "meta": {}
+}
+```
+
+The `secret` is the bearer, and **this response is the only time it is
+returned**. Store it now.
+
+The body is validated by `tokenRequest` in `modules/auth/schemas/auth.schemas.ts`:
+
+| Field | Rules | Meaning |
+|---|---|---|
+| `name` | required, trimmed, 1 to 100 characters | how you recognise the token when you list or revoke it |
+| `scopes` | optional, at most 32, each a valid grant pattern | what the token is limited to; omitted means the user's full role |
+| `expires_in_days` | optional integer, 1 to 365 | when the token stops working; omitted means it does not expire |
+
+Each scope must pass `isGrant()` from `@tulipes/core/acl`: a full RAI id
+(`users:bo:list`), a prefix wildcard (`hello:*`, `hello:web:*`,
+`hello:web:greetings:*`) or `*`. Duplicates are removed. A 0.11-style id such as
+`users:read` is refused:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [{ "field": "scopes.0", "message": "A scope is a permission or a pattern such as hello:web:* or *", "code": "CUSTOM" }],
+  "meta": {}
+}
+```
+
+A token cannot issue tokens: `POST /auth/tokens` with an API token as the bearer
+answers 403 `TOKEN_NEEDS_SESSION` ("API tokens are issued from a signed-in
+session, not by another token"). Otherwise a leaked token could mint its own
+successors.
+
+## The token's shape
+
+```txt
+<app>_<token_id>_<secret>
+
+tulipes-example_3f9c0a1b2c3d4e5f_9b1e…(64 hex)
+```
+
+- **`<app>`** is `config.app.name`, without an npm scope and lowercased
+  (`@acme/billing-api` becomes `billing-api`). It makes two apps' tokens easy to
+  tell apart in a shell and gives a secret scanner a pattern to look for.
+  Resolution ignores it, so renaming the app does not retire tokens.
+- **`<token_id>`** is 16 hex characters, stored in clear. It is what you list
+  and revoke by.
+- **`<secret>`** is 64 hex characters (32 random bytes). Only its SHA-256 hash is
+  stored, in `ApiToken.secret_hash`, which is `select: false`. Resolution
+  compares hashes with `timingSafeEqual`.
+
+The authentication middleware tells an API token from a JWT by this shape before
+any lookup (`isApiToken()`), so both go in the same header:
+
+```sh
+curl http://localhost:3000/api/v1/hello/secret \
+  -H "authorization: Bearer tulipes-example_3f9c0a1b2c3d4e5f_9b1e…"
+```
+
+## What a token resolves to
+
+`identifyApiToken()` in `modules/auth/helpers/api-tokens.ts` returns:
+
+```ts
+{
+  isAuthenticated: true,
+  user,                    // the user, re-read: the role comes from them, now
+  session: null,           // a token is not a session
+  scopes: token.scopes,    // only when the token has scopes
+  credentialId: token.token_id,
+}
+```
+
+- **The role always comes from the user**, never from the token. Demote the user
+  and the token reaches less on its next request.
+- **`session` is `null`.** Anything that needs a session refuses a token:
+  issuing tokens, and `POST /auth/password` (which needs the session's
+  credential version and answers 401 `INVALID_CREDENTIALS` without one).
+- **`credentialId`** is the token id, for audit lines and for work that must stop
+  when the credential is revoked. The MCP process writes it into every audit
+  line; an agent run checks `isTokenLive()` before each step.
+
+Resolved tokens are cached like sessions, under `auth:token:<token_id>` for
+`auth.cacheTtlSeconds`. A cache hit still checks the secret's hash, so knowing a
+token id is never enough. `last_used_at` is written at most once a minute.
+
+A token stops resolving, and the request becomes a guest, when it is:
+
+- revoked (its row deleted),
+- past `expires_at` (the row also has a TTL index, so it prunes itself),
+- issued before the user's last password change (its `credential_version` no
+  longer matches),
+- owned by a user who no longer exists.
+
+A guest asking for a route that needs a role gets 401 `UNAUTHENTICATED`, which is
+what a client sees right after revoking a token.
+
+## List and revoke
+
+`GET /api/v1/auth/tokens` lists the caller's live tokens, newest first, without
+secrets:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "token_id": "3f9c0a1b2c3d4e5f",
+      "name": "claude-code laptop",
+      "scopes": ["hello:web:*"],
+      "expires_at": "2026-12-01T10:00:00.000Z",
+      "created_at": "2026-11-01T10:00:00.000Z",
+      "last_used_at": "2026-11-01T10:05:12.000Z"
+    }
+  ],
+  "errors": [],
+  "meta": { "total_items": 1 }
+}
+```
+
+`DELETE /api/v1/auth/tokens/3f9c0a1b2c3d4e5f` revokes one. It deletes the row,
+then the cached identity, in that order (the other order would let a request
+between the two re-cache the token). The next request carrying it is a guest,
+on every replica:
+
+```json
+{ "success": true, "data": { "message": "Token revoked", "token_id": "3f9c0a1b2c3d4e5f" }, "errors": [], "meta": {} }
+```
+
+A token id that is not the caller's, or does not exist, answers 404
+`NO_SUCH_TOKEN`. All three endpoints are covered by the `auth:web:tokens:*`
+grant the auth module gives `user`.
+
+## From code
+
+Scripts and jobs can issue and revoke without HTTP, through `@app/auth`:
+
+```ts title="scripts/issue-ci-token.ts"
+import { join } from "node:path";
+import { boot } from "@tulipes/core/boot";
+
+import { issueToken, listTokens, revokeToken } from "../modules/auth/lib/index.ts";
+
+const userId = process.argv[2]!; // pnpm script scripts/issue-ci-token.ts <user id>
+const handle = await boot({ rootDir: join(import.meta.dirname, ".."), mode: "script" });
+try {
+  const token = await issueToken(handle.ctx, userId, {
+    name: "nightly export",
+    scopes: ["users:bo:list"],
+    expiresInDays: 7,
+  });
+  console.log(token.secret); // shown once
+
+  const live = await listTokens(handle.ctx, userId);
+  await revokeToken(handle.ctx, userId, live[0]!.token_id); // false when not theirs
+} finally {
+  await handle.shutdown();
+}
+```
+
+`issueToken()` throws when the user has no credential to issue against. Note the
+option is `expiresInDays` in code and `expires_in_days` over HTTP. See
+[scripts](/tulipes-js/guides/scripts/) for running a file like this one.
+
+## Scopes narrow a role
+
+The effective permission of a request is **what the role grants AND what the
+scopes cover**. A scope can only take away:
+
+```txt
+             role grants?            scopes cover?
+request ---> acl.can(role, id) --no--> 401 / 403 FORBIDDEN
+                  | yes
+                  v
+             scopesCover(scopes, id) --no--> 403 OUT_OF_SCOPE
+                  | yes
+                  v
+             validation, then the handler
+```
+
+The order is fixed in `accessRefusal()` in `packages/core/src/http/rai.ts`, and
+scopes use the ACL's own grammar: `grantsCovering(id)` lists every grant that
+reaches an id, and a scope covers the id when it is one of them.
+
+```ts
+import { scopesCover } from "@tulipes/core/acl";
+
+scopesCover(undefined, "users:bo:list");          // true  - unscoped: never narrowed
+scopesCover(["users:*"], "users:bo:list");        // true
+scopesCover(["users:bo:list"], "users:bo:list");  // true
+scopesCover(["hello:web:*"], "users:bo:list");    // false
+scopesCover([], "users:bo:list");                 // false - an empty list reaches nothing
+```
+
+Two consequences worth stating:
+
+- **A scope the role lacks grants nothing.** A `user` holding a token scoped to
+  `users:bo:*` still cannot reach the back office: the role check fails first and
+  the answer is 403 `FORBIDDEN`.
+- **`[]` is not "no scopes".** An absent `scopes` field is the full role; an
+  empty array is a token that can reach nothing.
+
+### The OUT_OF_SCOPE refusal
+
+When the role holds the permission but the scopes do not cover it, the answer is
+403 with its own code, so a client can tell "your token is too narrow" from "you
+may not":
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [{ "field": null, "message": "this credential is not scoped to users:web:list", "code": "OUT_OF_SCOPE" }],
+  "meta": {}
+}
+```
+
+The message is the key `outOfScope` with the English default above; define
+`outOfScope` in a module's `i18n/<locale>.json` to translate it, with
+`{{permission}}` available. The reference test issues a token scoped to
+`hello:web:*` for a `user`, reaches `GET /hello/secret`, and is refused
+`GET /users` with exactly this code.
+
+### Choosing scopes
+
+| Purpose | Scopes |
+|---|---|
+| an agent that may read and use greetings | `["hello:web:greetings:*"]` |
+| a read-only reporting job on users | `["users:bo:list"]` |
+| everything one module offers its web clients | `["hello:web:*"]` |
+| a full copy of the role (avoid) | omit `scopes` |
+
+Prefer the narrowest set that does the job. Run
+[`tulipes routes`](/tulipes-js/reference/cli/routes/) to see the ids, and
+`tulipes agent manifest --role <role>` for the agent actions a role can reach.
+
+## Scopes over HTTP and MCP
+
+Scopes are read off `req.auth.scopes`, which the auth module fills from the
+stored token, never from anything the client sends. Core applies them in both
+gates:
+
+- **HTTP routes.** `rai()` calls `accessRefusal()` before validation and the
+  handler.
+- **Agent actions.** `ctx.agent.invoke()` runs the same `accessRefusal()`, and
+  `ctx.agent.manifest(actor)` / `tools(actor)` filter by role **and** scopes, so
+  a scoped agent is never shown a tool it would be refused. Over MCP,
+  `tools/list` is that manifest and `tools/call` is that invoke.
+
+`config/mcp.config.ts` in the production preset identifies an MCP caller with
+`identifyCredential(ctx, credential)`, which resolves an API token exactly as a
+request's bearer is resolved:
+
+```sh
+claude mcp add tulipes-example -e TULIPES_MCP_TOKEN="$TOKEN" -- pnpm --silent mcp
+```
+
+The MCP process prints the identity it serves, including the scopes, on stderr
+when it starts. The [MCP guide](/tulipes-js/guides/mcp/) covers the rest.
+
+An agent run started with an API token (`POST /agents/runs`) records the token's
+scopes and id at creation. Every step re-reads the user's role and checks the
+token is still live; the scopes are a snapshot that can only narrow. See
+[agents](/tulipes-js/guides/agents/).
+
+## With a custom access checker
+
+`ctx.routes.setAccessChecker()` replaces the ACL's whole decision, and that
+includes the scopes. If you issue scoped credentials and install a checker, apply
+them yourself with the same rule `rai()` uses:
+
+```ts
+import { scopesCover } from "@tulipes/core/acl";
+
+ctx.routes.setAccessChecker(async (req, info) =>
+  (await yourPolicy(req, info)) && scopesCover(req.auth.scopes, info.id),
+);
+```
+
+## Adding API tokens to an app generated before 0.13
+
+The auth module is generated code, so `tulipes migrate 0.13` does not edit it.
+Copy from the reference app (`MIGRATING.md`, "0.13.0 — an MCP process, API
+tokens, credential scopes"):
+
+<Steps>
+
+1. `models/api-token.model.ts` and `helpers/api-tokens.ts`.
+2. The `identifyCredential` and `authenticate(ctx)` changes in
+   `helpers/passport.ts`.
+3. The token identities in `helpers/session-cache.ts`, so `forgetUser()` forgets
+   tokens too.
+4. The `/auth/tokens` controller methods, routes, schemas and i18n messages.
+5. `"auth:web:tokens:*"` in the `user` grant of `module.acl.ts`.
+6. Delete `config/mcp.config.ts` and run `tulipes migrate 0.13` again: it writes
+   the config that identifies through the auth module.
+
+</Steps>
+
+## Common mistakes
+
+- **Losing the secret.** It is shown once. Revoke the token and issue another.
+- **Sending a token to `POST /auth/tokens`.** 403 `TOKEN_NEEDS_SESSION`; sign in
+  and use the access token.
+- **Expecting a scope to grant something.** It never widens a role; 403
+  `FORBIDDEN` means the role is the problem, `OUT_OF_SCOPE` means the scopes are.
+- **Sending `scopes: []` to mean "unscoped".** Omit the field instead.
+- **Putting the token on a command line.** `ps` shows argv; pass it through the
+  environment, as `TULIPES_MCP_TOKEN` does.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Roles and permissions" href="/tulipes-js/guides/roles-and-permissions/" description="The grants scopes narrow, and how they are written." />
+  <LinkCard title="MCP" href="/tulipes-js/guides/mcp/" description="Serve the app's actions to Claude Code with a scoped token." />
+  <LinkCard title="Agents" href="/tulipes-js/guides/agents/" description="Declare actions and run Claude inside the app." />
+  <LinkCard title="Authentication" href="/tulipes-js/guides/authentication/" description="Sessions, refresh rotation and the identity cache." />
+</CardGrid>

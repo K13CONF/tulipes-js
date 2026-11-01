@@ -1,0 +1,221 @@
+---
+title: Quick start
+description: Scaffold the minimal Tulipes app, boot it, call its endpoints, then add a validated, translated, permission-checked route of your own in about five minutes.
+sidebar:
+  order: 3
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Five minutes from nothing to a running API, using the minimal preset: no
+database, no Redis, no credentials. You will boot the app, read its startup
+banner, call its endpoints, and add one route of your own that is validated,
+translated and permission-checked.
+
+You need Node 24 and pnpm 10 ([installation](/tulipes-js/start/installation/)).
+
+## Create and boot the app
+
+<Steps>
+
+1. Scaffold and install:
+
+   ```sh
+   npm install -g @tulipes/cli
+   tulipes init my-api
+   cd my-api
+   pnpm install
+   ```
+
+2. Start the backend process:
+
+   ```sh
+   pnpm dev
+   ```
+
+   `pnpm dev` regenerates the types (`wrote types/tulipes.d.ts`) and runs
+   `app.ts` with `node --watch`, so it restarts when you save a file. The
+   startup banner says what booted:
+
+   ```txt
+     ▲ my-api  development · backend mode
+
+     ➜  Server      http://localhost:3000  ● listening
+     ➜  Models      no provider declared
+     ➜  Queues      no provider declared
+     ➜  Sockets     no provider declared
+     ➜  Settings    no module declares settings
+     ➜  Modules     4 (core*, security*, hello, agent)  ·  * sys tier
+     ➜  Locales     en  ·  1 translated module(s)
+     ➜  Time zone   UTC  ·  requests may ask for any zone  ·  process
+     ➜  Roles       1 (guest)
+     ➜  Runtime     Node v24.22.2  ·  PID 98344  ·  ready in 64ms
+   ```
+
+3. In another terminal, call it:
+
+   ```sh
+   curl http://localhost:3000/api/v1/hello
+   ```
+
+   ```json
+   {"success":true,"data":{"message":"Hello"},"errors":[],"meta":{}}
+   ```
+
+   Every response has that shape, the **envelope**. Ask for something that
+   does not exist and the same envelope carries the error:
+
+   ```sh
+   curl http://localhost:3000/nope
+   ```
+
+   ```json
+   {"success":false,"data":null,"errors":[{"field":null,"message":"no route for GET /nope","code":"ROUTE_NOT_FOUND"}],"meta":{}}
+   ```
+
+</Steps>
+
+<Aside type="tip">
+`pnpm dev` watches files. If your machine runs out of file watchers
+(`EMFILE`), run `pnpm start` instead: it is `node app.ts` without the watch.
+</Aside>
+
+## Make a first change
+
+We will add `GET /api/v1/hello/:name`, which greets by name and rejects a
+name shorter than two letters.
+
+<Steps>
+
+1. Add the route to `modules/hello/routes/web.hello.routes.ts`:
+
+   ```ts title="modules/hello/routes/web.hello.routes.ts" ins={9-16}
+   import { Router } from "express";
+   import { z } from "zod/v4";
+   import type { BackendCtx } from "@tulipes/core/boot";
+   export default function helloRoutes({ rai }: BackendCtx): Router {
+     const router = Router();
+     router.get("/hello", rai({ id: "hello:web:read", name: "Hello", returns: z.object({ message: z.string() }) }), (req, res) => {
+       res.respond({ data: { message: req.t("greeting") } });
+     });
+     router.get("/hello/:name", rai({
+       id: "hello:web:greet:by-name",
+       name: "Hello by name",
+       params: z.object({ name: z.string().min(2, "nameTooShort") }),
+     }), (req, res) => {
+       res.respond({ data: { message: req.t("greetingFor", { name: req.params.name }) } });
+     });
+     return router;
+   }
+   ```
+
+   Three things happen on that one declaration. `rai()` gives the endpoint
+   an id, `hello:web:greet:by-name`, which is also its permission. Its
+   `params` schema validates the URL before your handler runs. And it binds
+   `req.t` to the hello module's translations.
+
+2. Add the two strings to `modules/hello/i18n/en.json`:
+
+   ```json title="modules/hello/i18n/en.json" ins={3-4}
+   {
+     "greeting": "Hello",
+     "greetingFor": "Hello, {{name}}!",
+     "nameTooShort": "A name has at least two letters"
+   }
+   ```
+
+3. Call it:
+
+   ```sh
+   curl http://localhost:3000/api/v1/hello/Ada
+   ```
+
+   ```json
+   {"success":false,"data":null,"errors":[{"field":null,"message":"authentication required","code":"UNAUTHENTICATED"}],"meta":{}}
+   ```
+
+   Refused. That is the framework failing closed: nobody was granted
+   `hello:web:greet:by-name`, so nobody may call it, not even an anonymous
+   caller (the `guest` role).
+
+4. Grant it to guest in `modules/hello/module.acl.ts`. The file already
+   grants `hello:web:greet`; widen that grant to a prefix, which covers the
+   bare id and everything under it:
+
+   ```ts title="modules/hello/module.acl.ts" del={2} ins={3}
+   import type { AclBuilder } from "@tulipes/core/acl";
+   export default function permissions(acl: AclBuilder) { acl.allow("guest", "hello:web:read", "hello:web:health", "hello:web:greet"); }
+   export default function permissions(acl: AclBuilder) { acl.allow("guest", "hello:web:read", "hello:web:health", "hello:web:greet:*"); }
+   ```
+
+5. Try again, then with a name that is too short:
+
+   ```sh
+   curl http://localhost:3000/api/v1/hello/Ada
+   curl http://localhost:3000/api/v1/hello/A
+   ```
+
+   ```json
+   {"success":true,"data":{"message":"Hello, Ada!"},"errors":[],"meta":{}}
+   {"success":false,"data":null,"errors":[{"field":"name","message":"A name has at least two letters","code":"TOO_SMALL"}],"meta":{}}
+   ```
+
+   The second answer is a `422`. The zod message `nameTooShort` was treated
+   as an i18n key and translated.
+
+</Steps>
+
+## See what you built
+
+The CLI can describe the app without starting it:
+
+```sh
+pnpm tulipes routes
+```
+
+```txt
+5 endpoint(s)
+
+POST  agent:web:invoke         /api/v1/agent/tools/:name  agent  guest
+      Run a declared action
+GET   agent:web:tools          /api/v1/agent/tools        agent  guest
+      Tools an agent may call
+GET   hello:web:greet:by-name  /api/v1/hello/:name        hello  guest
+      Hello by name
+GET   hello:web:health         /health                    hello  guest
+      Health
+GET   hello:web:read           /api/v1/hello              hello  guest
+      Hello
+```
+
+Each line is an endpoint, its id, its path, the module that declared it and
+the roles that reach it. `pnpm test` runs the generated suite, and
+`pnpm spec` writes an OpenAPI document and a Postman collection to `docs/`
+from the same declarations.
+
+## What a mistake looks like
+
+Add a route without `rai()`:
+
+```ts
+router.get("/oops", (_req, res) => { res.respond({ data: null }); });
+```
+
+The app does not start, and neither does `tulipes routes`:
+
+```txt
+TulipesBootError: Boot aborted during "routes" — 1 issue(s):
+  ✖ GET /api/v1/oops has no rai() declaration
+```
+
+An endpoint without a permission id cannot exist by accident. Remove the line
+and the app boots again.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Project structure" href="/tulipes-js/start/project-structure/" description="What every file in a generated app is for." />
+  <LinkCard title="Tutorial: a bookstore API" href="/tulipes-js/tutorial/overview/" description="Models, permissions, jobs, sockets, tests and deployment." />
+  <LinkCard title="Routes and controllers" href="/tulipes-js/guides/routes-and-controllers/" description="Everything a routes file can do." />
+  <LinkCard title="RAI ids and the ACL" href="/tulipes-js/concepts/rai-and-acl/" description="How ids, grants and roles decide access." />
+</CardGrid>

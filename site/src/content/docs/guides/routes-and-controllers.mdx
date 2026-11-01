@@ -1,0 +1,534 @@
+---
+title: Routes and controllers
+description: How to write routes files and controller classes, declare every endpoint with ctx.rai(), mount nested routers and place middleware in a Tulipes app.
+sidebar:
+  order: 1
+---
+
+import { Aside, FileTree, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+An endpoint in Tulipes is a plain Express 5 route with one extra handler in
+front of it: `ctx.rai()`. That declaration names the endpoint, gates it with
+the ACL, binds the request helpers (`req.t`, `req.page`, `res.respond`) and
+validates its input. The boot walks every router after mounting and refuses
+to start if any route lacks one, so no endpoint can ship unguarded by accident.
+
+## The idea
+
+A module's HTTP surface lives in two folders:
+
+- `routes/` holds **routes files**: a default-exported function that receives
+  the context and returns an Express `Router`. Read as a table of contents.
+- `controllers/` holds **controller classes**: each method returns a request
+  handler that does the work.
+
+The framework scans `routes/` (subfolders included) for files ending in
+`.routes.ts`. It never scans `controllers/`: a routes file imports its
+controller directly, so the wiring stays explicit.
+
+## Naming files scope-first
+
+The second segment of a RAI id is its **scope**: the surface the endpoint
+serves (`web`, `bo` for back office, `mobile`, any name the app picks). Files
+are named after it, scope first, so the back office of a module is one glance
+away:
+
+```txt
+routes/{scope}.{module}[.{extra}].routes.ts            web.users.routes.ts
+controllers/{scope}.{module}[.{extra}].controllers.ts  web.users.controllers.ts → WebUsersController
+routes/{scope}/{module}[.{extra}].routes.ts            a folder when one scope has several files
+```
+
+The reference app shows both layouts:
+
+<FileTree>
+- modules/
+  - users/
+    - routes/
+      - bo.users.routes.ts one file per scope, at the top of routes/
+      - web.users.routes.ts
+    - controllers/
+      - bo.users.controllers.ts exports BoUsersController
+      - web.users.controllers.ts exports WebUsersController
+  - hello/
+    - routes/
+      - web/ two files for one scope, so a folder named after it
+        - hello.routes.ts
+        - hello.greetings.routes.ts
+    - controllers/
+      - web/
+        - hello.controllers.ts
+        - hello.greetings.controllers.ts
+</FileTree>
+
+The naming is a convention, not a rule core checks. Files load in sorted
+path order within a module, and modules load in boot order (see
+[the module graph](/tulipes-js/concepts/modules/)).
+
+## A minimal endpoint
+
+This is the hello module's greetings routes file, unchanged:
+
+```ts title="modules/hello/routes/web/hello.greetings.routes.ts"
+import { Router } from "express";
+import type { BackendCtx } from "@tulipes/core/boot";
+
+import { HelloGreetingsController } from "../../controllers/web/hello.greetings.controllers.ts";
+
+export default function greetingsRoutes(ctx: BackendCtx): Router {
+  const { rai } = ctx;
+  const router = Router();
+  const greetings = new HelloGreetingsController(ctx);
+
+  router.get("/greetings", rai({
+      id: "hello:web:greetings",
+      name: "List greetings",
+      description: "Reads the seeded rows, clamped by the shared bounds",
+    }), greetings.list());
+
+  router.post("/greetings/:name/use", rai({
+      id: "hello:web:greetings:use",
+      status: 202,
+      name: "Use a greeting",
+      description: "Queues a job that counts the use",
+    }), greetings.use());
+
+  return router;
+}
+```
+
+Three things to notice:
+
+1. The paths are **relative**: `"/greetings"`, not `/api/v1/greetings`. A
+   router the function returns is mounted under `config.api.prefix`
+   (`/api/v1` in the reference app's `config/app.config.ts`), so the endpoint
+   answers at `GET /api/v1/greetings`.
+2. The function is typed `(ctx: BackendCtx) => Router`, with `BackendCtx`
+   from `@tulipes/core/boot`. Routes files only run in the backend process
+   and in inspection.
+3. `rai(...)` is the **first** handler of each route, and the controller's
+   handler comes after it.
+
+And the controller it calls:
+
+```ts title="modules/hello/controllers/web/hello.greetings.controllers.ts"
+import type { Request, RequestHandler, Response } from "express";
+import { requireModels, requireQueues, type Ctx } from "@tulipes/core/boot";
+import { HttpError } from "@tulipes/core/http";
+
+import { findGreetings } from "../../helpers/greetings.ts";
+
+export class HelloGreetingsController {
+  readonly #ctx: Ctx;
+
+  constructor(ctx: Ctx) {
+    this.#ctx = ctx;
+  }
+
+  list(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const { per_page, skip } = req.page;
+      const [greetings, total_items] = await findGreetings(this.#ctx, { skip, limit: per_page });
+      res.respond({ data: greetings, meta: { total_items } });
+    };
+  }
+
+  use(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const name = String(req.params.name);
+      const greeting = await requireModels(this.#ctx).get("Greeting").findOne({ name }).lean();
+      if (!greeting) throw new HttpError(404, "noSuchGreeting", { vars: { name } });
+
+      await requireQueues(this.#ctx).add("hello.count-greeting", "count", { name });
+      res.respond({ status: 202, data: { name, queued: true } });
+    };
+  }
+}
+```
+
+Then grant the ids in the module's `module.acl.ts`, otherwise every caller
+gets a 401 or 403:
+
+```ts title="modules/hello/module.acl.ts"
+acl.allow("user", "hello:web:secret", "hello:web:greetings:*");
+```
+
+Grants are covered in [roles and permissions](/tulipes-js/guides/roles-and-permissions/).
+
+## Controller classes
+
+The controller pattern is the same everywhere in the reference app:
+
+- The constructor takes the context and keeps it in a private field
+  (`readonly #ctx: Ctx`).
+- Each public method **returns** a `RequestHandler` rather than being one.
+  The routes file then reads as `greetings.list()`, and the class can keep
+  private helpers beside the handlers that use them.
+- Infrastructure is reached **inside the returned handler**:
+  `requireModels(this.#ctx)`, `requireQueues(this.#ctx)` or
+  `this.#ctx.config.<module>`. Never at construction time.
+- Failures are thrown (`throw new HttpError(404, "noSuchGreeting")`); the
+  happy path ends in `res.respond(...)`. See
+  [responses and errors](/tulipes-js/concepts/responses-and-errors/).
+- Logic shared with a queue job or an agent action goes in `helpers/`
+  (`findGreetings` above), so neither calls the other.
+
+`requireModels` and `requireQueues` come from `@tulipes/core/boot`. When the
+app declares no provider for the capability, they throw:
+
+```txt
+This module requires a database model store — no "models" provider is declared in package.json ("tulipes.providers.models")
+```
+
+Because the controller only holds `ctx`, a unit test can construct one with a
+stub context and call the returned handler.
+
+## Build with the context, use infrastructure in handlers
+
+`tulipes routes`, `tulipes spec` and `tulipes agent manifest` run an
+**inspection boot**: every routes file runs exactly as in production, but
+nothing is acquired. In that boot:
+
+| You read, while building the router | Result |
+|---|---|
+| `ctx.config.<module>.<setting>` | the schema default, fine |
+| `ctx.config.api.prefix` and other app config | fine |
+| an environment value, `ctx.config.core.redisUrl` | throws |
+| `ctx.models`, `ctx.queues`, `ctx.sockets` | a stub that throws on use |
+
+A routes file that reads an environment value while building fails the
+inspection with its module and the reason:
+
+```txt
+TulipesBootError: Boot aborted during "routes" — 1 issue(s):
+  ✖ [billing] routes function threw: config.billing.stripeApiKey is an environment value, not available during inspection — read it inside a handler or a bootstrap, not while building routes
+```
+
+and touching a provider gives
+`ctx.models is not available during inspection — use it inside a handler or a bootstrap, not while building routes`.
+The fix is always the same: move the read into the handler. For middleware
+that needs a client or an environment value, build it on its first request
+with `lazy()` from `@app/core` (shown under [middleware](#where-middleware-goes)).
+[Inspection](/tulipes-js/concepts/inspection/) explains the mechanism.
+
+## Every `RouteInfo` field
+
+`ctx.rai()` takes one object, the `RouteInfo`. Only `id` is required.
+
+```ts
+rai({
+  id: "users:bo:create",          // the RAI: identity and permission
+  status: 201,                    // default success status
+  name: "Create a user",          // label in generated documents
+  description: "Adds the account and queues its welcome email",
+  folder: "users",                // Postman folder / OpenAPI tag
+  params: emailParam,             // validated
+  query: listQuery,               // validated
+  body: createBody,               // validated
+  returns: userShape,             // documented, never validated
+})
+```
+
+### `id`
+
+The Resource Access Identifier, `module:scope:resource[:extra]`. Every segment
+matches `[a-z][a-z0-9-]*`, and there are three or four of them:
+
+```txt
+users:bo:list          users:web:list          users:bo:list:deleted
+hello:web:greet        hello:web:greet:by-name
+```
+
+The id is the ACL permission, so `acl.allow("user", "hello:web:greetings:*")`
+grants both greetings routes above. The `Rai` type rejects a two-segment id in
+the editor; the route scan rejects any other bad shape at boot:
+
+```txt
+  ✖ [billing] GET /api/v1/invoices: rai id "billing:read" has no scope — since 0.12 an id is "module:scope:resource[:extra]" (`tulipes migrate 0.12` rewrites a 0.11 app)
+  ✖ [billing] GET /api/v1/invoices: rai id "Billing:Web:List" is invalid — expected "module:scope:resource" or "module:scope:resource:extra", lowercase segments ([a-z][a-z0-9-]*)
+```
+
+Ids are unique across the app. A second route using the same id fails with
+`rai id "users:bo:list" is already declared by GET /users/directory (users)`.
+[RAI and ACL](/tulipes-js/concepts/rai-and-acl/) covers the grammar and the
+grant patterns in depth.
+
+### `status`
+
+The default success status for `res.respond()` and for the generated
+documents. Declare it when a route creates (`201`) or queues work (`202`):
+
+```ts title="modules/users/routes/bo.users.routes.ts"
+router.post("/", rai({
+    id: "users:bo:create",
+    status: 201,
+    name: "Create a user",
+    description: "Adds the account and queues its welcome email",
+    body: createBody,
+  }), users.create());
+```
+
+An explicit `res.respond({ status })` still wins. A value that is not an
+integer from 200 to 299 is a boot error:
+`POST /api/v1/invoices: success status must be an integer 2xx code`.
+
+### `name` and `description`
+
+Human text for `tulipes routes`, the OpenAPI document, the Postman collection
+and the console. Neither changes behavior. Write `name` as a short imperative
+("List greetings") and use `description` for what a caller needs to know.
+
+### `folder`
+
+Groups the endpoint in generated documents: a folder in Postman, a tag in
+OpenAPI. It defaults to the declaring module, so you only set it to split one
+module's routes or to gather routes from several modules under one heading.
+The config module sets it explicitly:
+
+```ts title="modules/config/routes/bo.config.routes.ts"
+router.get("/", rai({
+    id: "config:bo:read",
+    name: "Describe the app",
+    folder: "config",
+  }), console.app());
+```
+
+### `params`, `query`, `body`
+
+Zod schemas the request is validated against, after the access check. The
+parsed values replace `req.params`, `req.query` and `req.body`, so coerced
+numbers arrive as numbers. The [validation guide](/tulipes-js/guides/validation/)
+covers them in full, and `query: listQuery(policy)` turns on the controlled
+[list-query language](/tulipes-js/guides/pagination-and-list-queries/).
+
+### `returns`
+
+The schema of the success payload, the envelope's `data`. It is **never**
+validated, because a handler is trusted with its own output. It exists so
+`tulipes spec` can describe the response:
+
+```ts title="modules/users/routes/web.users.routes.ts"
+router.get("/", rai({
+    id: "users:web:list",
+    name: "List users",
+    query: listQuery,
+    returns: z.array(userShape),
+  }), users.list());
+```
+
+### What `rai()` does at request time
+
+```txt
+request ─▶ rai(info)
+            1 req.rai = info
+            2 bind req.locale, req.t, req.timezone, req.time,
+              req.page, res.respond   (declaring module's namespace)
+            3 req.auth falls back to a fresh guest value
+            4 access: role holds id? credential scope covers it?
+                no ─▶ throw 401 unauthenticated / 403 forbidden
+            5 validate params, query, body
+                bad ─▶ throw 422 ValidationError
+            6 next() ─▶ your handlers
+```
+
+Validation runs after the access check on purpose: a caller who may not reach
+a route never learns which of its fields are wrong.
+
+## Mounting: the prefix, other paths, nested routers
+
+A routes file has three ways to put its router on the app, all through
+`ctx.routes`:
+
+| Call | Mounted at |
+|---|---|
+| `return router` | `config.api.prefix` |
+| `ctx.routes.mount(router, "/users")` | `/users` (return nothing) |
+| `ctx.routes.mount(parent, "/tenants/:tenant", child)` | `child` inside `parent` |
+
+The users module mounts both of its routers outside the API prefix to show a
+mount of its own, and returns nothing:
+
+```ts title="modules/users/routes/web.users.routes.ts"
+export default function webUsersRoutes(ctx: BackendCtx): void {
+  const { rai, routes } = ctx;
+  const router = Router();
+  const users = new WebUsersController(ctx);
+
+  router.get("/ping", rai({ id: "users:web:ping", name: "Users module status" }), users.ping());
+
+  // Deliberately outside the API prefix, to show a mount of its own.
+  routes.mount(router, "/users");
+}
+```
+
+The config module mounts under the prefix plus a segment. Reading
+`config.api.prefix` while building is safe, because app config is available
+under inspection:
+
+```ts title="modules/config/routes/bo.config.routes.ts"
+routes.mount(router, `${config.api!.prefix}/config`);
+```
+
+For a nested router, never call `parent.use("/prefix", child)` yourself. The
+route scan cannot recover the prefix from Express's compiled matcher, so it
+refuses the boot:
+
+```txt
+  ✖ router mount path is unknown — use ctx.routes.mount(parent, path, router)
+```
+
+Use `ctx.routes.mount` with three arguments, and `Router({ mergeParams: true })`
+on the child when it reads the parent's parameters:
+
+```ts title="modules/billing/routes/web.billing.routes.ts"
+import { Router } from "express";
+import type { BackendCtx } from "@tulipes/core/boot";
+
+export default function billingRoutes(ctx: BackendCtx): Router {
+  const { rai, routes } = ctx;
+  const tenants = Router();
+  const invoices = Router({ mergeParams: true });
+
+  invoices.get("/invoices", rai({ id: "billing:web:invoices", name: "List a tenant's invoices" }),
+    (req, res) => res.respond({ data: { tenant: req.params.tenant } }));
+
+  routes.mount(tenants, "/tenants/:tenant", invoices);
+  return tenants;   // GET /api/v1/tenants/:tenant/invoices
+}
+```
+
+The registry records the full path, so `tulipes routes` and the generated
+documents show `/api/v1/tenants/:tenant/invoices`. Mounting a router inside
+itself is refused with `recursive router mount is unsupported`.
+
+## One `rai()` per method, first in the chain
+
+The scan checks every method of every route:
+
+| Mistake | Boot message |
+|---|---|
+| no declaration | `GET /api/v1/invoices has no rai() declaration` |
+| `rai()` after another handler, or two of them | `GET /api/v1/invoices: exactly one rai() must be the first handler` |
+| `router.all()` or a method outside get, put, post, delete, options, head, patch, trace | `/api/v1/invoices: route.all() or unsupported HTTP method — declare each supported method with its own rai()` |
+| two routes on one method and URL template | `GET /items/:name is already declared by rai "items:web:read" (items) — use one declaration per method and URL template` |
+
+The last row matters for parameter names: `/items/:id` and `/items/:name` are
+the same template, so declare it once. With `router.route()`, give each method
+its own declaration and its own id:
+
+```ts
+router.route("/invoices")
+  .get(rai({ id: "billing:web:invoices", name: "List invoices" }), billing.list())
+  .post(rai({ id: "billing:web:invoices:create", status: 201, name: "Create an invoice" }), billing.create());
+```
+
+<Aside type="caution">
+An undeclared route is not just undocumented. The pipeline authenticates
+rather than rejects, so a route without a RAI would be reachable by `guest`.
+That is why the boot refuses it instead of warning. To make an endpoint public,
+grant its id to `guest` in `module.acl.ts`.
+</Aside>
+
+## Path pattern limits
+
+The scanner describes paths for the generated documents, so it only accepts
+paths it can describe without guessing: literal segments and named
+`:parameters`. The rule is the regular expression
+`^\/(?:[a-zA-Z0-9_./~%-]|:[a-zA-Z_]\w*)*$`.
+
+| Path | Accepted |
+|---|---|
+| `/greetings`, `/greetings/:name/use`, `/v1.2/files` | yes |
+| `"/"` inside a mounted router | yes |
+| regular expressions, arrays of paths | no |
+| Express 5 wildcards `/files/*path`, optional groups `/a{/:b}` | no |
+
+A refused path fails the boot with
+`unsupported route path /files/*path — use a literal path with named :parameters`,
+and a refused mount prefix throws
+`unsupported router mount "…" — use a literal path with named :parameters`.
+
+## Where middleware goes
+
+Core mounts no middleware. Where yours goes depends on its reach:
+
+| Reach | Place |
+|---|---|
+| every request | a sys-tier module's routes file, mounted on `ctx.app`, returning nothing |
+| one router | `router.use(...)` before its endpoints |
+| one endpoint | after its `rai()` handler |
+
+Global middleware lives in sys modules because they load first. The core
+module's routes file is the reference app's global slot; it builds its
+middleware lazily because it needs Redis:
+
+```ts title="modules/core/routes/core.routes.ts"
+export default function coreRoutes(ctx: BackendCtx): void {
+  ctx.app.use(lazy(() => {
+    const cache = appCache(ctx);
+    return (async (_req, res, next) => {
+      res.setHeader("X-Request-Id", randomUUID());
+      const served = await cache.wrap("stats:served-sample", 10, async () => Date.now());
+      res.setHeader("X-Stats-Sample", String(served));
+      next();
+    }) satisfies RequestHandler;
+  }));
+}
+```
+
+The security module (sys, priority 10) mounts helmet, CORS, request logging,
+the rate limiters and `express.json()` the same way; see
+[security middleware](/tulipes-js/guides/security-middleware/).
+
+Per-endpoint middleware goes **after** `rai()`, never before it, because the
+first handler must be the declaration:
+
+```ts
+router.post("/avatar", rai({ id: "users:web:avatar", name: "Upload an avatar" }), upload.single("file"), users.avatar());
+```
+
+<Aside type="note">
+`router.use()` middleware and `router.param()` callbacks run **before** the
+endpoint's `rai()`, so before the access check. Never load data that depends
+on authorization in a `router.param()` callback; do it in a handler after
+`rai()`.
+</Aside>
+
+Never mount middleware in `app.ts`, which stays three lines, and never try to
+reorder middleware by moving `app.use` calls between modules. Order comes from
+`tier` and `priority` in each module's `package.json`.
+
+## The request pipeline
+
+```txt
+module routers, in load order
+  sys modules   request id, helmet, cors, logging, rate limits,
+                body parsing, then auth resolving req.auth
+  app modules   feature routes, each gated by its rai()
+notFoundHandler 404 ROUTE_NOT_FOUND for anything unclaimed
+errorHandler    terminal: builds the error envelope
+```
+
+Routes mount in phase 11 of the [boot pipeline](/tulipes-js/concepts/boot-pipeline/),
+in the backend process only. The scan runs right after, once everything is
+mounted, and its findings are one aggregate report.
+
+## Checking your work
+
+```sh
+pnpm tulipes routes            # every endpoint and the roles that reach it
+pnpm tulipes routes --scope bo # one surface
+pnpm spec                      # regenerate the OpenAPI document and Postman collection
+```
+
+`tulipes routes` needs no database, secret or `.env` file. See
+[`tulipes routes`](/tulipes-js/reference/cli/routes/).
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Validation" href="/tulipes-js/guides/validation/" description="Zod schemas on rai(), coercion and the 422 envelope." />
+  <LinkCard title="Pagination and list queries" href="/tulipes-js/guides/pagination-and-list-queries/" description="req.page, total_items and the controlled query language." />
+  <LinkCard title="Roles and permissions" href="/tulipes-js/guides/roles-and-permissions/" description="Grant the ids your routes declare." />
+  <LinkCard title="Responses and errors" href="/tulipes-js/concepts/responses-and-errors/" description="res.respond(), HttpError and the envelope." />
+</CardGrid>

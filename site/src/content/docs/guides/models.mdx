@@ -1,0 +1,278 @@
+---
+title: Models
+description: Declare Mongoose models as ModelDef files, read them typed through ctx.models, seed and index them in bootstrap tasks and keep persisted field names snake_case.
+sidebar:
+  order: 8
+---
+
+import { Aside, LinkCard, CardGrid, Steps } from "@astrojs/starlight/components";
+
+A model file in Tulipes is a **declaration**, not a registration. It
+default-exports a name and a Mongoose schema; the `@tulipes/mongoose`
+provider compiles it on the boot's own connection and puts it in the model
+store, `ctx.models`. You never call `mongoose.model()`. After `tulipes sync`,
+`ctx.models.get("Greeting")` is typed from the schema, and a name no model file
+declares does not compile.
+
+## Declaring the provider
+
+Core installs no database driver. The app selects one in its root
+`package.json`, and lists `mongoose` as its own dependency (the provider's
+peer, so the app's schemas and the provider share one instance):
+
+```json title="package.json"
+{
+  "tulipes": {
+    "providers": {
+      "models": "@tulipes/mongoose"
+    }
+  },
+  "dependencies": {
+    "@tulipes/mongoose": "…",
+    "mongoose": "^8"
+  }
+}
+```
+
+The provider connects to `config.mongoose`, which `config/app.config.ts` wires
+from the core module's environment values:
+
+```ts title="config/app.config.ts"
+mongoose: env.core.mongodbUri
+  ? { uri: env.core.mongodbUri }
+  : {
+      uri: env.core.mongodbHost,
+      user: env.core.mongodbUsername,
+      pass: env.core.mongodbPassword,
+      dbName: env.core.mongodbDbName,
+    },
+```
+
+A full `MONGO_URI` wins; otherwise the host, credentials and database name are
+handed to the driver separately, so nothing is URL-encoded by hand. See
+[environment variables](/tulipes-js/guides/environment-variables/) and
+[@tulipes/mongoose](/tulipes-js/packages/mongoose/).
+
+A module with files in `models/` requires the provider automatically. A module
+that reads models but owns none says so in its own manifest:
+
+```json title="modules/reports/package.json"
+{ "tulipes": { "requires": ["models"] } }
+```
+
+## A model file
+
+```ts title="modules/hello/models/greeting.model.ts"
+import { Schema } from "mongoose";
+import type { ModelDef } from "@tulipes/mongoose";
+
+// Cross-module import by package name, never a relative path
+// out of the module — the dependency is declared in package.json.
+import { baseSchemaOptions } from "@app/core";
+
+const greetingSchema = new Schema(
+  {
+    name: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    message: { type: String, required: true },
+    times_used: { type: Number, default: 0, min: 0 },
+  },
+  baseSchemaOptions,
+);
+
+export default { name: "Greeting", schema: greetingSchema } satisfies ModelDef;
+```
+
+`ModelDef` has three fields:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `name` | yes | the model name, unique across the app; `ref` targets it |
+| `schema` | yes | a `Schema` from the app's `mongoose` instance |
+| `collection` | no | overrides Mongoose's automatic collection name |
+
+The config module's audit model names its collection in the schema options
+instead, which Mongoose honors the same way:
+
+```ts title="modules/config/models/config-audit.model.ts"
+}, { collection: "config_audit_events", strict: "throw" });
+```
+
+The file must be named `*.model.ts` and sit directly in `models/` (no
+subfolders). Run `pnpm sync` after adding one.
+
+## Reading a model
+
+Anywhere the context reaches, inside a handler, a job, a bootstrap or a script:
+
+```ts title="modules/hello/helpers/greetings.ts"
+import { requireModels, type Ctx } from "@tulipes/core/boot";
+
+export function findGreetings(ctx: Ctx, { skip = 0, limit = 20 } = {}) {
+  const Greeting = requireModels(ctx).get("Greeting");
+  return Promise.all([
+    Greeting.find().select("name message times_used -_id").skip(skip).limit(limit).lean(),
+    Greeting.countDocuments(),
+  ]);
+}
+```
+
+`requireModels(ctx)` returns `ctx.models`, or throws when the app declares no
+models provider. Some reference-app controllers write `this.#ctx.models!`
+instead, which is equivalent once the provider is declared.
+
+| Member | Does |
+|---|---|
+| `get("Greeting")` | the compiled model, typed from its file after `tulipes sync` |
+| `get<T>(name)` | a caller-side generic for a name computed at runtime |
+| `has(name)` | whether any module registered it |
+| `ownerOf(name)` | the module that registered it |
+| `names()` | every registered name |
+| `connection` | the boot's own Mongoose `Connection`, for scripts and tests |
+
+`get()` throws on a name nobody registered, listing what exists, so a typo in
+dynamic code fails at the call site instead of travelling as `undefined`:
+
+```txt
+Model "Greting" was never registered by any module (known: …, Greeting, User, …)
+```
+
+Reference other modules' models by name (`ref: "User"`), never by import:
+no import, no coupling.
+
+### How the types are generated
+
+`tulipes sync` reads each model file's `name` literal and writes into
+`types/tulipes.d.ts`:
+
+```ts title="types/tulipes.d.ts"
+interface KnownModels {
+  "Greeting": (typeof import("./../modules/hello/models/greeting.model.ts"))["default"];
+}
+```
+
+The compiler infers the document type from the schema, including methods and
+statics. The name must be a string literal in the file; a computed name stays
+reachable only through `get<T>(name)`.
+
+## Why never `mongoose.model()`
+
+`mongoose.model("Greeting", schema)` compiles the model on Mongoose's
+**default** connection, which the framework never opens. The model is not in
+the store, not owned by a module, not typed by `sync`, not closed at shutdown,
+and its queries wait on a connection that never comes until Mongoose's own
+buffering timeout fails them. The model file is the whole contract.
+
+## Field names are snake_case
+
+Every persisted field, and so every field that reaches a response body, is
+`snake_case`: `times_used`, `created_at`, `last_seen_at`, `password_hash`.
+camelCase is for TypeScript-only names: locals, parameters, helper shapes that
+never reach MongoDB or the wire.
+
+**Never declare `createdAt` or `updatedAt`.** `baseSchemaOptions` and the base
+plugin already give every model `created_at` and `updated_at`; a hand-declared
+camelCase field gives you both. See [Mongoose plugins](/tulipes-js/guides/mongoose-plugins/).
+
+<Aside type="caution">
+Renaming a persisted field is a data migration, not a rename: existing
+documents keep the old key and stop matching queries. Write a bootstrap task
+with `$rename` when you change a field on live data. The 0.5 rename from
+camelCase to snake_case is the one upgrade step that could lock users out if
+skipped; see [upgrading](/tulipes-js/production/upgrading/).
+</Aside>
+
+## Indexes
+
+Declare indexes in the schema, where a reader looks for them:
+
+```ts
+const invoiceSchema = new Schema(
+  {
+    customer: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    number: { type: String, required: true, unique: true },
+    status: { type: String, enum: ["draft", "paid"], default: "draft", index: true },
+  },
+  baseSchemaOptions,
+);
+invoiceSchema.index({ customer: 1, created_at: -1 });
+```
+
+Mongoose builds them when the model is compiled (its `autoIndex` default).
+When you want the build to happen at a known moment, or to fail the boot,
+call it from a bootstrap task: `await Invoice.createIndexes()`. Index what
+list endpoints filter and sort on; see
+[pagination and list queries](/tulipes-js/guides/pagination-and-list-queries/#performance-said-plainly).
+
+## Seeding in a bootstrap task
+
+Anything that must run after models exist and before traffic (seed rows,
+defaults, indexes, data migrations) goes in `bootstrap/*.bootstrap.ts`:
+
+```ts title="modules/hello/bootstrap/seed-greetings.bootstrap.ts"
+import type { DatabaseCtx } from "@tulipes/core/boot";
+
+export default async function seedGreetings({ models, mode }: DatabaseCtx): Promise<void> {
+  if (mode === "script") return; // a one-off script reads; it does not seed
+  const Greeting = models.get("Greeting");
+
+  try {
+    await Greeting.updateOne(
+      { name: "world" },
+      { $setOnInsert: { name: "world", message: "Hello, world!" } },
+      { upsert: true },
+    );
+  } catch (error) {
+    // Backend and worker start together — concurrent upserts on a unique
+    // index race by design, and the loser gets a duplicate-key error. The
+    // row exists either way, which is all this task wanted.
+    if ((error as { code?: number }).code !== 11000) throw error;
+  }
+}
+```
+
+Three rules come with it:
+
+- **Idempotent.** Bootstrap runs on every boot of every process (backend,
+  worker and script). Upsert with `$setOnInsert`; never blind-insert.
+- **Concurrency-tolerant.** Two processes run the same seed at the same time.
+  Catch duplicate-key error `11000` on a unique index and carry on.
+- **Mode-aware when it matters.** `ctx.mode` tells you the process; the hello
+  seed skips script mode so a maintenance script never writes.
+
+`DatabaseCtx` from `@tulipes/core/boot` types `models` as present, for a
+module that owns models. Bootstrap runs in boot phase 9, after models,
+settings, translations and the ACL, and never under inspection. A bootstrap
+that throws aborts the boot with `bootstrap task <file> threw: <message>`.
+
+## Under the hood
+
+```txt
+phase 3b  provider declarations checked against module requirements
+phase 5   @tulipes/mongoose connects (serverSelectionTimeoutMS 5000),
+          compiles every models/*.model.ts in module load order
+phase 9   bootstrap/*.bootstrap.ts: seeds, indexes
+shutdown  bootstrap cleanups, then the connection closes
+```
+
+Under inspection (`tulipes routes`, `tulipes spec`) nothing connects and
+`ctx.models` is a stub that throws on use, which is why controllers read
+models inside handlers.
+
+## Boot errors
+
+| Message | Cause |
+|---|---|
+| `[reports] requires capability "models" (has models/ files) but the app's package.json declares no provider for it — add "tulipes": { "providers": { "models": "<package>" } }` | no provider declared |
+| `provider "@tulipes/mongoose" is selected but config.mongoose.uri is not set — wire it in config/app.config.ts …` | no URI wired |
+| `database connection failed (config.mongoose.uri): …` | the database did not answer within 5 seconds |
+| `[hello] …/greeting.model.ts must default-export { name, schema } (a ModelDef)` | wrong export, or a schema from another `mongoose` copy |
+| `[billing] model "User" is already registered by module "users"` | model names are global |
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Mongoose plugins" href="/tulipes-js/guides/mongoose-plugins/" description="Timestamps, soft delete and the base schema options." />
+  <LinkCard title="Pagination and list queries" href="/tulipes-js/guides/pagination-and-list-queries/" description="Expose a model as a searchable list." />
+  <LinkCard title="Data and models tutorial" href="/tulipes-js/tutorial/data-and-models/" description="Add a model to the bookstore step by step." />
+  <LinkCard title="Scripts" href="/tulipes-js/guides/scripts/" description="Read and fix data in a one-off task." />
+</CardGrid>

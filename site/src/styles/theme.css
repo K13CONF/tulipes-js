@@ -1,0 +1,109 @@
+/* Tulipes theme: the brand's forest green (#253E34) and cream (#F4EFE6) over Starlight's tokens. */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+:root {
+  --sl-font: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, monospace;
+  --sl-content-width: 48rem;
+  --tl-radius: 0.75rem;
+}
+
+/* Dark (Starlight's default) */
+:root {
+  --sl-color-accent-low: #18352a;
+  --sl-color-accent: #5fae86;
+  --sl-color-accent-high: #c9ead8;
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #eceee9;
+  --sl-color-gray-2: #c4c9c2;
+  --sl-color-gray-3: #8f978e;
+  --sl-color-gray-4: #5b645b;
+  --sl-color-gray-5: #3a423a;
+  --sl-color-gray-6: #262c27;
+  --sl-color-black: #151a17;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #dcebe2;
+  --sl-color-accent: #2f6b51;
+  --sl-color-accent-high: #1c3a2d;
+  --sl-color-white: #17201b;
+  --sl-color-gray-1: #253e34;
+  --sl-color-gray-2: #3c4a42;
+  --sl-color-gray-3: #5f6b63;
+  --sl-color-gray-4: #8e968f;
+  --sl-color-gray-5: #c9cdc5;
+  --sl-color-gray-6: #ebe7dd;
+  --sl-color-gray-7: #f6f3ec;
+  --sl-color-black: #fbf9f5;
+}
+
+/* Headings: tighter, heavier, a modern docs rhythm */
+.sl-markdown-content :is(h1, h2, h3, h4) {
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+h1#_top {
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+
+/* Code frames and cards get the same soft radius */
+.expressive-code .frame,
+.sl-markdown-content .card,
+.sl-markdown-content .sl-link-card,
+.sl-markdown-content details {
+  border-radius: var(--tl-radius);
+}
+.sl-markdown-content .card,
+.sl-markdown-content .sl-link-card {
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.sl-markdown-content .sl-link-card:hover {
+  transform: translateY(-1px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sl-markdown-content .sl-link-card:hover { transform: none; }
+}
+
+/* Inline code: a quiet pill instead of a box */
+.sl-markdown-content :not(pre) > code {
+  border-radius: 0.35rem;
+  padding: 0.1em 0.35em;
+  background: var(--sl-color-accent-low);
+  color: var(--sl-color-accent-high);
+  border: none;
+}
+
+/* Splash hero: a soft brand glow behind the title */
+[data-has-hero] .hero {
+  position: relative;
+  isolation: isolate;
+  padding-block: clamp(2.5rem, 8vw, 5rem);
+}
+[data-has-hero] .hero::before {
+  content: "";
+  position: absolute;
+  inset: -20% -10% auto;
+  height: 120%;
+  z-index: -1;
+  background: radial-gradient(60% 50% at 50% 30%, color-mix(in srgb, var(--sl-color-accent) 28%, transparent), transparent 70%);
+  filter: blur(20px);
+}
+[data-has-hero] .hero h1 {
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  line-height: 1.05;
+  background: linear-gradient(120deg, var(--sl-color-white), var(--sl-color-accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Sidebar: section labels as small caps headers */
+.sidebar-content .large {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sl-color-gray-3);
+}

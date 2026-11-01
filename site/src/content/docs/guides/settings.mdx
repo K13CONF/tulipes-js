@@ -1,0 +1,414 @@
+---
+title: Settings
+description: Declare a module's runtime settings with defineConfig, read them live at ctx.config, react with onChange and store them in a file or MongoDB with history.
+sidebar:
+  order: 5
+---
+
+import { Aside, LinkCard, CardGrid, Tabs, TabItem } from "@astrojs/starlight/components";
+
+A setting is a value an operator may change while the app runs: a limit, a
+mode, a toggle, a lifetime. Each module declares its settings once, as a zod
+schema in `module.config.ts`. The boot loads them from a settings store,
+validates them, and keeps them live at `ctx.config.<module>`: a write from
+the console lands in every process without a restart. Secrets and the values
+the boot needs before the database answers are
+[environment variables](/tulipes-js/guides/environment-variables/) instead.
+
+## Declaring settings
+
+`module.config.ts` has exactly one export, the default `defineConfig(...)`:
+
+```ts title="modules/users/module.config.ts"
+import { defineConfig } from "@tulipes/core/config";
+import { z } from "zod/v4";
+
+export default defineConfig({
+  schema: z.object({
+    maxSessions: z.number().int().positive().default(5)
+      .describe("Max concurrent sessions per user; the oldest is evicted past it"),
+    signupMode: z.enum(["open", "invite", "closed"]).default("open")
+      .describe("Who can register: open to anyone, invite only, or nobody"),
+  }),
+});
+```
+
+Run `pnpm sync`, and the values are typed everywhere:
+
+```ts
+ctx.config.users.maxSessions;  // number
+ctx.config.users.signupMode;   // "open" | "invite" | "closed"
+```
+
+### Schema rules
+
+| Rule | Why | Boot error when broken |
+|---|---|---|
+| the schema is a `z.object({...})` | a namespace is an object | `module.config: schema must be a zod object (z.object({ ... }))` |
+| every field has a default | an operator is never asked for a value the process needs to boot | `module.config: field "maxSessions" has no default — every setting needs one` |
+| no field is a secret | secrets belong to the environment, never to a store a console can read | `module.config: field "apiKey" is marked secret — secrets are environment variables, never settings` |
+| no other export | initialization belongs to bootstrap files | `module.config exports "onReady": its only export is the default defineConfig({ schema }) — initialization is a bootstrap/*.bootstrap.ts file, …` |
+
+Describe every field with `.describe()`: the text reaches the console form,
+the generated types and the agent manifest. Put validation in the schema
+(`.min()`, `.regex()`, `.refine()`), never in `onChange`: the store persists
+before `onChange` runs, so a check there would leave a stored value the module
+cannot use.
+
+A setting name must not also be an environment value of the same module.
+The boot refuses
+`config.users.mode is both a setting (module.config.ts) and an environment value (package.json tulipes.env) — rename one`.
+
+### Nested objects
+
+A field may be an object with its own defaults. The security module groups its
+rate limits:
+
+```ts title="modules/security/module.config.ts"
+rateLimits: z.object({
+  windowMs: z.number().int().min(1).max(2_147_483_647).default(60_000)
+    .describe("Fixed request window in milliseconds"),
+  auth: z.number().int().min(1).max(2_147_483_647).default(20)
+    .describe("Combined login, register and password POST attempts per client per window"),
+  // …
+}).default({ namespace: "tulipes", windowMs: 60_000, auth: 20, session: 120, config: 60 })
+  .describe("Shared request quotas, counted in Redis so replicas agree"),
+```
+
+### Fields that need a restart
+
+Some values cannot be hot-applied, a listening port for instance. Tag them
+`.meta({ restart: true })`:
+
+```ts
+workers: z.number().int().positive().default(2).meta({ restart: true })
+  .describe("Applied on the next boot"),
+```
+
+A write to such a field persists, but this process keeps the value it booted
+with until it restarts. The write reports the field in `requiresRestart`, and
+the console answers with `meta.action: "restart_required"`.
+
+## Reading settings
+
+Read a setting where it is used, inside a handler, a job or a callback:
+
+```ts title="modules/users/controllers/web.users.controllers.ts"
+res.respond({
+  data: { module: "users", locale: req.locale, max_sessions: this.#ctx.config.users?.maxSessions },
+});
+```
+
+The namespace object is updated in place when a write lands, so holding
+`ctx.config.users` is safe. Copying a value out at boot is not:
+
+```ts del={2} ins={5}
+export default function usersRoutes(ctx: BackendCtx): Router {
+  const max = ctx.config.users.maxSessions;     // frozen at boot, misses every write
+  const router = Router();
+  router.get("/limits", ctx.rai({ id: "users:web:limits" }), (req, res) =>
+    res.respond({ data: { max: ctx.config.users.maxSessions } })); // live
+  return router;
+}
+```
+
+Under inspection (`tulipes routes`, `tulipes spec`) settings are each
+schema's defaults, held in memory, so reading a setting while building a
+router is allowed. Reading an environment value is not.
+
+## Reacting to a change: `onChange`
+
+Middleware built from a setting once does not see later writes. Either build
+it per request from the live value, or rebuild it in `onChange`. The security
+module does both:
+
+```ts title="modules/security/module.config.ts"
+export default defineConfig({
+  schema: z.object({ /* bodyLimit, corsOrigins, trustProxyCidrs, rateLimits… */ }),
+
+  /**
+   * Helmet, CORS and the body parser read the live values on every
+   * request; the rate limiter holds a Redis client and the proxy policy is
+   * an app setting, so those two are rebuilt here.
+   */
+  onChange(next, ctx) {
+    ctx.app?.set("trust proxy", trustedProxies(next.trustProxyCidrs));
+    rebuildRateLimits(ctx, next.rateLimits);
+  },
+});
+```
+
+`onChange(next, ctx)` receives the module's new values (typed from the schema)
+and the context. It runs after a write is stored and applied, **in every
+process that holds the app**: the one that wrote, and every other replica,
+worker or backend, when the store's watch delivers the change. `ctx.app` only
+exists in a backend process, hence the `?.`.
+
+When the write came from this process, an error thrown in `onChange` reaches
+the caller of `ctx.settings.set()`, after the value was stored. When it came
+from elsewhere, the error is logged:
+`[tulipes] settings "security" onChange failed: …`.
+
+## Writing settings: `ctx.settings`
+
+`ctx.config` is the read side. `ctx.settings` is the write and inspection
+side, for a console, a script or a test:
+
+| Method | Returns |
+|---|---|
+| `namespaces()` | every module that declares settings |
+| `describe(ns)` | `{ module, schema, values, stored, restart, pendingRestart }`: the JSON Schema, what this process runs with, what the store holds (`values`, `version`, `updated_at`, `updated_by`) |
+| `describeEnv(ns)` | the module's environment values: name, variable, type, source, and the value unless it is a secret |
+| `set(ns, patch, actor)` | validates the patch over the stored values, persists, applies, runs `onChange`; returns `{ values, version, requiresRestart }` |
+| `status()` | `{ label, ready }` of the store, as the banner shows it |
+
+```ts
+const written = await ctx.settings.set("users", { maxSessions: 10 }, { id: "ops", label: "ops runbook" });
+// { values: { maxSessions: 10, signupMode: "open" }, version: 4, requiresRestart: [] }
+```
+
+`set()` throws two errors from `@tulipes/core/config`:
+
+- `SettingsValidationError` when the schema refuses the result. It carries
+  `namespace` and `issues` (`path`, `message`), in the same shape request
+  validation uses.
+- `SettingsConflictError` when another writer stored a newer version in
+  between, with `current` and `expectedVersion`:
+  `settings "users": version 3 is stale, the store holds version 4`.
+
+An unknown namespace throws
+`no module declares settings "billing" (known: core, hello, security, users, …)`.
+
+## Where settings are stored
+
+The app's root `package.json` selects the store. Both stores version every
+namespace and refuse a write whose version is stale. Neither validates: the
+module's schema does, in every process, before a value is applied.
+
+<Tabs>
+<TabItem label="File store (default)">
+
+With no `settings` provider declared, core keeps settings in one JSON file
+per `APP_ENV`:
+
+```txt
+config/settings.development.json
+config/settings.production.json
+```
+
+```json title="config/settings.development.json"
+{
+  "users": {
+    "values": { "maxSessions": 5, "signupMode": "open" },
+    "version": 1,
+    "updated_at": "2026-10-31T09:12:44.120Z",
+    "updated_by": { "id": "system", "label": "first boot" }
+  }
+}
+```
+
+Writes replace the file atomically (a temporary file renamed into place).
+The process watches the directory and polls every two seconds, so an edit by
+hand, with a higher `version`, lands without a restart. There is no history.
+This store suits the minimal preset and local development; a deployment
+with several replicas wants the Mongo store.
+
+</TabItem>
+<TabItem label="MongoDB store">
+
+```json title="package.json"
+{
+  "tulipes": {
+    "providers": {
+      "models": "@tulipes/mongoose",
+      "settings": "@tulipes/mongoose/settings"
+    }
+  }
+}
+```
+
+Every namespace is one document in the `settings` collection:
+
+```json
+{ "_id": "users", "values": { "maxSessions": 5, "signupMode": "open" }, "version": 1, "updated_at": "…", "updated_by": { "id": "system", "label": "first boot" } }
+```
+
+- A write is a `findOneAndUpdate` on `{ _id, version }`, so two operators
+  cannot overwrite each other.
+- The replaced document is copied to `settings_history`: every version is
+  kept.
+- Other processes see a change through a change stream on a replica set, and
+  by polling every two seconds on a standalone server.
+- The store shares the models provider's connection when both are
+  `@tulipes/mongoose`, and opens its own from `config.mongoose` otherwise.
+
+</TabItem>
+</Tabs>
+
+| | File store | `@tulipes/mongoose/settings` |
+|---|---|---|
+| location | `config/settings.<APP_ENV>.json` | `settings` collection |
+| versions, stale writes refused | yes | yes |
+| history | no | `settings_history` |
+| other processes | file watch plus a 2 s poll, same machine | change stream on a replica set, else a 2 s poll |
+| replicas on several hosts | no | yes |
+
+### First boot, and invalid stored values
+
+In boot phase 6 every declared namespace is read. A namespace never written is
+seeded with the schema's defaults as version 1, by the actor
+`{ id: "system", label: "first boot" }`. If two processes seed at once, the
+loser reads the winner's values.
+
+A stored value the schema refuses stops the boot, naming the field and the
+store:
+
+```txt
+TulipesBootError: Boot aborted during "settings" — 1 issue(s):
+  ✖ [users] stored setting "users.maxSessions": … (fix it in the store, or file config/settings.development.json)
+```
+
+A value arriving later through the watch that the schema refuses is logged
+and ignored, never applied:
+`[tulipes] settings "users" version 5 ignored: maxSessions …`.
+
+## The console: the `config` module
+
+The production preset's `config` module serves and edits settings over HTTP,
+under `/api/v1/config`:
+
+| Endpoint | RAI | Granted to |
+|---|---|---|
+| `GET /config` | `config:bo:read` | `admin`, `sysadmin` |
+| `GET /config/:module` | `config:bo:describe` | `admin`, `sysadmin` |
+| `PATCH /config/:module` | `config:bo:write` | `sysadmin` only |
+
+`GET /config` describes every module in load order: its manifest, its
+environment values (name, variable, type, source, never a secret's value),
+its settings with their schema, live values and stored version, and its
+endpoints with the roles that reach them.
+
+`PATCH /config/:module` takes a patch and, optionally, the version you read:
+
+```json
+{ "values": { "maxSessions": 10 }, "version": 3 }
+```
+
+| Answer | When |
+|---|---|
+| 200 with `{ module, values, version, requires_restart }` | written; `meta.action: "restart_required"` when a restart field changed |
+| 404 `NO_SUCH_MODULE` | no module declares settings by that name |
+| 409 `STALE_VERSION` | `version` is not the stored one, or another write won |
+| 422 with one entry per field | the module's schema refused the result |
+| 503 `AUDIT_UNAVAILABLE` | the audit record could not be acknowledged, so nothing changed |
+
+### The audit
+
+Before any write, the controller records an audit event in the
+`config_audit_events` collection and waits for a majority acknowledgment:
+
+```ts title="modules/config/helpers/audit.ts"
+await new Audit({
+  action: "settings.change_requested",
+  module: change.module,
+  keys: change.keys,
+  version: change.version,
+  actor: String(user._id),
+  actor_role: user.role,
+  ip: req.ip,
+  app_env: ctx.appEnv,
+  mode: ctx.mode,
+  recorded_at: new Date(),
+}).save({ w: "majority", j: true, wtimeout: 5000 });
+```
+
+Only identifiers enter the record (the namespace, the field names, the version
+the caller read), never values. If the audit fails the write does not happen:
+a change nobody can account for is worse than one that did not happen.
+
+The three endpoints are also tools in the agent manifest, so an agent with
+`sysadmin` reconfigures the app through the same door, with the same audit.
+
+## The `settings` module: the log stream
+
+The `settings` module is what is left of the 0.10 console: a live view of the
+logs, which no store can provide.
+
+| Endpoint | RAI | Query |
+|---|---|---|
+| `GET /api/v1/settings/logs/stream` | `settings:bo:logs` | `process` (`backend` or `worker`), `level`, `tail` (0 to 1,000) |
+
+It is Server-Sent Events over the files the core logger writes, `sysadmin`
+only (the settings module grants `settings:*` to that role alone). The
+authority behind an open stream is re-checked while it runs, and the stream
+ends on logout, password or role change, session end, account deletion, after
+a bounded duration and byte count, and on `ctx.signal` at shutdown. Its
+bootstrap wires that last part:
+
+```ts title="modules/settings/bootstrap/log-streams.bootstrap.ts"
+export default function logStreams(ctx: RuntimeCtx): void {
+  ctx.signal.addEventListener("abort", () => configuredLogStreams(ctx).drain(), { once: true });
+}
+```
+
+It refuses when `LOG_FILE` is off. See [logging](/tulipes-js/guides/logging/)
+for the files it reads.
+
+## `tulipes config:check`
+
+A deploy preflight for the store, the way `env:check` is one for the
+environment. It boots in script mode, which loads and validates every
+namespace from the declared store, prints what each module runs with, and
+exits:
+
+```sh
+$ pnpm tulipes config:check
+APP_ENV=development — 6 settings namespace(s) in file config/settings.development.json:
+  …
+  ✔ users  v1  2026-10-31T09:12:44.120Z  by first boot
+      maxSessions = 5
+      signupMode = "open"
+```
+
+A field changed in the store but not yet applied by this process shows
+`(restart pending)`. Because it boots, it needs the app's services. See
+[`tulipes config:check`](/tulipes-js/reference/cli/config-check/).
+
+## `tulipes config:import`
+
+Only for an upgrade from 0.10. `tulipes migrate 0.11` turned some environment
+variables into settings and recorded the mapping in
+`config/migration-0.11.json`. `config:import` reads those variables from
+`process.env` and `.envs/.env.<APP_ENV>`, validates them with each module's
+schema, and writes them to the store with its own versioning, so the upgraded
+app boots with what it ran with:
+
+```sh
+pnpm tulipes config:import --dry-run
+pnpm tulipes config:import
+```
+
+It writes to the file store, or to the Mongo store when the app declares
+`@tulipes/mongoose/settings` (then it needs `MONGO_URI`). Without the mapping
+file it stops and tells you to run `tulipes migrate 0.11` first, since that
+command records which variables became settings.
+See [`tulipes config:import`](/tulipes-js/reference/cli/config-import/).
+
+## Common mistakes
+
+- **A secret in a settings schema.** Use an environment variable.
+- **A required setting.** There is none: give it a default, and let the
+  operator change it.
+- **Capturing a value at boot.** Read `ctx.config.<module>` when you use it.
+- **Validating in `onChange`.** The value is already stored. Use the schema.
+- **Initializing in `module.config.ts`.** Open clients, seed rows and ensure
+  indexes in `bootstrap/*.bootstrap.ts`, which may return its cleanup.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Environment variables" href="/tulipes-js/guides/environment-variables/" description="What belongs in the environment instead." />
+  <LinkCard title="Configuration" href="/tulipes-js/concepts/configuration/" description="The three configuration layers and when each is read." />
+  <LinkCard title="Configuration reference" href="/tulipes-js/reference/topics/configuration/" description="Every settings key the reference app declares." />
+  <LinkCard title="@tulipes/mongoose" href="/tulipes-js/packages/mongoose/" description="The models provider and the Mongo settings store." />
+</CardGrid>

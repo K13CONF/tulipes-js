@@ -29,6 +29,16 @@ for (const file of pages) {
   if (title && title.length > 60) problems.push(`${page}: title is ${title.length} characters (max 60)`);
 }
 
+// Every internal link must land on a built file (the base path maps to dist/).
+const broken = new Set();
+for (const file of pages) {
+  for (const [, href] of readFileSync(file, "utf8").matchAll(/href="(\/tulipes-js\/[^"#?]*)/g)) {
+    const path = join(dist, decodeURI(href.slice("/tulipes-js/".length)));
+    if (!existsSync(path) && !existsSync(join(path, "index.html"))) broken.add(`${relative(dist, file)} → ${href}`);
+  }
+}
+for (const link of broken) problems.push(`broken link: ${link}`);
+
 if (!existsSync(join(dist, "sitemap-index.xml"))) problems.push("sitemap-index.xml missing");
 if (!existsSync(join(dist, "404.html"))) problems.push("404.html missing");
 

@@ -1,0 +1,296 @@
+---
+title: Validating requests
+description: Validate params, query and body with zod 4 schemas on ctx.rai(), translate error messages, read the 422 envelope and report custom checks with ValidationError.
+sidebar:
+  order: 2
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Request input in Tulipes is validated by declaring a zod schema on the route's
+`rai()`, not by writing `if` checks in the handler. The same declaration feeds
+`tulipes spec`, so the generated OpenAPI document and Postman collection can
+never describe a shape the endpoint would reject. A rejected request answers
+with a 422 in the standard envelope, with one entry per bad field, in the
+caller's language.
+
+## A minimal example
+
+```ts title="modules/users/schemas/users.schemas.ts"
+import { z } from "zod/v4";
+
+export const createBody = z.object({
+  // The message doubles as an i18n key: the error handler translates it
+  // in this module's namespace, and falls back to the text as written.
+  email: z.email("emailInvalid"),
+});
+```
+
+```ts title="modules/users/routes/bo.users.routes.ts"
+import { createBody, emailParam } from "../schemas/users.schemas.ts";
+
+router.post("/", rai({
+    id: "users:bo:create",
+    status: 201,
+    name: "Create a user",
+    body: createBody,
+  }), users.create());
+```
+
+A request with `{"email": "nope"}` never reaches `users.create()`. It gets:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [
+    { "field": "email", "message": "Must be a valid email address", "code": "INVALID_FORMAT" }
+  ],
+  "meta": {}
+}
+```
+
+with HTTP status 422. With `?lang=fr` the message is
+`"Doit être une adresse email valide"`, read from `modules/users/i18n/fr.json`.
+
+## Which zod
+
+Use zod 4. The reference app depends on `zod@^4.6.6` and imports from
+`zod/v4`, which zod 4 serves as an alias of its main entry:
+
+```ts
+import { z } from "zod/v4";
+```
+
+Core does not import your zod. It types route schemas structurally: anything
+with a zod-style `safeParse()` validates, so `zod/v4` and a module's own
+`zod@4` copy both work, side by side. `@tulipes/spec` is stricter, because it
+turns schemas into JSON Schema with zod 4's `toJSONSchema`. A schema it cannot
+convert still validates, but its shape is left out of the document and
+`tulipes spec` warns about it.
+
+<Aside type="caution">
+Keep zod at 4.6.6 or later. Earlier releases, including the `zod/v4` path of
+zod 3.25, can exhaust memory validating an oversized constrained collection
+(GHSA-mrhx-c7xc-m3w5). Set `"zod": "^4.6.6"` in the root `package.json` and in
+every module manifest that lists zod.
+</Aside>
+
+## What gets validated
+
+`RouteInfo` has three validated segments and one documented one:
+
+| Field | Validated against | Notes |
+|---|---|---|
+| `params` | `req.params` | path parameters, always strings before parsing |
+| `query` | `req.query` | strings, or arrays for repeated keys; Express 5's simple parser does not nest |
+| `body` | `req.body` | whatever the body parser produced |
+| `returns` | nothing | describes `data` in the generated documents only |
+
+The order of events inside `rai()` is fixed:
+
+```txt
+access check ─▶ params ─▶ query ─▶ body ─▶ throw once, or next()
+```
+
+- **After the access check.** A caller who may not reach the route gets the
+  401 or 403 and never learns which fields are wrong.
+- **All three segments, then one answer.** A request wrong in the query and
+  in the body gets both lists of issues in one response.
+- **The parsed value replaces the input.** Defaults, transforms and coercion
+  are what your handler reads. Express 5 exposes `req.query` through a getter,
+  so core redefines it on the request rather than assigning it.
+
+A body only exists once a JSON parser ran. In the production preset that is
+the security module's `express.json()`, mounted for every request. Without a
+parser, or for a request with no JSON content type, `req.body` is `undefined`
+and a `body` schema reports one issue with `field: "body"` and
+`code: "INVALID_TYPE"`.
+
+## Coercion
+
+Query strings and path parameters arrive as strings. Use `z.coerce` to turn
+them into the type you mean; the handler then reads a number:
+
+```ts title="modules/users/schemas/users.schemas.ts"
+export const listQuery = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  per_page: z.coerce.number().int().min(1).max(100).optional(),
+});
+```
+
+From core's own test suite, a schema `params: z.object({ id: z.coerce.number().int().positive() })`
+turns `/items/12` into `req.params.id === 12`, and `/items/wrong?count=wrong`
+into two issues:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [
+    { "field": "id", "message": "…", "code": "INVALID_TYPE" },
+    { "field": "count", "message": "…", "code": "INVALID_TYPE" }
+  ],
+  "meta": {}
+}
+```
+
+Booleans need care: `z.coerce.boolean()` turns the string `"false"` into
+`true`, because any non-empty string is truthy. For a flag in a query string,
+use `z.enum(["true", "false"])` and compare, as the list-query grammar does
+for `?tree`.
+
+## Reading the error envelope
+
+Each zod issue becomes one entry in `errors`:
+
+| Envelope field | Comes from |
+|---|---|
+| `field` | the issue path joined with dots: `address.city`, `filter.0.2`; the segment name (`body`, `query`, `params`) when the path is empty |
+| `message` | the issue message, translated when it is a key in the module's i18n file, as written otherwise |
+| `code` | zod's issue code, uppercased: `INVALID_TYPE`, `INVALID_FORMAT`, `TOO_SMALL`, `TOO_BIG`, `CUSTOM` |
+
+Note that `field` does not carry the segment: a bad `:id` is `"id"`, not
+`"params.id"`. Clients should branch on `code`, which is never translated,
+and show `message`, which always is.
+
+## Error messages as i18n keys
+
+Every zod check accepts a message. Give it a key from the module's i18n file:
+
+```ts
+z.object({
+  email: z.email("emailInvalid"),
+  name: z.string().min(1, "nameRequired"),
+  age: z.number().int().min(18, { error: "mustBeAdult" }),
+});
+```
+
+```json title="modules/users/i18n/en.json"
+{
+  "emailInvalid": "Must be a valid email address"
+}
+```
+
+The terminal error handler asks `req.hasTranslation(message)` first. If the
+declaring module's namespace has that key in the negotiated locale (or the
+default locale it falls back to), the message is translated. If not, the
+message is used exactly as written. A plain English sentence works too, it
+just stays English. Without a message, zod's own default text is used.
+
+The namespace is the module that declared the route, because `rai()` recorded
+it. Write the key into **that** module's `i18n/<locale>.json`. See
+[translations](/tulipes-js/guides/translations/).
+
+## Custom checks: refine in the schema
+
+A rule zod can express belongs in the schema, so the spec and the 422 come
+for free. `.refine()` with a `path` attributes a cross-field rule to a field:
+
+```ts title="modules/security/module.config.ts"
+z.object({ /* … */ }).refine((values) => { try { corsOptions(values); return true; } catch { return false; } }, {
+  path: ["corsCredentials"],
+  message: "corsOrigins \"*\" cannot be combined with corsCredentials — list the origins explicitly",
+});
+```
+
+That example is a settings schema, but route schemas work the same way.
+
+## Custom checks: `ValidationError` in the handler
+
+Some checks need the database: an email already taken, a reference that does
+not exist. Throw `ValidationError` from `@tulipes/core/http` with every
+problem you found, so the client fixes them in one round trip:
+
+```ts
+import { ValidationError } from "@tulipes/core/http";
+
+const issues = [];
+if (await User.exists({ email })) issues.push({ field: "email", message: "emailTaken" });
+if (!(await Team.exists({ _id: team }))) issues.push({ field: "team", message: "noSuchTeam" });
+if (issues.length) throw new ValidationError(issues);
+```
+
+`ValidationError` always answers 422. Each issue is `{ field, message, code? }`,
+where `field` may be `null` for a problem that belongs to no single input.
+For one field, `HttpError` with a `field` option is shorter:
+
+```ts title="modules/users/controllers/bo.users.controllers.ts"
+if (!email) throw new HttpError(422, "emailRequired", { field: "email" });
+```
+
+The config module converts a settings write the schema refused into a
+`ValidationError`, mapping each issue path to a field:
+
+```ts title="modules/config/controllers/bo.config.controllers.ts"
+if (error instanceof SettingsValidationError) {
+  throw new ValidationError(error.issues.map((issue) => ({ field: issue.path.map(String).join(".") || "values", message: issue.message })));
+}
+```
+
+### How a custom issue gets its code
+
+| Issue | `code` in the response |
+|---|---|
+| has its own `code` | that code |
+| `message` is a key the module translates | derived from the key: `emailTaken` → `EMAIL_TAKEN`, `session.notFound` → `SESSION_NOT_FOUND` |
+| `message` is not a known key | `VALIDATION_FAILED` |
+
+<Aside type="caution">
+A key you forgot to add to `i18n/en.json` is not translated, so it is sent as
+the raw key and the code falls back to `VALIDATION_FAILED`. Add the key to the
+default locale before you rely on the derived code, or pass `code` yourself.
+</Aside>
+
+## Sharing schemas
+
+When a routes file starts to sprawl, move its schemas to
+`modules/<module>/schemas/<module>.schemas.ts` and import them. The users,
+auth, config and settings modules all do. Export one constant per shape and
+reuse it across routes:
+
+```ts title="modules/users/schemas/users.schemas.ts"
+export const emailParam = z.object({
+  email: z.email("emailInvalid"),
+});
+
+export const userShape = z.object({
+  email: z.string(),
+  role: z.string(),
+});
+```
+
+```ts title="modules/users/routes/bo.users.routes.ts"
+router.delete("/:email", rai({
+    id: "users:bo:delete",
+    name: "Soft-delete a user",
+    params: emailParam,
+  }), users.softDelete());
+```
+
+A schema another module needs is exported from the owning module's
+`lib/index.ts` and imported by package name (`@app/users`), never by a
+relative path out of the module.
+
+## Common mistakes
+
+| Symptom | Cause |
+|---|---|
+| `req.query.page` is a string | the schema used `z.number()`, which rejects strings; use `z.coerce.number()` |
+| every POST answers 422 with `field: "body"` | no JSON body parser ran, or the client sent no `Content-Type: application/json` |
+| the message comes back as `emailInvalid` | the key is missing from the declaring module's default-locale file |
+| a field you sent is gone in the handler | `z.object()` strips unknown keys; declare the field |
+| the spec shows no body for a route | the schema is not a zod 4 schema; `tulipes spec` prints which one |
+| validation errors leak a route's shape | they cannot: validation runs after the access check |
+
+A schema is not authorization. `rai({ id })` decides who may call the route;
+the schema only shapes what they send.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Pagination and list queries" href="/tulipes-js/guides/pagination-and-list-queries/" description="listQuery(policy): a validated query language for list endpoints." />
+  <LinkCard title="Translations" href="/tulipes-js/guides/translations/" description="Where the message keys live and how a locale is chosen." />
+  <LinkCard title="OpenAPI and Postman" href="/tulipes-js/guides/openapi-and-postman/" description="Generate documents from the same schemas." />
+  <LinkCard title="Error codes" href="/tulipes-js/reference/topics/error-codes/" description="Every code a client can branch on." />
+</CardGrid>

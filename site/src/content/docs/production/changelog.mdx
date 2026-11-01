@@ -1,0 +1,111 @@
+---
+title: Release history
+description: A readable summary of every Tulipes release line from 0.1 to 0.13, what each one added or broke, with links to the full core changelog on GitHub.
+sidebar:
+  order: 7
+---
+
+import { Aside, Badge, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+This is the story of the framework one minor line at a time: what each line added, what it broke, and which packages shipped with it. It is a summary. The full record, entry by entry, is the [core CHANGELOG on GitHub](https://github.com/K13CONF/tulipes-js/blob/master/packages/core/CHANGELOG.md), and the upgrade steps are on [upgrading](/tulipes-js/production/upgrading/).
+
+<Aside type="note">
+Packing pins every package's core dependency to core's version, so each core release republishes all the packages, often with no source change of their own.
+</Aside>
+
+## 0.13 <Badge text="current" variant="success" />
+
+**0.13.0 (2026-10-15)** went straight to `latest` with no published candidate. It is additive over 0.12.
+
+- **Credential scopes.** A credential can be limited to grant patterns. `rai()` and `ctx.agent.invoke()` allow only when the role grants the permission and a scope covers it; a scope refusal is 403 `OUT_OF_SCOPE`. `scopesCover()` in `@tulipes/core/acl`.
+- **`@tulipes/mcp` 0.2.0.** `serveMcp()` serves the app's agent actions as an MCP server, over stdio or Streamable HTTP on its own port, to the caller `defineMcp({ identify })` resolves. The HTTP transport refuses DNS-rebinding `Host` headers on a loopback bind and bodies over 1 MiB.
+- **API tokens** in the reference app's auth module: named, scoped, optionally expiring, hashed at rest, shown once.
+- **The `agents` module** in the production preset: Claude inside the app as a queue-driven harness acting as the person who started the run. Experimental.
+- `tulipes migrate 0.13` adds the MCP process to an app on 0.12.
+
+**0.13.1 (2026-10-17)**: the new brand and documentation fixes; no API change.
+
+**0.13.2 (2026-10-31)**: no core API change.
+
+- Security: new apps and the reference app depend on `zod ^4.6.6` (GHSA-mrhx-c7xc-m3w5). Core accepts `^3.25 || ^4.6.6`.
+- **`@tulipes/bullmq` 0.3.0** moves to BullMQ 6 and is breaking: `ctx.queues.add()` no longer takes `repeat`; recurring jobs use `ctx.queues.schedule()`.
+- **List queries** in the production preset's core module: `listQuery(policy)` for `rai({ query })` parses `search`, `sort`, `filter`, `fields`, `resolve`, `group` and `tree` against an allowlist, refusing anything else with a 422. See the [list-query grammar](/tulipes-js/reference/topics/list-query-grammar/).
+
+## 0.12
+
+**0.12.0 (2026-10-14)**, after two candidates. The last breaking line.
+
+- **Scoped RAI ids.** An id is `module:scope:resource[:extra]`; an app on 0.11 refuses to boot until `tulipes migrate 0.12` rewrites its ids. Prefix grants reach every depth.
+- **The environment in the config.** `ctx.Environment` is gone; environment values are read as `ctx.config.<module>.<name>`, read-only and non-enumerable, beside the module's settings.
+- **Time zones.** An optional `config.timezone`, `req.timezone`, `req.time` and `ctx.time`.
+- Fixes found upgrading a real app: `tulipes spec` with `publicDomain`, settings schemas from a module's own zod 4, and a cache ready at boot.
+
+## 0.11
+
+**0.11.0 (2026-10-08)**, after rc.1 and rc.2. Every entry was breaking for a 0.10 app, and `tulipes migrate 0.11` carries most of it.
+
+- **Production without tsx**: Node 24 strips types; `node app.ts`, `node --watch` for `tulipes dev`, PM2 runs node directly.
+- **Settings**: `module.config.ts` declares a zod schema with `defineConfig()`; values live in a store (a file, or MongoDB through `@tulipes/mongoose/settings`), are edited live and applied in every replica.
+- **Bootstrap files** replace lifecycle hooks; `ctx.signal` announces shutdown.
+- **Plain routes** and a three-file module root; `tulipes routes` and `tulipes spec` always inspect.
+- **pnpm** replaces yarn 4.
+- **`@tulipes/testing` 0.1.0**: `useTestApp()` boots the app once per test file.
+- The first **`@tulipes/mcp`** and the agent surface, experimental.
+- `tulipes migrate 0.11` and `tulipes config:import`.
+- The reference app retired the restart endpoint and the variable and translation editors; the `config` console replaced them.
+
+## 0.10
+
+**0.10.0 (2026-09-12)**, after three candidates; **0.10.1** the same day, a republish with no runtime change.
+
+- **The provider seam.** Mongoose, BullMQ and Socket.IO moved out of core into `@tulipes/mongoose`, `@tulipes/bullmq` and `@tulipes/socket.io`, declared in the root `package.json`. Core installed 7.6 MB against 53 MB for 0.9.
+- **`@tulipes/cli`** took over the `tulipes` command.
+- A replica set's multi-host `MONGO_URI` is accepted; the Redis cache degrades instead of failing requests.
+
+## 0.9
+
+**0.9.0-rc.1 to rc.3 (2026-09-08 to 09-11)**, candidates only.
+
+- A minimal default for `tulipes init`, with `--preset production` for the full app.
+- Node `>=24.0.0 <25`, the MIT license, PM2 7.0.4.
+- The production security work S08a to S08m: credential-bound sessions, strict refresh reuse revocation, proxy trust, shared rate limits, durable audits, bounded log streaming. See the [security model](/tulipes-js/production/security-model/).
+- rc.1 was blocked by its audit gate and never uploaded; rc.2 replaced it.
+
+## 0.8
+
+**0.8.0 (2026-09-07)**: reliability contracts. `rai()` must be first in each method chain; unsupported paths fail the boot; `ctx.routes.mount()` records nested prefixes; shutdown drains work before hooks within a deadline; failed boots release what they acquired; phase-specific context types (`ConfigCtx`, `BackendCtx`, `DatabaseCtx`, `RuntimeCtx`) and `requireModels()`/`requireQueues()`.
+
+## 0.7
+
+**0.7.0 and 0.7.1 (2026-09-06)**: `ctx.modules`, the settings module, and `.envs/` no longer committed by the scaffold (the committed contract is `.env.example`).
+
+## 0.6
+
+**0.6.0 and 0.6.1 (2026-09-06)**: request validation on the RAI (`rai({ body, query, params })` with zod schemas and translated errors), `tulipes spec` for OpenAPI 3.1 and Postman, and a fix for commands run from a global CLI install.
+
+## 0.5
+
+**0.5.0 to 0.5.2 (2026-09-06)**: the response envelope `{ success, data, errors, meta }` and `res.respond()`, `HttpError` with an i18n key and an options object, and snake_case persisted fields. **The field rename needs a data migration**; see [upgrading](/tulipes-js/production/upgrading/). 0.5.2 added the CHANGELOG and MIGRATING files themselves.
+
+## 0.4
+
+**0.4.0 (2026-09-05)**: `req.auth` with `{ isAuthenticated, user, session }` replaces `req.principal`.
+
+## 0.3
+
+**0.3.0 (2026-09-05)**: the RAI. Every route declares `rai({ id })`, which is its permission; a route without one aborts the boot. i18n arrived in the same release.
+
+## 0.2
+
+**0.2.0 (2026-09-02)**: a JWT auth module in the scaffold and the `guest` role.
+
+## 0.1
+
+**0.1.x (2026-08-29 to 08-31)**: the initial series. The boot pipeline and its aggregate report, environment contracts, the module graph, config with generated types, the ACL, models, queues, sockets, the three process modes, and the first CLI commands.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Upgrading" href="/tulipes-js/production/upgrading/" description="The steps for each line, and the support policy." />
+  <LinkCard title="Packages" href="/tulipes-js/packages/core/" description="What each npm package adds." />
+</CardGrid>

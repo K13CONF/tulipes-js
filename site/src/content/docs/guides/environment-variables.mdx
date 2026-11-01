@@ -1,0 +1,371 @@
+---
+title: Environment variables
+description: Declare environment variables in a module's package.json, resolve them from the process and .envs files, keep secrets out of listings and check them in CI.
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard, CardGrid, Steps } from "@astrojs/starlight/components";
+
+A Tulipes app never reads `process.env` directly. Each module declares the
+variables it needs under `tulipes.env` in its own `package.json`, and the
+boot resolves, coerces and validates all of them before any module code
+runs. The values land at `ctx.config.<module>.<name>`, typed by
+`tulipes sync`, read-only and hidden from every listing. Ten missing
+variables are one boot failure listing ten problems.
+
+## Environment value or setting?
+
+Keep the environment small. A value belongs in the environment only if:
+
+- the process needs it **before the database answers**: a connection string,
+  the port, where logs go; or
+- it is a **secret**: an API key, a signing key, a password.
+
+Everything else (limits, modes, toggles, lifetimes) is a
+[setting](/tulipes-js/guides/settings/), declared in `module.config.ts` and
+editable at runtime. A value shared by several modules and the same everywhere
+(pagination bounds, locales) goes in `config/app.config.ts`. See
+[configuration](/tulipes-js/concepts/configuration/) for the three layers side
+by side.
+
+## Declaring a variable
+
+Declare it in the `package.json` of the module that owns it, keyed by the
+**config name** you will read it as. `key` names the variable the deployment
+sets:
+
+```json title="modules/core/package.json"
+{
+  "name": "@app/core",
+  "tulipes": {
+    "tier": "sys",
+    "priority": 0,
+    "env": {
+      "port": {
+        "key": "PORT",
+        "type": "number",
+        "group": "http",
+        "description": "HTTP port the backend process listens on",
+        "default": 3000
+      },
+      "redisUrl": {
+        "key": "REDIS_URL",
+        "type": "url",
+        "group": "redis",
+        "required": true,
+        "description": "Redis connection string (queues, cache, rate limits)"
+      }
+    }
+  }
+}
+```
+
+Run `pnpm sync`, and read it where it is used:
+
+```ts
+ctx.config.core.port;      // number
+ctx.config.core.redisUrl;  // string
+```
+
+The declaration is plain JSON on purpose: `tulipes sync`, `tulipes env:check`
+and the console read a module's contract without executing its code.
+
+## Every field
+
+| Field | Required | Rule |
+|---|---|---|
+| the object key | yes | the config name, camelCase (`mongodbUri`); not `then`, `toJSON`, `constructor`, `prototype`, `valueOf` or `toString` |
+| `key` | yes | the variable name, UPPER_SNAKE_CASE (`MONGO_URI`); one owner across the whole app |
+| `type` | yes | `string`, `number`, `boolean`, `enum`, `url` or `secret` |
+| `description` | yes | non-empty; shown in `.env.example`, the generated types and the console |
+| `enum` | with `type: "enum"` | the allowed values; only valid with that type |
+| `required` | no | no value anywhere aborts the boot; cannot be combined with `default` |
+| `default` | no | used when nothing else supplies a value; never a real credential |
+| `group` | no | a free-form label grouping variables in `.env.example` |
+
+### `type`, with an example of each
+
+```json
+{
+  "port":        { "key": "PORT", "type": "number", "default": 3000, "description": "HTTP port" },
+  "logConsole":  { "key": "LOG_CONSOLE", "type": "boolean", "default": true, "description": "Pretty logs on stdout" },
+  "logLevel":    { "key": "LOG_LEVEL", "type": "enum", "enum": ["fatal", "error", "warn", "info", "debug", "trace"], "default": "info", "description": "Lowest level that reaches any destination" },
+  "mongodbUri":  { "key": "MONGO_URI", "type": "url", "description": "Full MongoDB connection string" },
+  "logDir":      { "key": "LOG_DIR", "type": "string", "default": "logs", "description": "Directory for log files" },
+  "jwtAccessSecret": { "key": "JWT_ACCESS_SECRET", "type": "secret", "required": true, "description": "Signing key for short-lived access tokens" }
+}
+```
+
+| Type | Accepts | TypeScript type |
+|---|---|---|
+| `string` | any string | `string` |
+| `secret` | any string, never printed | `string` |
+| `number` | anything `Number()` turns into a finite number: `"14"` becomes `14` | `number` |
+| `boolean` | `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`, any case | `boolean` |
+| `enum` | one of `enum` | a literal union: `"fatal" \| "error" \| …` |
+| `url` | a parseable URL, or a multi-host MongoDB URI (`mongodb://a:27017,b:27017/db?replicaSet=rs0`) | `string` |
+
+A defaulted value is coerced and checked too, so a bad `default` fails the
+boot the same way a bad deployment value does.
+
+### `required` and `default`
+
+A value with neither is optional, and its generated type includes
+`| undefined`. The core module's `MONGO_URI` is optional because the
+connection can also be given in parts; `config/app.config.ts` picks one.
+
+```ts
+ctx.config.core.mongodbUri;   // string | undefined
+ctx.config.core.redisUrl;     // string, because required
+ctx.config.core.port;         // number, because defaulted
+```
+
+## Resolution order
+
+```txt
+process.env  ›  .envs/.env.<APP_ENV>  ›  default
+```
+
+A value injected by the container or the shell always wins, which is why a
+production deployment needs no env file at all. The file never overrides
+the process, and its values are **not** copied into `process.env`.
+
+`APP_ENV` selects the file: `development` (the default), `staging`,
+`production` or `test`. Any other value aborts the boot with
+`APP_ENV "prod" is invalid — expected one of: development, staging, production, test`.
+Tulipes deliberately does not use `NODE_ENV`, which bundlers and libraries
+overload as an optimization flag; it sets `NODE_ENV` for third-party code
+when it is unset (`development` or `test` as is, `production` for the others).
+Read the deployment as `ctx.appEnv`.
+
+## The `.envs` folder
+
+```txt
+.env.example            generated by tulipes sync, committed
+.envs/
+  .env.development      your local values, not committed
+  .env.staging
+  .env.production
+```
+
+An app scaffolded by `tulipes init` git-ignores `.envs/`, because a file of
+working credentials does not belong in a repository. (The reference app in the
+framework repository commits its throwaway development values so a clone runs.) The committed contract is
+`.env.example`; copy it to `.envs/.env.development` and fill in what is
+required:
+
+```sh title=".envs/.env.development"
+PORT=3000
+LOG_LEVEL=debug
+
+MONGO_URI=mongodb://127.0.0.1:27017/tulipes-example
+REDIS_URL=redis://127.0.0.1:6379
+
+JWT_ACCESS_SECRET=dev-only-access-secret-change-me
+JWT_REFRESH_SECRET=dev-only-refresh-secret-change-me
+AUTH_ADMIN_EMAIL=admin@example.com
+AUTH_ADMIN_PASSWORD=dev-admin-password
+```
+
+A missing file is a valid deployment: every variable then comes from the
+process or its default.
+
+## `tulipes sync` and `.env.example`
+
+After you add, rename or remove a variable, run:
+
+```sh
+pnpm sync
+```
+
+It regenerates two committed files:
+
+- `types/tulipes.d.ts`, which types `ctx.config.<module>.<name>` and the
+  `env` argument of `config/app.config.ts`. A name that is not declared does
+  not compile.
+- `.env.example`, every variable grouped by module and `group`, with its
+  description, type, whether it is required, and where it lands:
+
+```sh title=".env.example"
+# ━━━ core ━━━
+
+# ── http ──
+# HTTP port the backend process listens on (number) → config.core.port
+PORT=3000
+
+# ── redis ──
+# Redis connection string (queues, cache, rate limits) (url, REQUIRED) → config.core.redisUrl
+REDIS_URL=
+```
+
+Never edit either file by hand. See [`tulipes sync`](/tulipes-js/reference/cli/sync/).
+
+## How the values behave
+
+The boot binds each value onto its module's config namespace in phase 6,
+right after the settings, so a module's settings and its environment values
+are read the same way:
+
+```ts
+ctx.config.users.maxSessions;   // a setting, from module.config.ts
+ctx.config.auth.jwtAccessSecret; // an environment value, from package.json
+```
+
+But environment values are different in three ways:
+
+- **Read-only.** Assigning to one throws: a deployment value is not
+  something code changes.
+- **Invisible to listings.** They are non-enumerable, so
+  `{ ...ctx.config.auth }`, `JSON.stringify`, `Object.keys` and `console.log`
+  skip them. That is what keeps a secret out of a response body, a log line
+  and the settings store.
+- **Refused under inspection.** `tulipes routes` and `tulipes spec` resolve
+  variables leniently (nothing is required) and every read throws. A routes
+  file that reads one while building its router fails with
+  `config.billing.stripeApiKey is an environment value, not available during inspection — read it inside a handler or a bootstrap, not while building routes`.
+  Read it in the handler, or build the middleware with `lazy()` (see
+  [routes and controllers](/tulipes-js/guides/routes-and-controllers/#build-with-the-context-use-infrastructure-in-handlers)).
+
+## Secrets
+
+`type: "secret"` behaves like `string` at the call site, and additionally its
+value is never shown:
+
+- `tulipes env:check` prints `•••`;
+- `GET /config` in the config module describes it by name, type and source
+  only;
+- it never reaches a settings file or a listing of `ctx.config`.
+
+Secrets are never settings. A settings field tagged `.meta({ secret: true })`
+is refused at boot:
+`field "apiKey" is marked secret — secrets are environment variables, never settings`.
+
+## Wiring core and the providers: `config/app.config.ts`
+
+A module's own values need no wiring: it reads `ctx.config.<module>.<name>`.
+Core and the providers, however, read fixed keys (`server.port`,
+`mongoose.*`, `bullmq.redisUrl`). `config/app.config.ts` is the one place
+where the environment is wired to them. It default-exports a function of the
+resolved values, typed by `tulipes sync`:
+
+```ts title="config/app.config.ts"
+import type { AppConfigFn } from "@tulipes/core/boot";
+
+const appConfig = ((env) => ({
+  app: { name: "tulipes-example" },
+  api: { prefix: "/api/v1" },
+
+  server: { port: env.core.port },
+
+  mongoose: env.core.mongodbUri
+    ? { uri: env.core.mongodbUri }
+    : {
+        uri: env.core.mongodbHost,
+        user: env.core.mongodbUsername,
+        pass: env.core.mongodbPassword,
+        dbName: env.core.mongodbDbName,
+      },
+
+  bullmq: { redisUrl: env.core.redisUrl },
+  // i18n, timezone, pagination…
+})) satisfies AppConfigFn;
+
+export default appConfig;
+```
+
+The function also receives `{ appEnv, mode }` as its second argument. It
+runs first in boot phase 4, and its result becomes the base of `ctx.config`.
+Under inspection a missing or invalid value is `undefined` rather than an
+error, so this file wires values and never requires one. A top-level key named
+after a module is refused:
+`app.config returns "users", which is the config namespace of module "users" — app-level keys may not be named after a module`.
+
+## One owner per variable
+
+Each variable has exactly one owning module. Shared infrastructure (`PORT`,
+`MONGO_URI`, `REDIS_URL`, the `LOG_*` variables) belongs to the sys `core`
+module, and every other module reads it from there: `ctx.config.core.redisUrl`.
+A second declaration of the same key aborts the boot:
+
+```txt
+TulipesBootError: Boot aborted during "environment" — 1 issue(s):
+  ✖ [billing] variable "REDIS_URL" is already declared by module "core" — one owner per variable
+```
+
+Within one module, two config names fed by one variable are refused too
+(`variable "PORT" already supplies "port"`).
+
+## Adding a variable, step by step
+
+<Steps>
+1. Pick the owning module: `core` for shared infrastructure, the feature's
+   module otherwise.
+2. Add the entry under `tulipes.env` in that module's `package.json`, with
+   `key`, `type` and `description`, and `required` or `default`.
+3. Put a value in `.envs/.env.development` if it is required.
+4. Run `pnpm sync`.
+5. Read it where it is used, inside a handler, a bootstrap or a job.
+6. Run `pnpm check` to see where it landed.
+</Steps>
+
+## Checking the environment: `tulipes env:check`
+
+`tulipes env:check` (the reference app's `pnpm check`) runs boot phase 1 and
+nothing else. It resolves every declared variable, prints where each landed
+and from which source, and exits non-zero on any problem. It connects to
+nothing, so it fits a CI gate or a deploy preflight:
+
+```sh
+$ APP_ENV=production pnpm check
+APP_ENV=production — 16 variable(s) resolved:
+  ✔ config.core.port ← PORT=3000
+  ✔ config.core.mongodbUri ← MONGO_URI=mongodb://db:27017/app
+  ✔ config.core.mongodbUsername ← MONGO_USERNAME=
+  ✔ config.auth.jwtAccessSecret ← JWT_ACCESS_SECRET=•••
+  ✔ config.agents.anthropicApiKey ← ANTHROPIC_API_KEY=(not set)
+```
+
+It is also the one place you can **see** the values, since `ctx.config` hides
+them from every listing. See [`tulipes env:check`](/tulipes-js/reference/cli/env-check/).
+
+## Boot errors
+
+All variable problems are collected and reported once, in the
+`environment` phase:
+
+```txt
+TulipesBootError: Boot aborted during "environment" — 3 issue(s):
+  ✖ [core] required variable "REDIS_URL" has no value (Redis connection string (queues, cache, rate limits))
+  ✖ [core] variable "PORT": "abc" is not a number
+  ✖ [core] variable "LOG_LEVEL": "verbose" is not one of: fatal, error, warn, info, debug, trace
+```
+
+| Message | Fix |
+|---|---|
+| `required variable "X" has no value (…)` | set it in the process or `.envs/.env.<APP_ENV>` |
+| `variable "X": "abc" is not a number` | also `is not a boolean (use true/false, 1/0, yes/no, on/off)`, `is not one of: …`, `is not a valid URL` |
+| `config.users.mode is both a setting (module.config.ts) and an environment value (package.json tulipes.env) — rename one` | one name, one source |
+| `"X": "required" and "default" are mutually exclusive` | pick one |
+| `"X": type "enum" requires an "enum" value list` | add `enum` |
+| `tulipes.env is an object keyed by config name since 0.12 …` | the 0.11 array form; `tulipes migrate 0.12` rewrites it |
+
+## Common mistakes
+
+- **A value reads `undefined`.** You did not run `pnpm sync` (the type would
+  have said `| undefined` or refused the name), the config name differs from
+  the manifest, or the value is optional and nothing supplied it.
+- **Reading `process.env.X`.** It bypasses validation, typing, the env file
+  and the secret handling. Declare the variable instead.
+- **Re-declaring another module's variable.** Read that module's config.
+- **Logging `ctx.config.auth`.** It prints the settings only, which is the
+  point; to inspect environment values run `pnpm check`.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Settings" href="/tulipes-js/guides/settings/" description="Values an operator changes at runtime." />
+  <LinkCard title="Configuration" href="/tulipes-js/concepts/configuration/" description="Environment, settings and app config, side by side." />
+  <LinkCard title="Environment variable reference" href="/tulipes-js/reference/topics/environment-variables/" description="Every variable the reference app declares." />
+  <LinkCard title="Production checklist" href="/tulipes-js/production/checklist/" description="What to set before a deployment." />
+</CardGrid>

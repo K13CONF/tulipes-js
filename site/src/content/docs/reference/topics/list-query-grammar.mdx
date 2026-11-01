@@ -1,0 +1,247 @@
+---
+title: List-query grammar
+description: The syntax, operators, field types, limits and refusals of the list-query language that list endpoints accept in search, sort, filter, fields, resolve, group.
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+The list-query language lets a client search, filter, sort, project, populate and
+group a list endpoint through its query string, while the endpoint decides exactly
+which fields and operators are allowed. It lives in the reference app's `core`
+module (`modules/core/helpers/query/`), not in `@tulipes/core`, so a generated app
+owns and can edit it. This page is the lookup table; the walkthrough is in
+[pagination and list queries](/tulipes-js/guides/pagination-and-list-queries/).
+
+## Two layers
+
+```txt
+?filter=[["role","=","admin"]]
+        │
+        ▼
+ grammar.ts   shape only: JSON, dotted identifiers, primitives, limits
+        │
+        ▼
+ policy.ts    the endpoint's allowlist: fields, operators, types
+        │
+        ▼
+ req.query    a ListQuery AST, then toMongoose() and runQuery()
+```
+
+Both layers run inside `rai({ query: listQuery(policy) })`, so a refused query is a
+422 before the handler or the database is reached. A value is always a primitive:
+nothing a client sends can become a Mongo operator.
+
+## Parameters
+
+Every parameter except `search`, `page`, `per_page` and `tree` is JSON in the query
+string.
+
+| Parameter | Syntax | Example |
+|---|---|---|
+| `page` | integer ≥ 1 | `?page=2` |
+| `per_page` | integer ≥ 1, clamped by `config.pagination.maxLimit` | `?per_page=50` |
+| `search` | one plain term, trimmed, 1–128 characters | `?search=alice` |
+| `sort` | `[field, "asc" \| "desc"]` or a list of such pairs | `?sort=[["created_at","desc"],["email","asc"]]` |
+| `filter` | a list of conditions, implicitly ANDed | `?filter=[["role","in",["admin","editor"]]]` |
+| `fields` | a list of fields to return | `?fields=["email","role"]` |
+| `resolve` | a list of relations, each a name or `[name, options]` | `?resolve=[["sessions",{"limit":3}]]` |
+| `group` | a list of fields to group by | `?group=["role"]` |
+| `tree` | `true` or `false`, only with `group` | `?group=["role","status"]&tree=true` |
+
+Remember to URL-encode the JSON in a real request; the examples show it decoded.
+
+### Conditions
+
+```txt
+leaf    [field, operator, value]
+node    ["and", condition, condition, …]
+        ["or",  condition, condition, …]
+```
+
+```txt
+?filter=[["created_at",">=","2026-01-01"],["or",["role","=","admin"],["email","starts","ops@"]]]
+```
+
+### Resolve options
+
+```txt
+[relation, { "fields": [...], "sort": [...], "limit": n, "resolve": [...] }]
+```
+
+The options object is strict: any other key is refused. Nested `resolve` follows the
+same syntax.
+
+## Operators
+
+| Operator | Value | Mongo | Field types |
+|---|---|---|---|
+| `=` | one value, or `null` | equality | all |
+| `!=` | one value, or `null` | `$ne` | all |
+| `>` `>=` `<` `<=` | one value, not `null` | `$gt` `$gte` `$lt` `$lte` | all |
+| `in` | non-empty list, at most 50 | `$in` | all |
+| `nin` | non-empty list, at most 50 | `$nin` | all |
+| `like` | string, at most 64 characters | case-insensitive `$regex`, escaped | `string` only |
+| `starts` | string, at most 64 characters | `$regex` anchored with `^`, escaped | `string` only |
+| `exists` | `true` or `false` | `$exists` | all |
+
+Every pattern is built from an escaped literal, so a client can never write a
+regular expression (no ReDoS).
+
+## Field types
+
+A policy's `filter` entry is either a bare operator list, which means a `string`
+field, or `{ type, ops }`.
+
+| Type | Accepted value | Converted to |
+|---|---|---|
+| `string` | a JSON string | as is |
+| `number` | a JSON number | as is |
+| `boolean` | `true` or `false` | as is |
+| `date` | a string or number `new Date()` understands | `Date` |
+| `id` | a 24-character hex string | `ObjectId` |
+
+## The policy
+
+The endpoint names everything a client may use; anything not named is refused.
+
+```ts title="modules/users/routes/bo.users.routes.ts"
+router.get("/directory", rai({
+    id: "users:bo:list",
+    name: "Browse users",
+    description: "Search, filter, sort, group and resolve sessions, within the declared policy",
+    query: listQuery({
+      search: ["email"],
+      filter: {
+        role: ["=", "!=", "in"],
+        email: ["=", "like", "starts"],
+        created_at: { type: "date", ops: [">", ">=", "<", "<="] },
+      },
+      sort: ["created_at", "email", "role"],
+      fields: ["email", "role", "created_at"],
+      resolve: {
+        sessions: { fields: ["ip", "user_agent", "last_seen_at", "created_at"], sort: ["created_at", "last_seen_at"], maxLimit: 10 },
+      },
+      group: ["role"],
+    }),
+  }), users.list());
+```
+
+| Policy key | Type | Effect |
+|---|---|---|
+| `search` | `string[]` or `"text"` | Fields `?search` is matched on (an `$or` of escaped, case-insensitive regexes), or `"text"` for the model's text index (`$text`). Absent, `?search` is refused. |
+| `filter` | `Record<field, Operator[] \| { type, ops }>` | Filterable fields, their operators and type. |
+| `sort` | `string[]` | Sortable fields. When grouped, the group keys and `count` are sortable instead. |
+| `fields` | `string[]` | Fields a client may ask for. With no `?fields`, this is also the projection. |
+| `resolve` | `Record<relation, { fields, sort?, maxLimit?, resolve? }>` | Relations that may be populated, the only fields they expose, and the per-parent limit cap. |
+| `group` | `string[]` | Fields a client may group by. |
+| `count` | `boolean`, default `true` | `false` skips the count query, so `meta.total_items` is absent. |
+
+The handler compiles and runs the parsed query:
+
+```ts title="modules/users/controllers/bo.users.controllers.ts"
+const compiled = toMongoose(req.query as unknown as ParsedListQuery, req.page);
+const { data, total_items } = await runQuery(this.#ctx.models!.get("User"), compiled);
+res.respond({ data, meta: total_items === undefined ? {} : { total_items } });
+```
+
+`toMongoose(query, page, { system, maxTimeMS })` accepts a `system` filter (a
+tenant, an owner) that is ANDed outside everything the client sent and cannot be
+overridden, and a per-call `maxTimeMS`.
+
+## Limits
+
+Constants in `grammar.ts`, the same in every environment.
+
+| Limit | Value |
+|---|---|
+| Length of one JSON parameter | 2048 characters |
+| `search` length | 128 characters |
+| Field name length | 64 characters |
+| Sort keys | 3 |
+| Filter nesting depth | 3 levels |
+| Filter conditions (leaves) | 20 |
+| Values in an `in` / `nin` list | 50 |
+| String value length | 256 characters |
+| `like` / `starts` pattern length | 64 characters |
+| Resolve nesting depth | 3 |
+| Relations in one `resolve` list | 10 |
+| `limit` inside a resolve | 1–100, and at most the policy's `maxLimit` |
+| `fields` entries | 64 |
+| Group keys | 3 |
+| Query time | `config.pagination.maxTimeMs`, default 5000 ms, on `find`, `count` and `aggregate` |
+
+A field name is a dotted identifier (`address.city`), matching
+`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`, so it can never start with `$`.
+
+## Results
+
+| Mode | Each row | Ordering |
+|---|---|---|
+| Plain list | the document, projected to `fields`, with resolved relations populated | requested keys, then `_id`, so pages never overlap |
+| `group` | `{ key: { role: "admin" }, count: 12 }` | requested keys or `count`, then the group keys ascending |
+| `group` + `tree=true` | `{ key, count, groups: [{ key, count, groups? }] }` | per level: its own key or `count` as asked, then the key ascending |
+
+`meta.total_items` is the document count, the bucket count when grouped, or the
+top-level key count for a tree. `_id` always comes back in a plain list. A relation
+with a `limit` costs one query per parent, which is why the policy caps it.
+
+## Refusals
+
+All refusals are 422 with one entry per problem, code `CUSTOM` for a policy refusal
+(see [error codes](/tulipes-js/reference/topics/error-codes/)). The `field` is the
+path into the JSON the client sent:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [{ "field": "filter.0.0", "message": "\"password_hash\" is not filterable", "code": "CUSTOM" }],
+  "meta": {}
+}
+```
+
+| Message | Cause |
+|---|---|
+| `invalid JSON` | A JSON parameter does not parse. |
+| `a field is a dotted identifier` | A field name breaks the identifier rule. |
+| `sort is [field, "asc" \| "desc"] or a list of such pairs` | Malformed `sort`. |
+| `a condition is [field, operator, value] or ["and" \| "or", ...conditions]` | Malformed condition. |
+| `a resolve entry is a relation name or [relation, { fields, sort, limit, resolve }]` | Malformed `resolve`. |
+| `filter nests deeper than 3 levels` / `filter has more than 20 conditions` | A filter limit. |
+| `"and" / "or" needs at least one condition` | An empty node. |
+| `resolve nests deeper than 3 levels` | Resolve depth. |
+| `search is not supported here` | `?search` on an endpoint whose policy has no `search`. |
+| `"<field>" is not filterable` | Field not in the policy's `filter`. |
+| `"<op>" is not allowed on "<field>"` | Operator not in the field's `ops`. |
+| `<field>: value must be a <type>` / `every value must be a <type>` | Type mismatch. |
+| `<field>: <op> takes a non-empty list` / `<op> takes a single value` / `<op> does not take null` / `exists takes true or false` | Value shape for the operator. |
+| `<field>: <op> applies to string fields only` / `pattern longer than 64 characters` | `like` / `starts` misuse. |
+| `cannot sort by "<field>"` | Not sortable here. |
+| `"<field>" is not a field of this endpoint` | Not in `fields` (or a relation's `fields`). |
+| `"<relation>" cannot be resolved here` / `<relation> resolves at most <n>` | Resolve not allowed, or `limit` over `maxLimit`. |
+| `cannot group by "<field>"` | Not groupable here. |
+| `fields cannot be combined with group` / `resolve cannot be combined with group` / `tree needs group` | Incompatible parameters. |
+
+A count or length limit inside `sort`, a condition or a resolve entry (four sort
+keys, an `in` list of 51, a 300-character value) fails the whole shape: code
+`INVALID_UNION` with that shape's message above, on the path of the offending entry
+(`filter.0`). A limit on a top-level list such as `fields` or `group` returns zod's
+`TOO_BIG` with its own message. `invalid JSON`, the depth and size checks on
+`filter` and `resolve`, and every policy refusal are `CUSTOM`.
+
+<Aside type="caution">
+Every filter, sort, search or group on an unindexed field is a collection scan.
+Expose in a policy only what you indexed, and use `search: "text"` only with a text
+index. `search: "text"` together with `group` on a soft-deleting model fails,
+because MongoDB requires `$text` in the first stage.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Pagination and list queries" href="/tulipes-js/guides/pagination-and-list-queries/" description="Add a list endpoint with a policy, step by step." />
+  <LinkCard title="Models" href="/tulipes-js/guides/models/" description="Indexes and relations the policy should match." />
+  <LinkCard title="Error codes" href="/tulipes-js/reference/topics/error-codes/" description="Every status and code an endpoint can return." />
+</CardGrid>

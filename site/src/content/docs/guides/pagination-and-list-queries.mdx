@@ -1,0 +1,474 @@
+---
+title: Pagination and list queries
+description: Page list endpoints with req.page and total_items, then let clients search, filter, sort, project, populate and group safely with listQuery(policy).
+sidebar:
+  order: 3
+---
+
+import { Aside, LinkCard, CardGrid, Steps } from "@astrojs/starlight/components";
+
+Every list endpoint in a Tulipes app paginates the same way: core parses
+`?page` and `?per_page` into `req.page`, clamped by one app-wide policy, and
+`res.respond()` fills the page metadata from the count you pass. When clients
+need more than paging (search, filters, sorting, choosing fields, populating
+relations, grouping), the production preset adds a **controlled list-query
+language**: each endpoint declares exactly what clients may shape, and
+anything else is refused before it reaches the database.
+
+## Part 1: pagination
+
+### `req.page`
+
+Inside any route declared with `rai()`, `req.page` is already there:
+
+```ts
+interface PageRequest {
+  page: number;      // from ?page, at least 1
+  per_page: number;  // from ?per_page, at most config.pagination.maxLimit
+  skip: number;      // (page - 1) * per_page, ready for .skip()
+}
+```
+
+The bounds come from `config.pagination` in `config/app.config.ts`:
+
+```ts title="config/app.config.ts"
+pagination: {
+  defaultLimit: 20,
+  maxLimit: 100,
+  /** Ceiling for one list query (find, count or aggregate); see @app/core's query helpers. */
+  maxTimeMs: 5_000,
+},
+```
+
+| Key | Default when absent | Effect |
+|---|---|---|
+| `defaultLimit` | 20 | `per_page` when the client sends none |
+| `maxLimit` | 100 | the most rows any request can get; a larger `per_page` is clamped to it |
+| `maxTimeMs` | none in core | read by the list-query bootstrap below |
+
+Parsing is forgiving on purpose. A value that is not a positive integer
+(`?page=abc`, `?per_page=0`, `?page=1.5`) falls back to the default rather
+than failing the request, and `?per_page=10000` silently becomes 100. Because
+the bounds live in one place, no endpoint can be talked into returning ten
+thousand rows.
+
+### Responding with a page
+
+Pass `total_items` in `meta`, and that is what marks the response as a page:
+
+```ts title="modules/users/controllers/web.users.controllers.ts"
+list(): RequestHandler {
+  return async (req: Request, res: Response) => {
+    const { per_page, skip } = req.page;
+    const User = this.#ctx.models!.get("User");
+
+    const [users, total_items] = await Promise.all([
+      User.find().select("email role -_id").skip(skip).limit(per_page).lean(),
+      User.countDocuments(),
+    ]);
+
+    res.respond({ data: users, meta: { total_items } });
+  };
+}
+```
+
+`GET /users?page=2&per_page=10` with 50 users answers:
+
+```json
+{
+  "success": true,
+  "data": [ { "email": "…", "role": "user" } ],
+  "errors": [],
+  "meta": { "page": 2, "per_page": 10, "total_pages": 5, "total_items": 50 }
+}
+```
+
+`res.respond()` takes `page` and `per_page` from `req.page` and computes
+`total_pages` as `ceil(total_items / per_page)`. Without `total_items`, `meta`
+stays exactly what you passed (usually `{}`), so a single record never
+carries four nulls. You may pass `page`, `per_page` or `total_pages`
+yourself to override a computed value, and any other `meta` keys are kept.
+
+<Aside type="tip">
+Share list logic between a route and a job through a helper. The hello
+module's `findGreetings(ctx, { skip, limit })` in `helpers/greetings.ts` is
+called by the list route with `req.page` and by an agent action with its
+defaults.
+</Aside>
+
+## Part 2: the list-query language
+
+The language ships in the production preset's core module and is imported
+from `@app/core`. It is application code you own, under
+`modules/core/helpers/query/`. The minimal preset leaves it out.
+
+### Why a controlled language
+
+Building a Mongo filter from `req.query` by hand is how `?email[$ne]=x`
+reaches a database, and how a filter on `password_hash` leaks what a model
+hides. The list-query language closes both holes:
+
+- **Values are primitives only.** Client input only ever lands in a
+  condition's value, under an operator the translator chose. An object value
+  is refused, so `{"$gt": ""}` can never reach Mongo.
+- **Every endpoint names an allowlist.** Fields, operators, relations and
+  groupings that the policy does not list are refused with the path of the
+  offending value.
+
+### A complete example
+
+The users back office directory is the reference usage:
+
+```ts title="modules/users/routes/bo.users.routes.ts"
+import { listQuery } from "@app/core";
+
+router.get("/directory", rai({
+    id: "users:bo:list",
+    name: "Browse users",
+    description: "Search, filter, sort, group and resolve sessions, within the declared policy",
+    query: listQuery({
+      search: ["email"],
+      filter: {
+        role: ["=", "!=", "in"],
+        email: ["=", "like", "starts"],
+        created_at: { type: "date", ops: [">", ">=", "<", "<="] },
+      },
+      sort: ["created_at", "email", "role"],
+      fields: ["email", "role", "created_at"],
+      resolve: {
+        sessions: { fields: ["ip", "user_agent", "last_seen_at", "created_at"], sort: ["created_at", "last_seen_at"], maxLimit: 10 },
+      },
+      group: ["role"],
+    }),
+  }), users.list());
+```
+
+```ts title="modules/users/controllers/bo.users.controllers.ts"
+import { runQuery, toMongoose, type ParsedListQuery } from "@app/core";
+
+list(): RequestHandler {
+  return async (req: Request, res: Response) => {
+    // App-wide defaults (config.pagination.maxTimeMs) apply; pass { maxTimeMS } here to override.
+    const compiled = toMongoose(req.query as unknown as ParsedListQuery, req.page);
+    const { data, total_items } = await runQuery(this.#ctx.models!.get("User"), compiled);
+    res.respond({ data, meta: total_items === undefined ? {} : { total_items } });
+  };
+}
+```
+
+`listQuery(policy)` returns a zod schema, so it sits in `rai()`'s ordinary
+`query` slot: the same 422 envelope, the same issue paths, and `tulipes spec`
+describes every parameter with this endpoint's allowlist. By the time the
+handler runs, `req.query` is the parsed query (the AST) with the policy
+attached.
+
+### What a client sends
+
+Every parameter except `search` and `tree` is **JSON in the query string**,
+URL-encoded. Express 5's default query parser does not nest, and the syntax is
+arrays anyway.
+
+| Param | Shape | Example |
+|---|---|---|
+| `page`, `per_page` | integers | `page=2&per_page=50` |
+| `search` | one term, up to 128 characters | `search=john` |
+| `sort` | `[field, dir]` or a list of pairs, up to 3 | `[["created_at","desc"],["email","asc"]]` |
+| `filter` | a list of conditions (an implicit `and`) | `[["role","=","admin"]]` |
+| `fields` | the fields to return | `["email","role"]` |
+| `resolve` | relations to populate | `["sessions"]` or `[["sessions",{"fields":["ip"],"limit":5}]]` |
+| `group` | fields to bucket by, up to 3 | `["role"]` |
+| `tree` | `true` or `false`, with `group` | `tree=true` |
+
+With curl, `-G --data-urlencode` does the encoding:
+
+```sh
+curl -G http://localhost:3000/users/directory \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-urlencode 'filter=[["role","=","admin"],["or",["email","like","@k13"],["created_at",">","2026-01-01"]]]' \
+  --data-urlencode 'sort=[["created_at","desc"]]' \
+  --data-urlencode 'resolve=[["sessions",{"fields":["ip","created_at"],"sort":[["created_at","desc"]],"limit":5}]]'
+```
+
+The directory is mounted at `/users`, outside the API prefix, which is why the
+path has no `/api/v1`.
+
+### Filters
+
+A condition is either a **leaf**, `[field, operator, value]`, or a **node**,
+`["and" | "or", ...conditions]`. The top-level list is an implicit `and`:
+
+```json
+[
+  ["role", "=", "admin"],
+  ["or", ["email", "like", "@k13"], ["created_at", ">", "2026-01-01"]]
+]
+```
+
+| Operator | Meaning | Mongo |
+|---|---|---|
+| `=` | equals (also `null`) | value |
+| `!=` | not equal (also `null`) | `$ne` |
+| `>` `>=` `<` `<=` | comparisons | `$gt` `$gte` `$lt` `$lte` |
+| `in`, `nin` | in, not in a non-empty list (up to 50 values) | `$in`, `$nin` |
+| `like` | contains, case-insensitive; string fields only | escaped `$regex` with `i` |
+| `starts` | prefix; string fields only, the one that can use an index | escaped `^` `$regex` |
+| `exists` | `true` or `false` | `$exists` |
+
+`like` and `starts` patterns are escaped before they become a regex and are
+capped at 64 characters, so a client cannot write a pattern and there is no
+ReDoS. Values are strings, numbers, booleans or `null`, and lists of those for
+`in` and `nin`.
+
+### Field types in the policy
+
+A policy entry is either a bare operator list, which means a **string** field,
+or `{ type, ops }`:
+
+```ts
+filter: {
+  role: ["=", "in"],                                     // string
+  created_at: { type: "date", ops: [">", "<"] },         // compared as a Date
+  owner: { type: "id", ops: ["="] },                     // compared as an ObjectId
+  active: { type: "boolean", ops: ["="] },
+  age: { type: "number", ops: [">=", "<="] },
+},
+```
+
+| Type | Accepts | Becomes |
+|---|---|---|
+| `string` | a string | the string |
+| `number` | a JSON number | the number |
+| `boolean` | `true` or `false` | the boolean |
+| `date` | a date string or epoch number | `new Date(value)` |
+| `id` | a 24-character hex string | `new Types.ObjectId(value)` |
+
+A value of the wrong type is an issue, not a silent mismatch.
+
+### Every policy option
+
+```ts
+interface QueryPolicy {
+  search?: readonly string[] | "text";
+  filter?: Record<string, readonly Operator[] | { type: FieldType; ops: readonly Operator[] }>;
+  sort?: readonly string[];
+  fields?: readonly string[];
+  resolve?: Record<string, { fields: readonly string[]; sort?: readonly string[]; maxLimit?: number; resolve?: Record<string, ResolvePolicy> }>;
+  group?: readonly string[];
+  count?: boolean;
+}
+```
+
+| Option | Allows | Notes |
+|---|---|---|
+| `search` | `?search` on these fields, as a case-insensitive contains on each (OR) | `"text"` uses the model's `$text` index instead |
+| `filter` | these fields with these operators | anything else: `"x" is not filterable` |
+| `sort` | these sort keys | rows always get `_id` as the last tiebreaker, so pages never overlap |
+| `fields` | these fields in `?fields` | also the default projection when the client sends none |
+| `resolve` | populating these relations | per relation: allowed fields, sortable keys, `maxLimit`, nested relations |
+| `group` | these group keys | grouped requests sort by the group keys or `count` |
+| `count` | `false` skips the count query | `meta` then has no `total_items` |
+
+An endpoint that only needs one feature declares only that:
+
+```ts
+query: listQuery({ sort: ["created_at"], fields: ["email", "created_at"] })
+```
+
+### Resolving relations
+
+`resolve` populates Mongoose relations, including virtuals. The User model
+declares sessions as a virtual, so nothing is stored on the user:
+
+```ts title="modules/users/models/user.model.ts"
+userSchema.virtual("sessions", { ref: "Session", localField: "_id", foreignField: "user" });
+```
+
+The policy says which fields of a session may come back (here never
+`refresh_jti`) and caps how many per user. A client may ask for fewer fields,
+a sort among the allowed keys and a lower `limit`, and nest relations up to
+three levels.
+
+A limit is per parent document, which costs one query per row. When the
+client sends no `limit`, the policy's `maxLimit` applies, so keep `maxLimit`
+small. Filtering inside a resolve is not supported.
+
+### Grouping
+
+`?group=["role"]&sort=[["count","desc"]]` turns rows into buckets:
+
+```json
+{
+  "data": [
+    { "key": { "role": "user" }, "count": 3 },
+    { "key": { "role": "admin" }, "count": 1 },
+    { "key": { "role": "editor" }, "count": 1 }
+  ],
+  "meta": { "page": 1, "per_page": 20, "total_pages": 1, "total_items": 3 }
+}
+```
+
+`total_items` counts buckets, not documents. Several keys bucket every
+distinct combination (`{ key: { role, status }, count }`). With `tree=true` the
+buckets fold into one level per key, `{ key, count, groups: [...] }`, and
+pagination counts the top-level nodes. `fields` and `resolve` are refused with
+`group`.
+
+### The system query
+
+Scoping that a client must never widen (a tenant, an owner, visibility) goes
+in `system`, which is ANDed **outside** everything the client sent:
+
+```ts
+const compiled = toMongoose(req.query as unknown as ParsedListQuery, req.page, {
+  system: { tenant: req.auth.user!.tenant },
+});
+```
+
+The compiled match is `{ $and: [system, filter, search] }`, so there is no
+top-level key a client could override. Never put scoping in a default filter
+the client could replace. Soft-deleted rows need nothing here: the base
+Mongoose plugin already excludes them from `find`, `count` and `aggregate`
+(see [Mongoose plugins](/tulipes-js/guides/mongoose-plugins/)).
+
+### Time limits: app-wide defaults, per-call override
+
+Every query the runner issues (the page, the count, or the aggregation)
+carries a `maxTimeMS`. The default comes from `config.pagination.maxTimeMs`
+through a bootstrap in the core module:
+
+```ts title="modules/core/bootstrap/list-query.bootstrap.ts"
+import type { RuntimeCtx } from "@tulipes/core/boot";
+
+import { configureListQueries } from "../helpers/query/index.ts";
+
+export default function listQueries(ctx: RuntimeCtx): void {
+  configureListQueries({ maxTimeMS: ctx.config.pagination?.maxTimeMs });
+}
+```
+
+Without that value the runner's built-in default is 5,000 ms. A controller
+overrides it for one call:
+
+```ts
+const compiled = toMongoose(query, req.page, { maxTimeMS: 15_000 });
+```
+
+`system` cannot be set app-wide: it belongs to the endpoint and the caller.
+`listQueryDefaults()` returns the defaults in effect, for diagnostics.
+
+### What the runner does
+
+```txt
+toMongoose(query, req.page, options)
+  no group  ─▶ { mode: "list", match, sort, project, populate, skip, limit }
+               runQuery: find(match).sort().skip().limit()
+                         .select().populate().lean()
+                         ‖ countDocuments(match)        (parallel)
+  group     ─▶ { mode: "group", pipeline, count }
+               runQuery: aggregate([$match, $group, $project,
+                                    $sort, $skip, $limit])
+                         ‖ aggregate([$match, $group, $count])
+```
+
+`runQuery(model, compiled)` returns `{ data, total_items? }`; `total_items` is
+absent when the policy set `count: false`.
+
+## Refusals and their messages
+
+Anything outside the grammar or the policy is a 422, with `field` pointing
+into the JSON the client sent. From the reference app's tests:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [
+    { "field": "filter.0.0", "message": "\"password_hash\" is not filterable", "code": "CUSTOM" },
+    { "field": "sort.0", "message": "cannot sort by \"refresh_jti\"", "code": "CUSTOM" }
+  ],
+  "meta": {}
+}
+```
+
+| Message | Cause |
+|---|---|
+| `"x" is not filterable` | the field is not in `filter` |
+| `">" is not allowed on "role"` | the operator is not in that field's list |
+| `created_at: value must be a date` | wrong value type for the field |
+| `role: in takes a non-empty list` | `in` or `nin` without a list |
+| `created_at: like applies to string fields only` | `like` or `starts` on a typed field |
+| `cannot sort by "x"` | the key is not in `sort` (or not a group key when grouped) |
+| `"x" is not a field of this endpoint` | `fields` outside the allowlist |
+| `"x" cannot be resolved here` | the relation is not in `resolve` |
+| `sessions resolves at most 10` | `limit` above the relation's `maxLimit` |
+| `cannot group by "x"` | the key is not in `group` |
+| `fields cannot be combined with group` | also for `resolve` |
+| `tree needs group` | `tree=true` without `group` |
+| `search is not supported here` | the policy has no `search` |
+| `invalid JSON` | a parameter that should be JSON is not |
+| `filter nests deeper than 3 levels` | also `filter has more than 20 conditions` |
+
+These messages are plain sentences, not i18n keys, so they arrive in English.
+
+<Aside type="caution">
+A route with `listQuery()` validates `page` and `per_page` too: `?page=0` is a
+422 there, while a route without it silently falls back to page 1. `per_page`
+above `maxLimit` is still clamped, not refused.
+</Aside>
+
+## Limits
+
+The hard limits are constants in `helpers/query/grammar.ts` (`LIMITS`), not
+config. Nobody tunes them per environment:
+
+| Limit | Value |
+|---|---|
+| one JSON parameter | 2,048 characters |
+| `search` | 128 characters |
+| a field name | 64 characters, a dotted identifier |
+| sort keys | 3 |
+| filter depth / conditions | 3 levels / 20 |
+| values in `in`, `nin` | 50 |
+| a string value / a `like` pattern | 256 / 64 characters |
+| resolve depth / relations / `limit` | 3 / 10 / 100 |
+| `fields` | 64 |
+| group keys | 3 |
+
+The full grammar is in the [list-query grammar reference](/tulipes-js/reference/topics/list-query-grammar/).
+
+## Performance, said plainly
+
+- **Only expose what is indexed.** A filter, sort, search or group on an
+  unindexed field is a collection scan. The engine cannot know; the policy
+  author does.
+- **`search` on fields is a regex scan.** For large collections use
+  `search: "text"` with a text index on the model.
+- **The count is a second query.** With a filter it can scan. Set
+  `count: false` where an absent total is fine.
+- **Grouping scans the matched set.** Group on low-cardinality fields,
+  behind a filter where you can.
+- `search: "text"` together with `group` fails on a soft-deleting model:
+  MongoDB requires `$text` in the first pipeline stage, and the soft-delete
+  plugin's own `$match` comes first.
+
+## Extending the language
+
+Because it is your code, it is meant to be extended:
+
+<Steps>
+1. **A new operator**: add it to `operators` in `helpers/query/grammar.ts`
+   and to the `OPERATORS` map in `helpers/query/mongoose/stages.ts`, the only
+   place an operator becomes Mongo.
+2. **Another database**: write a translator from the same `ListQuery` AST.
+   The grammar and the policy do not change.
+3. **Different limits**: edit `LIMITS` in `grammar.ts`.
+</Steps>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Models" href="/tulipes-js/guides/models/" description="Declare the models a list endpoint reads, with their indexes." />
+  <LinkCard title="Mongoose plugins" href="/tulipes-js/guides/mongoose-plugins/" description="Soft delete and how it keeps deleted rows out of lists." />
+  <LinkCard title="List-query grammar" href="/tulipes-js/reference/topics/list-query-grammar/" description="The grammar in table form." />
+  <LinkCard title="Validation" href="/tulipes-js/guides/validation/" description="How rai() reports the refusals." />
+</CardGrid>

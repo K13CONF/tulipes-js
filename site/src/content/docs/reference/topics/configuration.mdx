@@ -1,0 +1,218 @@
+---
+title: Configuration keys
+description: Every key the framework, the providers and the reference app read from ctx.config, with its type, its default and what it controls, checked against the source.
+sidebar:
+  order: 1
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+A Tulipes app has one global config object, `ctx.config`. Boot phase 4 builds it
+from `config/app.config.ts` (the app-wide seed), then adds one namespace per
+module: `ctx.config.<module>` holds that module's settings from
+`module.config.ts` and its environment values from `tulipes.env`. This page lists
+every key that exists in core, the providers and the reference app. For how the
+pieces fit together, read [configuration](/tulipes-js/concepts/configuration/).
+
+## App-wide keys (`config/app.config.ts`)
+
+The seed is a function that receives `env` (every module's resolved environment
+values) and returns a plain object. Core reads only the keys below; anything else
+you add is yours.
+
+```ts title="config/app.config.ts"
+const appConfig = ((env) => ({
+  app: { name: "tulipes-example" },
+  api: { prefix: "/api/v1" },
+  server: { port: env.core.port },
+  // mongoose, bullmq, i18n, timezone, pagination…
+})) satisfies AppConfigFn;
+```
+
+| Key | Type | Default when absent | Read by | What it does |
+|---|---|---|---|---|
+| `app.name` | `string` | `"tulipes"` in the banner, `"api"` in the spec and the agent manifest | core banner, `@tulipes/spec`, agent registry | The app's name in the boot banner, the OpenAPI `info.title` and the agent manifest. |
+| `app.version` | `string` | none | `@tulipes/spec`, agent registry | Added to the OpenAPI `info` and the agent manifest when it is a string. |
+| `api.prefix` | `string` | `""` (routes mount at the root) | core routing, `@tulipes/testing` | Prefix every router a routes file returns is mounted under. `ctx.routes.mount(router, "/x")` mounts elsewhere. |
+| `server.port` | `number` | `3000` | core (`boot()`) | Port the backend listens on. `boot({ port })` wins over it. A value that is not a whole number from 0 to 65535 aborts with `config.server.port must be a whole number between 0 and 65535, got …`. |
+| `pagination.defaultLimit` | `number` | `20` | `res.respond()`, `req.page` | Rows per page when `?per_page` is absent or invalid. |
+| `pagination.maxLimit` | `number` | `100` | `res.respond()`, `req.page` | Ceiling on `?per_page`; a larger value is clamped, not refused. |
+| `pagination.maxTimeMs` | `number` | `5000` | reference app's list-query helpers (`configureListQueries`) | `maxTimeMS` on every list-query `find`, `count` and `aggregate`. Not read by core. |
+| `i18n.defaultLocale` | `string` | `"en"` | core i18n (phase 7) | Locale used when the request names none, and the fallback for a missing key. |
+| `i18n.supportedLocales` | `string[]` | `[defaultLocale]` | core i18n | Locales a request may pick with `?lang=` or `Accept-Language`. Empty, or not containing `defaultLocale`, aborts the boot. |
+| `timezone.default` | `string` (IANA zone) | `"UTC"` | core time (phase 7b), `@tulipes/bullmq` cron | The app's zone: request fallback, `ctx.time`, and the zone of cron patterns. An unknown zone aborts the boot. |
+| `timezone.supported` | `string[]` | any valid IANA zone | core time | Allow-list for `?tz=` and `X-Timezone`. A zone outside it falls back to `default`. Empty, or not containing `default`, aborts the boot. |
+| `timezone.applyToProcess` | `boolean` | `true` once a `timezone` block exists | core time | Sets `process.env.TZ` to `default`, so log times and `Date#getHours()` agree. With no `timezone` block the process zone is left alone. |
+
+<Aside type="note">
+`pagination` bounds are lenient by design: `?page=abc` or `?per_page=0` falls back
+to the default instead of failing the request. See
+[pagination and list queries](/tulipes-js/guides/pagination-and-list-queries/).
+</Aside>
+
+### Boot errors for app-wide keys
+
+Problems are collected and reported together (see the [boot error
+format](/tulipes-js/reference/topics/error-codes/#boot-errors)). The messages come
+straight from `packages/core/src/i18n/i18n.ts` and `packages/core/src/time/timezone.ts`:
+
+```txt
+config.i18n.supportedLocales is empty
+config.i18n.defaultLocale "de" is not in supportedLocales (en, fr)
+config.timezone.default "Mars/Base" is not a time zone this runtime knows (an IANA name such as "Europe/Paris")
+config.timezone.supported is empty
+config.timezone.default "UTC" is not in supported (Europe/Paris)
+config.timezone.applyToProcess must be true or false
+```
+
+## Provider keys
+
+Core knows nothing of these keys. Each provider augments `GlobalConfig` with its
+own key and refuses the boot when it is selected but the key is missing.
+
+| Key | Type | Default | Provider | What it does |
+|---|---|---|---|---|
+| `mongoose.uri` | `string` | none, required | `@tulipes/mongoose` | `mongodb://host:port[/db]` or `mongodb+srv://…`. Empty counts as missing. |
+| `mongoose.user` | `string` | none | `@tulipes/mongoose` | Passed to the driver beside the URI, so nothing is URL-encoded by hand. Ignored when empty. |
+| `mongoose.pass` | `string` | none | `@tulipes/mongoose` | Password, same treatment as `user`. |
+| `mongoose.dbName` | `string` | the database in `uri` | `@tulipes/mongoose` | Overrides the database named in the URI. |
+| `bullmq.redisUrl` | `string` | none, required | `@tulipes/bullmq` | `redis://[user:pass@]host:port[/db]` for queues and workers. |
+
+The reference app wires them from the core module's environment values. A full
+`MONGO_URI` wins; otherwise the parts are passed separately:
+
+```ts title="config/app.config.ts"
+mongoose: env.core.mongodbUri
+  ? { uri: env.core.mongodbUri }
+  : {
+      uri: env.core.mongodbHost,
+      user: env.core.mongodbUsername,
+      pass: env.core.mongodbPassword,
+      dbName: env.core.mongodbDbName,
+    },
+bullmq: { redisUrl: env.core.redisUrl },
+```
+
+A missing key aborts with:
+
+```txt
+provider "mongoose" is selected but config.mongoose.uri is not set — wire it in config/app.config.ts from a variable a sys module declares: mongoose: { uri: env.core.mongodbUri }
+provider "bullmq" is selected but config.bullmq.redisUrl is not set — wire it in config/app.config.ts from a variable a sys module declares: bullmq: { redisUrl: env.core.redisUrl }
+```
+
+`@tulipes/socket.io` reads no config key. See
+[providers](/tulipes-js/concepts/providers/) for how each one joins the boot.
+
+## MCP keys (`config/mcp.config.ts`)
+
+Read only by the `pnpm mcp` process (`serveMcp()` from `@tulipes/mcp`), through
+`defineMcp()`.
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `transport` | `"stdio"` or `{ http }` | `"stdio"` | stdio serves one client, identified by `--token` or `TULIPES_MCP_TOKEN`. `{ http }` serves MCP Streamable HTTP, each request identified by its `Authorization: Bearer`. |
+| `transport.http.port` | `number` | none, required | Port of the HTTP listener. |
+| `transport.http.host` | `string` | `"127.0.0.1"` | Bind address. On loopback, a request whose `Host` is not the listener's own is refused (DNS rebinding). |
+| `transport.http.path` | `string` | `"/mcp"` | The endpoint path; anything else is a 404. |
+| `transport.http.maxBodyBytes` | `number` | `1048576` (1 MiB) | Larger bodies get a 413 before `identify` runs. |
+| `identify` | `(ctx, credential) => actor or null` | none: every caller is a guest | Turns the credential into an actor. With the `http` transport and no `identify`, the process refuses to start when `APP_ENV` is `production` or `staging`. |
+
+See the [MCP guide](/tulipes-js/guides/mcp/) and the
+[@tulipes/mcp package](/tulipes-js/packages/mcp/).
+
+## Module settings (`module.config.ts`)
+
+A module declares its settings with `defineConfig({ schema })`. Values live in the
+settings store (phase 6), are typed at `ctx.config.<module>.<field>` by
+`tulipes sync`, and can be changed at runtime through the console. Every field
+needs a default; a field marked `.meta({ secret: true })` is refused, and one marked
+`.meta({ restart: true })` applies on the next boot. Details are in the
+[settings guide](/tulipes-js/guides/settings/).
+
+The reference app declares the following. A generated app gets the same modules,
+so these are the settings you start with.
+
+### `core`
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `core.publicDomain` | `string` | `"localhost"` | Public hostname of the API; `"localhost"` means not deployed. Read by the nginx deploy script and the generated API documents. |
+
+### `auth`
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `auth.accessTtl` | `string` (ms duration) | `"15m"` | Access token lifetime. A revoked user keeps their role until it expires. |
+| `auth.refreshTtl` | `string` | `"30d"` | Refresh token lifetime; also the TTL of its database record. |
+| `auth.sessionTouchSeconds` | integer > 0 | `60` | Seconds between two writes of a session's `last_seen_at`. |
+| `auth.cacheTtlSeconds` | integer 0–3600 | `60` | Seconds a resolved session stays cached; `0` disables the cache. |
+
+### `users`
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `users.maxSessions` | integer > 0 | `5` | Concurrent sessions per user; the oldest is evicted past it. |
+| `users.signupMode` | `"open"`, `"invite"`, `"closed"` | `"open"` | Who may register. Anything but `open` makes `POST /auth/register` answer 403 `REGISTRATION_CLOSED`. |
+
+### `security`
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `security.passwordRounds` | integer 4–31 | `12` | bcrypt cost for new hashes; existing hashes are upgraded on login. |
+| `security.bodyLimit` | `string` such as `"1mb"` | `"1mb"` | Largest JSON body `express.json` parses. nginx `client_max_body_size` must be at least this. |
+| `security.trustProxyCidrs` | `string` (comma-separated) | `""` | Trusted proxy addresses or CIDRs; empty ignores forwarded headers. |
+| `security.corsOrigins` | `string` (comma-separated) | `""` | Origins allowed to read responses; `"*"` allows any, empty allows none. |
+| `security.corsCredentials` | `boolean` | `false` | Emits `Access-Control-Allow-Credentials`. Refused together with `corsOrigins: "*"`. |
+| `security.hstsMaxAge` | integer ≥ 0 | `15552000` | `Strict-Transport-Security` max-age in seconds; `0` disables the header. |
+| `security.rateLimits.namespace` | `string` | `"tulipes"` | Redis key namespace shared by replicas of one app. |
+| `security.rateLimits.windowMs` | integer ≥ 1 | `60000` | Fixed window, in milliseconds. |
+| `security.rateLimits.auth` | integer ≥ 1 | `20` | Login, register and password POSTs per client per window. |
+| `security.rateLimits.session` | integer ≥ 1 | `120` | All auth requests per client per window. |
+| `security.rateLimits.config` | integer ≥ 1 | `60` | Console (config and settings) requests per client per window. |
+
+These are hot-applied: `onChange` rebuilds the proxy policy and the rate limiter in
+every process. See [security middleware](/tulipes-js/guides/security-middleware/).
+
+### `agents`
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `agents.model` | `string` | `"claude-opus-5-5"` | Claude model every run uses. |
+| `agents.effort` | `"low"`…`"max"` | `"high"` | Thinking effort per turn. |
+| `agents.approval` | `"none"`, `"writes"`, `"all"` | `"writes"` | Which tool calls wait for the person who started the run. |
+| `agents.maxTurns` | integer > 0 | `30` | Model turns before a run ends exhausted. |
+| `agents.maxToolCalls` | integer > 0 | `100` | Tool calls before a run ends exhausted. |
+| `agents.maxOutputTokens` | integer > 0 | `200000` | Output tokens before a run ends exhausted. |
+| `agents.maxRunMinutes` | number > 0 | `10` | Working minutes per run, not counting time waiting for approval. |
+| `agents.maxTokensPerTurn` | integer > 0 | `32000` | `max_tokens` of one turn; a cut-off turn is retried once with twice this. |
+| `agents.toolResultMaxChars` | integer ≥ 1000 | `8000` | Longest tool result the model reads. |
+| `agents.contextEditing` | `boolean` | `false` | Lets the API clear old tool results from long runs (beta). |
+| `agents.compaction` | `boolean` | `false` | Lets the API summarise early turns near the context window (beta). |
+| `agents.refusalFallback` | `boolean` | `true` | Retries a declined turn on a fallback model. |
+| `agents.retentionDays` | integer > 0 | `30` | Days a finished run and its transcript are kept. |
+
+### `hello`
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `hello.greeting` | `string` | `"Hello"` | Word the demo module greets callers with. |
+
+## Environment values in the config
+
+Every module's `tulipes.env` entries also land in its namespace:
+`PORT` declared by `core` as `port` is `ctx.config.core.port`. The full list is on
+[environment variables](/tulipes-js/reference/topics/environment-variables/).
+
+<Aside type="caution">
+Under inspection (`tulipes routes`, `tulipes spec`) a missing or invalid
+environment value is `undefined` instead of an error. Keep `config/app.config.ts`
+to wiring values, never to requiring them.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Configuration concepts" href="/tulipes-js/concepts/configuration/" description="How the seed, settings and environment become ctx.config." />
+  <LinkCard title="Settings guide" href="/tulipes-js/guides/settings/" description="Declare, read and change module settings at runtime." />
+  <LinkCard title="Environment variables" href="/tulipes-js/reference/topics/environment-variables/" description="Every variable the app and providers declare." />
+</CardGrid>

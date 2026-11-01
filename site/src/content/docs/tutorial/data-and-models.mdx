@@ -1,0 +1,496 @@
+---
+title: Store books in MongoDB
+description: Declare a Book model, read it through ctx.models, type it with tulipes sync, build CRUD endpoints, and let clients search, filter, sort and page the catalogue.
+sidebar:
+  order: 3
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Now the catalogue gets real data. We declare a `Book` model, read and write
+it from controllers, split the endpoints into a public catalogue and a back
+office, and expose a list endpoint that clients can search, filter, sort,
+group and page through, all from one declaration.
+
+## Declare the model
+
+Replace the scaffolded `models/books.model.ts` with a `Book` model:
+
+```sh
+rm modules/books/models/books.model.ts
+```
+
+```ts title="modules/books/models/book.model.ts"
+import { Schema } from "mongoose";
+import type { ModelDef } from "@tulipes/mongoose";
+
+import { baseSchemaOptions } from "@app/core";
+
+const bookSchema = new Schema(
+  {
+    title: { type: String, required: true, trim: true, index: true },
+    author: { type: String, required: true, trim: true, index: true },
+    isbn: { type: String, required: true, unique: true, trim: true },
+    price: { type: Number, required: true, min: 0, index: true },
+    stock: { type: Number, default: 0, min: 0 },
+    published_at: { type: Date, index: true },
+  },
+  baseSchemaOptions,
+);
+
+// Every field the catalogue lets clients filter or sort on has an index.
+bookSchema.index({ created_at: -1 });
+
+export default { name: "Book", schema: bookSchema } satisfies ModelDef;
+```
+
+A model file is a **declaration**, not a registration. It default-exports a
+name and a schema, and the models provider (`@tulipes/mongoose`) compiles it
+on the boot's own connection and puts it in the model store. You never call
+`mongoose.model()` yourself; two modules registering the same name is a boot
+error naming both.
+
+Three conventions are at work:
+
+- **snake_case on the wire and in the database.** `published_at`, never
+  `publishedAt`. camelCase is for TypeScript-only names.
+- **Base plugins.** The core module registers a global plugin before any
+  model compiles, so every schema gets `created_at` and `updated_at`
+  timestamps and soft delete (`is_deleted`, `deleted_at`, `deleted_by`)
+  without asking. See [Mongoose plugins](/tulipes-js/guides/mongoose-plugins/).
+- **`baseSchemaOptions`** from `@app/core` sets the JSON serialization every
+  model shares: no `__v`, no `_id` when a document is turned into JSON.
+
+We will use the ISBN as the public identifier, so clients never see or send
+a MongoDB id.
+
+## Generate the types
+
+```sh
+pnpm sync
+```
+
+`types/tulipes.d.ts` now lists the model under its name:
+
+```ts title="types/tulipes.d.ts"
+    /** [books] modules/books/models/book.model.ts */
+    "Book": (typeof import("./../modules/books/models/book.model.ts"))["default"];
+```
+
+`requireModels(ctx).get("Book")` returns the model with that type. A name no
+module registered is not caught by the compiler (the store also accepts any
+string), but it throws at the call site with the names it does know:
+
+```txt
+Model "Books" was never registered by any module (known: <every registered model name>)
+```
+
+Run `pnpm sync` after every change to a model file, a settings schema, a
+queue's `jobs` export or a module's `tulipes.env`. `pnpm dev` runs it on
+every start.
+
+## Two surfaces: web and bo
+
+The catalogue has two audiences. Anyone may browse it; only staff may change
+it. In Tulipes that split is the **scope** segment of the RAI id: `web` for
+the client-facing surface, `bo` for the back office. We give each its own
+routes file and controller, named scope-first. Delete the scaffold's helper,
+which the new controllers do not use:
+
+```sh
+rm -r modules/books/helpers
+```
+
+### The catalogue
+
+```ts title="modules/books/routes/web.books.routes.ts"
+import { Router } from "express";
+import type { BackendCtx } from "@tulipes/core/boot";
+import { listQuery } from "@app/core";
+
+import { WebBooksController } from "../controllers/web.books.controllers.ts";
+
+export default function webBooksRoutes(ctx: BackendCtx): Router {
+  const { rai } = ctx;
+  const router = Router();
+  const books = new WebBooksController(ctx);
+
+  router.get("/books", rai({
+      id: "books:web:list",
+      name: "Browse the catalogue",
+      query: listQuery({
+        search: ["title", "author"],
+        filter: {
+          author: ["=", "in"],
+          price: { type: "number", ops: [">", ">=", "<", "<="] },
+          published_at: { type: "date", ops: [">=", "<"] },
+        },
+        sort: ["created_at", "title", "price"],
+        fields: ["title", "author", "isbn", "price", "stock", "published_at", "created_at"],
+        group: ["author"],
+      }),
+    }), books.list());
+
+  router.get("/books/:isbn", rai({
+      id: "books:web:detail",
+      name: "Read one book",
+    }), books.detail());
+
+  return router;
+}
+```
+
+`listQuery(policy)` from `@app/core` is the list-query language. The policy
+names everything a client may search, filter on (and with which operators),
+sort by, select and group by. Anything else is refused before the handler
+runs. `rai()` validates `?search`, `?filter`, `?sort`, `?fields` and `?group`
+against it and replaces `req.query` with the parsed result.
+
+```ts title="modules/books/controllers/web.books.controllers.ts"
+import type { Request, RequestHandler, Response } from "express";
+import { requireModels, type Ctx } from "@tulipes/core/boot";
+import { HttpError } from "@tulipes/core/http";
+import { runQuery, toMongoose, type ParsedListQuery } from "@app/core";
+
+export class WebBooksController {
+  readonly #ctx: Ctx;
+
+  constructor(ctx: Ctx) {
+    this.#ctx = ctx;
+  }
+
+  list(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      // rai() has already parsed and policed ?search, ?filter, ?sort…
+      const compiled = toMongoose(req.query as unknown as ParsedListQuery, req.page);
+      const { data, total_items } = await runQuery(requireModels(this.#ctx).get("Book"), compiled);
+      res.respond({ data, meta: total_items === undefined ? {} : { total_items } });
+    };
+  }
+
+  detail(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const book = await requireModels(this.#ctx).get("Book")
+        .findOne({ isbn: req.params.isbn })
+        .select("-_id title author isbn price stock published_at created_at")
+        .lean();
+      if (!book) throw new HttpError(404, "notFound");
+      res.respond({ data: book });
+    };
+  }
+}
+```
+
+`requireModels(ctx)` from `@tulipes/core/boot` returns the model store, or
+throws if the app declares no models provider. It is called **inside** the
+handler, when a request arrives, never while the router is built: inspection
+builds this router with no database at all.
+
+`req.page` holds `page`, `per_page` and `skip`, parsed from the query string
+and clamped by `config.pagination` (20 by default, 100 at most). Passing
+`total_items` to `res.respond()` is what marks a response as a page:
+`meta` then gains `page`, `per_page` and `total_pages`. A single record keeps
+`meta: {}`.
+
+A missing book is **thrown**, not responded: `throw new HttpError(404, "notFound")`.
+The terminal error handler turns it into the envelope, translating
+`notFound` in the books namespace. Add the string:
+
+```json title="modules/books/i18n/en.json"
+{
+  "notFound": "No book with this ISBN"
+}
+```
+
+```json title="modules/books/i18n/fr.json"
+{
+  "notFound": "Aucun livre avec cet ISBN"
+}
+```
+
+### The back office
+
+```ts title="modules/books/routes/bo.books.routes.ts"
+import { Router } from "express";
+import type { BackendCtx } from "@tulipes/core/boot";
+
+import { BoBooksController } from "../controllers/bo.books.controllers.ts";
+
+export default function boBooksRoutes(ctx: BackendCtx): Router {
+  const { rai } = ctx;
+  const router = Router();
+  const books = new BoBooksController(ctx);
+
+  router.post("/books", rai({
+      id: "books:bo:create",
+      status: 201,
+      name: "Add a book",
+    }), books.create());
+
+  router.patch("/books/:isbn", rai({
+      id: "books:bo:update",
+      name: "Change a book",
+    }), books.update());
+
+  router.delete("/books/:isbn", rai({
+      id: "books:bo:delete",
+      name: "Withdraw a book",
+    }), books.remove());
+
+  return router;
+}
+```
+
+`status: 201` on the declaration is the default status `res.respond()` uses
+for that route, and what the OpenAPI document describes.
+
+```ts title="modules/books/controllers/bo.books.controllers.ts"
+import type { Request, RequestHandler, Response } from "express";
+import { requireModels, type Ctx } from "@tulipes/core/boot";
+import { HttpError } from "@tulipes/core/http";
+
+export class BoBooksController {
+  readonly #ctx: Ctx;
+
+  constructor(ctx: Ctx) {
+    this.#ctx = ctx;
+  }
+
+  create(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const book = await requireModels(this.#ctx).get("Book").create(req.body);
+      res.respond({ data: book });
+    };
+  }
+
+  update(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const book = await requireModels(this.#ctx).get("Book")
+        .findOneAndUpdate({ isbn: req.params.isbn }, req.body, { new: true, runValidators: true });
+      if (!book) throw new HttpError(404, "notFound");
+      res.respond({ data: book });
+    };
+  }
+
+  remove(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const book = await requireModels(this.#ctx).get("Book").findOne({ isbn: req.params.isbn });
+      if (!book) throw new HttpError(404, "notFound");
+      // The core module's soft-delete plugin: the row stays, every ordinary query skips it.
+      await (book as unknown as { softDelete(): Promise<unknown> }).softDelete();
+      res.respond({ data: { isbn: req.params.isbn, deleted: true } });
+    };
+  }
+}
+```
+
+### The grants
+
+The catalogue is public, so widen chapter 2's grant to the whole web surface
+of the module. A grant ending in `:*` covers everything under it:
+
+```ts title="modules/books/module.acl.ts"
+import type { AclBuilder } from "@tulipes/core/acl";
+
+export default function booksAcl(acl: AclBuilder): void {
+  // The catalogue is public: guest may browse and read it.
+  acl.allow("guest", "books:web:*");
+}
+```
+
+The back office goes to administrators. In the production preset a new
+feature module's namespace is added to **both** the `admin` and the
+`sysadmin` grants in the auth module, which owns the roles. Neither role
+holds `*`, on purpose: a wildcard would also reach the settings console,
+which only `sysadmin` may use.
+
+```ts title="modules/auth/module.acl.ts" del={1,3} ins={2,4}
+  acl.allow("admin", "auth:*", "users:*", "hello:*", "agents:*");
+  acl.allow("admin", "auth:*", "users:*", "hello:*", "agents:*", "books:*");
+  acl.allow("sysadmin", "auth:*", "users:*", "hello:*", "agents:*");
+  acl.allow("sysadmin", "auth:*", "users:*", "hello:*", "agents:*", "books:*");
+```
+
+[Chapter 5](/tulipes-js/tutorial/permissions/) returns to permissions in depth.
+
+## Add some books
+
+Restart the app (`pnpm dev`). Writing needs an administrator, and the auth
+module seeded one on the first boot from `AUTH_ADMIN_EMAIL` and
+`AUTH_ADMIN_PASSWORD`. Sign in and keep the access token:
+
+```sh
+TOKEN=$(curl -s -X POST http://localhost:3000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@example.com","password":"dev-admin-password"}' \
+  | node -p 'JSON.parse(require("fs").readFileSync(0)).data.access_token')
+```
+
+Now add three books:
+
+```sh
+curl -s -X POST http://localhost:3000/api/v1/books \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"title":"The Left Hand of Darkness","author":"Ursula K. Le Guin","isbn":"9780441478125","price":9.99,"stock":4,"published_at":"1969-03-01"}'
+
+curl -s -X POST http://localhost:3000/api/v1/books \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"title":"A Wizard of Earthsea","author":"Ursula K. Le Guin","isbn":"9780547773742","price":8.5,"stock":0,"published_at":"1968-01-01"}'
+
+curl -s -X POST http://localhost:3000/api/v1/books \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"title":"Kindred","author":"Octavia E. Butler","isbn":"9780807083697","price":12,"stock":7,"published_at":"1979-06-01"}'
+```
+
+The first answers `201 Created`:
+
+```json
+{"success":true,"data":{"title":"The Left Hand of Darkness","author":"Ursula K. Le Guin","isbn":"9780441478125","price":9.99,"stock":4,"published_at":"1969-03-01T00:00:00.000Z","is_deleted":false,"deleted_at":null,"deleted_by":null,"created_at":"2026-11-01T16:06:30.236Z","updated_at":"2026-11-01T16:06:30.236Z"},"errors":[],"meta":{}}
+```
+
+The timestamps and soft-delete fields came from the base plugin; `_id` was
+removed by `baseSchemaOptions`. Instants are stored and returned in UTC.
+
+## Query the catalogue
+
+A plain list pages by 20. Ask for two per page:
+
+```sh
+curl -s 'http://localhost:3000/api/v1/books?per_page=2'
+```
+
+```json
+{"success":true,"data":[{"_id":"6ae7638672422c5fa77dcf08","title":"The Left Hand of Darkness","author":"Ursula K. Le Guin","isbn":"9780441478125","price":9.99,"stock":4,"published_at":"1969-03-01T00:00:00.000Z","created_at":"2026-11-01T16:06:30.236Z"},{"_id":"6ae7638672422c5fa77dcf0a","title":"A Wizard of Earthsea","author":"Ursula K. Le Guin","isbn":"9780547773742","price":8.5,"stock":0,"published_at":"1968-01-01T00:00:00.000Z","created_at":"2026-11-01T16:06:30.252Z"}],"errors":[],"meta":{"page":1,"per_page":2,"total_pages":2,"total_items":3}}
+```
+
+The policy's `fields` list is also the default projection, which is why
+`is_deleted` and `updated_at` are absent. List rows are read lean, so they
+carry MongoDB's `_id` as well.
+
+Every list parameter except `search` is JSON in the query string. `curl -G`
+with `--data-urlencode` saves you the escaping. Le Guin's books under 9,
+cheapest first, with two fields:
+
+```sh
+curl -s -G http://localhost:3000/api/v1/books \
+  --data-urlencode 'filter=[["author","=","Ursula K. Le Guin"],["price","<",9]]' \
+  --data-urlencode 'sort=["price","asc"]' \
+  --data-urlencode 'fields=["title","price"]'
+```
+
+```json
+{"success":true,"data":[{"_id":"6ae7638672422c5fa77dcf0a","title":"A Wizard of Earthsea","price":8.5}],"errors":[],"meta":{"page":1,"per_page":20,"total_pages":1,"total_items":1}}
+```
+
+A search term matches the policy's `search` fields, case-insensitively:
+
+```sh
+curl -s -G http://localhost:3000/api/v1/books --data-urlencode 'search=kind'
+```
+
+```json
+{"success":true,"data":[{"_id":"6ae7638672422c5fa77dcf0c","title":"Kindred","author":"Octavia E. Butler","isbn":"9780807083697","price":12,"stock":7,"published_at":"1979-06-01T00:00:00.000Z","created_at":"2026-11-01T16:06:30.269Z"}],"errors":[],"meta":{"page":1,"per_page":20,"total_pages":1,"total_items":1}}
+```
+
+Grouping turns rows into counts:
+
+```sh
+curl -s -G http://localhost:3000/api/v1/books --data-urlencode 'group=["author"]'
+```
+
+```json
+{"success":true,"data":[{"count":1,"key":{"author":"Octavia E. Butler"}},{"count":2,"key":{"author":"Ursula K. Le Guin"}}],"errors":[],"meta":{"page":1,"per_page":20,"total_pages":1,"total_items":2}}
+```
+
+And anything outside the policy is a `422` that names the offending value:
+
+```sh
+curl -s -G http://localhost:3000/api/v1/books --data-urlencode 'filter=[["stock",">",1]]'
+```
+
+```json
+{"success":false,"data":null,"errors":[{"field":"filter.0.0","message":"\"stock\" is not filterable","code":"CUSTOM"}],"meta":{}}
+```
+
+<Aside type="caution">
+Only expose what is indexed. A filter, sort or group on an unindexed field is
+a collection scan, and the engine cannot know which fields are indexed; the
+policy author does. That is why the model indexes `title`, `author`,
+`price`, `published_at` and `created_at`; the base plugin indexes
+`is_deleted` itself. The full grammar is in the
+[list-query reference](/tulipes-js/reference/topics/list-query-grammar/).
+</Aside>
+
+## Read, change and withdraw
+
+```sh
+curl -s http://localhost:3000/api/v1/books/9780807083697
+```
+
+```json
+{"success":true,"data":{"title":"Kindred","author":"Octavia E. Butler","isbn":"9780807083697","price":12,"stock":7,"published_at":"1979-06-01T00:00:00.000Z","created_at":"2026-11-01T16:06:30.269Z"},"errors":[],"meta":{}}
+```
+
+An unknown ISBN is the thrown `HttpError`, translated for whoever asks.
+`?lang=fr` (or an `Accept-Language` header) picks the locale:
+
+```sh
+curl -s 'http://localhost:3000/api/v1/books/123?lang=fr'
+```
+
+```json
+{"success":false,"data":null,"errors":[{"field":null,"message":"Aucun livre avec cet ISBN","code":"NOT_FOUND"}],"meta":{}}
+```
+
+The code `NOT_FOUND` is derived from the key `notFound`, so there is no
+second string to keep in step. Change the stock, then withdraw a book:
+
+```sh
+curl -s -X PATCH http://localhost:3000/api/v1/books/9780807083697 \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"stock":6}'
+
+curl -s -X DELETE http://localhost:3000/api/v1/books/9780547773742 \
+  -H "authorization: Bearer $TOKEN"
+```
+
+```json
+{"success":true,"data":{"isbn":"9780547773742","deleted":true},"errors":[],"meta":{}}
+```
+
+The withdrawn book is still in MongoDB with `is_deleted: true`, but the
+plugin hides it from every find, count and aggregate, so the catalogue now
+lists two books. Code that needs deleted rows asks for them explicitly with
+`.withDeleted()` or `.onlyDeleted()` on the query.
+
+## A gap we close next
+
+Send a book without an author:
+
+```sh
+curl -s -X POST http://localhost:3000/api/v1/books \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"title":"No author"}'
+```
+
+```json
+{"success":false,"data":null,"errors":[{"field":null,"message":"internal: Book validation failed: price: Path `price` is required., isbn: Path `isbn` is required., author: Path `author` is required.","code":"INTERNAL_ERROR"}],"meta":{}}
+```
+
+A `500`. Mongoose refused the document, but nothing told the framework this
+was the caller's fault, so it is an unexpected error. In development the
+real message is shown after `internal:`; in any other `APP_ENV` the caller
+reads only `internal server error`. The fix is to validate the request
+before it reaches the model, which is the next chapter.
+
+## Where we are
+
+The bookstore stores books, serves a public catalogue that can be searched,
+filtered, sorted, grouped and paged, and has an admin-only back office with
+soft delete.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Chapter 4: validate input" href="/tulipes-js/tutorial/validation-and-errors/" description="zod on rai(), HttpError and translated errors." />
+  <LinkCard title="Models" href="/tulipes-js/guides/models/" description="Model files, the store and typing in depth." />
+  <LinkCard title="Pagination and list queries" href="/tulipes-js/guides/pagination-and-list-queries/" description="Every policy option, resolve, system filters." />
+</CardGrid>

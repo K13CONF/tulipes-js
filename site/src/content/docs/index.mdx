@@ -3,26 +3,68 @@ title: Tulipes, the fail-closed Express framework
 description: Tulipes is a TypeScript framework for Express 5 that checks modules, roles, environment, models and queues at boot, and reports every problem at once.
 template: splash
 hero:
-  tagline: The Express framework that refuses to start when something is wrong.
+  title: Express apps that refuse to start broken
+  tagline: Tulipes is a TypeScript framework for Express 5. You write modules; it discovers, orders and validates them, and stops the boot with one report listing everything that is wrong.
   actions:
-    - text: View on GitHub
+    - text: Start the tutorial
+      link: /tulipes-js/tutorial/overview/
+      icon: right-arrow
+    - text: Quick start
+      link: /tulipes-js/start/quick-start/
+      variant: secondary
+    - text: GitHub
       link: https://github.com/K13CONF/tulipes-js
       icon: github
-    - text: "@tulipes/core on npm"
-      link: https://www.npmjs.com/package/@tulipes/core
-      icon: external
       variant: minimal
 ---
 
-import { Card, CardGrid } from "@astrojs/starlight/components";
+import { Card, CardGrid, LinkCard, Tabs, TabItem } from "@astrojs/starlight/components";
 
-You write **modules**: one folder per feature, holding its own routes, models,
-config, permissions and background jobs. Tulipes discovers them, orders them,
-validates them and wires them into a running Express 5 API.
+## Up and running in a minute
 
-Everything that can be checked is checked at boot, and every failure is
-reported **in aggregate**. Ten missing environment variables is one crash
-listing ten problems, not ten restarts.
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    npm install -g @tulipes/cli
+    tulipes init my-api
+    cd my-api && pnpm install && pnpm dev
+    ```
+  </TabItem>
+  <TabItem label="production preset">
+    ```sh
+    # auth, users, settings, MongoDB, queues, sockets, PM2 and nginx
+    tulipes init my-api --preset production
+    cd my-api && pnpm install && pnpm dev
+    ```
+  </TabItem>
+</Tabs>
+
+Open `http://localhost:3000/api/v1/hello`. The minimal preset needs no
+database, no Redis and no credentials.
+
+## One feature, one folder
+
+A module holds everything a feature needs: routes, permissions, settings,
+models, jobs and sockets. Delete the folder and the feature is gone.
+
+```ts title="modules/books/routes/web/books.routes.ts"
+import { Router } from "express";
+import { requireModels, type BackendCtx } from "@tulipes/core/boot";
+
+export default function booksRoutes(ctx: BackendCtx): Router {
+  const router = Router(); // mounted under config.api.prefix (/api/v1)
+
+  router.get("/books", ctx.rai({ id: "books:web:list", name: "List books" }), // the id is the permission
+    async (req, res) => {
+      const books = await requireModels(ctx).get("Book").find().lean();
+      res.respond({ data: books });                                          // one envelope everywhere
+    });
+
+  return router;
+}
+```
+
+## When something is wrong, you hear about all of it
 
 ```txt
 TulipesBootError: Boot aborted during "environment" — 3 issue(s):
@@ -31,41 +73,45 @@ TulipesBootError: Boot aborted during "environment" — 3 issue(s):
   ✖ [users] required variable "USERS_ADMIN_EMAIL" has no value
 ```
 
-## Quick start
-
-Tulipes needs Node.js 24 and pnpm 10.
-
-```sh
-npm install -g @tulipes/cli
-tulipes init my-api
-cd my-api
-pnpm install
-pnpm sync
-pnpm dev
-```
-
-Open `http://localhost:3000/api/v1/hello`. The default minimal preset needs no
-MongoDB, Redis or credentials. Run `tulipes init my-api --preset production`
-for authentication, users, settings, a database, queues, sockets and
-deployment files.
+Missing variables, dependency cycles, duplicate permissions and colliding
+queue names stop the boot with one report. Ten problems is one crash, not ten restarts.
 
 ## Why Tulipes
 
 <CardGrid>
-  <Card title="Modules, not layers" icon="puzzle">
-    A feature lives in one folder. Delete the folder and the feature is gone,
-    with no leftover registration in six other files.
+  <Card title="Fail closed" icon="warning">
+    Unknown roles are denied, unrouted requests get a 404, and internals never
+    leak outside development. Every check that can run at boot does.
   </Card>
-  <Card title="Fail closed, everywhere" icon="warning">
-    Missing variables, dependency cycles, duplicate ACL grants and colliding
-    queue names all stop the boot with a full report. Unknown roles are denied.
+  <Card title="Typed from your code" icon="seti:typescript">
+    `tulipes sync` generates types from your modules, so a wrong model name,
+    job payload or environment variable fails to compile.
   </Card>
   <Card title="One codebase, three processes" icon="seti:config">
-    The same app boots as an HTTP backend, a queue worker or a one-shot script,
+    The same app boots as an HTTP server, a queue worker or a one-off script,
     with the same modules and the same configuration.
   </Card>
-  <Card title="Generated types" icon="seti:typescript">
-    `tulipes sync` generates types from your modules, so a wrong model name,
-    job payload or environment variable does not compile.
+  <Card title="Infrastructure you choose" icon="puzzle">
+    Core installs no driver. Add MongoDB, BullMQ or Socket.IO as providers, and
+    an app that needs none installs none.
   </Card>
+  <Card title="Documented by declaration" icon="document">
+    The schemas that validate a request also generate OpenAPI 3.1 and Postman
+    collections, so the docs cannot drift from the code.
+  </Card>
+  <Card title="Ready for AI agents" icon="rocket">
+    Modules declare actions an agent may call, gated by the same permissions as
+    routes, and `@tulipes/mcp` serves them over MCP.
+  </Card>
+</CardGrid>
+
+## Your learning path
+
+<CardGrid>
+  <LinkCard title="1. Start here" description="What Tulipes is, installing it, and a tour of a new project." href="/tulipes-js/start/introduction/" />
+  <LinkCard title="2. Build a bookstore API" description="One project from empty folder to deployed API: models, permissions, jobs, sockets, tests." href="/tulipes-js/tutorial/overview/" />
+  <LinkCard title="3. How Tulipes works" description="Modules, the boot pipeline, the context, process modes and the permission model." href="/tulipes-js/concepts/architecture/" />
+  <LinkCard title="4. Guides" description="One feature per page: routes, validation, auth, queues, sockets, caching, testing and more." href="/tulipes-js/guides/routes-and-controllers/" />
+  <LinkCard title="5. Packages" description="What each package adds and how it plugs in: core, CLI, Mongoose, BullMQ, Socket.IO, MCP, spec, testing." href="/tulipes-js/packages/core/" />
+  <LinkCard title="6. Production" description="Deploying with PM2 and nginx, the security model, and upgrading between versions." href="/tulipes-js/production/deployment/" />
 </CardGrid>

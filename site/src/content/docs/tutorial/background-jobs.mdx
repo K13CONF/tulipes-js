@@ -1,0 +1,231 @@
+---
+title: Run work in the background
+description: Declare a books queue with a typed job schema, enqueue a job when a book is added, run the worker process to consume it, and configure retries with backoff.
+sidebar:
+  order: 6
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Adding a book should not wait for slow side effects: mailing subscribers,
+refreshing a search index, notifying a partner. That work belongs in a job.
+In this chapter the bookstore enqueues a job each time a book is added, and
+a second process, the worker, picks it up and retries it if it fails.
+
+## The idea
+
+One file describes both sides of a queue. Every process runs it:
+
+```txt
+                      queues/books.queues.ts
+                 jobs schema · define() · process()
+                    │                        │
+         backend process                worker process
+   registers the queue, so a       turns the processor into a
+   controller can add() into it    live consumer (one BullMQ worker)
+                    │                        ▲
+                    └──────── Redis ─────────┘
+```
+
+The process mode decides what the file means. The backend only produces;
+`pnpm worker` boots the same app in `worker` mode and consumes. A script
+can produce too. There is never a second definition to keep in step.
+
+## The queue file
+
+Replace the scaffolded `queues/books.queues.ts`:
+
+```ts title="modules/books/queues/books.queues.ts"
+import { requireModels, type Ctx } from "@tulipes/core/boot";
+import type { JobSchemas, QueueRegistry } from "@tulipes/bullmq";
+import { z } from "zod/v4";
+
+import { moduleLogger } from "@app/core";
+
+export const jobs = {
+  "books.added": z.object({ isbn: z.string() }),
+} satisfies JobSchemas;
+
+export default function booksQueues(ctx: Ctx, queues: QueueRegistry): void {
+  const log = moduleLogger(ctx, "books");
+
+  // Options a queue needs go on define(); every job added to it inherits them.
+  queues.define("books.added", {
+    defaultJobOptions: { attempts: 5, backoff: { type: "exponential", delay: 1_000 } },
+  });
+
+  queues.process("books.added", async (job) => {
+    // Re-read the book: a job carries an id, never a copy of the document.
+    const book = await requireModels(ctx).get("Book").findOne({ isbn: job.data.isbn }).lean();
+    if (!book) return { skipped: true };
+
+    // Stand-in for the slow part: mailing subscribers, warming a search index…
+    log.info({ isbn: book.isbn, attempt: job.attemptsMade + 1 }, "announced new book");
+    return { announced: book.isbn };
+  });
+}
+```
+
+Three parts:
+
+- **`jobs`** is the declaration. Each entry names a queue and the zod schema
+  of its payload. It defines the queue, every `add()` is validated against
+  it at runtime, and `pnpm sync` types `job.data` here and the payload at the
+  producer.
+- **`queues.define(name, options)`** is only needed for options. Here every
+  job is attempted up to five times, waiting 1 s, 2 s, 4 s and 8 s between
+  attempts. Without options, the `jobs` entry alone defines the queue.
+- **`queues.process(name, handler)`** registers the consumer. Jobs retry, so
+  the handler must be safe to run twice: pass ids and re-read state, never
+  ship documents.
+
+Queue names use `.` because BullMQ reserves `:` as its Redis separator.
+`moduleLogger(ctx, "books")` from `@app/core` is the app's logger; in the
+worker it writes to `logs/app-worker.<date>.log`, so the two processes never
+share a file.
+
+Regenerate the types:
+
+```sh
+pnpm sync
+```
+
+## Produce a job
+
+Enqueue from the create handler, after the book is saved:
+
+```ts title="modules/books/controllers/bo.books.controllers.ts" ins={2,10,13-14} del={1}
+import { requireModels, type Ctx } from "@tulipes/core/boot";
+import { requireModels, requireQueues, type Ctx } from "@tulipes/core/boot";
+
+  create(): RequestHandler {
+    return async (req: Request, res: Response) => {
+      const Book = requireModels(this.#ctx).get("Book");
+      if (await Book.exists({ isbn: req.body.isbn })) {
+        throw new HttpError(409, "isbnTaken", { field: "isbn", vars: { isbn: req.body.isbn } });
+      }
+      const { isbn } = req.body;
+      const book = await Book.create(req.body);
+
+      // The slow part runs in the worker; the response does not wait for it.
+      await requireQueues(this.#ctx).add("books.added", "announce", { isbn });
+
+      res.respond({ data: book });
+    };
+  }
+```
+
+`add(queue, jobName, data)` takes the queue name, a job name for BullMQ's own
+bookkeeping, and the payload. The payload is typed from the `jobs` schema, so
+a wrong shape does not compile:
+
+```txt
+modules/books/controllers/bo.books.controllers.ts(23,71): error TS2353: Object literal may only specify known properties, and 'id' does not exist in type '{ isbn: string; }'.
+```
+
+## Run the worker
+
+The backend and the worker are separate processes. Start both, each in its
+own terminal:
+
+```sh
+pnpm dev       # terminal 1: the backend
+pnpm worker    # terminal 2: the worker
+```
+
+The worker has its own banner:
+
+```txt
+  ▲ bookstore  development · worker mode
+
+  ➜  Worker      ● consuming 4 queue(s)
+  ➜  Models      mongodb://127.0.0.1:27017/bookstore  ● ready  ·  mongoose
+  ➜  Settings    mongodb://127.0.0.1:27017/bookstore.settings (poll)  ● ready  ·  mongoose-settings  ·  core v1, security v1, auth v1, users v1, hello v1, agents v1
+  ➜  Queues      redis (4 queue(s))  ● ready  ·  4 processor(s) registered, 4 consuming  ·  bullmq
+  ➜  Sockets     not used in worker mode  ·  socket.io
+  ➜  Modules     10 (core*, security*, auth*, users, books, hello, settings, config, agent, agents)  ·  * sys tier
+  ➜  Locales     en, fr  ·  8 translated module(s)
+  ➜  Time zone   UTC  ·  requests may ask for any zone  ·  process
+  ➜  Roles       5 (guest, user, editor, admin, sysadmin)
+  ➜  Runtime     Node v24.22.2  ·  PID 16704  ·  ready in 601ms
+```
+
+Same modules, same configuration, same database. What differs is the last
+phase: no HTTP server, no sockets, and one BullMQ worker per processor.
+Worker mode refuses to start if no module registers a processor, because a
+consumer with nothing to consume is a misconfigured deployment.
+
+Add a book (signed in as an editor or admin, as in chapter 5):
+
+```sh
+curl -s -X POST http://localhost:3000/api/v1/books \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"title":"The Dispossessed","author":"Ursula K. Le Guin","isbn":"9780061054884","price":10.99,"stock":3}'
+```
+
+The response returns at once with `201`. A moment later the worker logs:
+
+```txt
+[16:09:55.456] INFO: [books] announced new book
+    mode: "worker"
+    module: "books"
+    isbn: "9780061054884"
+    attempt: 1
+```
+
+If the worker is not running, nothing is lost: the job waits in Redis and
+runs when a worker starts.
+
+## Watch it retry
+
+Make the processor fail its first two attempts, to see the retry policy at
+work. Add one line after the `if (!book)` check:
+
+```ts
+if (job.attemptsMade < 2) throw new Error("mail server unavailable");
+```
+
+Restart the worker and add another book. The first two attempts throw, BullMQ
+waits 1 s and then 2 s, and the third succeeds:
+
+```txt
+[16:10:21.011] INFO: [books] announced new book
+    mode: "worker"
+    module: "books"
+    isbn: "9781416556961"
+    attempt: 3
+```
+
+Remove the line again. After the last attempt fails, a job stays in BullMQ's
+failed set rather than vanishing; options such as `attempts`, `backoff` and
+`removeOnFail` are BullMQ's own and go in `defaultJobOptions`.
+
+<Aside type="note">
+Shutdown is graceful. On `SIGTERM` the worker stops taking jobs, finishes the
+active ones, then closes Redis and MongoDB. That is why the PM2 config in
+[chapter 10](/tulipes-js/tutorial/deploy/) gives processes 10 seconds before
+killing them.
+</Aside>
+
+## Recurring jobs
+
+A job that runs on a schedule is registered from a bootstrap file with
+`ctx.queues.schedule(queue, schedulerId, repeat, job)`. It is keyed, so
+calling it on every boot updates the schedule instead of duplicating it, and
+a cron pattern fires in the app's time zone unless it names its own. The
+bookstore does not need one; the [queues guide](/tulipes-js/guides/queues/)
+shows it.
+
+## Where we are
+
+Adding a book enqueues an announcement that a separate worker process runs,
+with five attempts and exponential backoff.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Chapter 7: real time" href="/tulipes-js/tutorial/realtime/" description="Tell every connected client about new books." />
+  <LinkCard title="Queues and background jobs" href="/tulipes-js/guides/queues/" description="Every option, schedules and shutdown." />
+  <LinkCard title="Process modes" href="/tulipes-js/concepts/process-modes/" description="backend, worker and script, phase by phase." />
+  <LinkCard title="@tulipes/bullmq" href="/tulipes-js/packages/bullmq/" description="The queues provider." />
+</CardGrid>

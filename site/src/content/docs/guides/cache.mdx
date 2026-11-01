@@ -1,0 +1,217 @@
+---
+title: Cache
+description: Use the reference app's cache helper, a small Cache contract with Redis and in-memory drivers, opened at boot and closed at shutdown, that degrades to a miss.
+sidebar:
+  order: 10
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+The production preset ships one app-wide cache in its sys core module,
+imported from `@app/core`. It is a deliberately small contract (`get`, `set`,
+`del`, `wrap`) with two drivers: Redis, shared by every replica, and an
+in-process memory store for tests and setups without Redis. It is best effort
+by design: a Redis outage costs a cache miss, never a failed request. Like
+the other shared helpers, it is application code in
+`modules/core/helpers/cache/`, not part of the framework.
+
+## Using it
+
+```ts
+import { appCache } from "@app/core";
+
+const cache = appCache(ctx);
+
+const profile = await cache.wrap(`profile:${id}`, 60, () => loadProfile(ctx, id));
+await cache.set("stats:last-run", { at: Date.now() }, 300);
+const last = await cache.get<{ at: number }>("stats:last-run");   // null when absent or expired
+await cache.del(`profile:${id}`);
+```
+
+`appCache(ctx)` returns the process-wide singleton, creating it on the first
+call. It only reads `ctx.config`, so any context works: a handler's, a job's
+or a script's.
+
+## The `Cache` contract
+
+```ts title="modules/core/helpers/cache/types.ts"
+export interface Cache {
+  /** Returns the cached value, or `null` if absent/expired. */
+  get<T>(key: string): Promise<T | null>;
+  /** Stores a value, optionally expiring after `ttlSeconds`. */
+  set<T>(key: string, value: T, ttlSeconds?: number): Promise<void>;
+  /** Removes a key (no-op if absent). */
+  del(key: string): Promise<void>;
+  /** Returns the cached value, or computes it with `producer`, caches it for `ttlSeconds`, and returns it (read-through). */
+  wrap<T>(key: string, ttlSeconds: number, producer: () => Promise<T>): Promise<T>;
+}
+```
+
+| Method | Notes |
+|---|---|
+| `get` | `null` means a miss, so a cached `null` cannot be told apart from no entry |
+| `set` | no `ttlSeconds` (or `0`) keeps the entry until it is evicted or deleted |
+| `del` | a no-op for a missing key |
+| `wrap` | read-through: on a miss it awaits `producer` once, stores the result, returns it |
+
+`wrap` is implemented once in the abstract `BaseCache`, so a driver only
+implements storage. It is not atomic: two concurrent misses on one key both
+run the producer. A driver that can do better (a Redis lock, for instance) may
+override it.
+
+## The drivers
+
+`appCache` picks one from the core module's environment values:
+
+| Condition | Driver |
+|---|---|
+| `config.core.redisUrl` is set | `RedisCache` on its own ioredis client |
+| otherwise | `MemoryCache` |
+
+In the production preset `REDIS_URL` is required, so the app runs on Redis;
+the memory driver serves tests and setups with no Redis URL.
+
+### `RedisCache`
+
+- Values are JSON-serialized, so a cached `Date` comes back as a string.
+- Keys are prefixed with `cache:` (the constructor's `prefix` argument), so
+  cache entries never collide with BullMQ or other Redis users of the same
+  database, and can be cleared without a `FLUSHDB`.
+- The client is created with `maxRetriesPerRequest: 1` and
+  `enableOfflineQueue: false`: a command fails fast instead of queueing for
+  seconds while Redis is down.
+- Every operation catches its own error. `get` returns `null`, `set` and
+  `del` do nothing, and the failure is logged at most once every 30 seconds:
+  `[cache] redis get failed; serving without cache: …`.
+
+That last point is why the cache can sit in global middleware: if a Redis
+outage threw from here, every endpoint would answer 500.
+
+### `MemoryCache`
+
+- A `Map` in the process, so it is **not** shared between processes or
+  replicas.
+- Bounded: past `maxEntries` (10,000 by default, the constructor's argument)
+  the least-recently-used key is evicted. A hit moves its key to the end.
+- Expired entries are dropped when read.
+
+Both classes are exported, so a test or a module can construct its own:
+`new MemoryCache(100)`, `new RedisCache(redis, "reports:")`.
+
+## Lifecycle: open at boot, close at shutdown
+
+The cache holds a Redis connection, so the core module opens it in a
+bootstrap and returns the cleanup:
+
+```ts title="modules/core/bootstrap/cache.bootstrap.ts"
+import type { BootstrapCleanup, RuntimeCtx } from "@tulipes/core/boot";
+
+import { closeCache, openCache } from "../helpers/cache/index.ts";
+
+export default async function cache(ctx: RuntimeCtx): Promise<BootstrapCleanup> {
+  await openCache(ctx);
+  return () => closeCache();
+}
+```
+
+```txt
+phase 9   openCache: create the client, wait until Redis is ready,
+          at most 5 s; never throws
+requests  appCache(ctx) returns the same instance
+shutdown  closeCache: QUIT when ready, otherwise disconnect
+```
+
+Why wait at boot: with the offline queue off, a command sent while the client
+is still connecting is rejected, so the first requests would miss and log a
+false outage. Why it never throws: a Redis that does not come up in time
+leaves the app running without the cache, exactly as an outage later would.
+
+Core runs the returned cleanup after traffic drains, in reverse module order,
+under the shutdown deadline. Inspection never runs bootstraps, so
+`tulipes routes` never connects to Redis.
+
+## In middleware
+
+Middleware that needs the cache is built on its first request with `lazy()`,
+because inspection builds every router with nothing acquired and refuses an
+environment value read while building:
+
+```ts title="modules/core/routes/core.routes.ts"
+ctx.app.use(lazy(() => {
+  const cache = appCache(ctx);
+  return (async (_req, res, next) => {
+    res.setHeader("X-Request-Id", randomUUID());
+    const served = await cache.wrap("stats:served-sample", 10, async () => Date.now());
+    res.setHeader("X-Stats-Sample", String(served));
+    next();
+  }) satisfies RequestHandler;
+}));
+```
+
+## A real use: the auth session cache
+
+The auth module caches what a bearer token resolves to, so a request costs one
+Redis read instead of three MongoDB reads:
+
+```ts title="modules/auth/helpers/session-cache.ts"
+const KEY = "auth:session:";
+
+export async function readIdentity(ctx: Ctx, sid: string): Promise<CachedIdentity | null> {
+  if (cacheTtlSeconds(ctx) === 0) return null;
+  return appCache(ctx).get<CachedIdentity>(KEY + sid);
+}
+
+export async function writeIdentity(ctx: Ctx, sid: string, identity: CachedIdentity): Promise<void> {
+  const ttl = cacheTtlSeconds(ctx);
+  if (ttl === 0) return;
+  await appCache(ctx).set(KEY + sid, identity, ttl);
+}
+
+export async function forgetSession(ctx: Ctx, sid: string): Promise<void> {
+  await appCache(ctx).del(KEY + sid);
+}
+```
+
+It shows the habits worth copying:
+
+- **Namespace your keys** by module (`auth:session:`).
+- **Bound the TTL** by a setting (`auth.cacheTtlSeconds`), so an operator can
+  shorten it or turn caching off (`0`) at runtime.
+- **Delete on every path that invalidates**: logout, rotation, password
+  change and user deletion all call `forgetSession` or `forgetUser` before
+  answering, so a revoked session is refused on the next request on any
+  replica.
+
+<Aside type="caution">
+Never cache something whose staleness is a security problem without deleting
+it on every change. The cache is shared by every replica, so a missed `del`
+is wrong everywhere at once.
+</Aside>
+
+## Testing
+
+The core module's tests cover the lifecycle without and with Redis:
+
+```ts title="modules/core/tests/cache.test.ts"
+afterEach(() => closeCache());
+
+test("without redis the cache is in-process and openCache returns at once", async () => {
+  await openCache({ config: { core: {} } } as never, 5000);
+  const cache = appCache({ config: { core: {} } } as never);
+  let runs = 0;
+  await cache.wrap("k", 60, async () => ++runs);
+  await cache.wrap("k", 60, async () => ++runs);
+  expect(runs).toBe(1);
+});
+```
+
+`closeCache()` resets the singleton, so call it between tests that change the
+configuration.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Logging" href="/tulipes-js/guides/logging/" description="The other core helper every module uses." />
+  <LinkCard title="Authentication" href="/tulipes-js/guides/authentication/" description="How the session cache fits the auth flow." />
+  <LinkCard title="Boot pipeline" href="/tulipes-js/concepts/boot-pipeline/" description="When bootstraps run and cleanups close." />
+</CardGrid>

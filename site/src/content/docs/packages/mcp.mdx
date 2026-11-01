@@ -1,0 +1,182 @@
+---
+title: "@tulipes/mcp"
+description: Serve a Tulipes app's agent actions to MCP clients such as Claude Code, in the app's own process over stdio or HTTP, or as a bridge to its HTTP agent door.
+sidebar:
+  order: 6
+---
+
+import { Aside, Tabs, TabItem, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+`@tulipes/mcp` turns the actions your modules declare in `agent/*.agent.ts`
+into tools an [MCP](https://modelcontextprotocol.io) client can list and
+call: Claude Code, Claude Desktop or any other. The app's ACL, the
+credential's scopes and the action's input schema decide every call, exactly
+as they do over HTTP.
+
+<Aside type="caution" title="Experimental">
+This package and the core agent surface it serves are outside the
+compatibility promise. Flags, tool naming and the manifest may change in any
+release without a deprecation period.
+</Aside>
+
+## When you need it
+
+When you want an AI agent to operate your app through declared, permissioned
+actions rather than raw HTTP routes. Routes are never tools: an action is
+declared on its own, with an id (a permission), a description, an input
+schema and a handler. See [agents](/tulipes-js/guides/agents/) for writing
+actions and [MCP](/tulipes-js/guides/mcp/) for connecting clients.
+
+## Install
+
+<Tabs syncKey="pkg">
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add @tulipes/mcp
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install @tulipes/mcp
+    ```
+  </TabItem>
+</Tabs>
+
+Apps generated on 0.13 already have it. On an older app,
+`tulipes migrate 0.13` adds `mcp.ts`, `config/mcp.config.ts`, the `mcp`
+script and the dependency, and changes nothing that exists.
+
+## How it plugs in
+
+`@tulipes/mcp` is not a boot provider: there is no `tulipes.providers` entry.
+It is a third process next to `backend` and `worker`, with two ways to run.
+
+### In the app's own process: `serveMcp`
+
+```ts title="mcp.ts"
+import { serveMcp } from "@tulipes/mcp";
+
+await serveMcp({ rootDir: import.meta.dirname });
+```
+
+`serveMcp` boots the app in **script** mode (every phase, including
+bootstrap, but no HTTP server), reads `config/mcp.config.ts` and serves
+`ctx.agent`: `tools/list` is the manifest for the caller, `tools/call` is
+`ctx.agent.invoke()`.
+
+```ts title="config/mcp.config.ts"
+import { defineMcp } from "@tulipes/mcp";
+
+import { identifyCredential } from "../modules/auth/lib/index.ts";
+
+export default defineMcp({
+  transport: "stdio",
+  identify: (ctx, credential) => identifyCredential(ctx, credential),
+});
+```
+
+Register it with Claude Code, putting the token in the environment (a token
+on the command line shows up in `ps`):
+
+```sh
+claude mcp add tulipes-example -e TULIPES_MCP_TOKEN="$TOKEN" -- pnpm --silent mcp
+```
+
+The credential is an API token from `POST /auth/tokens`, ideally scoped to
+what the agent needs. `identify` runs on every list and call, so revoking the
+token or changing the user's role applies to a running session.
+
+### Over the HTTP agent door: `tulipes-mcp`
+
+The package also ships a `tulipes-mcp` binary that talks to a running
+backend's agent door (`<api prefix>/agent`) instead of booting the app:
+
+```sh
+pnpm tulipes-mcp --url http://localhost:3000/api/v1/agent --token <bearer token>
+```
+
+`tools/list` reads `GET <url>/tools`; `tools/call` posts to
+`POST <url>/tools/<name>` with the same bearer token. The package adds no
+identity of its own and never touches the database. A 401, 403 or 422 comes
+back as a tool error carrying the envelope's errors.
+
+## Configuration
+
+`config/mcp.config.ts` default-exports `defineMcp({ transport, identify })`.
+Without the file, the transport is stdio and every caller is a guest.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `transport` | `"stdio"` | One client, the process that started this one |
+| `transport.http.port` | required for HTTP | MCP Streamable HTTP (stateless) on its own port |
+| `transport.http.host` | `"127.0.0.1"` | Set `0.0.0.0` to reach it from another host, behind your ingress |
+| `transport.http.path` | `"/mcp"` | The endpoint path |
+| `transport.http.maxBodyBytes` | `1048576` (1 MiB) | Larger bodies get `413` before `identify` runs |
+| `identify` | none (guest) | `(ctx, credential) => actor or null` |
+
+Environment values:
+
+| Variable | Read by | Meaning |
+|---|---|---|
+| `TULIPES_MCP_TOKEN` | `serveMcp` (stdio) | The credential, unless `--token` is passed |
+| `MCP_ROLE` | `developmentIdentity()` | A role taken from the environment, for an app without auth |
+| `TULIPES_URL` | `tulipes-mcp` | Agent door; default `http://localhost:3000/api/v1/agent` |
+| `TULIPES_TOKEN` | `tulipes-mcp` | Bearer token; none calls as guest |
+
+On the HTTP transport, each request is identified by its own
+`Authorization: Bearer` header. On a loopback bind it answers only requests
+addressed to its own address (403 otherwise, against DNS rebinding). The
+production nginx template has a commented `location = /mcp` block to expose
+it; see [nginx](/tulipes-js/production/nginx/).
+
+## Main exports
+
+- `serveMcp(options)` runs the in-process server; options are `rootDir`,
+  `argv`, `transport` (a custom MCP transport, used by tests) and `audit`.
+  It returns `{ handle, server, http, url, close }`.
+- `defineMcp(config)` types `config/mcp.config.ts`.
+- `developmentIdentity(variable = "MCP_ROLE")` identifies the caller by a role
+  in an environment variable. Unset, the caller is a guest.
+- `AgentBridge` and `createServer` build the HTTP-door bridge in code:
+
+```ts
+import { AgentBridge, createServer } from "@tulipes/mcp";
+
+const bridge = new AgentBridge({ url: "http://localhost:3000/api/v1/agent", token });
+const server = await createServer(bridge);
+await server.connect(transport); // any @modelcontextprotocol/sdk transport
+```
+
+Every call writes one JSON audit line to stderr: tool, actor, role, outcome
+and duration, never the input. On stdio, stdout is the protocol, so the app's
+own logs are moved to stderr. See the
+[mcp API reference](/tulipes-js/reference/api/mcp/).
+
+`tulipes agent manifest` writes the same tool list from an inspection boot,
+with no service, for review or a tool-definition file.
+
+## Version and compatibility
+
+This page describes `@tulipes/mcp` **0.2.2**: Node.js `>=24.0.0 <25`, peer
+`@tulipes/core ^0.13.0`, and `@modelcontextprotocol/sdk ^1.32.1` as its own
+dependency.
+
+## Failure modes
+
+These are thrown when `pnpm mcp` starts:
+
+- `config/mcp.config: developmentIdentity() reads the role from MCP_ROLE, which is refused when APP_ENV is production — identify callers from a credential`
+- `config/mcp.config: the http transport has no identify, which would serve every caller on the network as a guest — refused when APP_ENV is production`
+  (also for `staging`)
+- `config/mcp.config: transport … is not supported — "stdio" or { http: { port } }`
+- `config/mcp.config must default-export defineMcp({ ... })`
+- Any `TulipesBootError` from booting the app.
+
+A scoped credential refused by its scopes rather than its role gets a 403
+with code `OUT_OF_SCOPE`.
+
+<CardGrid>
+  <LinkCard title="MCP guide" href="/tulipes-js/guides/mcp/" description="Connecting Claude Code and other clients to your app." />
+  <LinkCard title="Agents" href="/tulipes-js/guides/agents/" description="Declaring actions in agent/*.agent.ts." />
+  <LinkCard title="API tokens and scopes" href="/tulipes-js/guides/api-tokens-and-scopes/" description="Issuing the scoped credential an agent uses." />
+</CardGrid>

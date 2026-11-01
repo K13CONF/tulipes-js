@@ -278,7 +278,29 @@ plugin", "BullMQ Express integration", "role-based access control Node.js",
   Console shows the sitemap read with no errors; `site:` search returns the
   landing page (record the date).
 
-## 6. Evidence this plan expects
+### Course correction, 2026-11-01 — a learning journey, not a signature dump
+
+The maintainer rejected D02's result as the site's main content: generated
+pages describe the TypeScript files, which does not teach anyone. The site is
+now laid out as a learning path, and the generated API is a collapsed
+appendix that search skips (`pagefind: false`):
+
+- `start/` (4 pages), `tutorial/` (11 chapters of one bookstore API),
+  `concepts/` (10), `guides/` (23), `packages/` (8), `production/` (7) and
+  `reference/topics/` (4): 67 hand-written pages, following `site/WRITING.md`.
+- The tutorial was verified by running it: apps scaffolded from the source CLI,
+  installed from npm (core 0.13.2), with MongoDB 8 and Redis 7 in Docker. The
+  banners, boot errors and responses shown are copied from those runs.
+- Theme: brand green and cream, self-hosted Inter and JetBrains Mono, a
+  redesigned splash page.
+- `site/scripts/lint-frontmatter.mjs` checks pages without building (lengths,
+  uniqueness, base-path links, unquoted `: ` in YAML). `check-build.mjs` now
+  also fails on any internal link that does not resolve to a built file. This
+  found and fixed dead module overview pages (TypeDoc `entryFileName: "index"`)
+  and a `socket.io` slug.
+- Local result: 349 pages build; `check` passes; Pagefind search was checked in a browser.
+
+
 
 | Item | Evidence |
 |---|---|
@@ -306,6 +328,51 @@ Taken in this plan:
 - The site is a private workspace, and core gains no dependency (§2.2).
 
 ## 8. Backlog
+
+- **Stale docs found while writing the site** (the site follows the source; these sources still need fixing):
+  - `packages/core/README.md`:
+    - pre-0.11 `${prefix}` route paths
+    - `res.json` in the translations example
+    - `HttpError` described as `{ error, details? }`, with an `{ id }` option that does not exist
+    - wrong phase numbers in the `Ctx` comments
+    - "BullMQ 5"
+    - the env error example misses the description suffix
+    - a wrong model name *does* compile (string overload)
+    - the Europe/Paris offset on 2026-10-13 is +02:00
+  - Phase numbers in code comments: `boot/contracts.ts`, `modules/explorer.ts`, `acl/load-acl.ts`, `bullmq/src/load-queues.ts`, `socket.io/src/provider.ts`.
+  - Package READMEs:
+    - mongoose, bullmq, socket.io, cli, spec: "Versions" sections from the rc/0.10 era
+    - mongoose: "bootstrap never runs in script mode"
+    - spec: `--offline`, `inspectRoutes`, the `--url` default
+    - cli: missing commands; `@next`
+    - bullmq: `schedule()` from a bootstrap
+    - testing: `useTestApp({ rootDir })` without env
+    - mcp: `readOnlyHint` on routes
+  - `docs/security-model.md`: S08e calls `TRUST_PROXY_CIDRS` an env variable (now `security.trustProxyCidrs`; the nginx template comments say the same); S08m describes `onDrain`.
+  - `docs/support.md`: the 0.9 Node line.
+  - `docs/design/list-query-design.md`: says 400 at `filter[0][0]`; the code returns 422 at `filter.0.0`.
+  - `docs/design/translation-contract.md`.
+  - `docs/design/agents-module-design.md`: settings names and approver.
+  - `example/docs/browser-auth.md`: CORS env names.
+  - Template skills:
+    - tulipes-endpoint: the boot message
+    - tulipes-list-query: resolve limits
+    - tulipes-spec: the zod import
+    - tulipes-queue: `REDIS_URL`
+    - tulipes-socket: processors in the backend
+    - tulipes-model: `bootstrap/` requiring models
+  - `hello` i18n `secret`: mentions `hello:read`.
+  - Generated production README: `config/routes.ts`.
+  - `LOG_DIR` description: "relative to the app root".
+- **Behaviour worth a decision:**
+  - The production preset has no `/health` route.
+  - `MONGO_DBNAME` keeps `tulipes_example` in generated apps.
+  - The generated config test pins admin's grants, so adding a module's grants breaks it.
+  - Three i18n keys reach clients untranslated: `unauthorized`, `unauthenticated`, `forbidden`.
+  - The commented `/mcp` nginx block sends `Host $host`, which `serveMcp`'s DNS-rebinding check refuses.
+  - The users `maxSessions` setting is shown but never enforced.
+  - The `agent:web:tools` description still mentions route tools.
+- The site has no light-mode screenshot check yet; only dark mode and search were checked in a browser.
 
 - (Found here, not part of the docs work.) `packages/core/tests/inspection.test.ts` › "CLI writes specs for a freshly generated production app without services" timed out at the 10 s default on Node 24.0.0 (run 41244951990, 2026-10-31) and passed on re-run. It needs its own timeout or a faster fixture.
 - API URLs use TypeDoc's module names, not import paths: `core/index/…` for `@tulipes/core` and `mongoose/settings-provider/…` for `@tulipes/mongoose/settings`. Fix this before D08 so no URL has to move after launch (a `@module` tag in each entry file, or a URL rewrite in the plugin).

@@ -1,0 +1,214 @@
+---
+title: Test the bookstore
+description: Write the books tests with @tulipes/testing, boot the app once per file against dedicated services, sign in as each role, and assert on decoded envelopes.
+sidebar:
+  order: 8
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+Everything we checked by hand with `curl` deserves a test that runs on every
+change. `@tulipes/testing` boots the real app once per test file on a free
+port, calls it over HTTP with the envelope already decoded, and signs in as
+any role. In this chapter we write the books module's tests and run the
+whole suite.
+
+## The idea
+
+A module's tests live in `modules/<name>/tests/`. Each file calls
+`useTestApp()` once at the top: it boots the app in `beforeAll` and shuts it
+down in `afterAll`. Booting per test would reconnect to MongoDB and Redis
+every time; booting per file keeps tests realistic and fast enough.
+
+The boot is the normal one: every module, the real ACL, the real
+validation, `APP_ENV=test`, on port 0. Only the services differ: the
+production preset's `tests/support.ts` builds the environment from two
+variables you set, `TEST_MONGO_URI` and `TEST_REDIS_URL`, so a test can
+never write to your development database.
+
+```ts title="tests/support.ts"
+export function testEnv(): Record<string, string> {
+  if (!process.env.TEST_MONGO_URI || !process.env.TEST_REDIS_URL) {
+    throw new Error("Tests require dedicated TEST_MONGO_URI and TEST_REDIS_URL services");
+  }
+  return {
+    MONGO_URI: process.env.TEST_MONGO_URI,
+    REDIS_URL: process.env.TEST_REDIS_URL,
+    JWT_ACCESS_SECRET: randomBytes(32).toString("hex"),
+    // …fresh secrets, a test admin, logging off
+  };
+}
+```
+
+`testSettings()` beside it writes the settings the request pipeline needs
+(proxy trust, CORS, a unique rate-limit namespace) through the settings
+store right after the boot, the way an operator would.
+
+## The test file
+
+```ts title="modules/books/tests/books.test.ts"
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, expect, test } from "vitest";
+import { useTestApp } from "@tulipes/testing";
+
+import { testEnv, testSettings } from "../../../tests/support.ts";
+
+const rootDir = fileURLToPath(new URL("../../../", import.meta.url));
+const app = useTestApp({ rootDir, env: testEnv(), settings: testSettings() }, { beforeAll, afterAll });
+
+const kindred = {
+  title: "Kindred",
+  author: "Octavia E. Butler",
+  isbn: "9780807083697",
+  price: 12,
+};
+
+beforeAll(async () => {
+  // Each file boots once against the test database: start from a clean catalogue.
+  await app.ctx.models!.get("Book").deleteMany({});
+});
+
+test("a guest may browse but not add", async () => {
+  expect((await app.get(app.api("/books"))).status).toBe(200);
+  expect((await app.post(app.api("/books"), kindred)).status).toBe(401);
+});
+
+test("a signed-in user browses the catalogue but is refused the back office", async () => {
+  const user = await app.as("user");
+  expect((await app.get(app.api("/books"), { as: user })).status).toBe(200);
+
+  const { status, errors } = await app.post(app.api("/books"), kindred, { as: user });
+
+  expect(status).toBe(403);
+  expect(errors[0]?.code).toBe("FORBIDDEN");
+});
+
+test("an editor adds a book, and the catalogue lists it", async () => {
+  const editor = await app.as("editor");
+  const created = await app.post<{ isbn: string }>(app.api("/books"), kindred, { as: editor });
+  expect(created.status).toBe(201);
+  expect(created.data?.isbn).toBe(kindred.isbn);
+
+  const list = await app.get<Array<{ title: string }>>(app.api("/books"), {
+    query: { search: "kindred" },
+  });
+  expect(list.data?.map((book) => book.title)).toEqual(["Kindred"]);
+  expect(list.body.meta).toMatchObject({ page: 1, total_items: 1 });
+});
+
+test("the same ISBN twice is a conflict on the isbn field", async () => {
+  const editor = await app.as("editor");
+  const { status, errors } = await app.post(app.api("/books"), kindred, { as: editor });
+
+  expect(status).toBe(409);
+  expect(errors).toEqual([expect.objectContaining({ field: "isbn", code: "ISBN_TAKEN" })]);
+});
+
+test("every invalid field is reported at once", async () => {
+  const editor = await app.as("editor");
+  const { status, errors } = await app.post(app.api("/books"), { isbn: "12" }, { as: editor });
+
+  expect(status).toBe(422);
+  expect(errors.map((error) => error.field)).toEqual(["isbn", "title", "author", "price"]);
+});
+```
+
+What the helpers give you:
+
+- **`app.api("/books")`** prefixes the configured `api.prefix`, so tests
+  survive a move to `/api/v2`.
+- **`app.get(path, options)`**, **`app.post(path, body, options)`**,
+  `app.patch(path, body, options)` and `app.delete(path, options)` return
+  `{ status, headers, body, data, errors, raw }`. `body` is the whole
+  envelope, `data` and `errors` its parts, typed by the generic.
+  `options.query` builds the query string.
+- **`app.as(role)`** registers a fresh account through `/auth/register`,
+  promotes it through the app's `User` model, and signs in again, so the
+  returned tokens resolve to that role. Pass it as `{ as: account }`. It
+  works for any role the app defines, including our `editor`.
+- **`app.ctx`** is the booted context: models, the settings manager, the ACL.
+  Here it empties the books collection before the tests run.
+
+Note the argument order: the body is the **second** argument of `post` and
+`patch`; options come third.
+
+## Run it
+
+Start dedicated services, or reuse the Docker containers with a separate
+database and Redis index, never your development data:
+
+```sh
+TEST_MONGO_URI=mongodb://127.0.0.1:27017/bookstore_test \
+TEST_REDIS_URL=redis://127.0.0.1:6379/3 \
+pnpm vitest run modules/books --reporter=verbose
+```
+
+```txt
+ ✓ modules/books/tests/books.test.ts > a guest may browse but not add 40ms
+ ✓ modules/books/tests/books.test.ts > a signed-in user browses the catalogue but is refused the back office 414ms
+ ✓ modules/books/tests/books.test.ts > an editor adds a book, and the catalogue lists it 770ms
+ ✓ modules/books/tests/books.test.ts > the same ISBN twice is a conflict on the isbn field 738ms
+ ✓ modules/books/tests/books.test.ts > every invalid field is reported at once 730ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+```
+
+Creating a book in a test also enqueues the `books.added` job and emits the
+socket event; both work against the test Redis without a worker running.
+
+## Run the whole suite
+
+```sh
+TEST_MONGO_URI=mongodb://127.0.0.1:27017/bookstore_test \
+TEST_REDIS_URL=redis://127.0.0.1:6379/3 \
+pnpm test
+```
+
+`vitest.config.ts` runs every `tests/**/*.test.ts` and
+`modules/*/tests/**/*.test.ts` file one after another
+(`fileParallelism: false`), because they share one database. One generated
+test now fails:
+
+```txt
+ FAIL  modules/config/tests/config.test.ts > the console describes every module without a secret's value and only administrators read it
+AssertionError: expected [ { name: 'guest', …(4) }, …(4) ] to deep equally contain { name: 'admin', …(4) }
+```
+
+The config module's test pins the exact grants of `admin`, and in chapter 3
+we added `books:*`. The generated tests are your code, like the rest of the
+app: update the expectation.
+
+```ts title="modules/config/tests/config.test.ts" del={1} ins={2}
+    grants: ["agent:*", "agents:*", "auth:*", "config:bo:describe", "config:bo:read", "hello:*", "users:*"],
+    grants: ["agent:*", "agents:*", "auth:*", "books:*", "config:bo:describe", "config:bo:read", "hello:*", "users:*"],
+```
+
+With that, the suite passes:
+
+```txt
+ Test Files  16 passed (16)
+      Tests  186 passed | 8 skipped (194)
+```
+
+The eight skipped tests are the agents module's evaluation against the real
+model, which only runs with `AGENTS_LIVE=1` and an Anthropic key.
+
+<Aside type="caution">
+Point `TEST_MONGO_URI` and `TEST_REDIS_URL` only at disposable services. The
+suite creates users, sessions and settings, and our `beforeAll` deletes every
+book in the database it is given.
+</Aside>
+
+## Where we are
+
+The bookstore's behavior is pinned by tests that run the real app: access per
+role, validation, conflicts and the list query.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Chapter 9: API documents" href="/tulipes-js/tutorial/api-docs/" description="OpenAPI and Postman from the same declarations." />
+  <LinkCard title="Testing guide" href="/tulipes-js/guides/testing/" description="Settings in tests, second boots, unit tests." />
+  <LinkCard title="@tulipes/testing" href="/tulipes-js/packages/testing/" description="Every helper and option." />
+</CardGrid>
