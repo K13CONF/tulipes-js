@@ -65,7 +65,10 @@ export default function helloSockets({ config }: Ctx, sockets: SocketRegistry): 
         online: nsp.sockets.size,
       });
 
-      socket.on("ping", (ack: (reply: string) => void) => ack("pong"));
+      // A client may emit without a callback: never call one that is not there.
+      socket.on("ping", (ack: unknown) => {
+        if (typeof ack === "function") ack("pong");
+      });
     });
   });
 }
@@ -81,6 +84,10 @@ the live Socket.IO `Namespace`. Inside `setup`, everything is Socket.IO's own AP
 - A name is `/` or `/kebab-case`: `/hello`, `/order-updates`.
 - A namespace has one owner. A second module claiming it stops the boot, naming
   the first.
+- Every handler a module attaches with `socket.on` runs inside an error
+  boundary. A throw or a rejected promise is logged with the module, namespace
+  and event, and the process keeps serving. A client controls what it sends, so
+  check an acknowledgement is a function before calling it.
 
 A client connects to the backend's URL plus the namespace:
 

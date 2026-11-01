@@ -11,6 +11,15 @@ While the major version is `0`, a minor bump may carry breaking changes —
 
 ## [Unreleased]
 
+### Security
+
+- `@tulipes/socket.io`: every handler a module attaches with `socket.on`
+  runs inside an error boundary. A throw or rejected promise is logged with
+  the module, namespace and event; before, it ended the process. The
+  reference app's `whoami` and `ping` handlers called a missing
+  acknowledgement, so any anonymous client could crash the backend: see
+  MIGRATING, "security fixes (app code)", step 1.
+
 ### Changed
 
 - **Breaking:** a module may grant only its own ids. Granting another

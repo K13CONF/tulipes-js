@@ -10,8 +10,9 @@ export default function usersSockets({ config }: Ctx, sockets: SocketRegistry): 
         online: nsp.sockets.size,
       });
 
-      socket.on("whoami", (ack: (reply: { id: string }) => void) => {
-        ack({ id: socket.id });
+      // A client may emit without a callback: never call one that is not there.
+      socket.on("whoami", (ack: unknown) => {
+        if (typeof ack === "function") ack({ id: socket.id });
       });
     });
   });

@@ -70,3 +70,44 @@ test("a boot that fails before the server attaches still reports its own failure
 
   await expect(app.boot({ listen: false })).rejects.toThrow(/requires capability "queues"/);
 });
+
+test("a handler that throws, or an emit without an ack, does not end the process", async () => {
+  const app = await fixture({
+    "package.json": declared,
+    "modules/probe/sockets/probe.sockets.js": `
+      export default (ctx, sockets) => sockets.namespace('/probe', nsp => {
+        nsp.on('connection', socket => {
+          socket.on('ack', (ack) => ack('pong'));
+          socket.on('boom', () => { throw new Error('sync'); });
+          socket.on('reject', async () => { throw new Error('async'); });
+          socket.on('echo', (value, ack) => ack(value));
+        });
+      });
+    `,
+  });
+  const handle = await app.boot();
+  const socket = io(url(handle) + "/probe", { transports: ["websocket"], reconnection: false });
+  const errors: string[] = [];
+  const original = console.error;
+  console.error = (message: string) => errors.push(message);
+  try {
+    await new Promise((resolve, reject) => {
+      socket.once("connect", resolve);
+      socket.once("connect_error", reject);
+    });
+    socket.emit("ack");
+    socket.emit("boom");
+    socket.emit("reject");
+    expect(await socket.emitWithAck("echo", "still up")).toBe("still up");
+    expect(errors).toEqual([
+      expect.stringContaining('module "probe" /probe "ack" handler failed'),
+      expect.stringContaining('"boom" handler failed: sync'),
+      expect.stringContaining('"reject" handler failed: async'),
+    ]);
+    expect(handle.server!.listening).toBe(true);
+  } finally {
+    console.error = original;
+    socket.disconnect();
+    await handle.shutdown();
+  }
+});

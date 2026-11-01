@@ -11,6 +11,30 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — security fixes (app code)
+
+The November 2026 audit found these in the reference app, so every app
+generated with the production preset has them. They are your code: apply each
+step by hand, or copy the named file from the reference app. The framework
+fixes from the same audit arrive with the upgrade and need nothing here.
+
+1. **Sockets: never call a missing acknowledgement.** In
+   `modules/users/sockets/users.sockets.ts` and
+   `modules/hello/sockets/hello.sockets.ts`, a client that emitted `whoami` or
+   `ping` without a callback crashed the backend. Check before calling:
+
+   ```ts
+   socket.on("ping", (ack: unknown) => {
+     if (typeof ack === "function") ack("pong");
+   });
+   ```
+
+   `@tulipes/socket.io` now also catches what any handler throws, so the same
+   mistake elsewhere is logged instead of ending the process. Apply the check
+   anyway: the boundary only stops the crash, and the client still gets no reply.
+
+---
+
 ## Unreleased — grants outside a module's own ids
 
 **Breaking for an app that relied on it.** A module may now grant only ids
