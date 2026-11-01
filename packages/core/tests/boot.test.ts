@@ -340,13 +340,13 @@ test("without APP_ENV the boot reads development files but hides internals; a na
     const unset = await app.boot({ appEnv: undefined });
     expect(unset.ctx).toMatchObject({ appEnv: "development", appEnvDefaulted: true });
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining("APP_ENV is not set"));
-    const hidden = await (await fetch(url(unset) + "/fail", { headers: { connection: "close" } })).json();
-    expect(hidden.errors[0].message).toBe("internal server error");
+    const hidden = await (await fetch(url(unset) + "/fail", { headers: { connection: "close" } })).json() as { errors: { message: string }[] };
+    expect(hidden.errors[0]!.message).toBe("internal server error");
 
     const named = await app.boot({ appEnv: "development" });
     expect(named.ctx.appEnvDefaulted).toBeUndefined();
-    const shown = await (await fetch(url(named) + "/fail", { headers: { connection: "close" } })).json();
-    expect(shown.errors[0].message).toBe("internal: db at 10.0.0.5");
+    const shown = await (await fetch(url(named) + "/fail", { headers: { connection: "close" } })).json() as { errors: { message: string }[] };
+    expect(shown.errors[0]!.message).toBe("internal: db at 10.0.0.5");
   } finally {
     error.mockRestore();
     stderr.mockRestore();

@@ -89,10 +89,10 @@ test("a handler that throws, or an emit without an ack, does not end the process
   const socket = io(url(handle) + "/probe", { transports: ["websocket"], reconnection: false });
   const errors: string[] = [];
   const original = console.error;
-  console.error = (message: string) => errors.push(message);
+  console.error = (message: string) => void errors.push(message);
   try {
-    await new Promise((resolve, reject) => {
-      socket.once("connect", resolve);
+    await new Promise<void>((resolve, reject) => {
+      socket.once("connect", () => resolve());
       socket.once("connect_error", reject);
     });
     socket.emit("ack");

@@ -126,7 +126,7 @@ test("configured proxy trust supplies the same client IP to sessions and durable
   const changed = await fetch(app.base + "/api/v1/config/hello", {
     method: "PATCH",
     headers: { ...headers, "content-type": "application/json", authorization: "Bearer " + pair.access_token },
-    body: JSON.stringify({ values: { greeting: "Hello" } }),
+    body: JSON.stringify({ values: { greeting: "Hello" }, version: app.handle.ctx.settings.describe("hello").stored.version }),
   });
 
   expect(changed.status).toBe(200);
