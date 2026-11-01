@@ -159,6 +159,26 @@ describe("grants", () => {
     expect(acl.can("user", "users:bo:list")).toBe(false);
   });
 
+  test("a module grants its own ids; only the role's owner grants another module's ids or *", () => {
+    const acl = new Acl();
+    const report = new BootReport();
+    acl.forModule("auth", report).defineRole("guest").defineRole("admin")
+      .allow("admin", "users:*", "*"); // the owner may
+    acl.forModule("hello", report)
+      .allow("guest", "hello:web:greet", "hello:*") // its own ids
+      .allow("guest", "users:bo:list", "users:*", "*");
+
+    expect(messages(report)).toEqual([
+      'grants "guest" "users:bo:list", an id of module "users" — a module grants its own ids ("hello:…"); grants on another module\'s ids belong in "auth", which defines "guest"',
+      'grants "guest" "users:*", an id of module "users" — a module grants its own ids ("hello:…"); grants on another module\'s ids belong in "auth", which defines "guest"',
+      'grants "guest" everything ("*") — only module "auth", which defines "guest", may grant "*"',
+    ]);
+    expect(report.issues.slice(-3).every(({ module }) => module === "hello")).toBe(true);
+    expect(acl.can("guest", "hello:web:greet")).toBe(true);
+    expect(acl.can("guest", "users:bo:list")).toBe(false);
+    expect(acl.can("admin", "orders:bo:list")).toBe(true);
+  });
+
   test("a duplicate grant and a grant on an unknown role are reported", () => {
     const { report } = build((acl) => {
       acl.allow("user", "users:web:list");

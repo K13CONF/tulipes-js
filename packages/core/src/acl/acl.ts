@@ -170,6 +170,13 @@ export class AclBuilder {
     return this;
   }
 
+  /**
+   * Grants `role` each resource. A module grants its own ids
+   * (`hello` grants `hello:…`); only the module that defined the role may
+   * grant it another module's ids or `*`. Otherwise any feature module
+   * could open the users back office, or everything, to guest — so that
+   * refuses the boot with both module names rather than passing silently.
+   */
   allow(role: string, ...resources: string[]): this {
     if (!this.#acl.hasRole(role)) {
       this.#issue(
@@ -185,6 +192,17 @@ export class AclBuilder {
                 `or a prefix wildcard (\`tulipes migrate 0.12\` rewrites a 0.11 app)`
             : `resource "${resource}" is invalid — expected a RAI id ("module:scope:resource[:extra]"), ` +
                 `a prefix wildcard ("module:*", "module:scope:*", "module:scope:resource:*") or "*"`,
+        );
+        continue;
+      }
+      const owner = this.#acl.role(role)!.definedBy;
+      const namespace = resource === "*" ? undefined : resource.split(":")[0];
+      if (namespace !== this.#module && owner !== this.#module) {
+        this.#issue(
+          resource === "*"
+            ? `grants "${role}" everything ("*") — only module "${owner}", which defines "${role}", may grant "*"`
+            : `grants "${role}" "${resource}", an id of module "${namespace}" — a module grants its own ids ` +
+                `("${this.#module}:…"); grants on another module's ids belong in "${owner}", which defines "${role}"`,
         );
         continue;
       }

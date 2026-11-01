@@ -152,6 +152,20 @@ acl.allow("sysadmin", "auth:*", "users:*", "hello:*", "agents:*", "billing:*");
 The settings module grants `settings:*` to `sysadmin` itself: a module grants its
 own namespace.
 
+### Who may grant what
+
+The boot checks every grant against the module that made it:
+
+| Grant from | Its own ids (`billing:…`) | Another module's ids (`users:…`) | `*` |
+|---|---|---|---|
+| the module that defined the role | yes | yes | yes |
+| any other module | yes | boot refused | boot refused |
+
+Without that rule any feature module could open the users back office, or
+everything, to `guest`, and nothing would say so. Cross-module grants are
+policy about the roles, so they live with the roles: in this app, in
+`modules/auth/module.acl.ts`.
+
 ### Load order
 
 `module.acl.ts` files run in boot phase 7, in module load order: sys modules
@@ -178,6 +192,8 @@ Other messages from the same phase:
 | Mistake | Message |
 |---|---|
 | `defineRole("Admin")` | `role "Admin" is invalid — lowercase kebab-case required` |
+| `allow("guest", "users:*")` from billing | `grants "guest" "users:*", an id of module "users" — a module grants its own ids ("billing:…"); grants on another module's ids belong in "auth", which defines "guest"` |
+| `allow("admin", "*")` from billing | `grants "admin" everything ("*") — only module "auth", which defines "admin", may grant "*"` |
 | a role defined twice | `role "admin" is already defined by module "auth"` |
 | a malformed grant | `resource "billing:" is invalid — expected a RAI id ("module:scope:resource[:extra]"), a prefix wildcard ("module:*", "module:scope:*", "module:scope:resource:*") or "*"` |
 | `name` in a definition | `role "x": "name" is set by the ACL and cannot be defined` |

@@ -11,6 +11,24 @@ what makes it work under nvm.
 
 ---
 
+## Unreleased — grants outside a module's own ids
+
+**Breaking for an app that relied on it.** A module may now grant only ids
+that start with its own name. Another module's ids, or `*`, may be granted
+only by the module that defined the role. Anything else refuses the boot in
+the `acl` phase:
+
+```txt
+✖ [billing] grants "guest" "users:*", an id of module "users" — a module grants its own ids ("billing:…"); grants on another module's ids belong in "auth", which defines "guest"
+```
+
+Both presets already follow the rule, so a generated app that kept the
+convention boots unchanged. To fix one that did not, move each reported
+grant into the `module.acl.ts` of the module named in the message (the auth
+module in the production preset, the core module in the minimal one).
+
+---
+
 ## Client headers (optional, app code)
 
 Both presets now read the headers every client sends — `X-Platform`,

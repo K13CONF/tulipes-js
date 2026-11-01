@@ -9,6 +9,16 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** a module may grant only its own ids. Granting another
+  module's ids, or `*`, is reserved for the module that defined the role;
+  anything else refuses the boot in the `acl` phase. Before, any module
+  could grant any id, including `*` to `guest`, and nothing reported it.
+  See MIGRATING, "grants outside a module's own ids".
+
 ## [0.13.2] — 2026-10-31
 
 A patch to core with no API change, a security fix in what apps install,
