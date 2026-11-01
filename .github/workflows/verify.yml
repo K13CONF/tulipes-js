@@ -29,17 +29,17 @@ jobs:
       TEST_REDIS_URL: redis://127.0.0.1:6379/3
       REQUIRE_INTEGRATION_TESTS: '1'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node }}
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:types
       - run: pnpm test:coverage
       - run: pnpm --filter @tulipes-example/app sync && pnpm --filter @tulipes-example/app typecheck
       - run: diff packages/cli/templates/AGENTS.md example/AGENTS.md && diff packages/cli/templates/CLAUDE.md example/CLAUDE.md && diff -r packages/cli/templates/claude example/.claude
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: coverage-node-${{ matrix.node }}
@@ -48,11 +48,11 @@ jobs:
     needs: tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - run: pnpm install --frozen-lockfile
       - run: node scripts/artifacts.mjs prepare .artifacts
       - run: node scripts/audit.mjs reports/workspace-runtime.jsonl --environment production
@@ -64,13 +64,13 @@ jobs:
           diff -r "$RUNNER_TEMP/scaffold/nginx" example/nginx
           diff "$RUNNER_TEMP/scaffold/docs/browser-auth.md" example/docs/browser-auth.md
           diff "$RUNNER_TEMP/scaffold/README.md" <(sed "s/tulipes-example/scaffold/; s/ *<!-- feature:[a-z]* -->//" example/README.md)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-packages
           path: .artifacts/
           include-hidden-files: true
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: workspace-audit
@@ -84,17 +84,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     # Deliberately no database/Redis services in this job.
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-      - uses: pnpm/action-setup@v4
-      - uses: actions/download-artifact@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-packages
           path: .artifacts
       - run: node scripts/scaffold-smoke.mjs .artifacts minimal
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: minimal-smoke-${{ matrix.os }}
@@ -104,17 +104,17 @@ jobs:
     runs-on: ubuntu-latest
     # The production preset must also generate specs without services or secrets.
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-      - uses: pnpm/action-setup@v4
-      - uses: actions/download-artifact@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-packages
           path: .artifacts
       - run: node scripts/scaffold-smoke.mjs .artifacts production --offline-only
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: production-offline-smoke
@@ -125,17 +125,17 @@ jobs:
     # The production preset without its optional providers must still typecheck
     # and describe itself offline from the same archives.
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-      - uses: pnpm/action-setup@v4
-      - uses: actions/download-artifact@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-packages
           path: .artifacts
       - run: node scripts/scaffold-smoke.mjs .artifacts production --no-queues --no-sockets --offline-only
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: composition-smoke
@@ -146,17 +146,17 @@ jobs:
     # The last published production starter, refused with migration diagnostics
     # and then migrated per MIGRATING.md; no services, network only for the old archive.
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-      - uses: pnpm/action-setup@v4
-      - uses: actions/download-artifact@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-packages
           path: .artifacts
       - run: node scripts/upgrade-smoke.mjs .artifacts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: upgrade-smoke
@@ -182,17 +182,17 @@ jobs:
       TEST_MONGO_URI: mongodb://127.0.0.1:27017/tulipes_smoke
       TEST_REDIS_URL: redis://127.0.0.1:6379/4
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-      - uses: pnpm/action-setup@v4
-      - uses: actions/download-artifact@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-packages
           path: .artifacts
       - run: node scripts/scaffold-smoke.mjs .artifacts production
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: production-smoke

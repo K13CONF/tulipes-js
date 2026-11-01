@@ -206,6 +206,8 @@ function minorOf(version: string | undefined): number | undefined {
   return major === 0 && Number.isInteger(minor) ? minor : undefined;
 }
 
+const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
 async function fetchLatest(name: string): Promise<string> {
   // The scoped name has to be encoded for the registry's document route.
   const response = await fetch(`${REGISTRY}/${name.replace("/", "%2f")}/latest`);
@@ -215,6 +217,11 @@ async function fetchLatest(name: string): Promise<string> {
   const body = (await response.json()) as { version?: unknown };
   if (typeof body.version !== "string") {
     throw new Error(`${name}: registry returned no version`);
+  }
+  // The version goes into `npm install -g <name>@<version>` and into every
+  // manifest: anything but a plain semver is refused, never passed on.
+  if (!SEMVER.test(body.version)) {
+    throw new Error(`${name}: registry returned ${JSON.stringify(body.version.slice(0, 80))}, which is not a version`);
   }
   return body.version;
 }

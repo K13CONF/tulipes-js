@@ -48,6 +48,8 @@ While the major version is `0`, a minor bump may carry breaking changes —
   after the write: the value is stored and live, so it resolves with
   `onChangeFailed: true` and logs the error. A caller that saw an error
   would retry a change that had landed.
+- `tulipes update` refuses a registry answer that is not a semver version
+  before installing or writing anything.
 - `agent.parseInput(name, input)`: the input as `invoke()` would hand it to
   the handler, for an approval screen that shows what will run.
 - `@tulipes/bullmq`: a worker parses each job with the queue's schema before
