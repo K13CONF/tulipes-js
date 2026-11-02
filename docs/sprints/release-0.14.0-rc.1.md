@@ -1,7 +1,7 @@
 # Release — core 0.14.0-rc.1
 
-Status: **versions bumped and verified locally, 2026-11-02**; PR, CI, tag and
-publication follow (see Publication). Branch `feat/client-headers`.
+Status: **published on 2026-11-02** to npm's `next` tag, from `v0.14.0-rc.1`
+on `f4ecec8` (PR #42). `latest` stays 0.13.2. See Publication below.
 
 ## Scope
 
@@ -148,7 +148,17 @@ on 127.0.0.1, npm registry reachable. The jobs of `verify.yml`, in order.
 
 ## Publication
 
-To record after the tag: the PR and merge commit, the `v0.14.0-rc.1` tag, the
-publish run, registry integrity against the manifest, dist-tags and the
-`--registry` smokes.
-
+- PR #42 merged as `f4ecec8` (2026-11-02 00:30 UTC); CI green on both runs.
+- Tag `v0.14.0-rc.1` on `f4ecec8`, pushed 20:05 UTC. Publish run
+  41516042006: every `verify` job and `publish` passed. The macOS minimal job
+  waited about ten minutes for a hosted runner.
+- Published, all with provenance, dist-tag `next`: core 0.14.0-rc.1, spec
+  0.4.4-rc.1, mongoose 0.2.5-rc.1, bullmq 0.3.1-rc.1, socket.io 0.1.7-rc.1,
+  mcp 0.3.0-rc.1, testing 0.1.5-rc.1, cli 0.5.0-rc.1. They appeared on `next`
+  over about three minutes after the upload.
+- Registry integrity, the downloaded tarball's SHA-512 and the run's
+  `manifest.json` agree for all eight (manifest commit `f4ecec8`).
+- `latest` unchanged everywhere (core 0.13.2, cli 0.4.2, …).
+- `scaffold-smoke.mjs <artifacts> minimal --registry`: pass (15 s).
+  `production --registry` with MongoDB and Redis: pass (99 s): install,
+  types, tests, specs, backend, mcp, worker.

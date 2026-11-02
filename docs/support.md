@@ -28,7 +28,7 @@ API tokens, credential scopes, the production preset's `agents` module;
 0.12 is the last breaking line published to `latest` (scoped RAI ids, the
 environment in the config, `tulipes migrate 0.12`).
 
-Candidate on `next`: core 0.14.0-rc.1, `@tulipes/cli` 0.5.0-rc.1,
+Candidate on `next` (published 2026-11-02): core 0.14.0-rc.1, `@tulipes/cli` 0.5.0-rc.1,
 `@tulipes/mcp` 0.3.0-rc.1 (core `^0.14.0-rc.1`), `@tulipes/socket.io`
 0.1.7-rc.1, `@tulipes/bullmq` 0.3.1-rc.1, `@tulipes/spec` 0.4.4-rc.1,
 `@tulipes/mongoose` 0.2.5-rc.1, `@tulipes/testing` 0.1.5-rc.1; all but mcp
