@@ -52,9 +52,9 @@ test("health needs no external infrastructure", async () => {
 });
 
 test("the request id a client sends is echoed, and one is generated otherwise", async () => {
-  const echoed = await fetch(app.base + app.api("/hello"), { headers: { "X-Request-Id": "req-12345678" } });
+  const echoed = await fetch(app.api("/hello"), { headers: { "X-Request-Id": "req-12345678" } });
   expect(echoed.headers.get("x-request-id")).toBe("req-12345678");
 
-  const generated = await fetch(app.base + app.api("/hello"), { headers: { "X-Request-Id": "bad id!" } });
+  const generated = await fetch(app.api("/hello"), { headers: { "X-Request-Id": "bad id!" } });
   expect(generated.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
 });
