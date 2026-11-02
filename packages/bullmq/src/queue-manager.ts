@@ -1,6 +1,5 @@
 import {
   Queue,
-  UnrecoverableError,
   Worker,
   type JobsOptions,
   type Processor,
@@ -268,19 +267,7 @@ export class QueueManager implements QueuesCapability {
         });
         continue;
       }
-      // The producer parsed the payload, but Redis is not the producer: a job
-      // queued by an older release, another app or by hand reaches the
-      // handler only if it still fits the schema. A misfit fails once, not
-      // `attempts` times — retrying cannot fix the data.
-      const checked: Processor = (job, token) => {
-        try {
-          job.data = this.#validate(name, job.data);
-        } catch (error) {
-          throw new UnrecoverableError((error as Error).message);
-        }
-        return handler(job, token);
-      };
-      const worker = new Worker(name, checked, { ...options, connection: this.#connect() });
+      const worker = new Worker(name, handler, { ...options, connection: this.#connect() });
       this.#observe(name, worker);
       this.#workers.push(worker);
     }

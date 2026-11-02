@@ -32,7 +32,7 @@ and two HTTP endpoints change shape for clients.
    | `@tulipes/cli` | 0.4.2 | 0.5.0-rc.1 | templates change; `tulipes dev` sets APP_ENV; `update` |
    | `@tulipes/mcp` | 0.2.2 | 0.3.0-rc.1 | refuses `developmentIdentity()` on http; hides raw errors |
    | `@tulipes/socket.io` | 0.1.6 | 0.1.7-rc.1 | handler boundary, peer range |
-   | `@tulipes/bullmq` | 0.3.0 | 0.3.1-rc.1 | workers parse job data |
+   | `@tulipes/bullmq` | 0.3.0 | 0.3.1-rc.1 | repack, peer range |
    | `@tulipes/spec` | 0.4.3 | 0.4.4-rc.1 | repack, peer range |
    | `@tulipes/mongoose` | 0.2.4 | 0.2.5-rc.1 | repack, peer range |
    | `@tulipes/testing` | 0.1.4 | 0.1.5-rc.1 | repack, peer range |
@@ -109,7 +109,7 @@ on 127.0.0.1, npm registry reachable. The jobs of `verify.yml`, in order.
 |---|---|---|
 | `pnpm install --frozen-lockfile` | pass, lockfile unchanged by the bumps | to record |
 | `pnpm typecheck`, `pnpm test:types` | pass | to record |
-| `pnpm test:coverage`, `REQUIRE_INTEGRATION_TESTS=1` | 42 files, 499 passed; 94.92 % statements, 90.34 % branches, 94.96 % functions, 95.95 % lines | to record |
+| `pnpm test:coverage`, `REQUIRE_INTEGRATION_TESTS=1` | 42 files, 498 passed (after the review fixes); 94.92 % statements, 90.34 % branches, 94.96 % functions, 95.95 % lines | to record |
 | example `sync` + `typecheck`; guide parity diffs | pass | to record |
 | example suite | 16 files, 201 passed, 8 skipped (live agent eval) | — |
 | presets test | 15 passed | — |

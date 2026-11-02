@@ -21,7 +21,7 @@ registerBasePlugins();
  */
 export default defineConfig({
   schema: z.object({
-    publicDomain: z.string().regex(HOSTNAME, "a hostname: letters, digits, hyphens and dots").default("localhost")
+    publicDomain: z.string().trim().regex(HOSTNAME, "a hostname: letters, digits, hyphens and dots").default("localhost")
       .describe("Public hostname this API is served from; \"localhost\" means not deployed. The nginx deploy script and the generated API documents read it"),
   }),
 });

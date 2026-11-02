@@ -218,7 +218,7 @@ export class RunLoop {
       return { run: await store.awaitApproval(job.runId, job.elapsed()), stop: true };
     }
 
-    const claimed = await store.beginExecution(job.runId, { takeover: interrupted });
+    const claimed = await store.beginExecution(job.runId, { pendingId: run.pending[0]!.id, takeover: interrupted });
     // Another job is running these calls; running them here too would repeat its writes.
     if (!claimed) return { run: (await store.load(job.runId)) ?? run, stop: true };
     run = claimed;

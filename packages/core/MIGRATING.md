@@ -37,9 +37,13 @@ should copy.
    - `@tulipes/mcp` refuses `developmentIdentity()` on the http transport;
    - a process without `APP_ENV` hides internal error messages: set
      `APP_ENV=development` to see them outside `tulipes dev`.
-5. **The security fixes in app code**, steps 1 to 11 below. Step 1 (sockets)
+5. **Check `core.publicDomain` before deploying** (step 8): a stored value
+   that is not a bare hostname (`https://api.example.com`, a trailing dot,
+   an underscore) now fails validation and **stops every process at boot**.
+   Read it with `GET /config/core` on 0.13 and set a bare hostname first.
+6. **The security fixes in app code**, steps 1 to 11 below. Step 1 (sockets)
    closes an anonymous crash of the backend: do it first if nothing else.
-6. **Client headers**, optional (section below).
+7. **Client headers**, optional (section below).
 
 ---
 

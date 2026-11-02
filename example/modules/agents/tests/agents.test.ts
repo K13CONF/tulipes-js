@@ -232,7 +232,15 @@ test("the Mongo store hands the execution claim to one job; a takeover after a c
   const store = new MongoRunStore(ctx(), { retentionDays: 1 });
   const started = await startRun(ctx(), await caller("user"), { goal: "Claim it." });
 
-  expect(await store.beginExecution(started.id)).toMatchObject({ executing: true });
-  expect(await store.beginExecution(started.id)).toBeNull();
-  expect(await store.beginExecution(started.id, { takeover: true })).toMatchObject({ executing: true });
+  const runs = ctx().models!.get("AgentRun");
+  await runs.updateOne({ _id: started.id }, { $set: { pending: [{ id: "call-1", name: "hello_bo_greetings_reset", input: {} }] } });
+
+  expect(await store.beginExecution(started.id, { pendingId: "call-1" })).toMatchObject({ executing: true });
+  expect(await store.beginExecution(started.id, { pendingId: "call-1" })).toBeNull();
+  expect(await store.beginExecution(started.id, { pendingId: "call-1", takeover: true })).toMatchObject({ executing: true });
+
+  // A job that loaded the run before another answered these calls finds them gone: no claim, even as a takeover.
+  await store.appendResults(started.id, [{ type: "tool_result", tool_use_id: "call-1", content: "done" }], 10);
+  expect(await store.beginExecution(started.id, { pendingId: "call-1" })).toBeNull();
+  expect(await store.beginExecution(started.id, { pendingId: "call-1", takeover: true })).toBeNull();
 });

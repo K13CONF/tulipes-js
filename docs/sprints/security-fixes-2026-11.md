@@ -176,7 +176,7 @@ SEC-15 and SEC-16 need a decision first.
 - `packages/core/src/http/pagination.ts`: cap `page`.
 - `AgentRegistry.invoke()`: when a custom checker is set, refuse callers that
   pass no request; `tools()`/`manifest()` apply it too.
-- `packages/bullmq`: workers run the same `safeParse` as producers.
+- `packages/bullmq`: workers run the same `safeParse` as producers. (Done, then reverted before release: see "Review before release".)
 
 ### SEC-13 — App code in `example/`
 
@@ -289,7 +289,36 @@ fix restored).
 | SEC-15 (D2, D3, audit outcome, onChange) | `24833c1`, `a837f51` | app, core (MIGRATING 12) |
 | SEC-16 | `3b606b1` | CI, scripts, cli |
 
+## Review before release (2026-11-02)
+
+An independent read of the code diff found, and these were fixed before push:
+
+- **SEC-11 was incomplete.** A job that loaded the run before another job
+  answered its calls could still claim it afterwards (the claim only checked
+  `executing`) and repeat the write; a failed claim that found `executing:
+  false` also fell through. The claim now names the first pending call
+  (`pendingId`) and any failed claim stops the job. A takeover after a crash
+  still claims while `executing` is set; with a worker that is in fact alive,
+  both answer the calls (reads twice, writes once) — that needs the `resume()`
+  lease in the backlog.
+- **`publicDomain` could stop an upgraded app's boot.** The schema now trims
+  the value, and the MIGRATING summary says to check the stored value before
+  deploying.
+- **SEC-12's worker re-parse is reverted.** Parsing JSON-round-tripped data
+  again breaks any job schema that is not idempotent over JSON (`z.date()`,
+  transforms), permanently failing those jobs. Backlog.
+- The IPv4-mapped proxy check also refused real IPv6 ranges starting `ffff:`;
+  narrowed.
+
+Not changed, noted: `socket.on` is the only listener method wrapped
+(`addListener`, `prependListener`, `onAny` are not), and `removeListener`
+does not find a `once` listener by its original function; a password with an
+unencoded `/`, `?` or `#` in a URL is not masked.
+
 ## Backlog (not done in this sprint)
+
+- **Worker-side job validation** (SEC-12, reverted): only for schemas that
+  survive JSON, e.g. by checking that at enqueue.
 
 - **Route and action ids bound to their module** (SEC-15). Implemented and
   reverted: both presets comply, but 19 framework tests declare fixture ids

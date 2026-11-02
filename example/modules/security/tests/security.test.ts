@@ -175,7 +175,7 @@ test.each(["auth/login", "config"])(
 
 test("trusted proxies refuse an IPv4-mapped IPv6 range, which proxy-addr matches against every IPv4 peer", async () => {
   const { trustedProxies } = await import("../helpers/proxy.ts");
-  expect(trustedProxies("10.0.0.0/8, 2001:db8::1")).toEqual(["10.0.0.0/8", "2001:db8::1"]);
+  expect(trustedProxies("10.0.0.0/8, 2001:db8::1, ffff:abcd::/32")).toEqual(["10.0.0.0/8", "2001:db8::1", "ffff:abcd::/32"]);
   for (const mapped of ["::ffff:0.0.0.0/96", "::FFFF:10.0.0.1", "0:0:0:0:0:ffff:a00:1/120"]) {
     expect(() => trustedProxies(mapped), mapped).toThrow(/IPv4-mapped/);
   }

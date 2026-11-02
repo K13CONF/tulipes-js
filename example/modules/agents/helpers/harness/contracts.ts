@@ -167,12 +167,14 @@ export interface RunStore {
   appendTurn(runId: string, turn: ModelTurn, pending: PendingCall[], elapsedMs: number): Promise<Run>;
   awaitApproval(runId: string, elapsedMs: number): Promise<Run>;
   /**
-   * Claim the pending calls for execution. Null when another job already
-   * holds the claim — a redelivery racing a live worker — so this one must
-   * not run them. `takeover` claims regardless: the resume after a crash,
-   * which re-runs only read-only calls.
+   * Claim the pending calls for execution. `pendingId` is the first pending
+   * call this job planned from: the claim holds only while the run still
+   * waits on those calls, so a job that loaded the run before another
+   * finished them cannot run them again. Null when the claim fails for any
+   * reason but an ended run. `takeover` claims even when `executing` is set:
+   * the resume after a crash, which re-runs only read-only calls.
    */
-  beginExecution(runId: string, options?: { takeover?: boolean }): Promise<Run | null>;
+  beginExecution(runId: string, options: { pendingId: string; takeover?: boolean }): Promise<Run | null>;
   /** Checkpoint B: one user message answering every pending call; clears pending and decisions. */
   appendResults(runId: string, results: Anthropic.Beta.BetaToolResultBlockParam[], elapsedMs: number): Promise<Run>;
   /** A mid-conversation operator message (`role: "system"`). */

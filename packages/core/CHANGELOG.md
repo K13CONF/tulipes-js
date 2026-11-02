@@ -67,9 +67,6 @@ mcp still admit core 0.13. Read MIGRATING, "Upgrading from 0.13", first.
   provider's response body.
 - `parsePage` clamps `?page` to `maxPage` (default 1000), so a client cannot
   make `skip` scan without bound.
-- `@tulipes/bullmq`: a worker parses each job with the queue's schema before
-  the handler runs, as the producer does; a job that no longer fits fails
-  once, without retries.
 - `tulipes update` refuses a registry answer that is not a semver version
   before installing or writing anything.
 - Production preset fixes, each a MIGRATING step: a soft-deleted seeded admin
