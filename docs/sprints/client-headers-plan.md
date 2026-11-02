@@ -244,6 +244,10 @@ Only `@tulipes/cli` ships new bytes (the templates). Per `docs/releasing.md`
 that is one CLI version; core and the providers are untouched, so no cascade.
 Record in the release note; publishing is a separate authorized step.
 
+Done in [`release-0.14.0-rc.1.md`](./release-0.14.0-rc.1.md): the security
+fixes changed core, so the client headers ship with core 0.14.0-rc.1 and
+`@tulipes/cli` 0.5.0-rc.1.
+
 ## 4. Evidence to collect
 
 - Local: `pnpm typecheck`, `pnpm test` (with both service variables), the

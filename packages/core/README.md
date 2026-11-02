@@ -30,8 +30,8 @@ TulipesBootError: Boot aborted during "environment" — 3 issue(s):
 
 ## Quick start
 
-Requires Node 24.x and pnpm. The 0.13 line is stable — its API is settled
-and breaking changes wait for 0.14 — but no production pilot has run it yet;
+Requires Node 24.x and pnpm. The 0.13 line is stable on `latest`; 0.14, the
+next breaking line, is a candidate on `next`. No production pilot has run either yet;
 the [compatibility policy](../../docs/support.md) says exactly what that leaves
 unproven.
 
@@ -804,8 +804,8 @@ declarations and bootstrap cleanups, see [the migration guide](./MIGRATING.md).
 
 ## Versioning
 
-`0.13` is the current stable line: its contracts are settled and a breaking
-change waits for `0.14`. Before it, `0.x` minors broke freely — `0.2` through
+`0.13` is the current stable line; `0.14` is its breaking successor, a
+candidate on `next` until it is promoted. Before it, `0.x` minors broke freely — `0.2` through
 `0.5` each did. The
 [CHANGELOG](./CHANGELOG.md) records what changed and
 [MIGRATING.md](./MIGRATING.md) gives the upgrade steps, including the one

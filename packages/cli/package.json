@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/cli",
-  "version": "0.4.2",
+  "version": "0.5.0-rc.1",
   "description": "The tulipes command line: scaffold, sync, inspect, describe and run Tulipes apps",
   "type": "module",
   "bin": {
@@ -57,7 +57,7 @@
     "url": "https://github.com/K13CONF/tulipes-js/issues"
   },
   "peerDependencies": {
-    "@tulipes/spec": "^0.4.1"
+    "@tulipes/spec": "^0.4.4-rc.1"
   },
   "peerDependenciesMeta": {
     "@tulipes/spec": {

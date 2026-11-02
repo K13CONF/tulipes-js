@@ -1,6 +1,6 @@
 {
   "name": "@tulipes/testing",
-  "version": "0.1.4",
+  "version": "0.1.5-rc.1",
   "description": "Test an app written with Tulipes: boot it once per file on a random port, call its endpoints with the envelope decoded, sign in as a role",
   "type": "module",
   "exports": {
@@ -23,7 +23,7 @@
     }
   },
   "peerDependencies": {
-    "@tulipes/core": "^0.13.0"
+    "@tulipes/core": "^0.13.0 || ^0.14.0-rc.1"
   },
   "devDependencies": {
     "@tulipes/core": "workspace:*",

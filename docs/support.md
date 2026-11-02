@@ -25,8 +25,16 @@ spec and mcp require core `^0.13.0`; socket.io admits
 `^0.11.0 || ^0.12.0 || ^0.13.0`. 0.13 is additive over 0.12 (an MCP process,
 API tokens, credential scopes, the production preset's `agents` module;
 `tulipes migrate 0.13`); it went to `latest` without a published candidate.
-0.12 is the last breaking line (scoped RAI ids, the environment in the
-config, `tulipes migrate 0.12`).
+0.12 is the last breaking line published to `latest` (scoped RAI ids, the
+environment in the config, `tulipes migrate 0.12`).
+
+Candidate on `next`: core 0.14.0-rc.1, `@tulipes/cli` 0.5.0-rc.1,
+`@tulipes/mcp` 0.3.0-rc.1 (core `^0.14.0-rc.1`), `@tulipes/socket.io`
+0.1.7-rc.1, `@tulipes/bullmq` 0.3.1-rc.1, `@tulipes/spec` 0.4.4-rc.1,
+`@tulipes/mongoose` 0.2.5-rc.1, `@tulipes/testing` 0.1.5-rc.1; all but mcp
+also admit core 0.13. 0.14 is breaking: it carries the November 2026 security
+audit's fixes, a module may grant only its own ids, and two production-preset
+endpoints change for clients. See MIGRATING, "0.14.0 — upgrading from 0.13".
 
 **Stable is a statement about the API, not about production hours.** The 0.13
 contracts are settled, except the agent surface, `@tulipes/mcp` and the
@@ -47,6 +55,7 @@ Maintained lines, to be updated in each release PR:
 
 | Line | Status |
 |---|---|
+| core 0.14.0-rc.1, cli 0.5.0-rc.1, mcp 0.3.0-rc.1, socket.io 0.1.7-rc.1, bullmq 0.3.1-rc.1, spec 0.4.4-rc.1, mongoose 0.2.5-rc.1, testing 0.1.5-rc.1 | candidate (`next`); the security fixes land here first |
 | core 0.13.x, cli 0.4.x, spec 0.4.1+, mongoose 0.2.2+, bullmq 0.2.2+ (0.3.x for BullMQ 6), socket.io 0.1.4+, mcp 0.2.x, testing 0.1.2+ (latest: core 0.13.2) | current; normal fixes target these; the agent surface, `@tulipes/mcp` and the agents module are experimental (above) |
 | core 0.12.x, cli 0.3.x, spec 0.4.0, providers 0.2.1, socket.io 0.1.3, mcp and testing 0.1.1 | previous stable; critical security fixes evaluated until the next core minor ships |
 | core 0.12.0-rc.1 and rc.2 | candidates only (`next`); superseded by 0.12.0 — upgrade rather than expecting fixes |

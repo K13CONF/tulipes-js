@@ -11,7 +11,39 @@ what makes it work under nvm.
 
 ---
 
-## Unreleased — security fixes (app code)
+## 0.14.0 — upgrading from 0.13
+
+While 0.14 is a candidate, `tulipes update` still installs `latest` (0.13):
+install `@tulipes/core@next` and the other `@tulipes/*` packages at `next`
+instead. There is no `tulipes migrate 0.14`: each step is a small edit you
+make by reading it. Work through them in order. The first four can stop a boot or a client; the rest are fixes you
+should copy.
+
+1. **Grants outside a module's own ids** refuse the boot (section below).
+   Move each reported grant into the module that defines the role.
+2. **Two endpoints change for clients** (security fixes, step 12):
+   `POST /api/v1/auth/password` needs `current_password`, and
+   `PATCH /api/v1/config/:module` needs `version`. Update the app and its
+   clients together.
+3. **Back-office deletes compare role `level`** (step 7). Give every role a
+   numeric `level` in `defineRole()`, or every delete is refused.
+4. **Framework behavior**, nothing to copy:
+   - an app with a custom access checker (`ctx.routes.setAccessChecker`) can
+     no longer serve agent actions to the MCP process or agent runs: those
+     calls have no request for the checker to judge, and are refused with
+     `ACCESS_CHECKER_NEEDS_REQUEST`;
+   - `ctx.settings.set()` resolves with `onChangeFailed: true` instead of
+     throwing when `onChange` fails after the write;
+   - `@tulipes/mcp` refuses `developmentIdentity()` on the http transport;
+   - a process without `APP_ENV` hides internal error messages: set
+     `APP_ENV=development` to see them outside `tulipes dev`.
+5. **The security fixes in app code**, steps 1 to 11 below. Step 1 (sockets)
+   closes an anonymous crash of the backend: do it first if nothing else.
+6. **Client headers**, optional (section below).
+
+---
+
+## 0.14.0 — security fixes (app code)
 
 The November 2026 audit found these in the reference app, so every app
 generated with the production preset has them. They are your code: apply each
@@ -168,7 +200,7 @@ fixes from the same audit arrive with the upgrade and need nothing here.
 
 ---
 
-## Unreleased — grants outside a module's own ids
+## 0.14.0 — grants outside a module's own ids
 
 **Breaking for an app that relied on it.** A module may now grant only ids
 that start with its own name. Another module's ids, or `*`, may be granted
@@ -186,7 +218,7 @@ module in the production preset, the core module in the minimal one).
 
 ---
 
-## Client headers (optional, app code)
+## 0.14.0 — client headers (optional, app code)
 
 Both presets now read the headers every client sends — `X-Platform`,
 `X-App-Version`, `X-App-Mode`, `X-Device-Id`, `X-Request-Id` — into

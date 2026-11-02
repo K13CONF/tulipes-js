@@ -12,7 +12,7 @@ each with a description, an input schema and a permission. The app serves
 that manifest at its agent door; this package puts it on stdio for Claude
 Code, Claude Desktop or any MCP client.
 
-Requires Node 24.x and an app on `@tulipes/core` 0.13 or later with its
+Requires Node 24.x and an app on `@tulipes/core` 0.14 or later (0.2.x for core 0.13) with its
 `agent` module mounted (`tulipes init` scaffolds one).
 
 > [!WARNING]

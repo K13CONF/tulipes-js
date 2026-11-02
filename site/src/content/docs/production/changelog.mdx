@@ -13,6 +13,16 @@ This is the story of the framework one minor line at a time: what each line adde
 Packing pins every package's core dependency to core's version, so each core release republishes all the packages, often with no source change of their own.
 </Aside>
 
+## 0.14 <Badge text="candidate" variant="caution" />
+
+**0.14.0-rc.1 (2026-11-01)** on `next`. Breaking: read [upgrading](/tulipes-js/production/upgrading/) and the MIGRATING section "0.14.0 — upgrading from 0.13".
+
+- **Security fixes** from a full audit of the framework and both presets. The worst: any anonymous Socket.IO client could crash the backend of a production-preset app. `@tulipes/socket.io` now contains handler errors, and the preset's handlers are fixed. Also: URL credentials are masked in the config console, an unset `APP_ENV` hides internals, MCP hides raw errors, workers re-check job data, and nine fixes in the preset's auth, users, agents and nginx code, each a MIGRATING step.
+- **Grant ownership.** A module grants only its own ids; another module's ids, or `*`, belong to the module that defines the role.
+- **Client changes** in the production preset: `POST /auth/password` needs `current_password`, `PATCH /config/:module` needs `version`.
+- **Client headers** in both presets: `req.client` and the `X-Request-Id` round trip.
+- `@tulipes/mcp` 0.3 requires core 0.14.
+
 ## 0.13 <Badge text="current" variant="success" />
 
 **0.13.0 (2026-10-15)** went straight to `latest` with no published candidate. It is additive over 0.12.

@@ -1,7 +1,7 @@
 # Release — core 0.14.0-rc.1
 
-Status: **not started.** This is the checklist to finish before anything is
-published. Branch `feat/client-headers`, 24 commits ahead of `master`, local only.
+Status: **versions bumped and verified locally, 2026-11-02**; PR, CI, tag and
+publication follow (see Publication). Branch `feat/client-headers`.
 
 ## Scope
 
@@ -90,6 +90,38 @@ and two HTTP endpoints change shape for clients.
     tag. The publish job checks the tag matches core, the commit is on
     `master`, and the archive digests; prereleases go to `next`.
 
+## Decisions
+
+- **Versions** as in the table in step 1. Peer ranges: mcp `^0.14.0-rc.1`
+  (it imports `revealsInternals`), socket.io adds `^0.14.0-rc.1` to its list,
+  spec, mongoose, bullmq and testing `^0.13.0 || ^0.14.0-rc.1`; cli's
+  optional spec peer `^0.4.4-rc.1`.
+- **No `tulipes migrate 0.14`.** The steps are a handful of edits that each
+  need judgment (where a grant moves, which `level` a role gets), not a
+  rewrite a codemod can do. MIGRATING carries an ordered summary on top.
+
+## Evidence
+
+Local: this Mac, 2026-11-02, Node 24.22.2, pnpm 10.28.0, MongoDB and Redis
+on 127.0.0.1, npm registry reachable. The jobs of `verify.yml`, in order.
+
+| Check | Local | CI |
+|---|---|---|
+| `pnpm install --frozen-lockfile` | pass, lockfile unchanged by the bumps | to record |
+| `pnpm typecheck`, `pnpm test:types` | pass | to record |
+| `pnpm test:coverage`, `REQUIRE_INTEGRATION_TESTS=1` | 42 files, 499 passed; 94.92 % statements, 90.34 % branches, 94.96 % functions, 95.95 % lines | to record |
+| example `sync` + `typecheck`; guide parity diffs | pass | to record |
+| example suite | 16 files, 201 passed, 8 skipped (live agent eval) | — |
+| presets test | 15 passed | — |
+| `artifacts.mjs prepare` + `verify`, `audit.mjs` | eight archives pack and verify; no high/critical (low: fast-uri; moderate: qs, minimatch) | to record |
+| scaffold parity diffs against the example | pass | to record |
+| `scaffold-smoke.mjs minimal` | pass after `83ce18d` (the request-id test built its URL twice; the local suites never run that file) | to record |
+| `scaffold-smoke.mjs production --offline-only`, `--no-queues --no-sockets --offline-only` | pass | to record |
+| `upgrade-smoke.mjs` (0.11.0 → candidate) | pass: migrated with `migrate 0.12` and `0.13`, boots on the eight rc.1 archives | to record |
+| `scaffold-smoke.mjs production` (services) | pass in 95 s: install, types, tests, specs, backend, mcp, worker | to record |
+| site `build` + `check` | 351 pages | — |
+| `ingress-smoke.mjs`, `failure-smoke.mjs` | not run (Docker; not part of `verify.yml`) | — |
+
 ## After publication
 
 15. Verify each package's registry integrity and tarball digest against the
@@ -113,3 +145,10 @@ and two HTTP endpoints change shape for clients.
 - **Local test data.** The `bookstore` MongoDB database and Redis db 0 keys
   from the tutorial run are still on the local services; unrelated to the
   release.
+
+## Publication
+
+To record after the tag: the PR and merge commit, the `v0.14.0-rc.1` tag, the
+publish run, registry integrity against the manifest, dist-tags and the
+`--registry` smokes.
+
