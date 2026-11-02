@@ -1,6 +1,6 @@
 # Releasing
 
-The release owner is the GitHub organisation `K13CONF`. Repository visibility remains private.
+The release owner is the GitHub organisation `K13CONF`. The repository is public.
 No release is created just by merging a feature PR.
 
 1. Update versions of every changed published package, changelog, migration notes
@@ -15,7 +15,9 @@ No release is created just by merging a feature PR.
    changes, or the immutable-version preflight refuses the repack.
 2. Open and merge a reviewed PR with passing CI. For structural changes, choose
    a prerelease version first (for example `0.9.0-rc.1`) and compatible spec
-   dependencies. RC versions publish to `next`, stable versions to `latest`.
+   dependencies. RC versions publish to `next`, stable versions to `latest`
+   — unless the registry's `latest` is newer, when a stable version publishes
+   to `maintenance`, so a patch for an older line never moves `latest` back.
 3. Create and push `v<core-version>` from that merged commit. Manual workflow
    dispatch must also select a matching tag reachable from the default branch.
 4. The reusable verification workflow runs unit/integration tests on minimum and
@@ -41,9 +43,10 @@ GitHub owner/repository and `publish.yml`, then set repository variable
 npm 11 on Node 24. npm-side trust configuration is a maintainer account action;
 adding this workflow does not configure npm automatically.
 
-Provenance remains disabled for this private repository because npm requires
-public source for provenance. Tokenless authentication and provenance are
-separate capabilities. [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/),
+Provenance follows the repository's visibility: the publish job sets
+`NPM_CONFIG_PROVENANCE` to true whenever the repository is public, which it now
+is, so the next publish carries provenance. npm requires public source for it.
+Tokenless authentication and provenance are separate capabilities. [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/),
 [provenance prerequisites](https://docs.npmjs.com/generating-provenance-statements/).
 
 ## Recovery
@@ -66,3 +69,13 @@ regardless of `--tag`; record it.
 Do not bypass failed audits, digest checks or smoke tests to meet a release date.
 Review moderate/low findings in retained reports; no high/critical exceptions
 are currently configured.
+
+## Workflow actions
+
+Every third-party action in `.github/workflows/` is pinned to a commit SHA, with
+the tag it was resolved from as a comment (`actions/checkout@<sha> # v4`). A
+moved tag cannot change what the publish job, which holds `NPM_TOKEN`, runs. To
+update one, resolve the new tag to its commit (`gh api
+repos/<owner>/<repo>/git/ref/tags/<tag>`, and dereference an annotated tag) and
+replace every occurrence.
+

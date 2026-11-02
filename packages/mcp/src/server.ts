@@ -76,7 +76,8 @@ export async function createServer(source: AgentBridge | ToolSource, options: Se
         ...(typeof data === "object" && data !== null && !Array.isArray(data) && { structuredContent: data as Record<string, unknown> }),
       };
     } catch (error) {
-      return { isError: true, content: [{ type: "text", text: (error as Error).message }] };
+      process.stderr.write(`${(error as Error).stack ?? String(error)}\n`);
+      return { isError: true, content: [{ type: "text", text: "internal error" }] };
     }
   });
 

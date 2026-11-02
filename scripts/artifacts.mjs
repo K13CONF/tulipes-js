@@ -72,6 +72,21 @@ export async function publicationPlan(packages, lookup) {
   return pending;
 }
 
+/**
+ * The dist-tag for one package: prereleases go to `next`; a release goes to
+ * `latest` only when it is not older than the registry's `latest`, so
+ * publishing a patch for an older line (or re-running an old tag) never
+ * moves `latest` backwards — it goes to `maintenance` instead.
+ */
+export function distTag(version, registryLatest) {
+  if (version.includes('-')) return 'next';
+  if (!registryLatest) return 'latest';
+  const parts = v => v.split('-')[0].split('.').map(Number);
+  const [a, b] = [parts(version), parts(registryLatest)];
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i] ? 'latest' : 'maintenance';
+  return 'latest';
+}
+
 async function publish(dir) {
   const manifest = verify(dir, process.env.GITHUB_SHA);
   const core = manifest.packages.find(pkg => pkg.name === '@tulipes/core');
@@ -87,7 +102,10 @@ async function publish(dir) {
     return response.json();
   });
   for (const pkg of pending) {
-    run('npm', ['publish', join(dir, pkg.file), '--access', 'public', '--tag', pkg.version.includes('-') ? 'next' : 'latest']);
+    const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(pkg.name)}/latest`, { signal: AbortSignal.timeout(30_000) });
+    if (!response.ok && response.status !== 404) throw new Error('Registry query failed: ' + response.status);
+    const latest = response.ok ? (await response.json()).version : undefined;
+    run('npm', ['publish', join(dir, pkg.file), '--access', 'public', '--tag', distTag(pkg.version, latest)]);
   }
 }
 

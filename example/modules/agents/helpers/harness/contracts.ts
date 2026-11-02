@@ -107,6 +107,8 @@ export interface RunActor {
   scopes?: readonly string[];
   /** Set when an API token created the run; its revocation ends the run. */
   tokenId?: string;
+  /** Set when a signed-in session created the run; signing out or changing the password ends the run. */
+  sessionId?: string;
 }
 
 /** A `tool_use` the model asked for that has no `tool_result` yet. */
@@ -164,7 +166,15 @@ export interface RunStore {
   /** Checkpoint A: the turn, what it asked for, its usage — before any tool runs. */
   appendTurn(runId: string, turn: ModelTurn, pending: PendingCall[], elapsedMs: number): Promise<Run>;
   awaitApproval(runId: string, elapsedMs: number): Promise<Run>;
-  beginExecution(runId: string): Promise<Run>;
+  /**
+   * Claim the pending calls for execution. `pendingId` is the first pending
+   * call this job planned from: the claim holds only while the run still
+   * waits on those calls, so a job that loaded the run before another
+   * finished them cannot run them again. Null when the claim fails for any
+   * reason but an ended run. `takeover` claims even when `executing` is set:
+   * the resume after a crash, which re-runs only read-only calls.
+   */
+  beginExecution(runId: string, options: { pendingId: string; takeover?: boolean }): Promise<Run | null>;
   /** Checkpoint B: one user message answering every pending call; clears pending and decisions. */
   appendResults(runId: string, results: Anthropic.Beta.BetaToolResultBlockParam[], elapsedMs: number): Promise<Run>;
   /** A mid-conversation operator message (`role: "system"`). */

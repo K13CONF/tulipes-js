@@ -16,10 +16,12 @@
  * a commented TLS block to uncomment once they exist.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 import { boot } from "@tulipes/core/boot";
+
+import { HOSTNAME } from "../modules/core/helpers/hostname.ts";
 
 const SITES_AVAILABLE = "/etc/nginx/sites-available";
 const SITES_ENABLED = "/etc/nginx/sites-enabled";
@@ -42,6 +44,11 @@ try {
 async function deploy(): Promise<void> {
   const { appEnv } = handle.ctx;
   const domain = String(handle.ctx.config.core?.publicDomain ?? "localhost").trim();
+  // The schema already refuses anything else; checked again because this
+  // runs as root and a stored value may predate the schema.
+  if (!HOSTNAME.test(domain)) {
+    return fail(`core.publicDomain ${JSON.stringify(domain)} is not a hostname — set one through the console (PATCH /config/core)`);
+  }
   // What app.config wired from PORT — the same port the backend listens on.
   const port = Number(handle.ctx.config.server?.port ?? 3000);
 
@@ -80,19 +87,30 @@ async function deploy(): Promise<void> {
   }
 
   const availablePath = join(SITES_AVAILABLE, domain);
+  if (dirname(resolve(availablePath)) !== SITES_AVAILABLE) {
+    return fail(`${availablePath} is outside ${SITES_AVAILABLE}`);
+  }
   if (existsSync(availablePath) && !force) {
     return fail(
       `${availablePath} already exists — re-run with --force to overwrite it (it may have been hand-tuned on this box)`,
     );
   }
 
+  const previous = existsSync(availablePath) ? readFileSync(availablePath, "utf8") : undefined;
+  const enabledPath = join(SITES_ENABLED, domain);
+  const hadLink = existsSync(enabledPath) || isSymlink(enabledPath);
+
   writeFileSync(availablePath, conf);
   console.log(`wrote ${availablePath}`);
 
-  const enabledPath = join(SITES_ENABLED, domain);
   if (!linkSite(availablePath, enabledPath)) return;
 
   if (!run("nginx", ["-t"], "nginx rejected the configuration — nothing was reloaded")) {
+    // Leave nginx as it was, so the next reload (by anyone) does not fail on this file.
+    if (previous === undefined) rmSync(availablePath, { force: true });
+    else writeFileSync(availablePath, previous);
+    if (!hadLink) rmSync(enabledPath, { force: true });
+    console.error(`deploy-nginx: restored ${availablePath}${hadLink ? "" : ` and removed ${enabledPath}`}`);
     return;
   }
   if (!run("systemctl", ["reload", "nginx"], "nginx reload failed")) return;

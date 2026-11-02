@@ -299,3 +299,24 @@ test.each(["false", 1, {}])(
     });
   },
 );
+
+test("a 4xx error keeps its message only when it marks itself safe to show", async () => {
+  const { errorHandler } = await import("../src/http/error-handler.ts");
+  const app = express();
+  app.get("/sdk", () => { throw Object.assign(new Error("upstream said: invalid key sk-live-123"), { status: 401 }); });
+  app.get("/parser", () => { throw Object.assign(new Error("Unexpected token } in JSON"), { status: 400, expose: true }); });
+  app.use(errorHandler("production"));
+
+  const sdk = await request(app, "/sdk");
+  expect(sdk.status).toBe(401);
+  expect(JSON.stringify(sdk.body)).not.toContain("sk-live");
+  expect(await request(app, "/parser")).toMatchObject({ status: 400, body: { errors: [{ message: "Unexpected token } in JSON" }] } });
+});
+
+test("a page past maxPage is clamped to it", async () => {
+  const { parsePage } = await import("../src/http/pagination.ts");
+  const at = (page: string, bounds = {}) => parsePage({ query: { page, per_page: "10" } } as never, bounds);
+  expect(at("50")).toEqual({ page: 50, per_page: 10, skip: 490 });
+  expect(at("99999999")).toEqual({ page: 1000, per_page: 10, skip: 9990 });
+  expect(at("6", { maxPage: 5 })).toMatchObject({ page: 5 });
+});

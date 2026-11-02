@@ -521,7 +521,7 @@
           "auth"
         ],
         "summary": "Change password",
-        "description": "Set a new password and end every other session",
+        "description": "Set a new password, given the current one, and end every other session",
         "x-tulipes-permission": "auth:web:password",
         "x-tulipes-scope": "web",
         "x-tulipes-roles": [
@@ -537,12 +537,17 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "current_password": {
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "password": {
                     "type": "string",
                     "minLength": 8
                   }
                 },
                 "required": [
+                  "current_password",
                   "password"
                 ]
               }
@@ -1130,7 +1135,8 @@
                   }
                 },
                 "required": [
-                  "values"
+                  "values",
+                  "version"
                 ]
               }
             }
@@ -4832,8 +4838,7 @@
         "x-tulipes-scope": "web",
         "x-tulipes-roles": [
           "admin",
-          "sysadmin",
-          "user"
+          "sysadmin"
         ],
         "x-tulipes-authorization": "acl",
         "parameters": [

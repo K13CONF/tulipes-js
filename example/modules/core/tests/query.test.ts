@@ -171,3 +171,11 @@ describe("policy", () => {
     expect(result.data).toMatchObject({ search: "john", fields: ["email", "role", "created_at"], resolve: [{ relation: "sessions", limit: 5 }] });
   });
 });
+
+test("inherited names are not declared fields or relations: a 400 issue, never a TypeError", () => {
+  for (const query of [{ resolve: '["constructor"]' }, { resolve: '[["__proto__", {"fields": ["x"]}]]' }, { filter: '[["toString", "=", "x"]]' }, { filter: '[["constructor", "=", "x"]]' }]) {
+    const result = schema.safeParse(query);
+    expect(result.success, JSON.stringify(query)).toBe(false);
+    expect(result.error!.issues[0]!.message, JSON.stringify(query)).toMatch(/is not filterable|cannot be resolved here/);
+  }
+});

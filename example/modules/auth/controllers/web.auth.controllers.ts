@@ -9,8 +9,8 @@ import {
 
 import { issueToken, listTokens, revokeToken } from "../helpers/api-tokens.ts";
 import { auth } from "../helpers/auth.ts";
-import type { PasswordIdentity, UserDoc } from "../helpers/documents.ts";
-import { setPassword } from "../helpers/passwords.ts";
+import type { CredentialDoc, PasswordIdentity, UserDoc } from "../helpers/documents.ts";
+import { setPassword, verifyPassword } from "../helpers/passwords.ts";
 import {
   endSession,
   listSessions,
@@ -75,14 +75,19 @@ export class WebAuthController {
 
       const User = this.#ctx.models!.get<UserDoc>("User");
       const normalised = email!.toLowerCase();
-      if (await User.countDocuments({ email: normalised }).limit(1)) {
+      // Deleted accounts included: their email is still taken in the index.
+      if (await User.countDocuments({ email: normalised }).setOptions({ withDeleted: true }).limit(1)) {
         // Deliberately the same shape as any other validation failure: a
         // distinct message would turn registration into an oracle for
         // which addresses already have accounts.
         throw new HttpError(422, "emailUnavailable", { field: "email" });
       }
 
-      const user = await User.create({ email: normalised, role: "user" });
+      const user = await User.create({ email: normalised, role: "user" }).catch((error: { code?: number }) => {
+        // Two registrations for one address at once: the loser gets the same answer.
+        if (error.code === 11000) throw new HttpError(422, "emailUnavailable", { field: "email" });
+        throw error;
+      });
       const credentialVersion = await setPassword(
         this.#ctx,
         String(user._id),
@@ -264,8 +269,16 @@ export class WebAuthController {
   changePassword(): RequestHandler {
     return async (req: Request, res: Response) => {
       const userId = String(req.auth.user!._id);
-      const { password } = (req.body ?? {}) as { password?: string };
+      const { password, current_password } = (req.body ?? {}) as { password?: string; current_password?: string };
       this.#assertPassword(password);
+
+      // A stolen access token lives minutes; without this check it could set
+      // a password of the thief's choosing and keep the account for good.
+      const credential = await this.#ctx.models!.get<CredentialDoc>("Credential")
+        .findOne({ user: userId }).select("+password_hash").lean();
+      if (!credential || !current_password || !(await verifyPassword(current_password, credential.password_hash))) {
+        throw new HttpError(422, "currentPasswordIncorrect", { field: "current_password", code: "CURRENT_PASSWORD_INCORRECT" });
+      }
 
       // Capture the version written by this change, even if another change races.
       const expectedVersion = req.auth.session?.credential_version;

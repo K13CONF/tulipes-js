@@ -33,27 +33,48 @@ export class BoUsersController {
     };
   }
 
-  /** Soft delete: the row stays in mongo but leaves every ordinary query. */
+  /**
+   * Soft delete: the row stays in mongo but leaves every ordinary query.
+   * Only an account whose role ranks below the caller's: an admin cannot
+   * lock a sysadmin (or another admin) out, and nobody deletes themselves
+   * here. A role without a level counts as the highest.
+   */
   softDelete(): RequestHandler {
     return async (req: Request, res: Response) => {
       const user = await this.#ctx.models!.get("User").findOne({ email: req.params.email });
       if (!user) throw new HttpError(404, "notFound");
+      // The boot seeds this account; deleting it would stop every later boot.
+      if (user.get("email") === this.#ctx.config.auth?.adminEmail?.toLowerCase()) {
+        throw new HttpError(409, "seededAdmin", { code: "SEEDED_ADMIN" });
+      }
+      const caller = req.auth!.user!;
+      if (String(user._id) === String(caller._id)) throw new HttpError(403, "deleteSelf", { code: "DELETE_SELF" });
+      const level = (role: unknown) => {
+        const value = this.#ctx.acl?.role(String(role))?.level;
+        return typeof value === "number" ? value : Infinity;
+      };
+      if (level(user.get("role")) >= level(caller.role)) throw new HttpError(403, "outranks", { code: "OUTRANKS" });
 
-      // The account leaves every query, so its sessions resolve to nobody on
-      // the cold path; the cached identities would not know, so they go too.
-      await forgetUser(this.#ctx, String(user._id));
+      // The row first, then the cached identities: its sessions resolve to
+      // nobody on the cold path, and the cache must not keep answering for it.
       await (user as unknown as { softDelete(): Promise<unknown> }).softDelete();
+      await forgetUser(this.#ctx, String(user._id));
       res.respond({ data: { email: req.params.email, soft_deleted: true } });
     };
   }
 
   listDeleted(): RequestHandler {
-    return async (_req: Request, res: Response) => {
+    return async (req: Request, res: Response) => {
+      // Paged like every list: the tombstones only grow.
+      const { skip, per_page } = req.page;
       const deleted = await this.#ctx.models!
         .get("User")
         .find({ is_deleted: true })
         .setOptions({ withDeleted: true } as Record<string, unknown>)
         .select("email role -_id")
+        .sort({ email: 1 })
+        .skip(skip)
+        .limit(per_page)
         .lean();
 
       res.respond({ data: deleted });
@@ -66,7 +87,15 @@ export class BoUsersController {
       // `field` is what puts this against the input in the envelope.
       if (!email) throw new HttpError(422, "emailRequired", { field: "email" });
 
-      await this.#ctx.models!.get("User").create({ email });
+      const User = this.#ctx.models!.get("User");
+      // Deleted accounts included: their email is still taken in the index.
+      if (await User.countDocuments({ email }).setOptions({ withDeleted: true }).limit(1)) {
+        throw new HttpError(422, "emailUnavailable", { field: "email" });
+      }
+      await User.create({ email }).catch((error: { code?: number }) => {
+        if (error.code === 11000) throw new HttpError(422, "emailUnavailable", { field: "email" });
+        throw error;
+      });
       // The locale travels with the job: the worker has no request to
       // negotiate from, so whoever queues the work owns that decision.
       await this.#ctx.queues!.add("users.welcome", "welcome", {

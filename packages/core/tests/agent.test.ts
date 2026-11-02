@@ -126,6 +126,9 @@ test("a custom access checker decides on actions too, and the manifest stops fil
     const denied = await call({});
     expect({ status: denied.status, body: await denied.json() }).toMatchObject({ status: 401 });
     expect((await call({ "x-key": "open" })).status).toBe(200);
+    // Without a request the checker cannot decide, and the plain ACL is not the app's policy.
+    await expect(handle.ctx.agent!.invoke("probe_web_count", {}, { isAuthenticated: true, user: null, session: null, role: "admin" }))
+      .rejects.toMatchObject({ status: 403, code: "ACCESS_CHECKER_NEEDS_REQUEST" });
   } finally {
     await handle.shutdown();
   }
@@ -170,6 +173,28 @@ test("a script process carries the same surface and can invoke an action under t
     const actor = { isAuthenticated: true, user: null, session: null };
     await expect(registry.invoke("probe_web_reset", { confirm: true }, { ...actor, role: "viewer" })).rejects.toMatchObject({ status: 403 });
     await expect(registry.invoke("probe_web_reset", { confirm: true }, { ...actor, role: "user" })).resolves.toEqual({ reset: true, by: "user", reason: "none", mode: "script" });
+  } finally {
+    await handle.shutdown();
+  }
+});
+
+test("parseInput shows what invoke() would execute: defaults applied, or undefined when it does not parse", async () => {
+  const app = await fixture({
+    "modules/probe/module.acl.js": acl,
+    "modules/probe/routes/probe.routes.js": routes,
+    "modules/probe/agent/probe.agent.js": `
+      import { action, defineAgent } from '@tulipes/core/agent';
+      import { z } from 'zod';
+      export default defineAgent({ summary: 'Resets.', actions: [
+        action({ id: 'probe:web:reset', description: 'Reset', input: z.object({ confirm: z.boolean(), scope: z.string().default('all') }), handler: () => 1 }),
+      ] });`,
+  });
+  const handle = await app.boot({ listen: false });
+  try {
+    const agent = handle.ctx.agent!;
+    expect(agent.parseInput("probe_web_reset", { confirm: true })).toEqual({ confirm: true, scope: "all" });
+    expect(agent.parseInput("probe_web_reset", { confirm: "yes" })).toBeUndefined();
+    expect(agent.parseInput("no_such_tool", {})).toBeUndefined();
   } finally {
     await handle.shutdown();
   }

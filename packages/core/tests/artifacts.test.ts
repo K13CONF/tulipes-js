@@ -88,7 +88,12 @@ test("publication preflights every package and refuses a conflicting existing ve
       "-e",
       `
     import assert from 'node:assert/strict';
-    import { publicationPlan } from ${JSON.stringify(new URL("../../../scripts/artifacts.mjs", import.meta.url).href)};
+    import { distTag, publicationPlan } from ${JSON.stringify(new URL("../../../scripts/artifacts.mjs", import.meta.url).href)};
+    assert.equal(distTag('0.14.0', '0.13.2'), 'latest');
+    assert.equal(distTag('0.13.3', '0.14.0'), 'maintenance');
+    assert.equal(distTag('0.14.0', '0.14.0'), 'latest');
+    assert.equal(distTag('0.15.0-rc.1', '0.14.0'), 'next');
+    assert.equal(distTag('0.1.0', undefined), 'latest');
     const packages = [{ name: '@tulipes/core', version: '0.9.0', integrity: 'core' }, { name: '@tulipes/spec', version: '0.3.0', integrity: 'spec' }];
     await assert.rejects(publicationPlan(packages, async pkg => pkg.name.endsWith('core') ? null : { dist: { integrity: 'different' } }), /Published bytes differ/);
     assert.deepEqual(await publicationPlan(packages, async pkg => pkg.name.endsWith('core') ? { dist: { integrity: 'core' } } : null), [packages[1]]);

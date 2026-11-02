@@ -7,6 +7,7 @@ import type { Auth } from "@tulipes/core/http";
 import { useTestApp } from "@tulipes/testing";
 
 import { testEnv, testSettings } from "../../../tests/support.ts";
+import { MongoRunStore } from "../helpers/adapters/mongo-run-store.ts";
 import { composeLoop } from "../helpers/compose.ts";
 import type { TranscriptMessage } from "../helpers/harness/contracts.ts";
 import { startRun } from "../helpers/runs.ts";
@@ -108,6 +109,27 @@ test("a run started with a scoped API token is refused outside its scopes, and s
   expect(run).toMatchObject({ status: "failed", reason: "credential_revoked" });
 });
 
+test("a run started from a session stops once the owner changes their password", async () => {
+  const user = await app.as("user");
+  const started = await app.post<{ id: string }>(app.api("/agents/runs"), { goal: "List the greetings." }, { as: user });
+  expect(started.status).toBe(202);
+  const stored = await ctx().models!.get("AgentRun").findById(started.data!.id).lean() as Record<string, unknown>;
+  expect(stored).toMatchObject({ session_id: expect.any(String) });
+  expect(stored).not.toHaveProperty("token_id");
+
+  const model = new ScriptedModel([
+    turn([toolUse("hello_web_greetings")]),
+    async () => {
+      const changed = await app.post(app.api("/auth/password"), { current_password: user.password, password: randomBytes(24).toString("hex") }, { as: user });
+      expect(changed.status).toBe(200);
+      return turn([toolUse("hello_web_greetings")]);
+    },
+  ]);
+
+  const run = await composeLoop(ctx(), { model }).run(started.data!.id);
+  expect(run).toMatchObject({ status: "failed", reason: "credential_revoked" });
+});
+
 test("starting a run needs the key, and a signed-in caller", async () => {
   const guest: Auth = { isAuthenticated: false, user: null, session: null };
   await expect(startRun(ctx(), guest, { goal: "x" })).rejects.toMatchObject({ status: 401 });
@@ -204,4 +226,21 @@ test("over HTTP: the input is validated, and a guest is refused", async () => {
   expect(blank.errors[0]).toMatchObject({ field: "goal" });
   expect((await app.get(app.api("/agents/runs/not-an-id"), { as: user })).status).toBe(422);
   expect((await app.post(app.api("/agents/runs"), { goal: "x" })).status).toBe(401);
+});
+
+test("the Mongo store hands the execution claim to one job; a takeover after a crash still claims", async () => {
+  const store = new MongoRunStore(ctx(), { retentionDays: 1 });
+  const started = await startRun(ctx(), await caller("user"), { goal: "Claim it." });
+
+  const runs = ctx().models!.get("AgentRun");
+  await runs.updateOne({ _id: started.id }, { $set: { pending: [{ id: "call-1", name: "hello_bo_greetings_reset", input: {} }] } });
+
+  expect(await store.beginExecution(started.id, { pendingId: "call-1" })).toMatchObject({ executing: true });
+  expect(await store.beginExecution(started.id, { pendingId: "call-1" })).toBeNull();
+  expect(await store.beginExecution(started.id, { pendingId: "call-1", takeover: true })).toMatchObject({ executing: true });
+
+  // A job that loaded the run before another answered these calls finds them gone: no claim, even as a takeover.
+  await store.appendResults(started.id, [{ type: "tool_result", tool_use_id: "call-1", content: "done" }], 10);
+  expect(await store.beginExecution(started.id, { pendingId: "call-1" })).toBeNull();
+  expect(await store.beginExecution(started.id, { pendingId: "call-1", takeover: true })).toBeNull();
 });

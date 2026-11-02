@@ -10,5 +10,9 @@
   "welcome": {
     "subject": "Welcome, {{email}}"
   },
-  "emailInvalid": "Must be a valid email address"
+  "emailInvalid": "Must be a valid email address",
+  "emailUnavailable": "That email cannot be used",
+  "seededAdmin": "The seeded admin account cannot be deleted; change ADMIN_EMAIL first",
+  "outranks": "You cannot delete an account whose role is at or above yours",
+  "deleteSelf": "You cannot delete your own account here"
 }

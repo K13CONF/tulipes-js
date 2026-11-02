@@ -86,6 +86,18 @@ Guarding is the route's RAI, so there is no second call to forget:
 router.get("/invoices", rai({ id: "billing:web:invoices", name: "List my invoices" }), billing.list());
 ```
 
+The boot enforces this. A module may grant only ids that start with its
+own name; another module's ids, or `*`, may be granted only by the module
+that defined the role (the auth module, in this app). Anything else
+refuses the boot:
+
+```
+✖ [billing] grants "guest" "users:*", an id of module "users" — a module grants its own ids ("billing:…"); grants on another module's ids belong in "auth", which defines "guest"
+```
+
+So a cross-module grant, like adding `billing:*` to `admin`, goes in
+`modules/auth/module.acl.ts`.
+
 ## Wildcards
 
 A grant is an exact id, `*`, or a prefix ending in `:*`. A prefix covers

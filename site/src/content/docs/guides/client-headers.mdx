@@ -1,0 +1,221 @@
+---
+title: Client headers
+description: The headers every web and mobile client sends on each request, how the core module validates them into req.client, and how the request id round-trips into logs.
+sidebar:
+  order: 13
+---
+
+import { Aside, LinkCard, CardGrid, Tabs, TabItem } from "@astrojs/starlight/components";
+
+An API that serves a web console, an Android app and an iOS app answers
+the same question on every request: who is calling, which build, in which
+mode, from which device, and which exact request was this, so a support
+ticket can be matched to a log line. Tulipes apps answer it once, in the
+core module, before any route runs. The result is `req.client` in every
+handler and on every log line, and the request id goes back to the client
+as `X-Request-Id`.
+
+Language and time zone are not part of this: core already reads
+`Accept-Language` into `req.locale` and `X-Timezone` into `req.timezone`
+for every declared route. See [translations](/tulipes-js/guides/translations/)
+and [time zones](/tulipes-js/guides/time-zones/).
+
+## The headers
+
+| Header | Accepted | Normalized | Default | `req.client.` |
+|---|---|---|---|---|
+| `X-Platform` | `web`, `android`, `ios` | lower-cased | `web` | `platform` |
+| `X-App-Version` | `1.4.2`, `1.4.2+37`, `1.4.2-beta.1` | as sent | `null` | `appVersion` |
+| `X-App-Mode` | `development`, `staging`, `production` | lower-cased | `production` | `appMode` |
+| `X-Device-Id` | 8 to 128 of `A-Z a-z 0-9 . _ -` | as sent | `null` | `deviceId` |
+| `X-Request-Id` | same as the device id | as sent | a generated uuid | `requestId` |
+
+Header names are case-insensitive. A value is trimmed first, and an empty
+one counts as missing. A missing or invalid value never fails the request:
+it falls back to the default, so an old client that sends `X-Platform:
+Windows` is served as `web`. Only a header marked required can fail a
+request, and none is by default.
+
+A handler reads the result as a plain object:
+
+```ts title="modules/books/controllers/web/books.controllers.ts"
+list() {
+  return async (req: Request, res: Response) => {
+    const { platform, appVersion, requestId } = req.client;
+    if (platform !== "web" && appVersion === null) {
+      // A mobile build that sends no version predates the header: refuse it.
+      throw new HttpError(426, "updateRequired", { code: "UPDATE_REQUIRED" });
+    }
+    res.respond({ data: await requireModels(this.ctx).get("Book").find().lean() });
+  };
+}
+```
+
+## Where it runs
+
+The core module is a sys module with priority 0, so its routes file runs
+before every other module's. It mounts the parser on `ctx.app`:
+
+```ts title="modules/core/routes/core.routes.ts"
+export default function coreRoutes(ctx: BackendCtx): void {
+  ctx.app.use(clientHeaders());
+  // …the cache middleware
+}
+```
+
+The pipeline, in the production preset:
+
+```txt
+request
+  -> core       client headers: req.client, X-Request-Id echoed
+  -> security   trust proxy, helmet, CORS, pino-http, rate limits, express.json
+  -> auth       passport, req.auth
+  -> feature routes (rai() first)
+  -> core tail  404 ROUTE_NOT_FOUND, error handler
+```
+
+The parser runs before CORS, so it skips `OPTIONS` requests: a preflight
+is answered by the security module and must never meet a required-header
+check. Static files, the health route and unrouted paths all pass through
+it, which is why even a 404 carries an `X-Request-Id`. Socket.IO
+connections do not: this is HTTP middleware.
+
+The parser reads no environment value and opens nothing, so it is mounted
+directly rather than through `lazy()`, and `tulipes routes` and
+`tulipes spec` build it without complaint.
+
+## The definitions
+
+One object describes every header. Adding one is a row here and a case in
+the test:
+
+```ts title="modules/core/helpers/client-headers.ts"
+export const CLIENT_HEADERS = {
+  platform:   { header: "x-platform",    values: ["web", "android", "ios"], default: "web" },
+  appVersion: { header: "x-app-version", pattern: VERSION, default: null },
+  appMode:    { header: "x-app-mode",    values: ["development", "staging", "production"], default: "production" },
+  deviceId:   { header: "x-device-id",   pattern: ID, default: null },
+  requestId:  { header: "x-request-id",  pattern: ID, default: null },
+} satisfies Record<string, HeaderSpec>;
+```
+
+| Field | Meaning |
+|---|---|
+| `header` | the HTTP header name, lower-case |
+| `values` | the accepted values; the sent value is lower-cased before the comparison |
+| `pattern` | a regular expression the value must match, as sent |
+| `required` | `true` refuses a request that omits the header |
+| `default` | what `req.client` holds when the header is missing or invalid; `null` for the request id means "generate one" |
+
+The reading is a pure function, `readClientHeaders(get)`, that takes a
+header getter and returns `{ client, missing }`. The middleware wraps it,
+and the tests call it directly with a plain object, so a new header is
+tested without booting the app.
+
+## A required header
+
+Set `required: true` on an entry and a request that omits it is refused
+before any route, with every missing header named at once:
+
+```http
+HTTP/1.1 400 Bad Request
+X-Request-Id: 4f7c…
+
+{
+  "success": false,
+  "data": null,
+  "errors": [{ "field": null, "code": "CLIENT_HEADERS_REQUIRED", "message": "Missing required headers: x-platform" }]
+}
+```
+
+Required checks presence only. A required header that is present but
+invalid still falls back to its default, the same as any other.
+
+<Aside type="caution">
+The parser runs before any route binds `req.t`, so this message is not
+translated: it is the `defaultMessage` of an `HttpError`, and clients should
+key on the code. Requiring a header also means the health route and every
+preflight-free tool such as curl must send it.
+</Aside>
+
+## What consumes it
+
+**The request log.** The security module's pino-http line already used
+`X-Request-Id` as its `reqId`; it now carries the client fields too, so a
+JSON log file can be filtered by platform or app version:
+
+```json
+{"level":30,"reqId":"req-12345678","req":{"method":"GET","url":"/api/v1/hello","platform":"android","appVersion":"1.4.2+37","appMode":"staging","deviceId":"b3c1…"},"res":{"status":200}}
+```
+
+**The settings audit.** A settings change through the console records
+`request_id` on its `ConfigAudit` row, so a change can be traced back to
+the client that asked for it. See [settings](/tulipes-js/guides/settings/).
+
+**CORS.** `X-Request-Id` is in `exposedHeaders`, so browser JavaScript may
+read it. The `X-*` request headers need no allow-list: the security module
+sets no `allowedHeaders`, so the preflight reflects what the client asks
+for. See [security middleware](/tulipes-js/guides/security-middleware/#cors-fail-closed).
+
+**Your handlers.** `req.client.appVersion` for a minimum-version check,
+`req.client.platform` to shape a payload per client, `req.client.deviceId`
+to key a push subscription.
+
+## The client contract
+
+Share this with the front-end and mobile teams. Each client sends every
+header on every request; the request id is new per request, the device id
+stable per install:
+
+<Tabs>
+  <TabItem label="Web (axios)">
+    ```js
+    api.interceptors.request.use((request) => {
+      request.headers["X-Platform"] = "web";
+      request.headers["X-App-Version"] = APP_VERSION;                   // from the build
+      request.headers["X-App-Mode"] = APP_MODE;                         // development | staging | production
+      request.headers["X-Request-Id"] = crypto.randomUUID();
+      request.headers["X-Timezone"] = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      request.headers["Accept-Language"] = currentLanguage;
+      return request;
+    });
+    ```
+  </TabItem>
+  <TabItem label="Mobile">
+    ```txt
+    X-Platform: android            (or ios)
+    X-App-Version: 1.4.2+37        (version+build)
+    X-App-Mode: production
+    X-Device-Id: <install id>      (generated once, stored on the device)
+    X-Request-Id: <uuid>           (new per request)
+    X-Timezone: Europe/Brussels
+    Accept-Language: fr
+    ```
+  </TabItem>
+</Tabs>
+
+When a request fails, show the `X-Request-Id` of the response in the error
+message ("Reference: req-12345678"). Support finds the log line with it.
+
+## Testing
+
+The reference app's `modules/core/tests/client-headers.test.ts` covers the
+pure reader (valid values normalized, invalid ones defaulted, the required
+check) and the live app (the id echoed or generated, the preflight). A test
+for a new header is one more call:
+
+```ts title="modules/core/tests/client-headers.test.ts"
+test("the tenant header is kept when it looks like a slug", () => {
+  const { client } = readClientHeaders((name) => ({ "x-tenant": "acme-books" })[name]);
+  expect(client.tenant).toBe("acme-books");
+});
+```
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Logging" description="Where the request lines go and how the files rotate." href="/tulipes-js/guides/logging/" />
+  <LinkCard title="Security middleware" description="Helmet, CORS, rate limits and the body parser, in the module that runs right after this one." href="/tulipes-js/guides/security-middleware/" />
+  <LinkCard title="Time zones" description="The X-Timezone header core reads for you, and the req.time helpers." href="/tulipes-js/guides/time-zones/" />
+  <LinkCard title="Translations" description="How Accept-Language becomes req.locale and req.t." href="/tulipes-js/guides/translations/" />
+</CardGrid>

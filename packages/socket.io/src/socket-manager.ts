@@ -1,5 +1,5 @@
 import type { Server as HttpServer } from "node:http";
-import { Server, type Namespace, type ServerOptions } from "socket.io";
+import { Server, type Namespace, type ServerOptions, type Socket } from "socket.io";
 
 import type { SocketsCapability } from "@tulipes/core/boot";
 import type { BootReport } from "@tulipes/core/errors";
@@ -92,6 +92,39 @@ export class SocketManager implements SocketsCapability {
   }
 }
 
+/**
+ * Socket.IO calls event listeners straight from the transport, so a listener
+ * that throws — `ack()` when the client sent none — would end the process for
+ * every client. Each socket's `on` is wrapped before any module listener is
+ * attached: a throw or rejection is logged and stays with that event.
+ */
+function containHandlers(moduleName: string, namespace: string) {
+  return (socket: Socket, next: (error?: Error) => void): void => {
+    const on = socket.on.bind(socket);
+    const report = (event: string, error: unknown): void => {
+      console.error(
+        `[tulipes/socket.io] module "${moduleName}" ${namespace} "${event}" handler failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    };
+    socket.on = ((event: string, listener: (...args: unknown[]) => unknown) => {
+      const contained = (...args: unknown[]): void => {
+        try {
+          const result = listener.apply(socket, args);
+          if (result instanceof Promise) result.catch((error: unknown) => report(event, error));
+        } catch (error) {
+          report(event, error);
+        }
+      };
+      // removeListener(event, listener) still finds it.
+      (contained as { listener?: unknown }).listener = listener;
+      return on(event, contained);
+    }) as Socket["on"];
+    next();
+  };
+}
+
 /** "/", or "/name" — lowercase kebab-case. */
 const NAMESPACE = /^\/([a-z0-9-]+)?$/;
 
@@ -120,7 +153,9 @@ export class SocketRegistry {
       this.#issue(`namespace "${name}" is already claimed by module "${owner}"`);
       return this;
     }
-    setup(this.#manager.io.of(name));
+    const nsp = this.#manager.io.of(name);
+    nsp.use(containHandlers(this.#module, name));
+    setup(nsp);
     return this;
   }
 

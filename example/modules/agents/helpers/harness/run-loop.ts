@@ -218,7 +218,10 @@ export class RunLoop {
       return { run: await store.awaitApproval(job.runId, job.elapsed()), stop: true };
     }
 
-    run = await store.beginExecution(job.runId);
+    const claimed = await store.beginExecution(job.runId, { pendingId: run.pending[0]!.id, takeover: interrupted });
+    // Another job is running these calls; running them here too would repeat its writes.
+    if (!claimed) return { run: (await store.load(job.runId)) ?? run, stop: true };
+    run = claimed;
     if (TERMINAL.has(run.status)) return { run, stop: true };
 
     const answers = new Map<string, Answer>();
@@ -270,7 +273,8 @@ export class RunLoop {
       return { call, kind: "answer", content: `No tool named "${call.name}" is available to this run. Use one of the tools you were given.` };
     }
     if (interrupted && !tool.readOnly) return { call, kind: "answer", content: INTERRUPTED };
-    const recorded = run.decisions[call.id];
+    // Own keys only: a call id the model chose must not reach Object.prototype.
+    const recorded = Object.hasOwn(run.decisions, call.id) ? run.decisions[call.id] : undefined;
     switch (this.#deps.policy.decide(tool, recorded)) {
       case "allow":
         return { call, kind: "execute", tool };

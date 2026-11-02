@@ -21,6 +21,14 @@ export { LOG_FILES, logger, moduleLogger } from "../helpers/logger/index.ts";
 export { lazy } from "../helpers/lazy.ts";
 
 export {
+  CLIENT_HEADERS,
+  clientHeaders,
+  readClientHeaders,
+  type ClientHeaders,
+  type HeaderSpec,
+} from "../helpers/client-headers.ts";
+
+export {
   grammar,
   grammarFor,
   LIMITS,

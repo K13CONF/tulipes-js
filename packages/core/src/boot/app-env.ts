@@ -20,6 +20,21 @@ export function resolveAppEnv(override: AppEnv | undefined, report: BootReport):
   return "development"; // a placeholder; the report aborts the boot anyway
 }
 
+/** True when neither the caller nor the process named the deployment. */
+export function isAppEnvDefaulted(override: AppEnv | undefined): boolean {
+  return override === undefined && process.env.APP_ENV === undefined;
+}
+
+/**
+ * Whether error messages and stacks may reach a client: only in a
+ * development or test deployment that was named as such. A process started
+ * without APP_ENV reads the development files but answers like production —
+ * a server that forgot the variable must not leak its internals.
+ */
+export function revealsInternals(ctx: { appEnv: AppEnv; appEnvDefaulted?: boolean }): boolean {
+  return (ctx.appEnv === "development" || ctx.appEnv === "test") && !ctx.appEnvDefaulted;
+}
+
 /** Anything that is not clearly dev or test gets production-grade behaviour from libraries. */
 export function mirrorNodeEnv(appEnv: AppEnv): void {
   process.env.NODE_ENV ??= appEnv === "development" || appEnv === "test" ? appEnv : "production";

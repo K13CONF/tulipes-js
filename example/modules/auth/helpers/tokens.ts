@@ -227,6 +227,15 @@ function validClaims(
 }
 
 /** A live session owned by the token subject. TTL cleanup is not authorization. */
+/**
+ * Whether a session still stands: not ended, not expired, still on the
+ * current credential version. What an agent run started from a session
+ * checks before each step, as isTokenLive does for a token.
+ */
+export async function isSessionLive(ctx: Ctx, sid: string, userId: string): Promise<boolean> {
+  return Boolean(await loadSession(ctx, sid, userId));
+}
+
 export async function loadSession(
   ctx: Ctx,
   sid: string,
@@ -266,8 +275,10 @@ export async function touchSession(
 
 /** End one session: the refresh half dies with its row, and its cached identity with it. */
 export async function endSession(ctx: Ctx, sid: string): Promise<boolean> {
-  await forgetSession(ctx, sid);
+  // The row first, then the cache, as revokeToken does; the forget marker
+  // covers a request that read the row before it went.
   const result = await ctx.models!.get("Session").deleteOne({ sid });
+  await forgetSession(ctx, sid);
   return result.deletedCount === 1;
 }
 

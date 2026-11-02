@@ -44,6 +44,8 @@ splits an id into `{ module, scope, resource, extra? }`.
 
 The ACL is built in phase 8 from every `module.acl.ts`, in load order. Roles
 are global and defined once; grants are attached by each module on its own ids.
+The boot enforces that: only the module that defined a role may grant it
+another module's ids or `*`.
 
 ```ts title="modules/auth/module.acl.ts (excerpt)"
 declare module "@tulipes/core/acl" {
@@ -245,6 +247,8 @@ them.
 | one id on two routes | boot refused: `rai id "…" is already declared by …` |
 | `allow()` on an undefined role | boot refused: `allow() on unknown role "editor" — roles must be defined first (defineRole)` |
 | the same grant from two modules | boot refused: `"user" already granted "…" by module "…" — duplicate grant` |
+| a module granting another module's ids, not being the role's owner | boot refused: `grants "guest" "users:*", an id of module "users" — a module grants its own ids …` |
+| a module granting `*`, not being the role's owner | boot refused: `grants "guest" everything ("*") — only module "auth", which defines "guest", may grant "*"` |
 | a role nobody defined, at request time | denied |
 | no grant for `guest` | 401 for anonymous callers |
 | a custom checker returns anything but `true` | denied |

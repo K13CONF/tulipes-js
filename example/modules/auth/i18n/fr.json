@@ -23,5 +23,8 @@
   "expiryInvalid": "L'expiration est un nombre entier de jours entre 1 et 365",
   "tokenNeedsSession": "Les jetons d'API sont émis depuis une session connectée, pas par un autre jeton",
   "noSuchToken": "Jeton introuvable",
-  "tokenRevoked": "Jeton révoqué"
+  "tokenRevoked": "Jeton révoqué",
+  "passwordTooLong": "Un mot de passe fait au plus 72 octets (72 lettres simples, moins avec des accents ou des emoji)",
+  "currentPasswordRequired": "Saisissez votre mot de passe actuel",
+  "currentPasswordIncorrect": "Le mot de passe actuel est incorrect"
 }

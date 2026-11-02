@@ -9,6 +9,91 @@ While the major version is `0`, a minor bump may carry breaking changes —
 `0.2 → 0.5` each did. Upgrading across any of them needs the notes in
 [MIGRATING.md](./MIGRATING.md).
 
+## [0.14.0-rc.1] — 2026-11-01
+
+A breaking minor, published as a candidate to `next`. It carries the fixes
+from a full security audit of the framework and both presets, a permission
+rule that was missing, and client headers in both presets. Packages: core
+`0.14.0-rc.1`, `@tulipes/cli` `0.5.0-rc.1`, `@tulipes/mcp` `0.3.0-rc.1`
+(core `^0.14.0-rc.1`: it uses `revealsInternals`), `@tulipes/socket.io`
+`0.1.7-rc.1`, `@tulipes/bullmq` `0.3.1-rc.1`, `@tulipes/spec` `0.4.4-rc.1`,
+`@tulipes/mongoose` `0.2.5-rc.1`, `@tulipes/testing` `0.1.5-rc.1`; all but
+mcp still admit core 0.13. Read MIGRATING, "Upgrading from 0.13", first.
+
+### Breaking
+
+- A module may grant only its own ids. Granting another module's ids, or
+  `*`, is reserved for the module that defined the role; anything else
+  refuses the boot in the `acl` phase. Before, any module could grant any
+  id, including `*` to `guest`, and nothing reported it.
+- `agent.invoke()` without a request (the MCP process, agent runs) is refused
+  with 403 `ACCESS_CHECKER_NEEDS_REQUEST` when the app set a custom access
+  checker, instead of falling back to the plain ACL, which is not the policy
+  such an app chose.
+- `ctx.settings.set()` no longer throws when the module's `onChange` throws
+  after the write: the value is stored and live, so it resolves with
+  `onChangeFailed: true` and logs the error. A caller that saw an error
+  would retry a change that had landed.
+- `@tulipes/mcp`: `developmentIdentity()` is refused on the http transport,
+  and an http transport without `identify` is refused unless `APP_ENV` names
+  development or test.
+- Production preset (app code, so existing apps change only by following
+  MIGRATING): `POST /auth/password` requires `current_password`;
+  `PATCH /config/:module` requires `version`; the back office deletes only
+  accounts whose role `level` is below the caller's; `users:web:list` is no
+  longer granted to `user`.
+
+### Security
+
+- `@tulipes/socket.io`: every handler a module attaches with `socket.on`
+  runs inside an error boundary. A throw or rejected promise is logged with
+  the module, namespace and event; before, it ended the process. The
+  reference app's `whoami` and `ping` handlers called a missing
+  acknowledgement, so any anonymous client could crash the backend.
+- A `url` environment value no longer shows its credentials. The config
+  console (`describe`), `snapshot()` and `tulipes env:check` mask the user and
+  password before `@` and credential query parameters: `mongodb://•••@host/db`.
+  Before, an admin who may read the config saw the database and Redis
+  passwords inside `MONGO_URI` and `REDIS_URL`.
+- A process started without `APP_ENV` still reads the development files but
+  no longer reveals internals: a 500 carries `internal server error`, and the
+  boot prints a warning. `tulipes dev` sets `APP_ENV=development`.
+- `@tulipes/mcp`: an unexpected tool failure reaches the client as
+  `internal error` unless `APP_ENV` names development or test; the stack
+  stays on stderr.
+- A non-`HttpError` with a 4xx status keeps its message only when it marks
+  itself `expose: true` (body-parser and http-errors do); otherwise the
+  status text is sent. An SDK error with a 4xx status could carry a
+  provider's response body.
+- `parsePage` clamps `?page` to `maxPage` (default 1000), so a client cannot
+  make `skip` scan without bound.
+- `tulipes update` refuses a registry answer that is not a semver version
+  before installing or writing anything.
+- Production preset fixes, each a MIGRATING step: a soft-deleted seeded admin
+  no longer stops every boot; any user could list every account; a session's
+  agent run outlived a password change; login time revealed which emails
+  exist; a sign-out could be undone by a request in flight; an admin could
+  delete a sysadmin; `publicDomain` reached the root-run nginx script
+  unchecked; a redelivered agent job could repeat a write; an IPv4-mapped
+  proxy range trusted every IPv4 peer.
+
+### Added
+
+- `ctx.appEnvDefaulted` (`true` when `APP_ENV` was not set) and
+  `revealsInternals(ctx)` from `@tulipes/core/boot`.
+- `agent.parseInput(name, input)`: the input as `invoke()` would hand it to
+  the handler, for an approval screen that shows what will run.
+- Client headers in both presets: `X-Platform`, `X-App-Version`,
+  `X-App-Mode`, `X-Device-Id` and `X-Request-Id` read into `req.client` by
+  the core module, the request id echoed back (app code; MIGRATING,
+  "Client headers").
+
+### Changed
+
+- The publish job sends a stable version to `latest` only when it is not
+  older than the registry's `latest`, otherwise to `maintenance`; workflow
+  actions are pinned by commit SHA.
+
 ## [0.13.2] — 2026-10-31
 
 A patch to core with no API change, a security fix in what apps install,

@@ -32,7 +32,7 @@ export { importFile } from "./import-file.ts";
  * For tooling (`tulipes sync`, `tulipes env:check`): phase 1 on its own.
  * An app reads a value as `ctx.config.<module>.<name>`, never through these.
  */
-export { resolveAppEnv } from "./app-env.ts";
+export { resolveAppEnv, revealsInternals } from "./app-env.ts";
 export {
   resolveEnv,
   ResolvedEnv,

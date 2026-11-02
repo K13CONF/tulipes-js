@@ -89,8 +89,12 @@ export class MemoryRunStore implements RunStore {
     });
   }
 
-  async beginExecution(runId: string): Promise<Run> {
-    return this.#update(runId, (run) => { if (!TERMINAL.has(run.status)) run.executing = true; });
+  async beginExecution(runId: string, { pendingId, takeover = false }: { pendingId: string; takeover?: boolean }): Promise<Run | null> {
+    const current = this.#runs.get(runId);
+    if (!current) throw new Error(`no run ${runId}`);
+    if (TERMINAL.has(current.status)) return structuredClone(current);
+    if (current.pending[0]?.id !== pendingId || (current.executing && !takeover)) return null;
+    return this.#update(runId, (run) => { run.executing = true; });
   }
 
   async appendResults(runId: string, results: Anthropic.Beta.BetaToolResultBlockParam[], elapsedMs: number): Promise<Run> {

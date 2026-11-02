@@ -1,7 +1,10 @@
 import type { AclBuilder } from "@tulipes/core/acl";
 
 export default function usersAcl(acl: AclBuilder): void {
-  acl.allow("user", "users:web:list", "users:web:ping");
+  // Not users:web:list: it pages through every account's email and role,
+  // which is back-office information. admin and sysadmin reach it through
+  // users:* in the auth module.
+  acl.allow("user", "users:web:ping");
   // The demo endpoints are open so the error-handling examples stay
   // curl-able without a token.
   acl.allow("guest", "users:web:demo:*", "users:web:ping");

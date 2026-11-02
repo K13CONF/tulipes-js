@@ -102,7 +102,17 @@ export function logger({ config, mode }: Pick<Ctx, "config" | "mode">): Logger {
   // logger, which is also what the console's SYS: times and the daily
   // rotation above follow.
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const options = { level, base: { mode }, timestamp: () => `,"time":"${toZonedISO(Date.now(), zone)}"` };
+  // The log stream shows these files to sysadmins, and a line someone logs
+  // carelessly (a request, a body, an error with its config) must not carry
+  // a credential there: these keys are masked whatever logged them.
+  const redact = {
+    paths: [
+      "req.headers.authorization", "req.headers.cookie", "res.headers[\"set-cookie\"]",
+      "*.password", "*.access_token", "*.refresh_token", "*.secret", "*.token", "*.authorization", "*.apiKey",
+    ],
+    censor: "•••",
+  };
+  const options = { level, base: { mode }, redact, timestamp: () => `,"time":"${toZonedISO(Date.now(), zone)}"` };
 
   instance = targets.length
     ? pino(options, pino.transport({ targets }))

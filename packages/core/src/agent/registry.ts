@@ -163,6 +163,19 @@ export class AgentRegistry {
     return this.#tools.get(name)?.tool;
   }
 
+  /**
+   * The input as the handler would receive it — defaults applied,
+   * transforms run — or undefined when it does not parse. What an approval
+   * screen shows, so the owner approves what `invoke()` will execute.
+   */
+  parseInput(name: string, input: unknown): unknown {
+    const action = this.#tools.get(name)?.action;
+    if (!action) return undefined;
+    if (!action.input) return input;
+    const result = action.input.safeParse(input ?? {});
+    return result.success ? result.data : undefined;
+  }
+
   manifest(caller?: string | ToolActor): AgentManifest {
     const tools = this.tools(caller);
     const names = new Set(tools.map((tool) => tool.name));
@@ -192,6 +205,15 @@ export class AgentRegistry {
     }
     const { tool, action } = resolved;
 
+    // The app's checker decides from a request. A caller with none — the MCP
+    // process, an agent run — cannot be judged by it, and the plain ACL is
+    // not the policy the app chose: refuse rather than fall back.
+    if (this.#routes?.checker && !request) {
+      throw new HttpError(403, "checkerNeedsRequest", {
+        code: "ACCESS_CHECKER_NEEDS_REQUEST",
+        defaultMessage: "this app decides access with a custom checker, which needs an HTTP request; this caller has none",
+      });
+    }
     const refusal = this.#routes?.checker && request
       ? (await this.#routes.checker(request, { id: tool.permission, name: tool.title, description: tool.description })) === true
         ? undefined

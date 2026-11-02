@@ -94,7 +94,7 @@ export default function authRoutes(ctx: BackendCtx): void {
   router.post("/password", rai({
       id: "auth:web:password",
       name: "Change password",
-      description: "Set a new password and end every other session",
+      description: "Set a new password, given the current one, and end every other session",
       body: newPassword,
     }), auth.changePassword());
 

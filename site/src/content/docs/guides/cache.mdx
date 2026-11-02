@@ -140,7 +140,6 @@ environment value read while building:
 ctx.app.use(lazy(() => {
   const cache = appCache(ctx);
   return (async (_req, res, next) => {
-    res.setHeader("X-Request-Id", randomUUID());
     const served = await cache.wrap("stats:served-sample", 10, async () => Date.now());
     res.setHeader("X-Stats-Sample", String(served));
     next();

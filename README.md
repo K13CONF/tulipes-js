@@ -71,7 +71,7 @@ Default `tulipes init my-api` creates a minimal API without MongoDB or Redis.
 `--no-sockets` compose it without those providers. Node 24.x is the supported
 runtime. Both presets include Vitest tests.
 
-The 0.11 line is stable. Coming from 0.10, it changes the module layout, the configuration model and the runtime (see `packages/core/MIGRATING.md`), and `tulipes migrate 0.11` carries an app across.
+The 0.13 line is stable: core 0.13.2 is on npm's `latest` tag. 0.14.0-rc.1 is on `next`: it is breaking, and carries the fixes from the November 2026 security audit (see `packages/core/MIGRATING.md`, "0.14.0 — upgrading from 0.13"). Coming from an older line, read `packages/core/MIGRATING.md` oldest-first; `tulipes migrate 0.11`, `0.12` and `0.13` carry an app across each step.
 It is not production-proven — no pilot deployment has run this framework, so
 there is no load, backup-restore or multi-replica evidence and no independent
 security review. [Support](docs/support.md) states that in full, and the
@@ -82,7 +82,7 @@ See [Testing](docs/testing.md), [Contributing](CONTRIBUTING.md),
 [Security](SECURITY.md), [Support](docs/support.md) and
 [Releasing](docs/releasing.md). Publication requires the complete reusable CI
 workflow and installs/tests the exact archives that will be uploaded to npm.
-The repository remains private, so source, issues and CI require access.
+The repository is public: source, issues and CI runs are open to read.
 
 ---
 

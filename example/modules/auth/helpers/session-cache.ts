@@ -37,14 +37,41 @@ export async function readIdentity(ctx: Ctx, sid: string): Promise<CachedIdentit
 }
 
 export async function writeIdentity(ctx: Ctx, sid: string, identity: CachedIdentity): Promise<void> {
-  const ttl = cacheTtlSeconds(ctx);
-  if (ttl === 0) return;
-  await appCache(ctx).set(KEY + sid, identity, ttl);
+  await write(ctx, KEY + sid, identity);
 }
 
 /** Forget one session: the next request with its token takes the cold path. */
 export async function forgetSession(ctx: Ctx, sid: string): Promise<void> {
-  await appCache(ctx).del(KEY + sid);
+  await forget(ctx, KEY + sid);
+}
+
+/**
+ * Deleting the entry is not enough on its own: a request that read the old
+ * rows just before a revocation would write them back just after it, and
+ * the revoked identity would live for another TTL. So a forget leaves a
+ * marker for one TTL, and a write under a marker is skipped — that request
+ * still answers from what it read, and the next one takes the cold path.
+ *
+ * shortcut: the marker check and the write are two cache calls, so a write
+ * that started before the marker landed can still win; the window is one
+ * Redis round trip instead of a Mongo read. Make it one atomic script if a
+ * revocation ever has to be exact.
+ */
+const FORGOTTEN = "auth:forgotten:";
+
+async function write(ctx: Ctx, key: string, value: unknown): Promise<void> {
+  const ttl = cacheTtlSeconds(ctx);
+  if (ttl === 0) return;
+  const cache = appCache(ctx);
+  if (await cache.get(FORGOTTEN + key)) return;
+  await cache.set(key, value, ttl);
+}
+
+async function forget(ctx: Ctx, key: string): Promise<void> {
+  const cache = appCache(ctx);
+  const ttl = cacheTtlSeconds(ctx);
+  if (ttl > 0) await cache.set(FORGOTTEN + key, 1, ttl);
+  await cache.del(key);
 }
 
 /**
@@ -63,14 +90,12 @@ export async function readTokenIdentity(ctx: Ctx, tokenId: string): Promise<Cach
 }
 
 export async function writeTokenIdentity(ctx: Ctx, tokenId: string, identity: CachedTokenIdentity): Promise<void> {
-  const ttl = cacheTtlSeconds(ctx);
-  if (ttl === 0) return;
-  await appCache(ctx).set(TOKEN_KEY + tokenId, identity, ttl);
+  await write(ctx, TOKEN_KEY + tokenId, identity);
 }
 
 /** Forget one API token: the next request with it takes the cold path. */
 export async function forgetToken(ctx: Ctx, tokenId: string): Promise<void> {
-  await appCache(ctx).del(TOKEN_KEY + tokenId);
+  await forget(ctx, TOKEN_KEY + tokenId);
 }
 
 /**

@@ -70,7 +70,10 @@ export default function helloSockets({ config }: Ctx, sockets: SocketRegistry): 
         online: nsp.sockets.size,
       });
 
-      socket.on("ping", (ack: (reply: string) => void) => ack("pong"));
+      // A client may emit without a callback: never call one that is not there.
+      socket.on("ping", (ack: unknown) => {
+        if (typeof ack === "function") ack("pong");
+      });
     });
   });
 }

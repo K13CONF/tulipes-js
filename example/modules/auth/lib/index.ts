@@ -6,7 +6,7 @@
  */
 export { auth, currentUser, GUEST, type Auth } from "../helpers/auth.ts";
 export { hashPassword, setPassword, verifyPassword } from "../helpers/passwords.ts";
-export { endAllSessions, endSession, listSessions } from "../helpers/tokens.ts";
+export { endAllSessions, endSession, isSessionLive, listSessions } from "../helpers/tokens.ts";
 /** API tokens — what a user gives an agent; `POST /auth/tokens` is the door, these are for scripts and jobs. */
 export { identifyApiToken, isApiToken, isTokenLive, issueToken, listTokens, revokeToken } from "../helpers/api-tokens.ts";
 /** Call after writing a user's role or deleting the user: cached identities carry the old authority. */

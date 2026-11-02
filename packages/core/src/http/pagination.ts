@@ -17,6 +17,8 @@ export interface PageRequest {
 export interface PaginationBounds {
   defaultLimit?: number;
   maxLimit?: number;
+  /** The last page a caller may ask for; deeper pages are clamped to it. Default 1000. */
+  maxPage?: number;
 }
 
 /**
@@ -24,9 +26,11 @@ export interface PaginationBounds {
  * a caller may ask for and no endpoint can be talked into ten thousand.
  */
 export function parsePage(req: Request, bounds: PaginationBounds = {}): PageRequest {
-  const { defaultLimit = 20, maxLimit = 100 } = bounds;
+  const { defaultLimit = 20, maxLimit = 100, maxPage = 1000 } = bounds;
 
-  const page = positive(req.query?.page, 1);
+  // `skip` costs the database a scan of every skipped row, so an unbounded
+  // `?page=` is an unbounded query; past maxPage a client should filter.
+  const page = Math.min(positive(req.query?.page, 1), maxPage);
   const asked = positive(req.query?.per_page, defaultLimit);
   const per_page = Math.min(asked, maxLimit);
 

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { useTestApp } from "@tulipes/testing";
 import { listQueryDefaults } from "@app/core";
+import seedAdmin from "../../auth/bootstrap/seed-admin.bootstrap.ts";
 
 import { testEnv, testSettings } from "../../../tests/support.ts";
 
@@ -54,6 +55,12 @@ const browse = (query: Record<string, unknown>) =>
 
 test("the core bootstrap sets the app-wide query time limit from config.pagination", () => {
   expect(listQueryDefaults().maxTimeMS).toBe(app.ctx.config.pagination!.maxTimeMs);
+});
+
+test("a signed-in user cannot list accounts; the back office can", async () => {
+  const user = await app.register();
+  expect((await app.get("/users", { as: user })).status).toBe(403);
+  expect((await app.get("/users", { as: admin })).status).toBe(200);
 });
 
 test("only the back office may browse", async () => {
@@ -138,4 +145,46 @@ test("anything outside the policy is a 422 naming the value", async () => {
   const injection = await browse({ filter: [["role", "=", { $ne: null }]] });
   expect(injection.status).toBe(422);
   expect(injection.errors[0]).toMatchObject({ field: "filter.0" });
+});
+
+test("a soft-deleted email cannot be registered or created again, and answers 422, not 500", async () => {
+  const email = `gone-${tag}@example.test`;
+  await app.register({ email });
+  expect((await app.delete(`/users/${encodeURIComponent(email)}`, { as: admin })).status).toBe(200);
+
+  const again = await app.post(app.api("/auth/register"), { email, password: randomBytes(12).toString("hex") });
+  expect(again.status).toBe(422);
+  expect(again.errors).toEqual([expect.objectContaining({ field: "email" })]);
+  expect((await app.post("/users", { email }, { as: admin })).status).toBe(422);
+});
+
+test("the seeded admin cannot be deleted through the back office", async () => {
+  const seeded = app.ctx.config.auth!.adminEmail.toLowerCase();
+  const response = await app.delete(`/users/${encodeURIComponent(seeded)}`, { as: admin });
+  expect(response.status).toBe(409);
+  expect(response.errors).toEqual([expect.objectContaining({ code: "SEEDED_ADMIN" })]);
+});
+
+test("a soft-deleted seeded admin stops the boot with a message that names the way out", async () => {
+  const email = `seed-${tag}@example.test`;
+  const row = await app.ctx.models!.get("User").create({ email, role: "admin" });
+  await (row as unknown as { softDelete(): Promise<unknown> }).softDelete();
+  const ctx = { ...app.ctx, mode: "backend", config: { ...app.ctx.config, auth: { ...app.ctx.config.auth!, adminEmail: email } } };
+
+  await expect(seedAdmin(ctx as never)).rejects.toThrow(`the seeded admin account ${email} is soft-deleted — restore it`);
+});
+
+test("the back office deletes only accounts that rank below the caller, never the caller", async () => {
+  const sysadmin = await app.as("sysadmin");
+  const other = await app.as("admin");
+  const plain = await app.register();
+  const del = (account: { email: string }, as: { access_token: string }) =>
+    app.delete(`/users/${encodeURIComponent(account.email)}`, { as });
+  const me = await app.get<{ user: { email: string } }>(app.api("/auth/me"), { as: admin });
+
+  expect(await del(sysadmin, admin)).toMatchObject({ status: 403, errors: [expect.objectContaining({ code: "OUTRANKS" })] });
+  expect(await del(other, admin)).toMatchObject({ status: 403, errors: [expect.objectContaining({ code: "OUTRANKS" })] });
+  expect(await del(me.data!.user, admin)).toMatchObject({ status: 403, errors: [expect.objectContaining({ code: "DELETE_SELF" })] });
+  expect((await del(other, sysadmin)).status).toBe(200);
+  expect((await del(plain, admin)).status).toBe(200);
 });

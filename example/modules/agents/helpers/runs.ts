@@ -34,6 +34,8 @@ export async function startRun(ctx: RuntimeCtx, auth: Auth, input: StartRun) {
     user: (auth.user as { _id: unknown })._id,
     ...(auth.scopes && { scopes: [...auth.scopes] }),
     ...(auth.credentialId && { token_id: auth.credentialId }),
+    // A session-started run is bound to that session, so it ends with it.
+    ...(!auth.credentialId && auth.session?.sid && { session_id: auth.session.sid }),
     goal: input.goal,
     transcript: [openingMessage(input.goal, input.context)],
     status: "queued",
@@ -156,7 +158,8 @@ export function summaryOf(ctx: RuntimeCtx, doc: RunDocument) {
         id: call.id,
         tool: call.name,
         description: ctx.agent.find(call.name)?.description ?? "",
-        input: call.input,
+        // What will run: the action's schema may add defaults or transform the model's input.
+        input: ctx.agent.parseInput(call.name, call.input) ?? call.input,
       })),
     }),
     created_at: doc.created_at,

@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import type { BackendCtx } from "@tulipes/core/boot";
-import { lazy, logger } from "@app/core";
+import { lazy, logger, type ClientHeaders } from "@app/core";
 
 import { corsOptions, helmetOptions } from "../helpers/hardening.ts";
 import { trustedProxies } from "../helpers/proxy.ts";
@@ -32,7 +32,13 @@ export default function securityRoutes(ctx: BackendCtx): void {
       err || res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
     genReqId: (_req, res) => String(res.getHeader("X-Request-Id") ?? ""),
     serializers: {
-      req: (req: { method: string; url: string }) => ({ method: req.method, url: req.url }),
+      // What the client said about itself (req.client, bound by the core
+      // module) travels with the line, so a file can be filtered by platform
+      // or app version; the request id is already the line's reqId.
+      req: (req: { method: string; url: string; raw: { client?: Partial<ClientHeaders> } }) => {
+        const { platform, appVersion, appMode, deviceId } = req.raw.client ?? {};
+        return { method: req.method, url: req.url, platform, appVersion, appMode, deviceId };
+      },
       res: (res: { statusCode: number }) => ({ status: res.statusCode }),
     },
   })));

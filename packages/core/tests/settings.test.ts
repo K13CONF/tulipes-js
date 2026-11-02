@@ -202,3 +202,20 @@ test("a module whose own zod is 4.x declares settings: boot, set, describe and t
   expect(described.restart).toEqual(["label"]);
   expect(JSON.stringify(described.schema)).toContain("daily");
 });
+
+test("an onChange that throws is reported on the write, not thrown: the change is stored and live", async () => {
+  const app = await fixture({
+    "modules/probe/module.config.js": declaration(greeting, `, onChange(next) { if (next.greeting === 'Boom') throw new Error('downstream refused'); }`),
+  });
+  const handle = await app.boot({ mode: "script" });
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const write = await handle.ctx.settings.set("probe", { greeting: "Boom" }, { id: "u1" });
+    expect(write).toEqual({ values: { greeting: "Boom", limit: 5 }, version: 2, requiresRestart: [], onChangeFailed: true });
+    expect(handle.ctx.config.probe).toEqual({ greeting: "Boom", limit: 5 });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("probe: onChange failed"), expect.any(Error));
+  } finally {
+    error.mockRestore();
+    await handle.shutdown();
+  }
+});

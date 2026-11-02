@@ -66,6 +66,7 @@ async function patch(path: string, body: unknown, token: string) {
     headers: {
       "content-type": "application/json",
       authorization: "Bearer " + token,
+      "x-request-id": "req-audit-1",
     },
     body: JSON.stringify(body),
   });
@@ -99,7 +100,7 @@ test("the console describes every module without a secret's value and only admin
   expect(auth.routes).toContainEqual(expect.objectContaining({ id: "auth:web:login", method: "POST", roles: expect.arrayContaining(["guest"]) }));
 
   // The administrator may read; writing is the deployment's job.
-  expect((await patch("/api/v1/config/hello", { values: { greeting: "Nope" } }, admin.access_token)).status).toBe(403);
+  expect((await patch("/api/v1/config/hello", { values: { greeting: "Nope" }, version: 1 }, admin.access_token)).status).toBe(403);
 });
 
 test("a settings write is validated by the module's schema, refused on a stale version, audited without values and applied at once", async () => {
@@ -107,7 +108,11 @@ test("a settings write is validated by the module's schema, refused on a stale v
   const described = (await (await get("/api/v1/config/hello", user.access_token)).json()) as { data: { settings: { version: number } } };
   const before = described.data.settings.version;
 
-  const invalid = await patch("/api/v1/config/hello", { values: { greeting: "" } }, user.access_token);
+  const unversioned = await patch("/api/v1/config/hello", { values: { greeting: "Howdy" } }, user.access_token);
+  expect(unversioned.status).toBe(422);
+  expect(await unversioned.json()).toMatchObject({ errors: [{ field: "version" }] });
+
+  const invalid = await patch("/api/v1/config/hello", { values: { greeting: "" }, version: before }, user.access_token);
   expect(invalid.status).toBe(422);
   expect(await invalid.json()).toMatchObject({ errors: [{ field: "greeting" }] });
 
@@ -124,11 +129,17 @@ test("a settings write is validated by the module's schema, refused on a stale v
   const greeted = (await (await fetch(app.base + "/api/v1/hello")).json()) as { data: { message: string } };
   expect(greeted.data.message).toMatch(/^Howdy/);
 
-  const audit = await app.handle.ctx.models!.get("ConfigAudit").find({ actor: user.userId }).sort({ recorded_at: -1 }).lean();
-  expect(audit[0]).toMatchObject({ action: "settings.change_requested", module: "hello", keys: ["greeting"], version: before, actor_role: "sysadmin" });
+  const audit = await app.handle.ctx.models!.get("ConfigAudit").find({ actor: user.userId }).sort({ recorded_at: 1, _id: 1 }).lean();
+  // Every request is recorded before it is tried, then its outcome.
+  expect(audit.map((row) => [row.action, row.outcome])).toEqual([
+    ["settings.change_requested", undefined], ["settings.change_completed", "refused"],
+    ["settings.change_requested", undefined], ["settings.change_completed", "applied"],
+  ]);
+  expect(audit[2]).toMatchObject({ action: "settings.change_requested", module: "hello", keys: ["greeting"], version: before, actor_role: "sysadmin", request_id: "req-audit-1" });
+  expect(audit[3]).toMatchObject({ module: "hello", version: before + 1 });
   expect(JSON.stringify(audit)).not.toContain("Howdy");
 
-  expect((await patch("/api/v1/config/nope", { values: {} }, user.access_token)).status).toBe(404);
+  expect((await patch("/api/v1/config/nope", { values: {}, version: 1 }, user.access_token)).status).toBe(404);
 
   await app.handle.ctx.settings.set("hello", { greeting: "Hello" }, { id: "tests" });
 });

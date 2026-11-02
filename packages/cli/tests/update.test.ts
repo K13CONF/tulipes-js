@@ -238,3 +238,17 @@ test("the manager comes from the lockfile, then the pinned packageManager, then 
   app({ "yarn.lock": "" });
   expect(detectManager(root)).toBe("yarn");
 });
+
+test("a registry answer that is not a version is refused before anything is installed or written", async () => {
+  app({
+    "package.json": { name: "app", dependencies: { "@tulipes/core": "^0.10.0" } },
+    "node_modules/@tulipes/core/package.json": { name: "@tulipes/core", version: "0.10.0" },
+    "pnpm-lock.yaml": "",
+  });
+  registry({ core: "0.11.0 --registry=https://evil.example", cli: "0.2.0" });
+  await runUpdate(root);
+  expect(process.exitCode).toBe(1);
+  expect(errors.join("\n")).toMatch(/@tulipes\/core: registry returned .* which is not a version/);
+  expect(spawn).not.toHaveBeenCalled();
+  expect(manifest("package.json").dependencies["@tulipes/core"]).toBe("^0.10.0");
+});

@@ -11,6 +11,240 @@ what makes it work under nvm.
 
 ---
 
+## 0.14.0 — upgrading from 0.13
+
+While 0.14 is a candidate, `tulipes update` still installs `latest` (0.13):
+install `@tulipes/core@next` and the other `@tulipes/*` packages at `next`
+instead. There is no `tulipes migrate 0.14`: each step is a small edit you
+make by reading it. Work through them in order. The first four can stop a boot or a client; the rest are fixes you
+should copy.
+
+1. **Grants outside a module's own ids** refuse the boot (section below).
+   Move each reported grant into the module that defines the role.
+2. **Two endpoints change for clients** (security fixes, step 12):
+   `POST /api/v1/auth/password` needs `current_password`, and
+   `PATCH /api/v1/config/:module` needs `version`. Update the app and its
+   clients together.
+3. **Back-office deletes compare role `level`** (step 7). Give every role a
+   numeric `level` in `defineRole()`, or every delete is refused.
+4. **Framework behavior**, nothing to copy:
+   - an app with a custom access checker (`ctx.routes.setAccessChecker`) can
+     no longer serve agent actions to the MCP process or agent runs: those
+     calls have no request for the checker to judge, and are refused with
+     `ACCESS_CHECKER_NEEDS_REQUEST`;
+   - `ctx.settings.set()` resolves with `onChangeFailed: true` instead of
+     throwing when `onChange` fails after the write;
+   - `@tulipes/mcp` refuses `developmentIdentity()` on the http transport;
+   - a process without `APP_ENV` hides internal error messages: set
+     `APP_ENV=development` to see them outside `tulipes dev`.
+5. **Check `core.publicDomain` before deploying** (step 8): a stored value
+   that is not a bare hostname (`https://api.example.com`, a trailing dot,
+   an underscore) now fails validation and **stops every process at boot**.
+   Read it with `GET /config/core` on 0.13 and set a bare hostname first.
+6. **The security fixes in app code**, steps 1 to 11 below. Step 1 (sockets)
+   closes an anonymous crash of the backend: do it first if nothing else.
+7. **Client headers**, optional (section below).
+
+---
+
+## 0.14.0 — security fixes (app code)
+
+The November 2026 audit found these in the reference app, so every app
+generated with the production preset has them. They are your code: apply each
+step by hand, or copy the named file from the reference app. The framework
+fixes from the same audit arrive with the upgrade and need nothing here.
+
+1. **Sockets: never call a missing acknowledgement.** In
+   `modules/users/sockets/users.sockets.ts` and
+   `modules/hello/sockets/hello.sockets.ts`, a client that emitted `whoami` or
+   `ping` without a callback crashed the backend. Check before calling:
+
+   ```ts
+   socket.on("ping", (ack: unknown) => {
+     if (typeof ack === "function") ack("pong");
+   });
+   ```
+
+   `@tulipes/socket.io` now also catches what any handler throws, so the same
+   mistake elsewhere is logged instead of ending the process. Apply the check
+   anyway: the boundary only stops the crash, and the client still gets no reply.
+
+2. **The account list is back office only.** `modules/users/module.acl.ts`
+   granted `user` the `users:web:list` permission, so anyone who signed up could
+   page through every account's email and role. Drop it from the `user` grant:
+
+   ```ts
+   acl.allow("user", "users:web:ping");
+   ```
+
+   admin and sysadmin keep it through `users:*`. A test that used `GET /users`
+   as a route any signed-in caller reaches needs another one, such as
+   `GET /api/v1/auth/me`. Run `pnpm spec` to refresh `docs/openapi.json`.
+
+3. **A soft-deleted email is still taken.** The unique index on `email`
+   includes soft-deleted rows, but three lookups skipped them. Soft-deleting the
+   seeded admin then made every later boot fail with a duplicate-key error, and
+   registering or creating a deleted address answered 500. Copy from the
+   reference app, or change by hand:
+   - `modules/auth/bootstrap/seed-admin.bootstrap.ts`: look the account up with
+     `.setOptions({ withDeleted: true })`, and throw a message naming the
+     account when the row it finds is soft-deleted.
+   - `modules/auth/controllers/web.auth.controllers.ts` (register) and
+     `modules/users/controllers/bo.users.controllers.ts` (create): count with
+     `withDeleted` and answer 422 `emailUnavailable`; map an E11000 from
+     `create()` to the same answer.
+   - `softDelete` in the same back-office controller refuses the `ADMIN_EMAIL`
+     account with 409 `SEEDED_ADMIN`. Add the `emailUnavailable` and
+     `seededAdmin` keys to `modules/users/i18n/*.json`.
+
+4. **An agent run started from a session ends with that session.** A run
+   recorded the API token that started it but nothing about a session, so a
+   run started by someone holding a stolen access token kept acting after the
+   owner changed their password. Store the session and check it at each step:
+   - `modules/agents/models/run.model.ts`: add `session_id: { type: String }`
+     (and `session_id?: string` in `RunDocument`, `sessionId?: string` in
+     `RunActor`, mapped in `toRun()`).
+   - `modules/agents/helpers/runs.ts` (`startRun`): when there is no
+     `auth.credentialId`, store `session_id: auth.session.sid`.
+   - `modules/auth/helpers/tokens.ts`: add `isSessionLive(ctx, sid, userId)`
+     (`Boolean(await loadSession(ctx, sid, userId))`) and export it from
+     `modules/auth/lib/index.ts`.
+   - `modules/agents/helpers/adapters/auth-identity.ts`: return `null` when
+     `actor.sessionId` is set and the session is no longer live.
+   Runs created before the change carry no `session_id` and finish as before.
+
+5. **A failed login takes as long for an unknown email.** The local strategy in
+   `modules/auth/helpers/passport.ts` returned at once when no account or
+   credential matched, skipping bcrypt, so the response time told which
+   emails have accounts. Copy `verifyNothing()` from the reference app's
+   `modules/auth/helpers/passwords.ts` (one compare against a dummy hash at
+   the configured cost) and use `done(null, await verifyNothing(ctx, password))`
+   in both early returns.
+
+6. **A forgotten identity stays forgotten.** Signing out cleared the identity
+   cache before deleting the session, and any request that read the rows just
+   before a revocation could write them back just after it, keeping a revoked
+   session or token working for up to `auth.cacheTtlSeconds`. In
+   `modules/auth/helpers/session-cache.ts`, copy the reference app's
+   `write()`/`forget()` pair: a forget leaves a marker for one TTL, and a write
+   under a marker is skipped. Route `writeIdentity`, `forgetSession`,
+   `writeTokenIdentity` and `forgetToken` through them. In
+   `modules/auth/helpers/tokens.ts`, `endSession` deletes the row first, then
+   forgets.
+
+7. **The back office deletes only accounts that rank below the caller.**
+   `softDelete` in `modules/users/controllers/bo.users.controllers.ts` checked
+   the caller's permission but not the target, so an admin could lock every
+   sysadmin out. Compare the roles' `level` (`ctx.acl.role(name)?.level`, an
+   unknown level counting as the highest) and refuse with 403 `OUTRANKS` when
+   the target's is at or above the caller's, and with 403 `DELETE_SELF` for
+   the caller's own account. Add the `outranks` and `deleteSelf` keys to
+   `modules/users/i18n/*.json`. If your roles define no `level`, define one:
+   without it every delete is refused.
+
+8. **`publicDomain` is a hostname.** `scripts/deploy-nginx.ts` runs as root,
+   names a file after `core.publicDomain` and pastes it into the nginx server
+   block, and the setting accepted any string. Copy
+   `modules/core/helpers/hostname.ts`, use `z.string().regex(HOSTNAME, …)` for
+   `publicDomain` in `modules/core/module.config.ts`, and copy the reference
+   app's `scripts/deploy-nginx.ts`: it checks the value again, refuses a path
+   outside `sites-available`, and restores what it changed when `nginx -t`
+   fails. Check the stored value first (`GET /config/core`): a value that is
+   not a hostname now fails validation at boot.
+
+9. **One job runs a run's tools.** If BullMQ redelivered a stalled agent job
+   while the first worker was still running it, both could execute the same
+   approved write. `beginExecution` in
+   `modules/agents/helpers/adapters/mongo-run-store.ts` is now an atomic claim
+   (`executing: { $ne: true }` in the filter) that returns `null` when another
+   job holds it; the run loop stops that job, and a resume after a crash
+   claims with `{ takeover: true }`. Copy the store method, the `RunStore`
+   signature in `helpers/harness/contracts.ts` and the two lines around
+   `beginExecution` in `helpers/harness/run-loop.ts`.
+
+10. **No IPv4-mapped proxy ranges.** `modules/security/helpers/proxy.ts`
+    accepted `::ffff:0.0.0.0/96` in `TRUST_PROXY_CIDRS`, which proxy-addr
+    matches against every IPv4 peer, so any client could set its own
+    `req.ip` through `X-Forwarded-For`. Copy the reference app's check, and
+    write any such entry in IPv4 form.
+
+11. **Smaller fixes in the reference app.** Copy what applies:
+    - `modules/core/helpers/query/policy.ts` and `mongoose/stages.ts`: look
+      fields and relations up with `Object.hasOwn`, so `constructor` or
+      `toString` in a list query is a 400, not a 500; `resolveStage` passes
+      the list's `maxTimeMS` to every populate (`mongoose/run.ts`).
+    - `modules/users/controllers/bo.users.controllers.ts` `listDeleted`: page
+      with `req.page`.
+    - `modules/auth/schemas/auth.schemas.ts` and `helpers/passwords.ts`
+      (`setPassword`): refuse a password over 72 bytes, which bcrypt would
+      silently cut; add `passwordTooLong` to `modules/auth/i18n/*.json`.
+    - `modules/agents/helpers/harness/run-loop.ts`: read `run.decisions` with
+      `Object.hasOwn`; `trajectory.ts`: quote a tool name in the repetition
+      note only when it has a tool name's shape; `helpers/runs.ts`: show
+      `ctx.agent.parseInput(call.name, call.input)` in `waiting_on`.
+    - `modules/core/helpers/logger/index.ts`: pino `redact` paths for
+      authorization headers, cookies, passwords and tokens.
+
+12. **Two API changes for clients.**
+    - `POST /api/v1/auth/password` requires `current_password` and answers 422
+      `CURRENT_PASSWORD_INCORRECT` when it is missing or wrong. A stolen access
+      token lives minutes; without the check it could set a new password and
+      keep the account. Copy the check from `changePassword` in
+      `modules/auth/controllers/web.auth.controllers.ts`, the
+      `current_password` field in `modules/auth/schemas/auth.schemas.ts`, and
+      the `currentPasswordRequired` and `currentPasswordIncorrect` keys. Update
+      every client that changes passwords.
+    - `PATCH /api/v1/config/:module` requires `version`
+      (`modules/config/schemas/config.schemas.ts`), so an edit from a stale read
+      is always refused. The controller also records each change's outcome:
+      copy `auditOutcome()` from `modules/config/helpers/audit.ts`, the
+      `outcome` field and the `settings.change_completed` action in
+      `models/config-audit.model.ts`, and the `outcome(...)` calls in the
+      controller's `change()`.
+
+---
+
+## 0.14.0 — grants outside a module's own ids
+
+**Breaking for an app that relied on it.** A module may now grant only ids
+that start with its own name. Another module's ids, or `*`, may be granted
+only by the module that defined the role. Anything else refuses the boot in
+the `acl` phase:
+
+```txt
+✖ [billing] grants "guest" "users:*", an id of module "users" — a module grants its own ids ("billing:…"); grants on another module's ids belong in "auth", which defines "guest"
+```
+
+Both presets already follow the rule, so a generated app that kept the
+convention boots unchanged. To fix one that did not, move each reported
+grant into the `module.acl.ts` of the module named in the message (the auth
+module in the production preset, the core module in the minimal one).
+
+---
+
+## 0.14.0 — client headers (optional, app code)
+
+Both presets now read the headers every client sends — `X-Platform`,
+`X-App-Version`, `X-App-Mode`, `X-Device-Id`, `X-Request-Id` — into
+`req.client` in the core module, defaulting invalid values and echoing the
+request id (the client's own when valid). Core is unchanged; an existing
+app is not affected until it copies the files, which are its own code:
+
+1. Copy `modules/core/helpers/client-headers.ts` from the reference app
+   (the minimal preset's is identical) and mount it first in
+   `modules/core/routes/core.routes.ts` with `ctx.app.use(clientHeaders())`,
+   replacing the `res.setHeader("X-Request-Id", randomUUID())` line. Export
+   it from `modules/core/lib/index.ts` if other modules read `req.client`.
+2. Production preset: in `modules/security/helpers/hardening.ts` add
+   `exposedHeaders: ["X-Request-Id"]` to both objects `corsOptions()`
+   returns; in `security.routes.ts` the pino `req` serializer may add
+   `platform`, `appVersion`, `appMode` and `deviceId` from `req.raw.client`;
+   in `modules/config`, add `request_id: String` to the `ConfigAudit`
+   schema and `request_id: req.client.requestId` in `auditChange()`.
+3. Copy `modules/core/tests/client-headers.test.ts` and run `pnpm test`.
+
+---
+
 ## 0.13.2 — zod 4.6.6
 
 Recommended for every app, though nothing breaks without it. zod below

@@ -8,6 +8,10 @@ import { isGrant } from "@tulipes/core/acl";
  * Messages are i18n keys — the error handler translates them in this
  * module's namespace, so a rejected field speaks the caller's language.
  */
+/** bcrypt reads 72 bytes: anything after would be ignored, so a longer password is refused rather than silently cut. */
+const BCRYPT_BYTES = 72;
+const fitsBcrypt = (value: string) => Buffer.byteLength(value, "utf8") <= BCRYPT_BYTES;
+
 export const credentials = z.object({
   email: z.email("emailInvalid"),
   password: z.string("passwordRequired").min(1, "passwordRequired"),
@@ -15,7 +19,7 @@ export const credentials = z.object({
 
 export const registration = z.object({
   email: z.email("emailInvalid"),
-  password: z.string("passwordTooShort").min(8, "passwordTooShort"),
+  password: z.string("passwordTooShort").min(8, "passwordTooShort").refine(fitsBcrypt, "passwordTooLong"),
 });
 
 // Refresh credentials come from the JSON body, never ambient browser cookies.
@@ -24,7 +28,8 @@ export const refreshBody = z.object({
 });
 
 export const newPassword = z.object({
-  password: z.string("passwordTooShort").min(8, "passwordTooShort"),
+  current_password: z.string("currentPasswordRequired").min(1, "currentPasswordRequired"),
+  password: z.string("passwordTooShort").min(8, "passwordTooShort").refine(fitsBcrypt, "passwordTooLong"),
 });
 
 export const sidParam = z.object({

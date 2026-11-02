@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import bcrypt from "bcryptjs";
 import { z } from "zod/v4";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { boot } from "@tulipes/core/boot";
 import { useTestApp } from "@tulipes/testing";
 
 import { testEnv, testSettings } from "../../../tests/support.ts";
+import { forgetSession, readIdentity, writeIdentity } from "../helpers/session-cache.ts";
 
 const rootDir = fileURLToPath(new URL("../../../", import.meta.url));
 const app = useTestApp({ rootDir, env: testEnv(), settings: testSettings() }, { beforeAll, afterAll });
@@ -598,7 +600,7 @@ test("password change in the same JWT second revokes both devices and keeps the 
 
     const changed = await post(
       "/api/v1/auth/password",
-      { password },
+      { current_password: initial.password, password },
       initial.access_token,
     );
 
@@ -729,7 +731,7 @@ test.each(["login", "password", "cleanup", "credential-write"])(
           })
         : post(
             "/api/v1/auth/password",
-            { password: firstPassword },
+            { current_password: initial.password, password: firstPassword },
             initial.access_token,
           );
 
@@ -758,7 +760,7 @@ test.each(["login", "password", "cleanup", "credential-write"])(
 
       const changed = await post(
         "/api/v1/auth/password",
-        { password: latestPassword },
+        { current_password: operation === "password" || operation === "cleanup" ? firstPassword : initial.password, password: latestPassword },
         access,
       );
 
@@ -813,7 +815,7 @@ test("failed session cleanup after password replacement cannot preserve old sess
     try {
       const changed = await post(
         "/api/v1/auth/password",
-        { password },
+        { current_password: initial.password, password },
         initial.access_token,
       );
 
@@ -870,6 +872,20 @@ test("failed session cleanup after password replacement cannot preserve old sess
   }
 });
 
+test("a password change needs the current password", async () => {
+  const user = await account();
+  const next = randomBytes(24).toString("hex");
+  const missing = await post("/api/v1/auth/password", { password: next }, user.access_token);
+  expect(missing.status).toBe(422);
+  expect(await missing.json()).toMatchObject({ errors: [{ field: "current_password" }] });
+  const wrong = await post("/api/v1/auth/password", { current_password: "not-it", password: next }, user.access_token);
+  expect(wrong.status).toBe(422);
+  expect(await wrong.json()).toMatchObject({ errors: [{ field: "current_password", code: "CURRENT_PASSWORD_INCORRECT" }] });
+  // Nothing changed: the session still stands and the old password still signs in.
+  expect((await get("/api/v1/auth/me", user.access_token)).status).toBe(200);
+  expect((await post("/api/v1/auth/login", { email: user.email, password: user.password })).status).toBe(200);
+});
+
 test("a failed credential write preserves the old password and session", async () => {
   const initial = await account();
   const password = randomBytes(24).toString("hex");
@@ -880,7 +896,7 @@ test("a failed credential write preserves the old password and session", async (
 
   try {
     expect(
-      (await post("/api/v1/auth/password", { password }, initial.access_token))
+      (await post("/api/v1/auth/password", { current_password: initial.password, password }, initial.access_token))
         .status,
     ).toBe(500);
   } finally {
@@ -1038,6 +1054,41 @@ async function issue(token: string, body: unknown) {
   return { status: response.status, body: await response.json() as { data: { token_id: string; secret: string; scopes: string[] | null } | null; errors: { code: string; field: string | null }[] } };
 }
 
+test("a failed login costs one bcrypt compare whether or not the email has an account", async () => {
+  const known = await account();
+  const compare = vi.spyOn(bcrypt, "compare");
+  try {
+    for (const email of [known.email, `nobody-${randomBytes(6).toString("hex")}@example.test`]) {
+      compare.mockClear();
+      const response = await post("/api/v1/auth/login", { email, password: "not-the-password" });
+      expect(response.status).toBe(401);
+      expect(compare).toHaveBeenCalledTimes(1);
+    }
+  } finally {
+    compare.mockRestore();
+  }
+});
+
+test("a request that read a session before it was forgotten cannot cache it again", async () => {
+  const sid = "forgotten-" + randomBytes(6).toString("hex");
+  const identity = { user: { _id: "u1" }, session: { sid } } as never;
+  await writeIdentity(app.handle.ctx, sid, identity);
+  expect(await readIdentity(app.handle.ctx, sid)).not.toBeNull();
+
+  await forgetSession(app.handle.ctx, sid);
+  // The late write of a request that read the rows before the forget.
+  await writeIdentity(app.handle.ctx, sid, identity);
+  expect(await readIdentity(app.handle.ctx, sid)).toBeNull();
+});
+
+test("a password past bcrypt's 72 bytes is refused, not silently cut", async () => {
+  const email = randomBytes(8).toString("hex") + "@example.test";
+  const response = await post("/api/v1/auth/register", { email, password: "é".repeat(37) });
+  expect(response.status).toBe(422);
+  expect(await response.json()).toMatchObject({ errors: [{ field: "password" }] });
+  expect((await post("/api/v1/auth/register", { email, password: "a".repeat(72) })).status).toBe(201);
+});
+
 test("an API token is issued once, reaches what its role grants and its scopes cover, and is refused once revoked", async () => {
   const user = await account();
   const issued = await issue(user.access_token, { name: "claude-code laptop", scopes: ["hello:web:*"] });
@@ -1048,7 +1099,7 @@ test("an API token is issued once, reaches what its role grants and its scopes c
 
   // In scope and granted to the role: reached. Granted but out of scope: refused as such.
   expect((await get("/api/v1/hello/secret", secret)).status).toBe(200);
-  const outside = await get("/users", secret);
+  const outside = await get("/api/v1/auth/me", secret);
   expect(outside.status).toBe(403);
   expect(await outside.json()).toMatchObject({ errors: [{ code: "OUT_OF_SCOPE" }] });
 
@@ -1069,7 +1120,7 @@ test("an API token is issued once, reaches what its role grants and its scopes c
 test("an API token cannot issue tokens, rejects bad scopes, expires, and dies with a password change", async () => {
   const user = await account();
   const { secret } = (await issue(user.access_token, { name: "unscoped" })).body.data!;
-  expect((await get("/users", secret)).status).toBe(200);
+  expect((await get("/api/v1/auth/me", secret)).status).toBe(200);
 
   const minted = await issue(secret, { name: "successor" });
   expect(minted).toMatchObject({ status: 403, body: { errors: [{ code: "TOKEN_NEEDS_SESSION" }] } });
@@ -1078,15 +1129,15 @@ test("an API token cannot issue tokens, rejects bad scopes, expires, and dies wi
 
   const expiring = (await issue(user.access_token, { name: "short", expires_in_days: 1 })).body.data!;
   await app.handle.ctx.models!.get("ApiToken").updateOne({ token_id: expiring.token_id }, { expires_at: new Date(Date.now() - 1000) });
-  expect((await get("/users", expiring.secret)).status).toBe(401);
+  expect((await get("/api/v1/auth/me", expiring.secret)).status).toBe(401);
 
   // A forged secret for a real token id is not a caller.
   const forged = secret.replace(/[a-f0-9]{64}$/, "0".repeat(64));
-  expect((await get("/users", forged)).status).toBe(401);
+  expect((await get("/api/v1/auth/me", forged)).status).toBe(401);
 
-  const changed = await post("/api/v1/auth/password", { password: randomBytes(24).toString("hex") }, user.access_token);
+  const changed = await post("/api/v1/auth/password", { current_password: user.password, password: randomBytes(24).toString("hex") }, user.access_token);
   expect(changed.status).toBe(200);
-  expect((await get("/users", secret)).status).toBe(401);
+  expect((await get("/api/v1/auth/me", secret)).status).toBe(401);
   const replacement = tokens.parse(await changed.json()).data.access_token;
   expect(await (await get("/api/v1/auth/tokens", replacement)).json()).toMatchObject({ data: [] });
 });
@@ -1144,7 +1195,7 @@ test("a revocation on one replica is refused on the very next request on another
     // account: every path that revokes forgets the cached identity first.
     const second = await account();
     expect((await me(second.access_token)).status).toBe(200);
-    const changed = await post("/api/v1/auth/password", { password: randomBytes(24).toString("hex") }, second.access_token);
+    const changed = await post("/api/v1/auth/password", { current_password: second.password, password: randomBytes(24).toString("hex") }, second.access_token);
     expect(changed.status).toBe(200);
     expect((await me(second.access_token)).status).toBe(401);
 
@@ -1164,3 +1215,4 @@ test("a revocation on one replica is refused on the very next request on another
     await next.shutdown();
   }
 });
+

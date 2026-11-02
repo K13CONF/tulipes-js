@@ -19,6 +19,7 @@ export interface RunDocument {
   user: unknown;
   scopes?: string[];
   token_id?: string;
+  session_id?: string;
   goal: string;
   status: RunStatus;
   transcript: Run["transcript"];
@@ -84,8 +85,20 @@ export class MongoRunStore implements RunStore {
     return this.#write(runId, { $set: { status: "waiting_approval", elapsed_ms: elapsedMs } }, { live: true });
   }
 
-  beginExecution(runId: string): Promise<Run> {
-    return this.#write(runId, { $set: { executing: true } }, { live: true });
+  async beginExecution(runId: string, { pendingId, takeover = false }: { pendingId: string; takeover?: boolean }): Promise<Run | null> {
+    // Atomic: of two jobs on one run, exactly one claims these calls, and
+    // none once they were answered (appendResults empties pending).
+    const doc = await this.#runs()
+      .findOneAndUpdate(
+        { _id: runId, status: { $nin: ENDED }, "pending.0.id": pendingId, ...(!takeover && { executing: { $ne: true } }) },
+        { $set: { executing: true } },
+        { new: true },
+      )
+      .lean<RunDocument>();
+    if (doc) return toRun(doc);
+    const current = await this.load(runId);
+    if (!current) throw new Error(`agents: no run ${runId}`);
+    return ENDED.includes(current.status) ? current : null;
   }
 
   appendResults(runId: string, results: Anthropic.Beta.BetaToolResultBlockParam[], elapsedMs: number): Promise<Run> {
@@ -160,6 +173,7 @@ export function toRun(doc: RunDocument): Run {
       userId: String(doc.user),
       ...(doc.scopes && { scopes: doc.scopes }),
       ...(doc.token_id && { tokenId: doc.token_id }),
+      ...(doc.session_id && { sessionId: doc.session_id }),
     },
     transcript: doc.transcript,
     pending: doc.pending,

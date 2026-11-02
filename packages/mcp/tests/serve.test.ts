@@ -88,6 +88,28 @@ test("developmentIdentity takes the role from MCP_ROLE, and is refused in produc
   await expect(serve(config)).rejects.toThrow(/developmentIdentity\(\) reads the role from MCP_ROLE, which is refused when APP_ENV is production/);
 });
 
+test("an unexpected failure reaches the client as 'internal error' unless APP_ENV names development", async () => {
+  const failing = { "modules/probe/agent/probe.agent.js": `
+    import { action, defineAgent } from '@tulipes/core/agent';
+    export default defineAgent({ summary: 'Fails.', actions: [
+      action({ id: 'probe:web:count', description: 'Count', readOnly: true, handler: () => { throw new Error('connect ECONNREFUSED 10.0.0.5:27017'); } }),
+    ] });` };
+  const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  try {
+    vi.stubEnv("APP_ENV", "development");
+    const named = await serve(failing);
+    expect(named.text(await named.client.callTool({ name: "probe_web_count", arguments: {} }))).toBe("connect ECONNREFUSED 10.0.0.5:27017");
+
+    for (const appEnv of ["production", undefined]) {
+      if (appEnv) vi.stubEnv("APP_ENV", appEnv); else delete process.env.APP_ENV;
+      const hidden = await serve(failing);
+      expect(hidden.text(await hidden.client.callTool({ name: "probe_web_count", arguments: {} }))).toBe("internal error");
+    }
+  } finally {
+    stderr.mockRestore();
+  }
+});
+
 describe("the http transport", () => {
   const httpConfig = (identify: string) => ({ "config/mcp.config.js": `import { defineMcp } from '@tulipes/mcp';
     export default defineMcp({ transport: { http: { port: 0 } }${identify} });` });
@@ -122,6 +144,14 @@ describe("the http transport", () => {
     const result = await (await connect("full")).callTool({ name: "probe_bo_purge", arguments: {} });
     expect((result.content as { text: string }[])[0]!.text).toBe('{"data":{"purgedBy":"admin"}}');
     expect(JSON.parse(audit.at(-1)!)).toMatchObject({ tool: "probe_bo_purge", actor: "u1", outcome: "ok" });
+  });
+
+  test("refuses developmentIdentity: one role from the environment for every network caller", async () => {
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("MCP_ROLE", "admin");
+    const { rootDir } = await fixture({ ...app, "config/mcp.config.js": `import { defineMcp, developmentIdentity } from '@tulipes/mcp';
+      export default defineMcp({ transport: { http: { port: 0 } }, identify: developmentIdentity() });` });
+    await expect(serveMcp({ rootDir, argv: [], audit: () => {} })).rejects.toThrow(/developmentIdentity\(\) gives every http caller the role in MCP_ROLE/);
   });
 
   test("answers only POST on its path", async () => {
@@ -168,7 +198,7 @@ describe("the http transport", () => {
 
   test("refuses to serve every caller on the network as a guest in production", async () => {
     vi.stubEnv("APP_ENV", "production");
-    await expect(listen(httpConfig(""))).rejects.toThrow(/http transport has no identify.*refused when APP_ENV is production/);
+    await expect(listen(httpConfig(""))).rejects.toThrow(/http transport has no identify.*refused unless APP_ENV is set to development or test/);
   });
 
   test("rejects a transport it does not know", async () => {

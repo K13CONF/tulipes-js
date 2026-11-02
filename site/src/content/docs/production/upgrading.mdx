@@ -1,6 +1,6 @@
 ---
 title: Upgrading Tulipes
-description: How Tulipes versions and support lines work, what tulipes update and tulipes migrate do, and the key steps of every migration from 0.1 to 0.13.2.
+description: How Tulipes versions and support lines work, what tulipes update and tulipes migrate do, and the key steps of every migration from 0.1 to 0.14.
 sidebar:
   order: 6
 ---
@@ -15,7 +15,7 @@ Tulipes is pre-1.0, so a minor version may change public contracts. Every such c
 
 ## Versions and support
 
-`0.13` is the current stable line: its contracts are settled, and a breaking change waits for `0.14`. Before it, `0.x` minors broke freely; `0.2` through `0.5` each did.
+`0.13` is the current stable line: its contracts are settled. `0.14`, its breaking successor, is a candidate on `next` (below). Before it, `0.x` minors broke freely; `0.2` through `0.5` each did.
 
 The rules, from the support policy:
 
@@ -44,6 +44,7 @@ Maintained lines:
 
 | Line | Status |
 |---|---|
+| core 0.14.0-rc.1, cli 0.5.0-rc.1 | candidate (`next`); the security fixes land here first |
 | core 0.13.x, cli 0.4.x | current; normal fixes target these |
 | core 0.12.x, cli 0.3.x | previous stable; critical security fixes evaluated until the next core minor ships |
 | core 0.12.0-rc.1, rc.2 | candidates only; upgrade rather than expecting fixes |
@@ -74,6 +75,16 @@ tulipes migrate 0.13     # add the MCP process
 Each one reports every file it changed, leaves a `TODO` comment and a report line wherever it could not decide, and records its mapping in `config/migration-0.11.json` or `config/migration-0.12.json`; delete those once reviewed. Read oldest-first from wherever you are: the steps compose. See [`tulipes migrate`](/tulipes-js/reference/cli/migrate/).
 
 ## Migrations, newest first
+
+### 0.14.0: security fixes, grant ownership, two client changes
+
+A candidate: `tulipes update` still installs 0.13, so install `@tulipes/core@next` and the other `@tulipes/*` packages at `next`. There is no `tulipes migrate 0.14`; the steps are small edits, in [`MIGRATING.md`](https://github.com/K13CONF/tulipes-js/blob/master/packages/core/MIGRATING.md), "0.14.0 — upgrading from 0.13". In order:
+
+- **Grants outside a module's own ids** refuse the boot: move each reported grant into the module that defines the role.
+- **Clients:** `POST /api/v1/auth/password` needs `current_password`; `PATCH /api/v1/config/:module` needs `version`.
+- **Roles need a `level`** for back-office deletes, which now require the caller to outrank the account.
+- **Copy the security fixes** in the production preset's app code, socket handlers first: an emit without a callback crashed the backend.
+- `@tulipes/mcp` 0.3 requires core 0.14 and refuses `developmentIdentity()` on the http transport.
 
 ### 0.13.2: zod 4.6.6
 

@@ -27,6 +27,7 @@ export async function auditChange(
       actor: String(user._id),
       actor_role: user.role,
       ip: req.ip,
+      request_id: req.client.requestId,
       app_env: ctx.appEnv,
       mode: ctx.mode,
       recorded_at: new Date(),
@@ -37,5 +38,40 @@ export async function auditChange(
       code: "AUDIT_UNAVAILABLE",
       defaultMessage: "The audit record could not be acknowledged; the change was not applied",
     });
+  }
+}
+
+export type AuditOutcome = "applied" | "applied_on_change_failed" | "refused" | "conflict" | "failed";
+
+/**
+ * What became of a requested change, recorded after the fact. Best effort:
+ * the request record above is the guarantee, and failing the response here
+ * would report an error for a write that may have landed.
+ */
+export async function auditOutcome(
+  ctx: Ctx,
+  req: Request,
+  change: { module: string; keys: string[]; version: number; outcome: AuditOutcome },
+): Promise<void> {
+  const user = req.auth.user;
+  if (!user) return;
+  try {
+    const Audit = ctx.models!.get("ConfigAudit");
+    await new Audit({
+      action: "settings.change_completed",
+      outcome: change.outcome,
+      module: change.module,
+      keys: change.keys,
+      version: change.version,
+      actor: String(user._id),
+      actor_role: user.role,
+      ip: req.ip,
+      request_id: req.client.requestId,
+      app_env: ctx.appEnv,
+      mode: ctx.mode,
+      recorded_at: new Date(),
+    }).save({ w: "majority", j: true, wtimeout: 5000 });
+  } catch (error) {
+    console.error(`[config] the outcome of a ${change.module} change could not be audited: ${(error as Error).name}`);
   }
 }

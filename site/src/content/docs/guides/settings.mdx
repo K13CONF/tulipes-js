@@ -144,9 +144,11 @@ process that holds the app**: the one that wrote, and every other replica,
 worker or backend, when the store's watch delivers the change. `ctx.app` only
 exists in a backend process, hence the `?.`.
 
-When the write came from this process, an error thrown in `onChange` reaches
-the caller of `ctx.settings.set()`, after the value was stored. When it came
-from elsewhere, the error is logged:
+An error thrown in `onChange` never undoes the write: the value is stored and
+live. When the write came from this process, `ctx.settings.set()` resolves with
+`onChangeFailed: true` and logs the error, so a caller does not retry a change
+that already landed (the console answers 200 with `meta.action:
+"on_change_failed"`). When it came from elsewhere, the error is logged:
 `[tulipes] settings "security" onChange failed: …`.
 
 ## Writing settings: `ctx.settings`
@@ -159,7 +161,7 @@ side, for a console, a script or a test:
 | `namespaces()` | every module that declares settings |
 | `describe(ns)` | `{ module, schema, values, stored, restart, pendingRestart }`: the JSON Schema, what this process runs with, what the store holds (`values`, `version`, `updated_at`, `updated_by`) |
 | `describeEnv(ns)` | the module's environment values: name, variable, type, source, and the value unless it is a secret |
-| `set(ns, patch, actor)` | validates the patch over the stored values, persists, applies, runs `onChange`; returns `{ values, version, requiresRestart }` |
+| `set(ns, patch, actor)` | validates the patch over the stored values, persists, applies, runs `onChange`; returns `{ values, version, requiresRestart }`, plus `onChangeFailed: true` when `onChange` threw |
 | `status()` | `{ label, ready }` of the store, as the banner shows it |
 
 ```ts
@@ -288,7 +290,8 @@ environment values (name, variable, type, source, never a secret's value),
 its settings with their schema, live values and stored version, and its
 endpoints with the roles that reach them.
 
-`PATCH /config/:module` takes a patch and, optionally, the version you read:
+`PATCH /config/:module` takes a patch and the version you read. `version` is
+required, so an editor working from a stale read is always refused:
 
 ```json
 { "values": { "maxSessions": 10 }, "version": 3 }
@@ -296,7 +299,7 @@ endpoints with the roles that reach them.
 
 | Answer | When |
 |---|---|
-| 200 with `{ module, values, version, requires_restart }` | written; `meta.action: "restart_required"` when a restart field changed |
+| 200 with `{ module, values, version, requires_restart }` | written; `meta.action: "restart_required"` when a restart field changed, `"on_change_failed"` when the module's `onChange` threw after the write |
 | 404 `NO_SUCH_MODULE` | no module declares settings by that name |
 | 409 `STALE_VERSION` | `version` is not the stored one, or another write won |
 | 422 with one entry per field | the module's schema refused the result |
@@ -325,6 +328,11 @@ await new Audit({
 Only identifiers enter the record (the namespace, the field names, the version
 the caller read), never values. If the audit fails the write does not happen:
 a change nobody can account for is worse than one that did not happen.
+
+After the attempt, a second record, `settings.change_completed`, says what became
+of it: `outcome` is `applied`, `applied_on_change_failed`, `refused` (the schema
+said no), `conflict` (another write won) or `failed`. That one is best effort: it
+is logged, not answered as an error, when it cannot be written.
 
 The three endpoints are also tools in the agent manifest, so an agent with
 `sysadmin` reconfigures the app through the same door, with the same audit.

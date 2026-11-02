@@ -29,6 +29,12 @@ export interface SettingsWrite {
   version: number;
   /** Fields tagged restart whose stored value now differs from the one this process runs with. */
   requiresRestart: string[];
+  /**
+   * The module's onChange threw. The values are stored and live all the
+   * same — the write landed — so this is reported, not thrown: a caller
+   * that saw an error would retry a change that already happened.
+   */
+  onChangeFailed?: true;
 }
 
 export interface SettingsDescription {
@@ -171,8 +177,19 @@ export class Settings implements SettingsApi {
     if (!parsed.success) throw new SettingsValidationError(namespace, parsed.error.issues);
     const values = parsed.data as Record<string, unknown>;
     live.stored = await this.#store!.save(namespace, values, live.stored.version, actor);
-    await this.#apply(live, namespace, values);
-    return { values: { ...live.stored.values }, version: live.stored.version, requiresRestart: this.#pending(live, this.#ctx!.config[namespace] as Record<string, unknown>) };
+    let onChangeFailed = false;
+    try {
+      await this.#apply(live, namespace, values);
+    } catch (error) {
+      onChangeFailed = true;
+      console.error(`[settings] ${namespace}: onChange failed after the change was stored and applied:`, error);
+    }
+    return {
+      values: { ...live.stored.values },
+      version: live.stored.version,
+      requiresRestart: this.#pending(live, this.#ctx!.config[namespace] as Record<string, unknown>),
+      ...(onChangeFailed && { onChangeFailed: true as const }),
+    };
   }
 
   status(): { label: string; ready: boolean } {

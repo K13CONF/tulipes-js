@@ -94,6 +94,8 @@ A module's own values need no wiring.
 
 Use `secret` for anything sensitive: its value is withheld from `GET
 /config`, from `tulipes env:check` and from the startup banner.
+A `url` value is shown with its credentials masked (`mongodb://•••@host/db`),
+so a connection string can stay a `url`.
 
 ## How the values behave
 
